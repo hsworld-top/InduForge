@@ -37,6 +37,7 @@ type QueryRecord struct {
 	UpdatedBy       *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	Outputs         []SourceOutputMappingRecord
 }
 
 // QueryListFilter 表示查询列表的分页与过滤条件。
@@ -52,6 +53,17 @@ type QueryListFilter struct {
 // QueryRepository 封装 data_queries 的参数化 SQL 访问。
 type QueryRepository struct {
 	pool *pgxpool.Pool
+}
+
+// QueryOutputDataPointParams 描述查询保存时需要同步的生成点。
+// Enabled=false 时不删除生成点，只在同一事务中将其标记为失效，避免留下悬空引用。
+type QueryOutputDataPointParams struct {
+	Enabled      bool
+	PathPrefix   string
+	Description  *string
+	SourceConfig map[string]any
+	Outputs      []SourceOutputMappingParam
+	UserID       string
 }
 
 // NewQueryRepository 创建查询仓储。
@@ -98,6 +110,13 @@ func (r *QueryRepository) ListByProject(ctx context.Context, projectID string, f
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历查询列表失败", err)
 	}
 
+	for index := range records {
+		outputs, outputErr := listSourceOutputMappings(ctx, r.pool, "query", records[index].ID)
+		if outputErr != nil {
+			return nil, 0, outputErr
+		}
+		records[index].Outputs = outputs
+	}
 	return records, total, nil
 }
 
@@ -116,6 +135,11 @@ func (r *QueryRepository) GetByProjectAndID(ctx context.Context, projectID, quer
 	if err != nil {
 		return nil, err
 	}
+	outputs, err := listSourceOutputMappings(ctx, r.pool, "query", record.ID)
+	if err != nil {
+		return nil, err
+	}
+	record.Outputs = outputs
 	return &record, nil
 }
 
@@ -134,6 +158,11 @@ func (r *QueryRepository) GetByID(ctx context.Context, queryID string) (*QueryRe
 	if err != nil {
 		return nil, err
 	}
+	outputs, err := listSourceOutputMappings(ctx, r.pool, "query", record.ID)
+	if err != nil {
+		return nil, err
+	}
+	record.Outputs = outputs
 	return &record, nil
 }
 
@@ -141,12 +170,27 @@ func (r *QueryRepository) GetByID(ctx context.Context, queryID string) (*QueryRe
 // 查询路径：project_id + name 唯一约束，主要命中 data_queries_project_name_key，写入时同时依赖 data_queries_connection_project_idx 的关联校验。
 // 潜在性能风险：写入阶段会触发 JSONB 编码与唯一约束检查；若配置体积变大，应关注 config 字段体积与冲突重试成本。
 func (r *QueryRepository) Create(ctx context.Context, params CreateQueryParams) (*QueryRecord, error) {
+	return r.create(ctx, params, nil)
+}
+
+// CreateWithOutput 在同一事务内创建查询和查询生成点。
+func (r *QueryRepository) CreateWithOutput(ctx context.Context, params CreateQueryParams, output QueryOutputDataPointParams) (*QueryRecord, error) {
+	return r.create(ctx, params, &output)
+}
+
+func (r *QueryRepository) create(ctx context.Context, params CreateQueryParams, output *QueryOutputDataPointParams) (*QueryRecord, error) {
 	configBytes, err := marshalJSONObject(params.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	row := r.pool.QueryRow(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启查询创建事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
         INSERT INTO data_queries (
             project_id,
             connection_id,
@@ -173,6 +217,14 @@ func (r *QueryRepository) Create(ctx context.Context, params CreateQueryParams) 
 	if err != nil {
 		return nil, translateQueryWriteError(err)
 	}
+	if output != nil {
+		if err := syncQueryOutputDataPointTx(ctx, tx, &record, *output); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交查询创建事务失败", err)
+	}
 
 	return &record, nil
 }
@@ -181,12 +233,27 @@ func (r *QueryRepository) Create(ctx context.Context, params CreateQueryParams) 
 // 查询路径：project_id + id，主命中 data_queries_pkey；更新时仍保留项目边界，防止误写其他项目。
 // 潜在性能风险：每次更新都会重写 JSONB 配置与时间戳，若配置较大且更新频繁，写放大会明显增加。
 func (r *QueryRepository) Update(ctx context.Context, params UpdateQueryParams) (*QueryRecord, error) {
+	return r.update(ctx, params, nil)
+}
+
+// UpdateWithOutput 在同一事务内更新查询和查询生成点。
+func (r *QueryRepository) UpdateWithOutput(ctx context.Context, params UpdateQueryParams, output QueryOutputDataPointParams) (*QueryRecord, error) {
+	return r.update(ctx, params, &output)
+}
+
+func (r *QueryRepository) update(ctx context.Context, params UpdateQueryParams, output *QueryOutputDataPointParams) (*QueryRecord, error) {
 	configBytes, err := marshalJSONObject(params.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	row := r.pool.QueryRow(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启查询更新事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
         UPDATE data_queries
         SET connection_id = $3,
             name = $4,
@@ -211,15 +278,76 @@ func (r *QueryRepository) Update(ctx context.Context, params UpdateQueryParams) 
 	if err != nil {
 		return nil, translateQueryWriteError(err)
 	}
+	if output != nil {
+		if err := syncQueryOutputDataPointTx(ctx, tx, &record, *output); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交查询更新事务失败", err)
+	}
+	if output == nil {
+		record.Outputs, err = listSourceOutputMappings(ctx, r.pool, "query", record.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &record, nil
+}
+
+// syncQueryOutputDataPointTx 保证查询与其生成点不会出现一边成功、一边失败的状态。
+func syncQueryOutputDataPointTx(ctx context.Context, tx pgx.Tx, record *QueryRecord, output QueryOutputDataPointParams) error {
+	if !output.Enabled {
+		output.Outputs = []SourceOutputMappingParam{}
+	}
+	status := "active"
+	if !record.IsEnabled {
+		status = "inactive"
+	}
+	outputs, err := syncSourceOutputMappingsTx(ctx, tx, sourceOutputOwner{Kind: "query", ID: record.ID,
+		ProjectID: record.ProjectID, SourceType: "db.query", SourceID: record.ID, PathPrefix: output.PathPrefix,
+		Status: status, Description: output.Description, BaseConfig: output.SourceConfig, UserID: output.UserID}, output.Outputs)
+	if err != nil {
+		return err
+	}
+	record.Outputs = outputs
+	return nil
 }
 
 // Delete 按项目与主键删除查询。
 // 查询路径：project_id + id，主命中 data_queries_pkey；删除前保留 project_id 边界，避免无意删除别的项目记录。
 // 潜在性能风险：单条删除代价很低，但如果未来需要级联同步大量 datapoints，应注意级联逻辑不要在单次请求中放大。
 func (r *QueryRepository) Delete(ctx context.Context, projectID, queryID string) error {
-	commandTag, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启查询删除事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := lockSourceProject(ctx, tx, projectID); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM data_points WHERE project_id=$1 AND source_type='db.query' AND source_id=$2 FOR UPDATE`, projectID, queryID)
+	if err != nil {
+		return err
+	}
+	pointIDs := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		pointIDs = append(pointIDs, id)
+	}
+	rows.Close()
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, pointIDs); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE data_points SET status='invalid',updated_at=now() WHERE project_id=$1 AND id=ANY($2::uuid[])`, projectID, pointIDs); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "标记查询数据点失效失败", err)
+	}
+	commandTag, err := tx.Exec(ctx, `
         DELETE FROM data_queries
         WHERE project_id = $1 AND id = $2
     `, projectID, queryID)
@@ -228,6 +356,9 @@ func (r *QueryRepository) Delete(ctx context.Context, projectID, queryID string)
 	}
 	if commandTag.RowsAffected() == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "查询不存在")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交查询删除事务失败", err)
 	}
 	return nil
 }

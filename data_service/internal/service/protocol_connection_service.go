@@ -31,27 +31,21 @@ var allowedRedisModes = map[string]struct{}{
 	"cluster":    {},
 }
 
-// ProtocolConnection 表示 wave1 协议连接响应结构。
+// ProtocolConnection 表示 协议连接 协议连接响应结构。
 type ProtocolConnection struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"projectId"`
 	Name      string    `json:"name"`
 	Type      string    `json:"type"`
-	Status    string    `json:"status"`
+	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// KafkaPreview 表示 Kafka 预览响应结构。
-type KafkaPreview struct {
-	Topic   string `json:"topic"`
-	Payload string `json:"payload"`
 }
 
 // CreateKafkaConfigInput 表示创建 Kafka 配置的业务输入。
 type CreateKafkaConfigInput struct {
 	Name            string
-	Status          string
+	Enabled         *bool
 	Brokers         string
 	Topic           string
 	ConsumerGroup   string
@@ -64,21 +58,21 @@ type CreateKafkaConfigInput struct {
 // CreateHTTPConfigInput 表示创建 HTTP 配置的业务输入。
 type CreateHTTPConfigInput struct {
 	Name        string
-	Status      string
+	Enabled     *bool
 	Description string
 }
 
 // CreateWebSocketConfigInput 表示创建 WebSocket 配置的业务输入。
 type CreateWebSocketConfigInput struct {
 	Name        string
-	Status      string
+	Enabled     *bool
 	Description string
 }
 
 // CreateRedisConfigInput 表示创建 Redis 配置的业务输入。
 type CreateRedisConfigInput struct {
 	Name            string
-	Status          string
+	Enabled         *bool
 	Address         string
 	DB              *int
 	Username        *string
@@ -90,20 +84,20 @@ type CreateRedisConfigInput struct {
 	ClearSecretKeys []string
 }
 
-// ProtocolWave1Service 负责第一波协议配置的输入校验和结果映射。
-// 说明：`kafka/http/websocket/redis` 属于 Phase 1 正式协议范围，但不是 MQTT 那种完整运行态深度。
+// ProtocolConnectionService 负责协议连接配置的输入校验和结果映射。
+// 说明：`kafka/http/websocket/redis` 属于 开发态协议 正式协议范围，但不是 MQTT 那种完整运行态深度。
 // 当前只保证配置层与 artifact 层稳定；其中仅 Kafka 暂时保留 mock preview 作为联调样本。
-type ProtocolWave1Service struct {
-	repository *repository.ProtocolWave1Repository
+type ProtocolConnectionService struct {
+	repository *repository.ProtocolConnectionRepository
 }
 
-// NewProtocolWave1Service 创建第一波协议服务。
-func NewProtocolWave1Service(repo *repository.ProtocolWave1Repository) *ProtocolWave1Service {
-	return &ProtocolWave1Service{repository: repo}
+// NewProtocolConnectionService 创建协议连接服务。
+func NewProtocolConnectionService(repo *repository.ProtocolConnectionRepository) *ProtocolConnectionService {
+	return &ProtocolConnectionService{repository: repo}
 }
 
 // CreateKafkaConfig 创建 Kafka Source 配置。
-func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID, userID string, input CreateKafkaConfigInput) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) CreateKafkaConfig(ctx context.Context, projectID, userID string, input CreateKafkaConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -112,10 +106,6 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 	}
 
 	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +136,7 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 		ProjectID:     projectID,
 		UserID:        userID,
 		Name:          name,
-		Status:        status,
+		IsEnabled:     input.Enabled,
 		Brokers:       brokers,
 		Topic:         topic,
 		ConsumerGroup: consumerGroup,
@@ -162,32 +152,8 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 	return &connection, nil
 }
 
-// PreviewKafkaTopic 返回 Kafka 预览结果。
-func (s *ProtocolWave1Service) PreviewKafkaTopic(ctx context.Context, projectID, connectionID string) ([]KafkaPreview, error) {
-	if err := validateProjectID(projectID); err != nil {
-		return nil, err
-	}
-	if err := validateConnectionID(connectionID); err != nil {
-		return nil, err
-	}
-
-	records, err := s.repository.PreviewKafkaTopic(ctx, projectID, connectionID)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]KafkaPreview, 0, len(records))
-	for _, record := range records {
-		result = append(result, KafkaPreview{
-			Topic:   record.Topic,
-			Payload: record.Payload,
-		})
-	}
-	return result, nil
-}
-
 // CreateHTTPConfig 创建 HTTP Source 配置。
-func (s *ProtocolWave1Service) CreateHTTPConfig(ctx context.Context, projectID, userID string, input CreateHTTPConfigInput) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) CreateHTTPConfig(ctx context.Context, projectID, userID string, input CreateHTTPConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -199,16 +165,11 @@ func (s *ProtocolWave1Service) CreateHTTPConfig(ctx context.Context, projectID, 
 	if err != nil {
 		return nil, err
 	}
-	status, err := normalizeProtocolStatus(input.Status)
-	if err != nil {
-		return nil, err
-	}
-
 	record, err := s.repository.CreateHTTPConfig(ctx, repository.CreateHTTPConfigParams{
 		ProjectID:   projectID,
 		UserID:      userID,
 		Name:        name,
-		Status:      status,
+		IsEnabled:   input.Enabled,
 		Description: strings.TrimSpace(input.Description),
 	})
 	if err != nil {
@@ -220,7 +181,7 @@ func (s *ProtocolWave1Service) CreateHTTPConfig(ctx context.Context, projectID, 
 }
 
 // CreateWebSocketConfig 创建 WebSocket Source 配置。
-func (s *ProtocolWave1Service) CreateWebSocketConfig(ctx context.Context, projectID, userID string, input CreateWebSocketConfigInput) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) CreateWebSocketConfig(ctx context.Context, projectID, userID string, input CreateWebSocketConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -232,15 +193,11 @@ func (s *ProtocolWave1Service) CreateWebSocketConfig(ctx context.Context, projec
 	if err != nil {
 		return nil, err
 	}
-	status, err := normalizeProtocolStatus(input.Status)
-	if err != nil {
-		return nil, err
-	}
 	record, err := s.repository.CreateWebSocketConfig(ctx, repository.CreateWebSocketConfigParams{
 		ProjectID:   projectID,
 		UserID:      userID,
 		Name:        name,
-		Status:      status,
+		IsEnabled:   input.Enabled,
 		Description: strings.TrimSpace(input.Description),
 	})
 	if err != nil {
@@ -252,7 +209,7 @@ func (s *ProtocolWave1Service) CreateWebSocketConfig(ctx context.Context, projec
 }
 
 // CreateRedisConfig 创建 Redis Source 配置。
-func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID, userID string, input CreateRedisConfigInput) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) CreateRedisConfig(ctx context.Context, projectID, userID string, input CreateRedisConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -261,10 +218,6 @@ func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID,
 	}
 
 	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +251,7 @@ func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID,
 		ProjectID:  projectID,
 		UserID:     userID,
 		Name:       name,
-		Status:     status,
+		IsEnabled:  input.Enabled,
 		Address:    address,
 		DB:         db,
 		Username:   normalizeOptionalText(input.Username),
@@ -315,16 +268,12 @@ func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID,
 	return &connection, nil
 }
 
-func (s *ProtocolWave1Service) UpdateKafkaConfig(ctx context.Context, projectID, connectionID, userID string, input CreateKafkaConfigInput) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) UpdateKafkaConfig(ctx context.Context, projectID, connectionID, userID string, input CreateKafkaConfigInput) (*ProtocolConnection, error) {
 	if err := validateConnectionID(connectionID); err != nil {
 		return nil, err
 	}
 	// 复用创建校验但改为调用更新仓储，确保创建和编辑语义一致。
 	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +294,7 @@ func (s *ProtocolWave1Service) UpdateKafkaConfig(ctx context.Context, projectID,
 		return nil, err
 	}
 	options = scrubKafkaSecretOptions(mapFromAny(normalized["options"]))
-	record, err := s.repository.UpdateKafkaConfig(ctx, connectionID, repository.CreateKafkaConfigParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Brokers: brokers, Topic: strings.TrimSpace(input.Topic), ConsumerGroup: strings.TrimSpace(input.ConsumerGroup), StartPosition: start, Options: options, Secrets: secrets, ClearSecretKeys: input.ClearSecretKeys})
+	record, err := s.repository.UpdateKafkaConfig(ctx, connectionID, repository.CreateKafkaConfigParams{ProjectID: projectID, UserID: userID, Name: name, IsEnabled: input.Enabled, Brokers: brokers, Topic: strings.TrimSpace(input.Topic), ConsumerGroup: strings.TrimSpace(input.ConsumerGroup), StartPosition: start, Options: options, Secrets: secrets, ClearSecretKeys: input.ClearSecretKeys})
 	if err != nil {
 		return nil, err
 	}
@@ -353,13 +302,13 @@ func (s *ProtocolWave1Service) UpdateKafkaConfig(ctx context.Context, projectID,
 	return &result, nil
 }
 
-func (s *ProtocolWave1Service) UpdateHTTPConfig(ctx context.Context, projectID, connectionID, userID string, input CreateHTTPConfigInput) (*ProtocolConnection, error) {
-	return s.updateSimple(ctx, projectID, connectionID, userID, "http", input.Name, input.Status, input.Description)
+func (s *ProtocolConnectionService) UpdateHTTPConfig(ctx context.Context, projectID, connectionID, userID string, input CreateHTTPConfigInput) (*ProtocolConnection, error) {
+	return s.updateSimple(ctx, projectID, connectionID, userID, "http", input.Name, input.Enabled, input.Description)
 }
-func (s *ProtocolWave1Service) UpdateWebSocketConfig(ctx context.Context, projectID, connectionID, userID string, input CreateWebSocketConfigInput) (*ProtocolConnection, error) {
-	return s.updateSimple(ctx, projectID, connectionID, userID, "websocket", input.Name, input.Status, input.Description)
+func (s *ProtocolConnectionService) UpdateWebSocketConfig(ctx context.Context, projectID, connectionID, userID string, input CreateWebSocketConfigInput) (*ProtocolConnection, error) {
+	return s.updateSimple(ctx, projectID, connectionID, userID, "websocket", input.Name, input.Enabled, input.Description)
 }
-func (s *ProtocolWave1Service) updateSimple(ctx context.Context, projectID, connectionID, userID, protocolType, rawName, rawStatus, description string) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) updateSimple(ctx context.Context, projectID, connectionID, userID, protocolType, rawName string, isEnabled *bool, description string) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -373,11 +322,7 @@ func (s *ProtocolWave1Service) updateSimple(ctx context.Context, projectID, conn
 	if err != nil {
 		return nil, err
 	}
-	status, err := normalizeProtocolStatus(rawStatus)
-	if err != nil {
-		return nil, err
-	}
-	record, err := s.repository.UpdateSimpleConfig(ctx, connectionID, protocolType, projectID, userID, name, status, map[string]any{"mode": "workbench", "description": strings.TrimSpace(description)})
+	record, err := s.repository.UpdateSimpleConfig(ctx, connectionID, protocolType, projectID, userID, name, isEnabled, map[string]any{"mode": "workbench", "description": strings.TrimSpace(description)})
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +330,7 @@ func (s *ProtocolWave1Service) updateSimple(ctx context.Context, projectID, conn
 	return &result, nil
 }
 
-func (s *ProtocolWave1Service) UpdateRedisConfig(ctx context.Context, projectID, connectionID, userID string, input CreateRedisConfigInput) (*ProtocolConnection, error) {
+func (s *ProtocolConnectionService) UpdateRedisConfig(ctx context.Context, projectID, connectionID, userID string, input CreateRedisConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -396,10 +341,6 @@ func (s *ProtocolWave1Service) UpdateRedisConfig(ctx context.Context, projectID,
 		return nil, err
 	}
 	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +369,7 @@ func (s *ProtocolWave1Service) UpdateRedisConfig(ctx context.Context, projectID,
 	if err := validateConnectionOptionsContainNoSecrets(input.Options); err != nil {
 		return nil, err
 	}
-	record, err := s.repository.UpdateRedisConfig(ctx, connectionID, repository.CreateRedisConfigParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Address: address, DB: db, Username: normalizeOptionalText(input.Username), KeyPattern: keyPattern, Mode: mode, Options: cloneMap(input.Options), Secrets: mergePasswordSecret(input.Secrets, input.Password), ClearSecretKeys: input.ClearSecretKeys})
+	record, err := s.repository.UpdateRedisConfig(ctx, connectionID, repository.CreateRedisConfigParams{ProjectID: projectID, UserID: userID, Name: name, IsEnabled: input.Enabled, Address: address, DB: db, Username: normalizeOptionalText(input.Username), KeyPattern: keyPattern, Mode: mode, Options: cloneMap(input.Options), Secrets: mergePasswordSecret(input.Secrets, input.Password), ClearSecretKeys: input.ClearSecretKeys})
 	if err != nil {
 		return nil, err
 	}
@@ -485,21 +426,10 @@ func toProtocolConnection(record repository.ProtocolConnectionRecord) ProtocolCo
 		ProjectID: record.ProjectID,
 		Name:      record.Name,
 		Type:      record.Type,
-		Status:    record.Status,
+		Enabled:   record.IsEnabled,
 		CreatedAt: record.CreatedAt,
 		UpdatedAt: record.UpdatedAt,
 	}
-}
-
-func normalizeProtocolStatus(status string) (string, error) {
-	status = strings.TrimSpace(strings.ToLower(status))
-	if status == "" {
-		return "disconnected", nil
-	}
-	if _, ok := allowedConnectionStatus[status]; !ok {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接状态不受支持")
-	}
-	return status, nil
 }
 
 func validateProtocolConnectionID(connectionID string) error {

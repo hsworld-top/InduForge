@@ -76,6 +76,7 @@ type HTTPRequest struct {
 	LastSentAt    *time.Time     `json:"lastSentAt"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
+	Outputs       []SourceOutput `json:"outputs"`
 }
 
 // CreateHTTPRequestGroupInput 描述创建 HTTP 分组的输入。
@@ -95,35 +96,38 @@ type UpdateHTTPRequestGroupInput struct {
 
 // CreateHTTPRequestInput 描述创建 HTTP 请求的输入。
 type CreateHTTPRequestInput struct {
-	GroupID   *string        `json:"groupId"`
-	Name      string         `json:"name"`
-	Method    string         `json:"method"`
-	URL       string         `json:"url"`
-	Params    []any          `json:"params"`
-	Headers   []any          `json:"headers"`
-	Auth      map[string]any `json:"auth"`
-	BodyType  string         `json:"bodyType"`
-	Body      map[string]any `json:"body"`
-	Settings  map[string]any `json:"settings"`
-	Enabled   bool           `json:"enabled"`
-	SortOrder int            `json:"sortOrder"`
+	GroupID   *string             `json:"groupId"`
+	Name      string              `json:"name"`
+	Method    string              `json:"method"`
+	URL       string              `json:"url"`
+	Params    []any               `json:"params"`
+	Headers   []any               `json:"headers"`
+	Auth      map[string]any      `json:"auth"`
+	BodyType  string              `json:"bodyType"`
+	Body      map[string]any      `json:"body"`
+	Settings  map[string]any      `json:"settings"`
+	Enabled   bool                `json:"enabled"`
+	SortOrder int                 `json:"sortOrder"`
+	Outputs   []SourceOutputInput `json:"outputs"`
 }
 
 // UpdateHTTPRequestInput 描述更新 HTTP 请求的输入。
 type UpdateHTTPRequestInput struct {
-	GroupID    *string        `json:"groupId"`
-	HasGroupID bool           `json:"-"`
-	Name       string         `json:"name"`
-	Method     string         `json:"method"`
-	URL        string         `json:"url"`
-	Params     []any          `json:"params"`
-	Headers    []any          `json:"headers"`
-	Auth       map[string]any `json:"auth"`
-	BodyType   string         `json:"bodyType"`
-	Body       map[string]any `json:"body"`
-	Settings   map[string]any `json:"settings"`
-	Enabled    bool           `json:"enabled"`
-	SortOrder  int            `json:"sortOrder"`
+	GroupID    *string             `json:"groupId"`
+	HasGroupID bool                `json:"-"`
+	Name       string              `json:"name"`
+	Method     string              `json:"method"`
+	URL        string              `json:"url"`
+	Params     []any               `json:"params"`
+	Headers    []any               `json:"headers"`
+	Auth       map[string]any      `json:"auth"`
+	BodyType   string              `json:"bodyType"`
+	Body       map[string]any      `json:"body"`
+	Settings   map[string]any      `json:"settings"`
+	Enabled    bool                `json:"enabled"`
+	SortOrder  int                 `json:"sortOrder"`
+	Outputs    []SourceOutputInput `json:"outputs"`
+	HasOutputs bool                `json:"-"`
 }
 
 // HTTPRequestListResult 表示 HTTP 请求分页结果。
@@ -394,8 +398,9 @@ func (s *HTTPWorkbenchService) SendRequest(ctx context.Context, projectID, reque
 
 	startedAt := time.Now()
 	response, sendErr := s.executeHTTPRequest(ctx, *connection, *record)
+	var mappingErr error
 	quality := "good"
-	var defaultValue *string
+	outputValues := map[string]*string{}
 	if sendErr != nil {
 		quality = "bad"
 		response = &HTTPSendResponse{
@@ -411,20 +416,59 @@ func (s *HTTPWorkbenchService) SendRequest(ctx context.Context, projectID, reque
 			ReceivedAt: time.Now().UTC(),
 		}
 	} else {
-		value := stringifyJSONValue(response)
-		defaultValue = &value
+		outputValues, mappingErr = snapshotValuesForSourceOutputs(response.Body, record.Outputs)
+		if mappingErr != nil {
+			quality = "bad"
+		}
 	}
 	if saveErr := s.repository.SaveRequestSendSnapshot(ctx, projectID, repository.HTTPRequestSendSnapshot{
 		RequestID:       record.ID,
 		Quality:         quality,
 		LastSentAt:      time.Now().UTC(),
-		DefaultValue:    defaultValue,
+		OutputValues:    outputValues,
 		DataPointConfig: httpRequestSourceConfig(*connection, *record),
 		UserID:          userID,
 	}); saveErr != nil {
 		return nil, saveErr
 	}
+	if mappingErr != nil {
+		return nil, mappingErr
+	}
 	return response, nil
+}
+
+func snapshotValuesForSourceOutputs(root any, outputs []repository.SourceOutputMappingRecord) (map[string]*string, error) {
+	result := make(map[string]*string, len(outputs))
+	for _, output := range outputs {
+		value := root
+		switch output.Selector.Kind {
+		case "whole":
+		case "path":
+			selected, ok := extractValueBySegments(root, output.Selector.Segments)
+			if !ok {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "预览结果缺少输出字段: "+output.DisplayName)
+			}
+			value = selected
+		case "column":
+			if output.Selector.Column == nil {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出列配置无效")
+			}
+			object, ok := root.(map[string]any)
+			if !ok {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "预览结果不是可提取字段的对象")
+			}
+			selected, exists := object[*output.Selector.Column]
+			if !exists {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "预览结果缺少输出字段: "+output.DisplayName)
+			}
+			value = selected
+		default:
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出选择器无效")
+		}
+		encoded := stringifyJSONValue(value)
+		result[output.ID] = &encoded
+	}
+	return result, nil
 }
 
 func (s *HTTPWorkbenchService) executeHTTPRequest(ctx context.Context, connection repository.ConnectionRecord, record repository.HTTPRequestRecord) (*HTTPSendResponse, error) {
@@ -526,6 +570,10 @@ func (s *HTTPWorkbenchService) normalizeCreateRequest(ctx context.Context, proje
 		URL:          requestURL,
 	}
 	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRows(input.Headers), normalizeHTTPAuth(input.Auth))
+	outputs, err := normalizeSourceOutputs(input.Outputs, SourceOutputInput{Key: "response", DisplayName: name, Selector: SourceOutputSelector{Kind: "whole"}, DataType: "object"})
+	if err != nil {
+		return repository.CreateHTTPRequestParams{}, err
+	}
 	return repository.CreateHTTPRequestParams{
 		ProjectID:       projectID,
 		ConnectionID:    connection.ID,
@@ -545,6 +593,7 @@ func (s *HTTPWorkbenchService) normalizeCreateRequest(ctx context.Context, proje
 		DataPointPath:   buildHTTPDataPointPath(connection.Name, name),
 		DataPointConfig: httpRequestSourceConfig(connection, record),
 		UserID:          userID,
+		Outputs:         outputs,
 	}, nil
 }
 
@@ -565,6 +614,13 @@ func (s *HTTPWorkbenchService) normalizeUpdateRequest(ctx context.Context, proje
 	record.Method = method
 	record.URL = requestURL
 	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRowsOrDefault(input.Headers, current.Headers), normalizeMapOrDefault(input.Auth, current.Auth, normalizeHTTPAuth))
+	outputs := sourceOutputParamsFromRecords(current.Outputs)
+	if input.HasOutputs {
+		outputs, err = normalizeSourceOutputs(input.Outputs, SourceOutputInput{Key: "response", DisplayName: name, Selector: SourceOutputSelector{Kind: "whole"}, DataType: "object"})
+		if err != nil {
+			return repository.UpdateHTTPRequestParams{}, err
+		}
+	}
 	return repository.UpdateHTTPRequestParams{
 		ID:              current.ID,
 		ProjectID:       projectID,
@@ -585,6 +641,7 @@ func (s *HTTPWorkbenchService) normalizeUpdateRequest(ctx context.Context, proje
 		DataPointConfig: httpRequestSourceConfig(connection, record),
 		DefaultValue:    nil,
 		UserID:          userID,
+		Outputs:         outputs,
 	}, nil
 }
 
@@ -685,7 +742,9 @@ func buildHTTPRequestBody(record repository.HTTPRequestRecord) (io.Reader, strin
 		buffer := &bytes.Buffer{}
 		writer := multipart.NewWriter(buffer)
 		for key, value := range enabledKeyValuePairs(anySliceFromMap(record.Body, "form")) {
-			_ = writer.WriteField(key, value)
+			if err := writer.WriteField(key, value); err != nil {
+				return nil, "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP form-data 字段写入失败", err)
+			}
 		}
 		if err := writer.Close(); err != nil {
 			return nil, "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP form-data Body 格式无效", err)
@@ -954,6 +1013,7 @@ func toHTTPRequest(record repository.HTTPRequestRecord) HTTPRequest {
 		LastSentAt:    record.LastSentAt,
 		CreatedAt:     record.CreatedAt,
 		UpdatedAt:     record.UpdatedAt,
+		Outputs:       sourceOutputsFromRecords(record.Outputs),
 	}
 }
 

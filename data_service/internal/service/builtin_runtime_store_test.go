@@ -7,9 +7,8 @@ import (
 
 func TestNormalizeBuiltinStoreCreateInput(t *testing.T) {
 	input := CreateConnectionInput{
-		Name:   " IF关系库 ",
-		Type:   "builtin.relation",
-		Status: "",
+		Name: " IF关系库 ",
+		Type: "builtin.relation",
 		Config: map[string]any{
 			"host":        "127.0.0.1",
 			"port":        5432,
@@ -24,9 +23,6 @@ func TestNormalizeBuiltinStoreCreateInput(t *testing.T) {
 
 	if result.Type != "builtin.relation" || result.Category != "builtin" {
 		t.Fatalf("unexpected type/category: %s/%s", result.Type, result.Category)
-	}
-	if result.Status != "connected" {
-		t.Fatalf("expected connected status, got %q", result.Status)
 	}
 	if _, ok := result.Config["host"]; ok {
 		t.Fatal("builtin store config must not keep host")

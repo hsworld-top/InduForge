@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -74,18 +75,37 @@ func (r *tdengineRuntime) Close() {
 }
 
 func (r *tdengineRuntime) query(ctx context.Context, sqlText string, args ...any) ([]string, [][]any, error) {
+	columns, _, rows, _, err := r.queryBounded(ctx, sqlText, developmentSQLMaxRows, developmentSQLMaxBytes, args...)
+	return columns, rows, err
+}
+
+func (r *tdengineRuntime) queryBounded(ctx context.Context, sqlText string, maxRows, maxBytes int, args ...any) ([]string, map[string]string, [][]any, string, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	rows, err := r.db.QueryContext(queryCtx, sqlText, args...)
+	boundSQL, err := bindTDengineQuery(sqlText, args)
 	if err != nil {
-		return nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行 TDengine SQL 失败", err)
+		return nil, nil, nil, "", err
+	}
+	rows, err := r.db.QueryContext(queryCtx, boundSQL)
+	if err != nil {
+		return nil, nil, nil, "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, sqlExecutionErrorMessage("执行 TDengine SQL 失败", err), err)
 	}
 	defer rows.Close()
 	columns, err := rows.Columns()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, "", err
+	}
+	columnTypeInfo, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	databaseTypes := make([]string, 0, len(columnTypeInfo))
+	for _, columnType := range columnTypeInfo {
+		databaseTypes = append(databaseTypes, columnType.DatabaseTypeName())
 	}
 	result := make([][]any, 0)
+	resultBytes := 0
+	truncatedBy := ""
 	for rows.Next() {
 		values := make([]any, len(columns))
 		scanTargets := make([]any, len(columns))
@@ -93,17 +113,128 @@ func (r *tdengineRuntime) query(ctx context.Context, sqlText string, args ...any
 			scanTargets[index] = &values[index]
 		}
 		if err := rows.Scan(scanTargets...); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, "", err
 		}
 		for index, value := range values {
 			values[index] = normalizeQueryValue(value)
 		}
+		accepted, reason, nextBytes := admitSQLResultRow(len(result), resultBytes, maxRows, maxBytes, values)
+		if !accepted {
+			truncatedBy = reason
+			break
+		}
 		result = append(result, values)
+		resultBytes = nextBytes
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, "", err
 	}
-	return columns, result, nil
+	return columns, canonicalSQLColumnTypes(columns, databaseTypes), result, truncatedBy, nil
+}
+
+func (r *tdengineRuntime) execAffected(ctx context.Context, sqlText string, args ...any) (int64, error) {
+	boundSQL, err := bindTDengineQuery(sqlText, args)
+	if err != nil {
+		return 0, err
+	}
+	result, err := r.db.ExecContext(ctx, boundSQL)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, sqlExecutionErrorMessage("执行 TDengine SQL 失败", err), err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return affected, nil
+}
+
+// bindTDengineQuery 将工作台值参数编码为 TDengine SQL 字面量。
+// taosWS 的查询接口不支持 database/sql 的 QueryContext 参数绑定，因此这里只替换
+// 注释、字符串和引用标识符之外的 ?，并对字符串做单引号转义。
+func bindTDengineQuery(sqlText string, args []any) (string, error) {
+	if err := validateSQLParameterCount("tdengine", sqlText, args); err != nil {
+		return "", err
+	}
+	if len(args) == 0 {
+		return sqlText, nil
+	}
+
+	var result strings.Builder
+	result.Grow(len(sqlText) + len(args)*8)
+	argIndex := 0
+	for index := 0; index < len(sqlText); {
+		ch := sqlText[index]
+		if ch == '-' && index+1 < len(sqlText) && sqlText[index+1] == '-' {
+			end := index + 2
+			for end < len(sqlText) && sqlText[end] != '\n' {
+				end++
+			}
+			result.WriteString(sqlText[index:end])
+			index = end
+			continue
+		}
+		if ch == '/' && index+1 < len(sqlText) && sqlText[index+1] == '*' {
+			end := index + 2
+			for end+1 < len(sqlText) && !(sqlText[end] == '*' && sqlText[end+1] == '/') {
+				end++
+			}
+			if end+1 < len(sqlText) {
+				end += 2
+			} else {
+				end = len(sqlText)
+			}
+			result.WriteString(sqlText[index:end])
+			index = end
+			continue
+		}
+		if ch == '\'' || ch == '"' || ch == '`' {
+			quote := ch
+			end := index + 1
+			for end < len(sqlText) {
+				if sqlText[end] == quote {
+					if end+1 < len(sqlText) && sqlText[end+1] == quote {
+						end += 2
+						continue
+					}
+					end++
+					break
+				}
+				end++
+			}
+			result.WriteString(sqlText[index:end])
+			index = end
+			continue
+		}
+		if ch == '?' {
+			result.WriteString(tdengineSQLLiteral(args[argIndex]))
+			argIndex++
+			index++
+			continue
+		}
+		result.WriteByte(ch)
+		index++
+	}
+	return result.String(), nil
+}
+
+func tdengineSQLLiteral(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return "NULL"
+	case bool:
+		if typed {
+			return "TRUE"
+		}
+		return "FALSE"
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return fmt.Sprint(typed)
+	case time.Time:
+		return "'" + typed.Format(time.RFC3339Nano) + "'"
+	case []byte:
+		return "'" + hex.EncodeToString(typed) + "'"
+	default:
+		return "'" + strings.ReplaceAll(fmt.Sprint(typed), "'", "''") + "'"
+	}
 }
 
 func validateTDengineReadOnlySQL(sqlText string) error {
@@ -122,6 +253,16 @@ func validateTDengineReadOnlySQL(sqlText string) error {
 		}
 	}
 	return nil
+}
+
+// validateTDengineSingleSQL 保持工作台与数据点回放只执行一条语句；
+// DML/DDL 是否允许由连接账号权限和统一数据库边界校验决定。
+func validateTDengineSingleSQL(sqlText string) error {
+	_, statementCount, err := tdengineSQLTokens(sqlText)
+	if err != nil || statementCount != 1 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TDengine 工作台只允许单条 SQL")
+	}
+	return ensureSQLWorkbenchDatabaseBoundary(sqlText)
 }
 
 // tdengineSQLTokens 只提取注释、字符串和引用标识符之外的关键字，并统计真实语句数。

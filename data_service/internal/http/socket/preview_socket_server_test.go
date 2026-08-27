@@ -752,7 +752,7 @@ func TestMqttPreviewRuntimeHandleMessageSkipsBatchTagWithoutCurrentPayloadValue(
 			"tag-982-id": {
 				ID:             "tag-982-id",
 				SubscriptionID: "sub-1",
-				DataType:       "number",
+				DataType:       "float64",
 				ParseType:      "batch_jsonpath",
 				ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag982","valuePath":"V","qualityPath":"Q"}`,
 			},
@@ -785,7 +785,7 @@ func TestPreviewSocketServerLoadLatestTagSnapshotSkipsBatchHistoryWithoutCurrent
 	tag := repository.MqttTagRecord{
 		ID:             "tag-982-id",
 		SubscriptionID: "sub-1",
-		DataType:       "number",
+		DataType:       "float64",
 		ParseType:      "batch_jsonpath",
 		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag982","valuePath":"V","qualityPath":"Q"}`,
 		CreatedAt:      time.Date(2026, 6, 3, 9, 0, 0, 0, time.UTC),
@@ -803,7 +803,7 @@ func TestPreviewSocketServerLoadLatestTagSnapshotSkipsEmptyHistory(t *testing.T)
 	tag := repository.MqttTagRecord{
 		ID:             "tag-1",
 		SubscriptionID: "sub-1",
-		DataType:       "number",
+		DataType:       "float64",
 		ParseType:      "batch_jsonpath",
 		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag1","valuePath":"V","qualityPath":"Q"}`,
 		CreatedAt:      time.Date(2026, 6, 4, 10, 0, 0, 0, time.UTC),

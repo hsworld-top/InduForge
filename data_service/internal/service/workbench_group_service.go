@@ -253,12 +253,19 @@ func normalizeWorkbenchScope(scope string) (string, error) {
 }
 
 func normalizeWorkbenchGroupName(name string) (string, error) {
+	original := name
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "分组名称不能为空")
 	}
+	if original != name {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "分组名称不能包含首尾空格")
+	}
 	if len([]rune(name)) > 100 {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "分组名称长度不能超过 100 个字符")
+	}
+	if containsControlCharacter(name) {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "分组名称不能包含换行、制表符或其他控制字符")
 	}
 	return name, nil
 }

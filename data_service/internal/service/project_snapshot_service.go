@@ -74,6 +74,14 @@ func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID
 
 // validateSnapshotAlarmItems 保证快照不能绕过普通 API 的报警语义校验。
 func validateSnapshotAlarmItems(snapshot repository.ProjectSnapshot) error {
+	allowedSeverities, severityOrder := defaultAlarmSeverityPolicy()
+	if snapshot.AlarmSettings != nil && len(snapshot.AlarmSettings.SeverityDefinitions) > 0 {
+		allowedSeverities, severityOrder = map[string]bool{}, map[string]int{}
+		for _, definition := range snapshot.AlarmSettings.SeverityDefinitions {
+			allowedSeverities[definition.Key] = true
+			severityOrder[definition.Key] = definition.SortOrder
+		}
+	}
 	dataTypes := make(map[string]string, len(snapshot.DataPoints))
 	for _, datapoint := range snapshot.DataPoints {
 		dataTypes[datapoint.ID] = datapoint.DataType
@@ -95,7 +103,7 @@ func validateSnapshotAlarmItems(snapshot repository.ProjectSnapshot) error {
 			if record.EvaluationMode == "single" && len(input.Conditions) != 1 {
 				return badAlarm("快照普通单条件报警必须且只能有一个条件")
 			}
-			if _, err := normalizeConfigurationConditions(input.Conditions, category, record.EvaluationMode, false); err != nil {
+			if _, err := normalizeConfigurationConditionsWithPolicy(input.Conditions, category, record.EvaluationMode, false, allowedSeverities, severityOrder); err != nil {
 				return err
 			}
 		} else if record.Mode == "derived" {
@@ -113,7 +121,7 @@ func validateSnapshotAlarmItems(snapshot repository.ProjectSnapshot) error {
 			if err := validateDerivedAlarmExpression(record.DerivedExpression, seenKeys); err != nil {
 				return err
 			}
-			if _, err := normalizeConfigurationConditions(input.Conditions, "", "single", true); err != nil {
+			if _, err := normalizeConfigurationConditionsWithPolicy(input.Conditions, "", "single", true, allowedSeverities, severityOrder); err != nil {
 				return err
 			}
 			if err := validateDerivedAlarmExpressionTypes(record.DerivedExpression, input.Inputs, input.Conditions[0]); err != nil {

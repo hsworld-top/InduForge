@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -44,6 +45,29 @@ type BuiltinRuntimeOptions struct {
 	RealtimeKeyPrefix string
 }
 
+// wrapBuiltinSQLExecutionError 保留工作台用户可操作的 PostgreSQL 错误信息，
+// 同时继续包装原始错误供服务端日志和 errors.Is/errors.As 使用。
+func wrapBuiltinSQLExecutionError(err error) error {
+	message := "执行内置运行库 SQL 失败"
+	var pgErr *pgconn.PgError
+	if stderrors.As(err, &pgErr) {
+		detail := strings.TrimSpace(pgErr.Message)
+		if pgErr.Position > 0 {
+			detail = fmt.Sprintf("%s（位置 %d）", detail, pgErr.Position)
+		}
+		if value := strings.TrimSpace(pgErr.Detail); value != "" {
+			detail += "；" + value
+		}
+		if value := strings.TrimSpace(pgErr.Hint); value != "" {
+			detail += "；提示：" + value
+		}
+		if detail != "" {
+			message += "：" + detail
+		}
+	}
+	return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, message, err)
+}
+
 func NewBuiltinRuntimeService(options BuiltinRuntimeOptions) *BuiltinRuntimeService {
 	realtimeKeyPrefix := strings.Trim(strings.TrimSpace(options.RealtimeKeyPrefix), ":")
 	if realtimeKeyPrefix == "" {
@@ -65,10 +89,14 @@ type BuiltinSQLExecuteInput struct {
 }
 
 type BuiltinSQLExecuteResult struct {
-	Columns       []string         `json:"columns"`
-	Rows          []map[string]any `json:"rows"`
-	RowCount      int              `json:"rowCount"`
-	ExecutionTime int64            `json:"executionTime"`
+	Columns       []string          `json:"columns"`
+	ColumnTypes   map[string]string `json:"columnTypes"`
+	Rows          []map[string]any  `json:"rows"`
+	RowCount      int               `json:"rowCount"`
+	ExecutionTime int64             `json:"executionTime"`
+	Truncated     bool              `json:"truncated"`
+	TruncatedBy   string            `json:"truncatedBy,omitempty"`
+	Limits        SQLResultLimits   `json:"limits"`
 }
 
 type BuiltinTimeseriesSampleInput struct {
@@ -103,6 +131,9 @@ type BuiltinRealtimeKeyDefinition struct {
 }
 
 func (s *BuiltinRuntimeService) ExecuteSQL(ctx context.Context, projectID string, input BuiltinSQLExecuteInput) (*BuiltinSQLExecuteResult, error) {
+	execCtx, cancel := context.WithTimeout(ctx, developmentSQLTimeout*time.Second)
+	defer cancel()
+	ctx = execCtx
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -150,13 +181,15 @@ func (s *BuiltinRuntimeService) ExecuteSQL(ctx context.Context, projectID string
 	if isBuiltinQuerySQL(sqlText) {
 		rows, err := tx.Query(ctx, sqlText, input.Parameters...)
 		if err != nil {
-			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行内置运行库 SQL 失败", err)
+			return nil, wrapBuiltinSQLExecutionError(err)
 		}
 		defer rows.Close()
 		result, err := collectBuiltinSQLRows(rows, limit)
 		if err != nil {
 			return nil, err
 		}
+		// 截断结果时仍可能有未读取的数据，提交事务前必须关闭游标释放连接。
+		rows.Close()
 		result.ExecutionTime = time.Since(startedAt).Milliseconds()
 		if err := tx.Commit(ctx); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交内置运行库 SQL 事务失败", err)
@@ -166,20 +199,25 @@ func (s *BuiltinRuntimeService) ExecuteSQL(ctx context.Context, projectID string
 
 	commandTag, err := tx.Exec(ctx, sqlText, input.Parameters...)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行内置运行库 SQL 失败", err)
+		return nil, wrapBuiltinSQLExecutionError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交内置运行库 SQL 事务失败", err)
 	}
 	return &BuiltinSQLExecuteResult{
 		Columns:       []string{},
+		ColumnTypes:   map[string]string{},
 		Rows:          []map[string]any{},
 		RowCount:      int(commandTag.RowsAffected()),
 		ExecutionTime: time.Since(startedAt).Milliseconds(),
+		Limits:        developmentSQLLimits(),
 	}, nil
 }
 
 func (s *BuiltinRuntimeService) ExecuteSQLInSchema(ctx context.Context, schemaName string, sqlText string, parameters []any, limit int) (*BuiltinSQLExecuteResult, error) {
+	execCtx, cancel := context.WithTimeout(ctx, developmentSQLTimeout*time.Second)
+	defer cancel()
+	ctx = execCtx
 	if s == nil || s.devPool == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态关系/时序运行库未初始化")
 	}
@@ -218,13 +256,15 @@ func (s *BuiltinRuntimeService) ExecuteSQLInSchema(ctx context.Context, schemaNa
 	if isBuiltinQuerySQL(sqlText) {
 		rows, err := tx.Query(ctx, sqlText, parameters...)
 		if err != nil {
-			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行内置运行库 SQL 失败", err)
+			return nil, wrapBuiltinSQLExecutionError(err)
 		}
 		defer rows.Close()
 		result, err := collectBuiltinSQLRows(rows, limit)
 		if err != nil {
 			return nil, err
 		}
+		// 截断结果时仍可能有未读取的数据，提交事务前必须关闭游标释放连接。
+		rows.Close()
 		result.ExecutionTime = time.Since(startedAt).Milliseconds()
 		if err := tx.Commit(ctx); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交内置运行库 SQL 事务失败", err)
@@ -233,16 +273,18 @@ func (s *BuiltinRuntimeService) ExecuteSQLInSchema(ctx context.Context, schemaNa
 	}
 	commandTag, err := tx.Exec(ctx, sqlText, parameters...)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行内置运行库 SQL 失败", err)
+		return nil, wrapBuiltinSQLExecutionError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交内置运行库 SQL 事务失败", err)
 	}
 	return &BuiltinSQLExecuteResult{
 		Columns:       []string{},
+		ColumnTypes:   map[string]string{},
 		Rows:          []map[string]any{},
 		RowCount:      int(commandTag.RowsAffected()),
 		ExecutionTime: time.Since(startedAt).Milliseconds(),
+		Limits:        developmentSQLLimits(),
 	}, nil
 }
 
@@ -697,7 +739,9 @@ func (s *BuiltinRuntimeService) SetRealtimeKey(ctx context.Context, projectID st
 	if err := s.realtimeClient.Set(ctx, key, string(valueBytes), ttl).Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写入实时库 key 失败", err)
 	}
-	_, _ = s.UpsertRealtimeKeyDefinition(ctx, projectID, input.RuntimeKey, input.Key, "json", input.TtlSeconds, "")
+	if _, err := s.UpsertRealtimeKeyDefinition(ctx, projectID, input.RuntimeKey, input.Key, "json", input.TtlSeconds, ""); err != nil {
+		return nil, err
+	}
 	return s.GetRealtimeKey(ctx, projectID, input.RuntimeKey, input.Key)
 }
 
@@ -885,51 +929,56 @@ func builtinSQLSchemaSuffix(store string) (string, error) {
 }
 
 func isBuiltinQuerySQL(sqlText string) bool {
-	normalized := strings.TrimSpace(strings.ToLower(sqlText))
-	return strings.HasPrefix(normalized, "select") || strings.HasPrefix(normalized, "with")
+	return sqlWorkbenchStatementReturnsRows(sqlText)
 }
 
 func collectBuiltinSQLRows(rows pgx.Rows, limit int) (*BuiltinSQLExecuteResult, error) {
 	fieldDescriptions := rows.FieldDescriptions()
 	columns := make([]string, 0, len(fieldDescriptions))
+	databaseTypes := make([]string, 0, len(fieldDescriptions))
 	for _, field := range fieldDescriptions {
 		columns = append(columns, field.Name)
+		typeName := ""
+		if dataType, ok := rows.Conn().TypeMap().TypeForOID(field.DataTypeOID); ok {
+			typeName = dataType.Name
+		}
+		databaseTypes = append(databaseTypes, typeName)
 	}
 
 	resultRows := make([]map[string]any, 0)
+	resultBytes := 0
+	truncatedBy := ""
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取内置运行库 SQL 结果失败", err)
 		}
-		if len(resultRows) >= limit {
-			continue
-		}
 		item := map[string]any{}
 		for index, column := range columns {
 			if index < len(values) {
-				item[column] = normalizeBuiltinSQLValue(values[index])
+				item[column] = normalizeSQLValue(values[index], databaseTypes[index])
 			}
 		}
+		accepted, reason, nextBytes := admitSQLResultRow(len(resultRows), resultBytes, limit, developmentSQLMaxBytes, item)
+		if !accepted {
+			truncatedBy = reason
+			break
+		}
 		resultRows = append(resultRows, item)
+		resultBytes = nextBytes
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "遍历内置运行库 SQL 结果失败", err)
 	}
 	return &BuiltinSQLExecuteResult{
-		Columns:  columns,
-		Rows:     resultRows,
-		RowCount: len(resultRows),
+		Columns:     columns,
+		ColumnTypes: canonicalSQLColumnTypes(columns, databaseTypes),
+		Rows:        resultRows,
+		RowCount:    len(resultRows),
+		Truncated:   truncatedBy != "",
+		TruncatedBy: truncatedBy,
+		Limits:      developmentSQLLimits(),
 	}, nil
-}
-
-func normalizeBuiltinSQLValue(value any) any {
-	switch typed := value.(type) {
-	case []byte:
-		return string(typed)
-	default:
-		return typed
-	}
 }
 
 func deriveBuiltinRealtimeKey(prefix, projectID, runtimeKey, key string) (string, error) {

@@ -52,6 +52,7 @@ type HTTPRequestRecord struct {
 	DataPointPath *string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	Outputs       []SourceOutputMappingRecord
 }
 
 // CreateHTTPRequestGroupParams 描述 HTTP 请求分组创建参数。
@@ -95,6 +96,7 @@ type CreateHTTPRequestParams struct {
 	DefaultValue    *string
 	UserID          string
 	Secrets         map[string]string
+	Outputs         []SourceOutputMappingParam
 }
 
 // UpdateHTTPRequestParams 描述 HTTP 请求更新参数。
@@ -118,6 +120,7 @@ type UpdateHTTPRequestParams struct {
 	DefaultValue    *string
 	UserID          string
 	Secrets         map[string]string
+	Outputs         []SourceOutputMappingParam
 }
 
 // HTTPRequestSendSnapshot 描述一次发送后要保存的状态（不含响应内容，前端不展示历史）。
@@ -125,7 +128,7 @@ type HTTPRequestSendSnapshot struct {
 	RequestID       string
 	Quality         string
 	LastSentAt      time.Time
-	DefaultValue    *string
+	OutputValues    map[string]*string
 	DataPointConfig map[string]any
 	UserID          string
 }
@@ -287,10 +290,12 @@ func (r *HTTPWorkbenchRepository) ListRequestsPage(ctx context.Context, projectI
 		       req.sort_order, req.quality, req.last_sent_at, dp.id, dp.path,
 		       req.created_at, req.updated_at
 		FROM data_http_requests req
-		LEFT JOIN data_points dp
-		  ON dp.project_id = req.project_id
-		 AND dp.source_type = 'http.request'
-		 AND dp.source_config->>'requestId' = req.id::text
+		LEFT JOIN LATERAL (
+		  SELECT point.id,point.path FROM data_points point
+		  WHERE point.project_id=req.project_id AND point.source_type='http.request'
+		    AND point.source_config->>'requestId'=req.id::text
+		  ORDER BY point.created_at LIMIT 1
+		) dp ON true
 		WHERE `+whereSQL+`
 		ORDER BY req.sort_order ASC, req.updated_at DESC
 		LIMIT $`+fmt.Sprint(len(args)+1)+` OFFSET $`+fmt.Sprint(len(args)+2), queryArgs...)
@@ -305,6 +310,12 @@ func (r *HTTPWorkbenchRepository) ListRequestsPage(ctx context.Context, projectI
 		if scanErr != nil {
 			return nil, 0, scanErr
 		}
+		outputs, outputErr := listSourceOutputMappings(ctx, r.pool, "http", record.ID)
+		if outputErr != nil {
+			return nil, 0, outputErr
+		}
+		record.Outputs = outputs
+		setLegacyHTTPOutputSummary(&record)
 		result = append(result, record)
 	}
 	if err := rows.Err(); err != nil {
@@ -321,10 +332,12 @@ func (r *HTTPWorkbenchRepository) GetRequest(ctx context.Context, projectID, req
 		       req.sort_order, req.quality, req.last_sent_at, dp.id, dp.path,
 		       req.created_at, req.updated_at
 		FROM data_http_requests req
-		LEFT JOIN data_points dp
-		  ON dp.project_id = req.project_id
-		 AND dp.source_type = 'http.request'
-		 AND dp.source_config->>'requestId' = req.id::text
+		LEFT JOIN LATERAL (
+		  SELECT point.id,point.path FROM data_points point
+		  WHERE point.project_id=req.project_id AND point.source_type='http.request'
+		    AND point.source_config->>'requestId'=req.id::text
+		  ORDER BY point.created_at LIMIT 1
+		) dp ON true
 		WHERE req.project_id = $1 AND req.id = $2
 	`, projectID, requestID)
 	record, err := scanHTTPRequestRecord(row)
@@ -334,11 +347,20 @@ func (r *HTTPWorkbenchRepository) GetRequest(ctx context.Context, projectID, req
 		}
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 HTTP 请求失败", err)
 	}
+	outputs, err := listSourceOutputMappings(ctx, r.pool, "http", record.ID)
+	if err != nil {
+		return nil, err
+	}
+	record.Outputs = outputs
 	return &record, nil
 }
 
 // CreateRequestWithDataPoint 创建 HTTP 请求并同步 http.request 数据点。
 func (r *HTTPWorkbenchRepository) CreateRequestWithDataPoint(ctx context.Context, params CreateHTTPRequestParams) (*HTTPRequestRecord, error) {
+	encoded, err := marshalHTTPRequestFields(params.Params, params.Headers, params.Auth, params.Body, params.Settings)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 HTTP 请求创建事务失败", err)
@@ -355,7 +377,7 @@ func (r *HTTPWorkbenchRepository) CreateRequestWithDataPoint(ctx context.Context
 		RETURNING id, project_id, connection_id, group_id, name, method, url, params, headers,
 		          auth, body_type, body, settings, enabled, sort_order,
 		          quality, last_sent_at, created_at, updated_at
-	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Method, params.URL, mustMarshalJSONArray(params.Params), mustMarshalJSONArray(params.Headers), mustMarshalJSONObject(params.Auth), params.BodyType, mustMarshalJSONObject(params.Body), mustMarshalJSONObject(params.Settings), params.Enabled, params.SortOrder, params.UserID).Scan(
+	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Method, params.URL, encoded.params, encoded.headers, encoded.auth, params.BodyType, encoded.body, encoded.settings, params.Enabled, params.SortOrder, params.UserID).Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Name, &record.Method, &record.URL,
 		newJSONScanner(&record.Params), newJSONScanner(&record.Headers), newJSONScanner(&record.Auth), &record.BodyType,
 		newJSONScanner(&record.Body), newJSONScanner(&record.Settings), &record.Enabled, &record.SortOrder,
@@ -365,12 +387,15 @@ func (r *HTTPWorkbenchRepository) CreateRequestWithDataPoint(ctx context.Context
 		return nil, translateHTTPWorkbenchWriteError(err, "创建 HTTP 请求失败")
 	}
 
-	dataPointID, dataPointPath, err := upsertHTTPRequestDataPoint(ctx, tx, record, params.DataPointPath, params.DataPointConfig, params.DefaultValue, params.UserID)
+	outputs, err := syncSourceOutputMappingsTx(ctx, tx, sourceOutputOwner{Kind: "http", ID: record.ID,
+		ProjectID: record.ProjectID, SourceType: "http.request", SourceID: record.ConnectionID,
+		PathPrefix: params.DataPointPath, Status: protocolOutputStatus(record.Enabled), BaseConfig: params.DataPointConfig,
+		DefaultValue: params.DefaultValue, UserID: params.UserID}, params.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	record.DataPointID = &dataPointID
-	record.DataPointPath = &dataPointPath
+	record.Outputs = outputs
+	setLegacyHTTPOutputSummary(&record)
 	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "http."+record.ID+".", params.Secrets); err != nil {
 		return nil, err
 	}
@@ -383,6 +408,10 @@ func (r *HTTPWorkbenchRepository) CreateRequestWithDataPoint(ctx context.Context
 
 // UpdateRequestWithDataPoint 更新 HTTP 请求并同步 http.request 数据点。
 func (r *HTTPWorkbenchRepository) UpdateRequestWithDataPoint(ctx context.Context, params UpdateHTTPRequestParams) (*HTTPRequestRecord, error) {
+	encoded, err := marshalHTTPRequestFields(params.Params, params.Headers, params.Auth, params.Body, params.Settings)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 HTTP 请求更新事务失败", err)
@@ -410,7 +439,7 @@ func (r *HTTPWorkbenchRepository) UpdateRequestWithDataPoint(ctx context.Context
 		RETURNING id, project_id, connection_id, group_id, name, method, url, params, headers,
 		          auth, body_type, body, settings, enabled, sort_order,
 		          quality, last_sent_at, created_at, updated_at
-	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.Method, params.URL, mustMarshalJSONArray(params.Params), mustMarshalJSONArray(params.Headers), mustMarshalJSONObject(params.Auth), params.BodyType, mustMarshalJSONObject(params.Body), mustMarshalJSONObject(params.Settings), params.Enabled, params.SortOrder, params.UserID).Scan(
+	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.Method, params.URL, encoded.params, encoded.headers, encoded.auth, params.BodyType, encoded.body, encoded.settings, params.Enabled, params.SortOrder, params.UserID).Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Name, &record.Method, &record.URL,
 		newJSONScanner(&record.Params), newJSONScanner(&record.Headers), newJSONScanner(&record.Auth), &record.BodyType,
 		newJSONScanner(&record.Body), newJSONScanner(&record.Settings), &record.Enabled, &record.SortOrder,
@@ -423,12 +452,15 @@ func (r *HTTPWorkbenchRepository) UpdateRequestWithDataPoint(ctx context.Context
 		return nil, translateHTTPWorkbenchWriteError(err, "更新 HTTP 请求失败")
 	}
 
-	dataPointID, dataPointPath, err := upsertHTTPRequestDataPoint(ctx, tx, record, params.DataPointPath, params.DataPointConfig, params.DefaultValue, params.UserID)
+	outputs, err := syncSourceOutputMappingsTx(ctx, tx, sourceOutputOwner{Kind: "http", ID: record.ID,
+		ProjectID: record.ProjectID, SourceType: "http.request", SourceID: record.ConnectionID,
+		PathPrefix: params.DataPointPath, Status: protocolOutputStatus(record.Enabled), BaseConfig: params.DataPointConfig,
+		DefaultValue: params.DefaultValue, UserID: params.UserID}, params.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	record.DataPointID = &dataPointID
-	record.DataPointPath = &dataPointPath
+	record.Outputs = outputs
+	setLegacyHTTPOutputSummary(&record)
 	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "http."+record.ID+".", params.Secrets); err != nil {
 		return nil, err
 	}
@@ -451,6 +483,13 @@ func (r *HTTPWorkbenchRepository) DeleteRequestWithDataPoint(ctx context.Context
 		if err == pgx.ErrNoRows {
 			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "HTTP 请求不存在")
 		}
+		return err
+	}
+	pointIDs, err := sourceOutputPointIDsForUpdate(ctx, tx, "http", requestID)
+	if err != nil {
+		return err
+	}
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, pointIDs); err != nil {
 		return err
 	}
 
@@ -506,19 +545,20 @@ func (r *HTTPWorkbenchRepository) SaveRequestSendSnapshot(ctx context.Context, p
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "HTTP 请求不存在")
 	}
 
-	if snapshot.DefaultValue != nil {
+	for mappingID, outputValue := range snapshot.OutputValues {
+		if outputValue == nil {
+			continue
+		}
 		_, err = tx.Exec(ctx, `
-			UPDATE data_points
-			SET default_value = $3,
-			    source_config = $4::jsonb,
-			    updated_by = $5,
-			    updated_at = now()
-			WHERE project_id = $1
-			  AND source_type = 'http.request'
-			  AND source_config->>'requestId' = $2
-		`, projectID, snapshot.RequestID, snapshot.DefaultValue, string(configPayload), snapshot.UserID)
+			UPDATE data_points point
+			SET default_value = $4, source_config = point.source_config || $5::jsonb,
+			    updated_by = $6, updated_at = now()
+			FROM data_source_output_mappings mapping
+			WHERE mapping.id=$3 AND mapping.http_request_id=$2 AND mapping.datapoint_id=point.id
+			  AND point.project_id=$1
+		`, projectID, snapshot.RequestID, mappingID, outputValue, string(configPayload), snapshot.UserID)
 		if err != nil {
-			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写回 HTTP 请求数据点失败", err)
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写回 HTTP 请求输出点失败", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -584,6 +624,22 @@ func upsertHTTPRequestDataPoint(ctx context.Context, tx pgx.Tx, record HTTPReque
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 HTTP 请求数据点失败", err)
 	}
 	return dataPointID, dataPointPath, nil
+}
+
+func protocolOutputStatus(enabled bool) string {
+	if enabled {
+		return "active"
+	}
+	return "inactive"
+}
+
+// setLegacyHTTPOutputSummary 仅填充旧的单点摘要字段，公开契约以 Outputs 为准。
+func setLegacyHTTPOutputSummary(record *HTTPRequestRecord) {
+	if record == nil || len(record.Outputs) == 0 {
+		return
+	}
+	record.DataPointID = &record.Outputs[0].DataPointID
+	record.DataPointPath = &record.Outputs[0].DataPointPath
 }
 
 func scanHTTPRequestGroupRecord(row pgx.Row) (HTTPRequestGroupRecord, error) {
@@ -669,14 +725,26 @@ func (s *jsonScanner) Scan(value any) error {
 	return json.Unmarshal(payload, s.target)
 }
 
-func mustMarshalJSONObject(value map[string]any) string {
-	payload, _ := json.Marshal(value)
-	return string(payload)
+type encodedHTTPRequestFields struct {
+	params   string
+	headers  string
+	auth     string
+	body     string
+	settings string
 }
 
-func mustMarshalJSONArray(value []any) string {
-	payload, _ := json.Marshal(value)
-	return string(payload)
+func marshalHTTPRequestFields(params, headers []any, auth, body, settings map[string]any) (encodedHTTPRequestFields, error) {
+	values := []any{params, headers, auth, body, settings}
+	labels := []string{"参数", "请求头", "认证", "请求体", "设置"}
+	encoded := make([]string, len(values))
+	for index, value := range values {
+		payload, err := json.Marshal(value)
+		if err != nil {
+			return encodedHTTPRequestFields{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP "+labels[index]+"无法序列化", err)
+		}
+		encoded[index] = string(payload)
+	}
+	return encodedHTTPRequestFields{params: encoded[0], headers: encoded[1], auth: encoded[2], body: encoded[3], settings: encoded[4]}, nil
 }
 
 func translateHTTPWorkbenchWriteError(err error, fallback string) error {

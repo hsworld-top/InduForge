@@ -17,7 +17,7 @@ type CreateTdengineConfigParams struct {
 	ProjectID       string
 	UserID          string
 	Name            string
-	Status          string
+	IsEnabled       *bool
 	Protocol        string
 	Host            string
 	Port            int
@@ -30,15 +30,15 @@ type CreateTdengineConfigParams struct {
 	ClearSecretKeys []string
 }
 
-// ProtocolWave2Repository 负责 TDengine 配置的参数化 SQL。
-type ProtocolWave2Repository struct {
+// TDengineOPCRepository 负责 TDengine 配置的参数化 SQL。
+type TDengineOPCRepository struct {
 	pool   *pgxpool.Pool
 	cipher *security.ConnectionSecretCipher
 }
 
-// NewProtocolWave2Repository 创建第二波协议仓储。
-func NewProtocolWave2Repository(pool *pgxpool.Pool, ciphers ...*security.ConnectionSecretCipher) *ProtocolWave2Repository {
-	repository := &ProtocolWave2Repository{pool: pool}
+// NewTDengineOPCRepository 创建TDengine 与 OPC DA仓储。
+func NewTDengineOPCRepository(pool *pgxpool.Pool, ciphers ...*security.ConnectionSecretCipher) *TDengineOPCRepository {
+	repository := &TDengineOPCRepository{pool: pool}
 	if len(ciphers) > 0 {
 		repository.cipher = ciphers[0]
 	}
@@ -46,8 +46,8 @@ func NewProtocolWave2Repository(pool *pgxpool.Pool, ciphers ...*security.Connect
 }
 
 // CreateTdengineConfig 创建 TDengine 配置。
-func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, params CreateTdengineConfigParams) (*ProtocolConnectionRecord, error) {
-	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+func (r *TDengineOPCRepository) CreateTdengineConfig(ctx context.Context, params CreateTdengineConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalTDengineOPCJSONObject(params.Options, true)
 	if err != nil {
 		return nil, err
 	}
@@ -56,19 +56,19 @@ func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, para
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 TDengine 配置事务失败", err)
 	}
-	defer rollbackWave2TxQuietly(ctx, tx)
+	defer rollbackTDengineOPCTxQuietly(ctx, tx)
 
-	record, err := r.createConnectionTx(ctx, tx, createWave2ConnectionTxParams{
+	record, err := r.createConnectionTx(ctx, tx, createTDengineOPCConnectionTxParams{
 		ProjectID: params.ProjectID,
 		UserID:    params.UserID,
 		Name:      params.Name,
 		Type:      "tdengine",
-		Status:    params.Status,
+		IsEnabled: params.IsEnabled,
 		Metadata: map[string]any{
 			"protocol": params.Protocol, "host": params.Host, "port": params.Port,
 			"username": params.Username, "databaseName": params.DatabaseName,
 			"timezone": params.Timezone, "tlsSkipVerify": params.TLSSkipVerify,
-			"options": cloneWave2Map(params.Options),
+			"options": cloneTDengineOPCMap(params.Options),
 		},
 	})
 	if err != nil {
@@ -100,8 +100,8 @@ func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, para
 }
 
 // UpdateTdengineConfig 原子更新主连接、结构化 TDengine 配置和密钥。
-func (r *ProtocolWave2Repository) UpdateTdengineConfig(ctx context.Context, connectionID string, params CreateTdengineConfigParams) (*ProtocolConnectionRecord, error) {
-	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+func (r *TDengineOPCRepository) UpdateTdengineConfig(ctx context.Context, connectionID string, params CreateTdengineConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalTDengineOPCJSONObject(params.Options, true)
 	if err != nil {
 		return nil, err
 	}
@@ -109,10 +109,13 @@ func (r *ProtocolWave2Repository) UpdateTdengineConfig(ctx context.Context, conn
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 TDengine 更新事务失败", err)
 	}
-	defer rollbackWave2TxQuietly(ctx, tx)
-	metadataPayload, _ := json.Marshal(map[string]any{"protocol": params.Protocol, "host": params.Host, "port": params.Port, "username": params.Username, "databaseName": params.DatabaseName, "timezone": params.Timezone, "tlsSkipVerify": params.TLSSkipVerify, "options": cloneWave2Map(params.Options)})
+	defer rollbackTDengineOPCTxQuietly(ctx, tx)
+	metadataPayload, err := json.Marshal(map[string]any{"protocol": params.Protocol, "host": params.Host, "port": params.Port, "username": params.Username, "databaseName": params.DatabaseName, "timezone": params.Timezone, "tlsSkipVerify": params.TLSSkipVerify, "options": cloneTDengineOPCMap(params.Options)})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "序列化 TDengine 连接配置失败", err)
+	}
 	record := ProtocolConnectionRecord{}
-	err = tx.QueryRow(ctx, `UPDATE data_connections SET name=$3,status=$4,metadata=$5::jsonb,updated_by=$6,updated_at=now() WHERE project_id=$1 AND id=$2 AND type='tdengine' RETURNING id,project_id,name,type,status,created_at,updated_at`, params.ProjectID, connectionID, params.Name, params.Status, metadataPayload, params.UserID).Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.Status, &record.CreatedAt, &record.UpdatedAt)
+	err = tx.QueryRow(ctx, `UPDATE data_connections SET name=$3,is_enabled=$4,metadata=$5::jsonb,updated_by=$6,updated_at=now() WHERE project_id=$1 AND id=$2 AND type='tdengine' RETURNING id,project_id,name,type,is_enabled,created_at,updated_at`, params.ProjectID, connectionID, params.Name, connectionEnabledValue(params.IsEnabled), string(metadataPayload), params.UserID).Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.IsEnabled, &record.CreatedAt, &record.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "TDengine 配置不存在")
 	}
@@ -132,20 +135,20 @@ func (r *ProtocolWave2Repository) UpdateTdengineConfig(ctx context.Context, conn
 	return &record, nil
 }
 
-type createWave2ConnectionTxParams struct {
+type createTDengineOPCConnectionTxParams struct {
 	ProjectID string
 	UserID    string
 	Name      string
 	Type      string
-	Status    string
+	IsEnabled *bool
 	Metadata  map[string]any
 }
 
 // createConnectionTx 统一写入 data_connections 主表。
-func (r *ProtocolWave2Repository) createConnectionTx(ctx context.Context, tx pgx.Tx, params createWave2ConnectionTxParams) (*ProtocolConnectionRecord, error) {
+func (r *TDengineOPCRepository) createConnectionTx(ctx context.Context, tx pgx.Tx, params createTDengineOPCConnectionTxParams) (*ProtocolConnectionRecord, error) {
 	metadataPayload, err := json.Marshal(params.Metadata)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 wave2 连接元数据失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 TDengine 连接元数据失败", err)
 	}
 
 	record := ProtocolConnectionRecord{}
@@ -162,7 +165,7 @@ func (r *ProtocolWave2Repository) createConnectionTx(ctx context.Context, tx pgx
 			name,
 			type,
 			category,
-			status,
+			is_enabled,
 			metadata,
 			display_order,
 			created_by,
@@ -171,24 +174,23 @@ func (r *ProtocolWave2Repository) createConnectionTx(ctx context.Context, tx pgx
 		VALUES ($1, $2, $3, 'protocol', $4, $5::jsonb,
 			COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
 			$6, $6)
-		RETURNING id, project_id, name, type, status, created_at, updated_at
-	`, params.ProjectID, params.Name, params.Type, params.Status, string(metadataPayload), params.UserID).Scan(
+		RETURNING id, project_id, name, type, is_enabled, created_at, updated_at
+	`, params.ProjectID, params.Name, params.Type, connectionEnabledValue(params.IsEnabled), string(metadataPayload), params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.Name,
 		&record.Type,
-		&record.Status,
+		&record.IsEnabled,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
 	if err != nil {
-		return nil, translateConnectionWriteError("写入 wave2 连接失败", err)
+		return nil, translateConnectionWriteError("写入 TDengine 连接失败", err)
 	}
-
 	return &record, nil
 }
 
-func marshalWave2JSONObject(input map[string]any, emptyAsObject bool) (any, error) {
+func marshalTDengineOPCJSONObject(input map[string]any, emptyAsObject bool) (any, error) {
 	if input == nil {
 		if emptyAsObject {
 			return "{}", nil
@@ -197,12 +199,12 @@ func marshalWave2JSONObject(input map[string]any, emptyAsObject bool) (any, erro
 	}
 	payload, err := json.Marshal(input)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "wave2 JSON 配置格式无效", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TDengine JSON 配置格式无效", err)
 	}
 	return string(payload), nil
 }
 
-func cloneWave2Map(input map[string]any) map[string]any {
+func cloneTDengineOPCMap(input map[string]any) map[string]any {
 	if input == nil {
 		return map[string]any{}
 	}
@@ -213,6 +215,6 @@ func cloneWave2Map(input map[string]any) map[string]any {
 	return result
 }
 
-func rollbackWave2TxQuietly(ctx context.Context, tx pgx.Tx) {
+func rollbackTDengineOPCTxQuietly(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(ctx)
 }

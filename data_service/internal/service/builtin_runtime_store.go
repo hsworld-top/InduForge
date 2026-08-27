@@ -17,7 +17,6 @@ type builtinStoreNormalizedInput struct {
 	Name     string
 	Type     string
 	Category string
-	Status   string
 	Config   map[string]any
 }
 
@@ -89,7 +88,6 @@ func normalizeBuiltinStoreCreateInput(projectID string, input CreateConnectionIn
 		Name:     name,
 		Type:     connectionType,
 		Category: "builtin",
-		Status:   "connected",
 		Config:   config,
 	}, nil
 }

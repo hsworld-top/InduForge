@@ -54,9 +54,9 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	})
 
 	relational := mustCreateConnection(t, server.URL, token, projectID, map[string]any{
-		"name":   "pg-main",
-		"type":   "relational",
-		"status": "connected",
+		"name":    "pg-main",
+		"type":    "relational",
+		"enabled": true,
 		"config": map[string]any{
 			"host":     "127.0.0.1",
 			"port":     5432,
@@ -297,7 +297,7 @@ func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase,
 			updated_by
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, $9, $10, $10)
-	`, tagID, projectID, subscriptionID, "tag-main", "tag_main", "number", "jsonpath", "$.value", 1, userID)
+	`, tagID, projectID, subscriptionID, "tag-main", "tag_main", "float64", "jsonpath", "$.value", 1, userID)
 	if err != nil {
 		t.Fatalf("insert mqtt tag failed: %v", err)
 	}

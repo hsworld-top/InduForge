@@ -44,18 +44,18 @@ func TestCollectorPointGroupDeleteMovesSubtreePointsToParent(t *testing.T) {
 
 	_, err := fixture.pool.Exec(ctx, `
 		INSERT INTO data_collector_connections (
-			id, project_id, name, code, status, display_order, protocol_family, driver_id,
+			id, project_id, name, code, is_enabled, display_order, protocol_family, driver_id,
 			driver_version, schema_version, config, metadata, created_by
-		) VALUES ($1,$2,'测试连接','test_connection','unknown',0,'opcua','opcua.standard','1.0.0',2,'{}','{}',$3);
+		) VALUES ($1,$2,'测试连接','test_connection',true,0,'opcua','opcua.standard','1.0.0',2,'{}','{}',$3);
 		INSERT INTO data_collector_point_groups (id,project_id,connection_id,parent_id,name) VALUES
 			($4,$2,$1,NULL,'上级分组'),
 			($5,$2,$1,$4,'待删除分组'),
 			($6,$2,$1,$5,'子分组');
 		INSERT INTO data_collector_points (
 			id,project_id,connection_id,group_id,code,name,address,address_text,address_schema_version,
-			data_type,element_count,read_options,acquisition,enabled,sort_order,metadata
+			data_type,element_count,read_options,acquisition_mode,acquisition_overrides,enabled,sort_order,metadata
 		) VALUES ($7,$2,$1,$6,'temperature','温度','{"nodeId":"ns=2;s=Temperature"}',
-			'ns=2;s=Temperature',2,'float32',1,'{}','{"intervalMs":1000}',true,0,'{}')
+			'ns=2;s=Temperature',2,'float32',1,'{}','inherit','{}',true,0,'{}')
 	`, connectionID, projectID, userID, parentID, rootID, childID, pointID)
 	if err != nil {
 		t.Fatalf("准备分组删除测试数据失败: %v", err)
@@ -82,7 +82,7 @@ func TestCollectorPointGroupDeleteMovesSubtreePointsToParent(t *testing.T) {
 	}
 }
 
-func TestCollectorPointBatchCreateSkipsConflictsAndExportsSpecifiedPages(t *testing.T) {
+func TestCollectorPointBatchCreateRollsBackConflictsAndExportsSpecifiedPages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fixture := setupTestDatabase(t, ctx)
@@ -93,7 +93,7 @@ func TestCollectorPointBatchCreateSkipsConflictsAndExportsSpecifiedPages(t *test
 	projectID := "550e8400-e29b-41d4-a716-446655440100"
 	connectionID := "550e8400-e29b-41d4-a716-446655440110"
 	userID := "550e8400-e29b-41d4-a716-446655440101"
-	_, err := fixture.pool.Exec(ctx, `INSERT INTO data_collector_connections (id,project_id,name,code,status,display_order,protocol_family,driver_id,driver_version,schema_version,config,metadata,created_by) VALUES ($1,$2,'批量测试连接','batch_test','unknown',0,'opcua','opcua.standard','1.0.0',1,'{}','{}',$3); INSERT INTO data_collector_points (id,project_id,connection_id,code,name,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata) VALUES ('550e8400-e29b-41d4-a716-446655440120',$2,$1,'existing','Existing','{"nodeId":"ns=2;s=Existing"}','ns=2;s=Existing',1,'float32',1,'{}','{"intervalMs":1000}',true,0,'{}')`, connectionID, projectID, userID)
+	_, err := fixture.pool.Exec(ctx, `INSERT INTO data_collector_connections (id,project_id,name,code,is_enabled,display_order,protocol_family,driver_id,driver_version,schema_version,config,metadata,created_by) VALUES ($1,$2,'批量测试连接','batch_test',true,0,'opcua','opcua.standard','1.0.0',1,'{}','{}',$3); INSERT INTO data_collector_points (id,project_id,connection_id,code,name,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition_mode,acquisition_overrides,enabled,sort_order,metadata) VALUES ('550e8400-e29b-41d4-a716-446655440120',$2,$1,'existing','Existing','{"nodeId":"ns=2;s=Existing"}','ns=2;s=Existing',1,'float32',1,'{}','inherit','{}',true,0,'{}')`, connectionID, projectID, userID)
 	if err != nil {
 		t.Fatalf("准备批量创建测试数据失败: %v", err)
 	}
@@ -104,11 +104,22 @@ func TestCollectorPointBatchCreateSkipsConflictsAndExportsSpecifiedPages(t *test
 		{ID: "550e8400-e29b-41d4-a716-446655440123", ProjectID: projectID, ConnectionID: connectionID, ConnectionCode: "batch_test", UserID: userID, Code: "temperature", Name: "Temperature", Address: map[string]any{"nodeId": "ns=2;s=Temperature"}, AddressText: "ns=2;s=Temperature", AddressSchemaVersion: 1, DataType: "float32", ElementCount: 1, ReadOptions: map[string]any{}, Acquisition: map[string]any{"intervalMs": 1000}, Enabled: true, SortOrder: 2, Metadata: map[string]any{}},
 	}
 	created, err := repo.CreatePointsBatch(ctx, params)
+	if err == nil {
+		t.Fatalf("批量创建包含名称冲突时应整体失败，实际创建 %#v", created)
+	}
+	var countAfterRollback int
+	if err := fixture.pool.QueryRow(ctx, `SELECT count(*) FROM data_collector_points WHERE connection_id=$1`, connectionID).Scan(&countAfterRollback); err != nil {
+		t.Fatalf("读取回滚后的点位数量失败: %v", err)
+	}
+	if countAfterRollback != 1 {
+		t.Fatalf("冲突批次应完整回滚，当前点位数量 = %d, want 1", countAfterRollback)
+	}
+	created, err = repo.CreatePointsBatch(ctx, params[1:])
 	if err != nil {
-		t.Fatalf("批量创建变量失败: %v", err)
+		t.Fatalf("创建无冲突批次失败: %v", err)
 	}
 	if len(created) != 2 {
-		t.Fatalf("创建数量 = %d, want 2", len(created))
+		t.Fatalf("无冲突批次创建数量 = %d, want 2", len(created))
 	}
 	exported := make([]repository.CollectorPointExportRecord, 0)
 	err = repo.StreamPointsForExport(ctx, projectID, connectionID, repository.CollectorPointExportFilter{Scope: "pages", PageSize: 1, Pages: []int64{2}, SortBy: "sortOrder", SortOrder: "asc"}, func(record repository.CollectorPointExportRecord) error {
@@ -220,7 +231,7 @@ func TestSchemaInitializer_CreatesIndexes(t *testing.T) {
 	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
 	for _, indexName := range []string{
 		"data_connections_project_type_idx",
-		"data_connections_project_status_idx",
+		"data_connections_project_type_idx",
 		"data_relational_configs_connection_id_key",
 		"data_relational_configs_db_type_idx",
 		"data_relational_configs_ssl_config_gin_idx",
@@ -308,8 +319,8 @@ func TestSchemaInitializer_CreatesBuiltinRuntimeStores(t *testing.T) {
 	}
 	for _, storeType := range storeTypes {
 		_, err := fixture.pool.Exec(ctx, `
-			INSERT INTO data_connections (project_id, name, type, category, status, metadata, created_by, updated_by)
-			VALUES ($1, $2, $3, 'builtin', 'connected', jsonb_build_object('runtimeKey', $3 || ':' || $1::text), $4, $4)
+			INSERT INTO data_connections (project_id, name, type, category, is_enabled, metadata, created_by, updated_by)
+			VALUES ($1, $2, $3, 'builtin', true, jsonb_build_object('runtimeKey', $3 || ':' || $1::text), $4, $4)
 		`, projectID, storeType, storeType, userID)
 		if err != nil {
 			t.Fatalf("insert builtin type %s failed: %v", storeType, err)
@@ -317,8 +328,8 @@ func TestSchemaInitializer_CreatesBuiltinRuntimeStores(t *testing.T) {
 	}
 
 	_, err := fixture.pool.Exec(ctx, `
-		INSERT INTO data_connections (project_id, name, type, category, status, metadata, created_by, updated_by)
-		VALUES ($1, 'repeat relation', 'builtin.relation', 'builtin', 'connected', jsonb_build_object('runtimeKey', 'builtin.relation:repeat'), $2, $2)
+		INSERT INTO data_connections (project_id, name, type, category, is_enabled, metadata, created_by, updated_by)
+		VALUES ($1, 'repeat relation', 'builtin.relation', 'builtin', true, jsonb_build_object('runtimeKey', 'builtin.relation:repeat'), $2, $2)
 	`, projectID, userID)
 	if err != nil {
 		t.Fatalf("expected duplicate builtin relation type to be allowed: %v", err)
@@ -446,12 +457,12 @@ func TestAlarmConfigSyncIsIdempotentOrderedAndTransactional(t *testing.T) {
 		t.Fatalf("准备报警同步数据点失败: %v", err)
 	}
 
-	repo := repository.NewAlarmPolicyRepository(fixture.pool)
+	repo := repository.NewAlarmRepository(fixture.pool)
 	first, err := repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 1, "request-1", []repository.AlarmConfigSyncOperationParams{{
 		Resource: "group",
 		Action:   "upsert",
 		ID:       groupID,
-		Group: &repository.SaveAlarmPolicyGroupParams{
+		Group: &repository.SaveAlarmGroupParams{
 			ID: groupID, ProjectID: projectID, UserID: actorID, Name: "生产线",
 		},
 	}})
@@ -483,7 +494,7 @@ func TestAlarmConfigSyncIsIdempotentOrderedAndTransactional(t *testing.T) {
 	invalidAlarmItem.DatapointID = &missingDatapointID
 	invalidAlarmItem.TriggerFingerprint = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 3, "request-3", []repository.AlarmConfigSyncOperationParams{
-		{Resource: "group", Action: "upsert", ID: rollbackGroupID, Group: &repository.SaveAlarmPolicyGroupParams{ID: rollbackGroupID, ProjectID: projectID, UserID: actorID, Name: "应回滚目录"}},
+		{Resource: "group", Action: "upsert", ID: rollbackGroupID, Group: &repository.SaveAlarmGroupParams{ID: rollbackGroupID, ProjectID: projectID, UserID: actorID, Name: "应回滚目录"}},
 		{Resource: "alarm_item", Action: "upsert", ID: invalidConfigurationID, AlarmItem: &invalidAlarmItem},
 	}); err == nil {
 		t.Fatal("包含无效点位的同步批次应失败")

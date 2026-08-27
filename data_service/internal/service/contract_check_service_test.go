@@ -3,12 +3,54 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/repository"
 )
+
+func TestLoadAllContractCheckPages(t *testing.T) {
+	const total = 1201
+	calls := 0
+	records, err := loadAllContractCheckPages(100, func(page, pageSize int) ([]int, int, error) {
+		calls++
+		start := (page - 1) * pageSize
+		if start >= total {
+			return []int{}, total, nil
+		}
+		end := min(start+pageSize, total)
+		pageRecords := make([]int, 0, end-start)
+		for index := start; index < end; index++ {
+			pageRecords = append(pageRecords, index)
+		}
+		return pageRecords, total, nil
+	})
+	if err != nil {
+		t.Fatalf("loadAllContractCheckPages() error = %v", err)
+	}
+	if len(records) != total {
+		t.Fatalf("len(records) = %d, want %d", len(records), total)
+	}
+	if calls != 13 {
+		t.Fatalf("calls = %d, want 13", calls)
+	}
+	if records[0] != 0 || records[len(records)-1] != total-1 {
+		t.Fatalf("records boundary = %d..%d", records[0], records[len(records)-1])
+	}
+
+	wantErr := fmt.Errorf("page failed")
+	_, err = loadAllContractCheckPages(100, func(page, _ int) ([]int, int, error) {
+		if page == 2 {
+			return nil, total, wantErr
+		}
+		return make([]int, 100), total, nil
+	})
+	if err != wantErr {
+		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+}
 
 func TestToContractCheckRun(t *testing.T) {
 	summaryJSON := json.RawMessage(`{"passed":5,"warning":2,"failed":1}`)
@@ -108,7 +150,7 @@ func TestContractCheckServiceListRuns_NilChecks(t *testing.T) {
 	s := &ContractCheckService{
 		datapoints: &repository.DataPointRepository{},
 		compute:    &repository.ComputeRepository{},
-		alarms:     &repository.AlarmPolicyRepository{},
+		alarms:     &repository.AlarmRepository{},
 		checks:     nil,
 	}
 

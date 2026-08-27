@@ -19,25 +19,21 @@ import (
 
 // ConnectionRecord 表示 data_connections 表在仓储层的投影结果。
 type ConnectionRecord struct {
-	ID            string
-	ProjectID     string
-	Name          string
-	Type          string
-	Category      string `json:"-"`
-	Status        string
-	Config        map[string]any
-	DisplayOrder  int
-	VariableCount int
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-}
-
-// ConnectionStatusRecord 表示连接状态更新后的返回结构。
-type ConnectionStatusRecord struct {
-	ID        string
-	ProjectID string
-	Status    string
-	UpdatedAt time.Time
+	ID                 string         `json:"id"`
+	ProjectID          string         `json:"projectId"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Category           string         `json:"-"`
+	IsEnabled          bool           `json:"enabled"`
+	Config             map[string]any `json:"config"`
+	DisplayOrder       int            `json:"displayOrder"`
+	VariableCount      int            `json:"-"`
+	LastTestStatus     string         `json:"-"`
+	LastTestedAt       *time.Time     `json:"-"`
+	LastTestDurationMS *int           `json:"-"`
+	LastTestMessage    *string        `json:"-"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
 }
 
 // ConnectionListFilter 表示接入源管理页的服务端分页与筛选条件。
@@ -55,7 +51,7 @@ type CreateConnectionParams struct {
 	Name            string
 	Type            string
 	Category        string
-	Status          string
+	IsEnabled       *bool
 	Config          map[string]any
 	Secrets         map[string]string
 	ClearSecretKeys []string
@@ -69,7 +65,7 @@ type UpdateConnectionParams struct {
 	Name            string
 	Type            string
 	Category        string
-	Status          string
+	IsEnabled       *bool
 	Config          map[string]any
 	Secrets         map[string]string
 	ClearSecretKeys []string
@@ -149,10 +145,16 @@ func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID stri
 		       conn.name,
 		       conn.type,
 		       conn.category,
-		       conn.status,
+		       conn.is_enabled,
 		       conn.metadata,
 		       conn.display_order,
-		       0 AS variable_count,
+		       (SELECT COUNT(*)::int FROM data_points dp
+		        WHERE dp.project_id = conn.project_id AND dp.status <> 'invalid'
+		          AND (dp.source_id = conn.id OR dp.source_config->>'connectionId' = conn.id::text)) AS variable_count,
+		       COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+		       (SELECT test.tested_at FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+		       (SELECT test.duration_ms FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+		       (SELECT test.message FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
 		       conn.created_at,
 		       conn.updated_at
 		FROM data_connections conn
@@ -208,8 +210,15 @@ func (r *ConnectionRepository) ListByProjectPage(ctx context.Context, projectID 
 
 	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	listQuery := fmt.Sprintf(`
-		SELECT conn.id, conn.project_id, conn.name, conn.type, conn.category, conn.status,
-		       conn.metadata, conn.display_order, 0 AS variable_count,
+		SELECT conn.id, conn.project_id, conn.name, conn.type, conn.category,
+		       conn.is_enabled, conn.metadata, conn.display_order,
+		       (SELECT COUNT(*)::int FROM data_points dp
+		        WHERE dp.project_id = conn.project_id AND dp.status <> 'invalid'
+		          AND (dp.source_id = conn.id OR dp.source_config->>'connectionId' = conn.id::text)) AS variable_count,
+		       COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+		       (SELECT test.tested_at FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+		       (SELECT test.duration_ms FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+		       (SELECT test.message FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
 		       conn.created_at, conn.updated_at
 		FROM data_connections conn
 		WHERE %s
@@ -242,7 +251,13 @@ func (r *ConnectionRepository) ListByProjectPage(ctx context.Context, projectID 
 // 如果后续频繁走 project_id + id 联合过滤，可再评估是否需要复合索引。
 func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID, connectionID string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
+		SELECT id, project_id, name, type, category, is_enabled, metadata, display_order,
+               (SELECT COUNT(*)::int FROM data_points dp WHERE dp.project_id=data_connections.project_id AND dp.status <> 'invalid' AND (dp.source_id=data_connections.id OR dp.source_config->>'connectionId'=data_connections.id::text)),
+               COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+               (SELECT test.tested_at FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+               (SELECT test.duration_ms FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+               (SELECT test.message FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+               created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND id = $2
     `, projectID, connectionID)
@@ -259,7 +274,13 @@ func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID,
 // 用于校验工程级内置运行库唯一性；调用方只关心是否存在，不依赖排序。
 func (r *ConnectionRepository) GetByProjectAndType(ctx context.Context, projectID, connectionType string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
+		SELECT id, project_id, name, type, category, is_enabled, metadata, display_order,
+               (SELECT COUNT(*)::int FROM data_points dp WHERE dp.project_id=data_connections.project_id AND dp.status <> 'invalid' AND (dp.source_id=data_connections.id OR dp.source_config->>'connectionId'=data_connections.id::text)),
+               COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+               (SELECT test.tested_at FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+               (SELECT test.duration_ms FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+               (SELECT test.message FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),
+               created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND type = $2
         LIMIT 1
@@ -300,7 +321,7 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
             name,
             type,
             category,
-            status,
+            is_enabled,
             metadata,
             display_order,
             created_by,
@@ -309,8 +330,9 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
         VALUES ($1, $2, $3, $4, $5, $6::jsonb,
             COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
             $7, $7)
-        RETURNING id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
-    `, params.ProjectID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
+		RETURNING id, project_id, name, type, category, is_enabled, metadata, display_order, 0 AS variable_count,
+                  'not_tested'::text,NULL::timestamptz,NULL::integer,NULL::text,created_at, updated_at
+    `, params.ProjectID, params.Name, params.Type, params.Category, connectionEnabledValue(params.IsEnabled), string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
 	if scanErr != nil {
@@ -345,13 +367,14 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
         SET name = $3,
             type = $4,
             category = $5,
-            status = $6,
+            is_enabled = $6,
             metadata = $7::jsonb,
             updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
-    `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
+		RETURNING id, project_id, name, type, category, is_enabled, metadata, display_order, 0 AS variable_count,
+                  'not_tested'::text,NULL::timestamptz,NULL::integer,NULL::text,created_at, updated_at
+    `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, connectionEnabledValue(params.IsEnabled), string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
 	if scanErr != nil {
@@ -391,13 +414,14 @@ func (r *ConnectionRepository) UpdateKafka(ctx context.Context, params UpdateKaf
         SET name = $3,
             type = $4,
             category = $5,
-            status = $6,
+            is_enabled = $6,
             metadata = $7::jsonb,
             updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
-    `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
+		RETURNING id, project_id, name, type, category, is_enabled, metadata, display_order, 0 AS variable_count,
+                  'not_tested'::text,NULL::timestamptz,NULL::integer,NULL::text,created_at, updated_at
+    `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, connectionEnabledValue(params.IsEnabled), string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
 	if scanErr != nil {
@@ -485,25 +509,20 @@ func (r *ConnectionRepository) Delete(ctx context.Context, projectID, connection
 	return nil
 }
 
-// UpdateStatus 按项目更新连接状态。
-func (r *ConnectionRepository) UpdateStatus(ctx context.Context, projectID, connectionID, status string) (*ConnectionStatusRecord, error) {
-	row := r.pool.QueryRow(ctx, `
-        UPDATE data_connections
-        SET status = $3,
-            updated_at = now()
-        WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, status, updated_at
-    `, projectID, connectionID, status)
-
-	record := ConnectionStatusRecord{}
-	if err := row.Scan(&record.ID, &record.ProjectID, &record.Status, &record.UpdatedAt); err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "连接不存在")
-		}
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新连接状态失败", err)
+func connectionEnabledValue(value *bool) bool {
+	if value == nil {
+		return true
 	}
+	return *value
+}
 
-	return &record, nil
+// SaveTestRecord 保存一次已保存连接测试摘要；敏感请求配置不进入测试记录。
+func (r *ConnectionRepository) SaveTestRecord(ctx context.Context, projectID, connectionID, userID, status string, durationMS int, message string) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO data_connection_test_records(project_id,connection_id,status,duration_ms,message,tested_by) VALUES($1,$2,$3,$4,$5,$6)`, projectID, connectionID, status, durationMS, message, userID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "保存连接测试摘要失败", err)
+	}
+	return nil
 }
 
 type scannable interface {
@@ -522,10 +541,14 @@ func scanConnection(row scannable) (ConnectionRecord, error) {
 		&record.Name,
 		&record.Type,
 		&record.Category,
-		&record.Status,
+		&record.IsEnabled,
 		&configBytes,
 		&record.DisplayOrder,
 		&record.VariableCount,
+		&record.LastTestStatus,
+		&record.LastTestedAt,
+		&record.LastTestDurationMS,
+		&record.LastTestMessage,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {

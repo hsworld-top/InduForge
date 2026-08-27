@@ -74,7 +74,7 @@ func TestNewRouterCollectorImportRoutesDoNotConflict(t *testing.T) {
 	_ = NewRouter(WithCollectorImportRoutes(handler.NewCollectorImportHandler(nil), validator))
 }
 
-func TestNewRouterAlarmPolicyRoutesDoNotConflict(t *testing.T) {
+func TestNewRouterAlarmRoutesDoNotConflict(t *testing.T) {
 	validator, err := auth.NewJWTValidator("router-test-secret")
 	if err != nil {
 		t.Fatal(err)
@@ -84,5 +84,5 @@ func TestNewRouterAlarmPolicyRoutesDoNotConflict(t *testing.T) {
 			t.Fatalf("alarm policy routes should not conflict: %v", recovered)
 		}
 	}()
-	_ = NewRouter(WithAlarmPolicyRoutes(handler.NewAlarmPolicyHandler(nil), validator))
+	_ = NewRouter(WithAlarmRoutes(handler.NewAlarmHandler(nil), validator))
 }

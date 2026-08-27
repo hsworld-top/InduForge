@@ -19,15 +19,9 @@ type ProtocolConnectionRecord struct {
 	ProjectID string
 	Name      string
 	Type      string
-	Status    string
+	IsEnabled bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
-}
-
-// KafkaPreviewRecord 表示 Kafka 预览接口返回的一行消息。
-type KafkaPreviewRecord struct {
-	Topic   string
-	Payload string
 }
 
 // CreateKafkaConfigParams 描述 Kafka 配置落库参数。
@@ -35,7 +29,7 @@ type CreateKafkaConfigParams struct {
 	ProjectID       string
 	UserID          string
 	Name            string
-	Status          string
+	IsEnabled       *bool
 	Brokers         string
 	Topic           string
 	ConsumerGroup   string
@@ -50,7 +44,7 @@ type CreateHTTPConfigParams struct {
 	ProjectID   string
 	UserID      string
 	Name        string
-	Status      string
+	IsEnabled   *bool
 	Description string
 }
 
@@ -59,7 +53,7 @@ type CreateWebSocketConfigParams struct {
 	ProjectID   string
 	UserID      string
 	Name        string
-	Status      string
+	IsEnabled   *bool
 	Description string
 }
 
@@ -68,7 +62,7 @@ type CreateRedisConfigParams struct {
 	ProjectID       string
 	UserID          string
 	Name            string
-	Status          string
+	IsEnabled       *bool
 	Address         string
 	DB              int
 	Username        *string
@@ -79,17 +73,17 @@ type CreateRedisConfigParams struct {
 	ClearSecretKeys []string
 }
 
-// ProtocolWave1Repository 负责第一波协议配置（kafka/http/ws/redis）的参数化 SQL。
-// 说明：Phase 1 对这批协议只冻结配置对象与 artifact 契约，除 Kafka mock preview 外，
+// ProtocolConnectionRepository 负责协议连接配置（kafka/http/ws/redis）的参数化 SQL。
+// 说明：开发态协议 对这批协议只冻结配置对象与 artifact 契约，除 Kafka mock preview 外，
 // 不把它们扩成完整运行态采集栈。
-type ProtocolWave1Repository struct {
+type ProtocolConnectionRepository struct {
 	pool   *pgxpool.Pool
 	cipher *security.ConnectionSecretCipher
 }
 
-// NewProtocolWave1Repository 创建第一波协议仓储。
-func NewProtocolWave1Repository(pool *pgxpool.Pool, ciphers ...*security.ConnectionSecretCipher) *ProtocolWave1Repository {
-	repository := &ProtocolWave1Repository{pool: pool}
+// NewProtocolConnectionRepository 创建协议连接仓储。
+func NewProtocolConnectionRepository(pool *pgxpool.Pool, ciphers ...*security.ConnectionSecretCipher) *ProtocolConnectionRepository {
+	repository := &ProtocolConnectionRepository{pool: pool}
 	if len(ciphers) > 0 {
 		repository.cipher = ciphers[0]
 	}
@@ -97,7 +91,7 @@ func NewProtocolWave1Repository(pool *pgxpool.Pool, ciphers ...*security.Connect
 }
 
 // CreateKafkaConfig 创建 Kafka 配置并写入 data_connections/data_kafka_configs。
-func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params CreateKafkaConfigParams) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) CreateKafkaConfig(ctx context.Context, params CreateKafkaConfigParams) (*ProtocolConnectionRecord, error) {
 	optionsPayload, err := marshalProtocolJSONObject(params.Options, true)
 	if err != nil {
 		return nil, err
@@ -114,7 +108,7 @@ func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params 
 		UserID:    params.UserID,
 		Name:      params.Name,
 		Type:      "kafka",
-		Status:    params.Status,
+		IsEnabled: params.IsEnabled,
 		Metadata: map[string]any{
 			"brokers": params.Brokers,
 			"options": cloneProtocolMap(params.Options),
@@ -148,35 +142,8 @@ func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params 
 	return record, nil
 }
 
-// PreviewKafkaTopic 返回 Kafka 预览消息。
-// 说明：当前版本先返回 mock 预览数据，后续接入真实 consumer 后可替换此实现。
-func (r *ProtocolWave1Repository) PreviewKafkaTopic(ctx context.Context, projectID, connectionID string) ([]KafkaPreviewRecord, error) {
-	var topic string
-	err := r.pool.QueryRow(ctx, `
-		SELECT cfg.topic
-		FROM data_kafka_configs cfg
-		JOIN data_connections conn ON conn.id = cfg.connection_id
-		WHERE conn.project_id = $1
-		  AND conn.id = $2
-		  AND conn.type = 'kafka'
-	`, projectID, connectionID).Scan(&topic)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 配置不存在")
-		}
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Kafka 配置失败", err)
-	}
-
-	return []KafkaPreviewRecord{
-		{
-			Topic:   topic,
-			Payload: `{"source":"kafka-preview-mock","status":"ok"}`,
-		},
-	}, nil
-}
-
 // CreateHTTPConfig 创建 HTTP 配置。
-func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params CreateHTTPConfigParams) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) CreateHTTPConfig(ctx context.Context, params CreateHTTPConfigParams) (*ProtocolConnectionRecord, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 HTTP 配置事务失败", err)
@@ -188,7 +155,7 @@ func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params C
 		UserID:    params.UserID,
 		Name:      params.Name,
 		Type:      "http",
-		Status:    params.Status,
+		IsEnabled: params.IsEnabled,
 		Metadata: map[string]any{
 			"mode":        "workbench",
 			"description": params.Description,
@@ -208,7 +175,7 @@ func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params C
 }
 
 // CreateWebSocketConfig 创建 WebSocket 配置。
-func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, params CreateWebSocketConfigParams) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) CreateWebSocketConfig(ctx context.Context, params CreateWebSocketConfigParams) (*ProtocolConnectionRecord, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 WebSocket 配置事务失败", err)
@@ -220,7 +187,7 @@ func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, par
 		UserID:    params.UserID,
 		Name:      params.Name,
 		Type:      "websocket",
-		Status:    params.Status,
+		IsEnabled: params.IsEnabled,
 		Metadata: map[string]any{
 			"mode":        "workbench",
 			"description": params.Description,
@@ -240,7 +207,7 @@ func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, par
 }
 
 // CreateRedisConfig 创建 Redis 配置。
-func (r *ProtocolWave1Repository) CreateRedisConfig(ctx context.Context, params CreateRedisConfigParams) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) CreateRedisConfig(ctx context.Context, params CreateRedisConfigParams) (*ProtocolConnectionRecord, error) {
 	optionsPayload, err := marshalProtocolJSONObject(params.Options, true)
 	if err != nil {
 		return nil, err
@@ -257,7 +224,7 @@ func (r *ProtocolWave1Repository) CreateRedisConfig(ctx context.Context, params 
 		UserID:    params.UserID,
 		Name:      params.Name,
 		Type:      "redis",
-		Status:    params.Status,
+		IsEnabled: params.IsEnabled,
 		Metadata: map[string]any{
 			"address":    params.Address,
 			"db":         params.DB,
@@ -296,10 +263,13 @@ func (r *ProtocolWave1Repository) CreateRedisConfig(ctx context.Context, params 
 	return record, nil
 }
 
-func (r *ProtocolWave1Repository) updateConnectionTx(ctx context.Context, tx pgx.Tx, connectionID, expectedType string, params createConnectionTxParams) (*ProtocolConnectionRecord, error) {
-	metadataPayload, _ := json.Marshal(params.Metadata)
+func (r *ProtocolConnectionRepository) updateConnectionTx(ctx context.Context, tx pgx.Tx, connectionID, expectedType string, params createConnectionTxParams) (*ProtocolConnectionRecord, error) {
+	metadataPayload, err := json.Marshal(params.Metadata)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "序列化协议连接配置失败", err)
+	}
 	record := ProtocolConnectionRecord{}
-	err := tx.QueryRow(ctx, `UPDATE data_connections SET name=$3,status=$4,metadata=$5::jsonb,updated_by=$6,updated_at=now() WHERE project_id=$1 AND id=$2 AND type=$7 RETURNING id,project_id,name,type,status,created_at,updated_at`, params.ProjectID, connectionID, params.Name, params.Status, metadataPayload, params.UserID, expectedType).Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.Status, &record.CreatedAt, &record.UpdatedAt)
+	err = tx.QueryRow(ctx, `UPDATE data_connections SET name=$3,is_enabled=$4,metadata=$5::jsonb,updated_by=$6,updated_at=now() WHERE project_id=$1 AND id=$2 AND type=$7 RETURNING id,project_id,name,type,is_enabled,created_at,updated_at`, params.ProjectID, connectionID, params.Name, connectionEnabledValue(params.IsEnabled), string(metadataPayload), params.UserID, expectedType).Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.IsEnabled, &record.CreatedAt, &record.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "协议接入源不存在")
 	}
@@ -309,7 +279,7 @@ func (r *ProtocolWave1Repository) updateConnectionTx(ctx context.Context, tx pgx
 	return &record, nil
 }
 
-func (r *ProtocolWave1Repository) UpdateKafkaConfig(ctx context.Context, connectionID string, params CreateKafkaConfigParams) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) UpdateKafkaConfig(ctx context.Context, connectionID string, params CreateKafkaConfigParams) (*ProtocolConnectionRecord, error) {
 	optionsPayload, err := marshalProtocolJSONObject(params.Options, true)
 	if err != nil {
 		return nil, err
@@ -319,7 +289,7 @@ func (r *ProtocolWave1Repository) UpdateKafkaConfig(ctx context.Context, connect
 		return nil, err
 	}
 	defer rollbackProtocolTxQuietly(ctx, tx)
-	record, err := r.updateConnectionTx(ctx, tx, connectionID, "kafka", createConnectionTxParams{ProjectID: params.ProjectID, UserID: params.UserID, Name: params.Name, Status: params.Status, Metadata: map[string]any{"brokers": params.Brokers, "options": cloneProtocolMap(params.Options)}})
+	record, err := r.updateConnectionTx(ctx, tx, connectionID, "kafka", createConnectionTxParams{ProjectID: params.ProjectID, UserID: params.UserID, Name: params.Name, IsEnabled: params.IsEnabled, Metadata: map[string]any{"brokers": params.Brokers, "options": cloneProtocolMap(params.Options)}})
 	if err != nil {
 		return nil, err
 	}
@@ -336,13 +306,13 @@ func (r *ProtocolWave1Repository) UpdateKafkaConfig(ctx context.Context, connect
 	return record, nil
 }
 
-func (r *ProtocolWave1Repository) UpdateSimpleConfig(ctx context.Context, connectionID, protocolType, projectID, userID, name, status string, metadata map[string]any) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) UpdateSimpleConfig(ctx context.Context, connectionID, protocolType, projectID, userID, name string, isEnabled *bool, metadata map[string]any) (*ProtocolConnectionRecord, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, err
 	}
 	defer rollbackProtocolTxQuietly(ctx, tx)
-	record, err := r.updateConnectionTx(ctx, tx, connectionID, protocolType, createConnectionTxParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Metadata: metadata})
+	record, err := r.updateConnectionTx(ctx, tx, connectionID, protocolType, createConnectionTxParams{ProjectID: projectID, UserID: userID, Name: name, IsEnabled: isEnabled, Metadata: metadata})
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +331,7 @@ func (r *ProtocolWave1Repository) UpdateSimpleConfig(ctx context.Context, connec
 	return record, nil
 }
 
-func (r *ProtocolWave1Repository) UpdateRedisConfig(ctx context.Context, connectionID string, params CreateRedisConfigParams) (*ProtocolConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) UpdateRedisConfig(ctx context.Context, connectionID string, params CreateRedisConfigParams) (*ProtocolConnectionRecord, error) {
 	optionsPayload, err := marshalProtocolJSONObject(params.Options, true)
 	if err != nil {
 		return nil, err
@@ -371,7 +341,7 @@ func (r *ProtocolWave1Repository) UpdateRedisConfig(ctx context.Context, connect
 		return nil, err
 	}
 	defer rollbackProtocolTxQuietly(ctx, tx)
-	record, err := r.updateConnectionTx(ctx, tx, connectionID, "redis", createConnectionTxParams{ProjectID: params.ProjectID, UserID: params.UserID, Name: params.Name, Status: params.Status, Metadata: map[string]any{"address": params.Address, "db": params.DB, "username": params.Username, "keyPattern": params.KeyPattern, "mode": params.Mode, "options": cloneProtocolMap(params.Options)}})
+	record, err := r.updateConnectionTx(ctx, tx, connectionID, "redis", createConnectionTxParams{ProjectID: params.ProjectID, UserID: params.UserID, Name: params.Name, IsEnabled: params.IsEnabled, Metadata: map[string]any{"address": params.Address, "db": params.DB, "username": params.Username, "keyPattern": params.KeyPattern, "mode": params.Mode, "options": cloneProtocolMap(params.Options)}})
 	if err != nil {
 		return nil, err
 	}
@@ -393,13 +363,13 @@ type createConnectionTxParams struct {
 	UserID    string
 	Name      string
 	Type      string
-	Status    string
+	IsEnabled *bool
 	Metadata  map[string]any
 }
 
 // createConnectionTx 统一写入 data_connections。
-// 说明：所有 wave1 协议都先落连接主表，再写各自配置表，方便复用项目级连接治理能力。
-func (r *ProtocolWave1Repository) createConnectionTx(ctx context.Context, tx pgx.Tx, params createConnectionTxParams) (*ProtocolConnectionRecord, error) {
+// 说明：所有 协议连接 协议都先落连接主表，再写各自配置表，方便复用项目级连接治理能力。
+func (r *ProtocolConnectionRepository) createConnectionTx(ctx context.Context, tx pgx.Tx, params createConnectionTxParams) (*ProtocolConnectionRecord, error) {
 	metadataPayload, err := json.Marshal(params.Metadata)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化协议连接元数据失败", err)
@@ -419,7 +389,7 @@ func (r *ProtocolWave1Repository) createConnectionTx(ctx context.Context, tx pgx
 			name,
 			type,
 			category,
-			status,
+			is_enabled,
 			metadata,
 			display_order,
 			created_by,
@@ -428,20 +398,19 @@ func (r *ProtocolWave1Repository) createConnectionTx(ctx context.Context, tx pgx
 		VALUES ($1, $2, $3, 'protocol', $4, $5::jsonb,
 			COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
 			$6, $6)
-		RETURNING id, project_id, name, type, status, created_at, updated_at
-	`, params.ProjectID, params.Name, params.Type, params.Status, string(metadataPayload), params.UserID).Scan(
+		RETURNING id, project_id, name, type, is_enabled, created_at, updated_at
+	`, params.ProjectID, params.Name, params.Type, connectionEnabledValue(params.IsEnabled), string(metadataPayload), params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.Name,
 		&record.Type,
-		&record.Status,
+		&record.IsEnabled,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
 	if err != nil {
 		return nil, translateConnectionWriteError("写入协议连接失败", err)
 	}
-
 	return &record, nil
 }
 

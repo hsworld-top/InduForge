@@ -10,7 +10,7 @@ import (
 func TestConnectionSecretSnapshotAndArtifactNeverExposePlaintext(t *testing.T) {
 	snapshot := &ProjectSnapshot{
 		Connections: []ConnectionRecord{{
-			ID: "connection-1", Name: "TDengine", Type: "tdengine", Status: "active",
+			ID: "connection-1", Name: "TDengine", Type: "tdengine", IsEnabled: true,
 			Config: map[string]any{
 				"host": "127.0.0.1", "password": "must-not-leak", "dsn": "root:must-not-leak@example",
 				"options": map[string]any{"token": "must-not-leak", "timezone": "Asia/Shanghai"},

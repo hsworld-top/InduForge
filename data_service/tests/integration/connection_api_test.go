@@ -66,9 +66,9 @@ func TestConnectionsCRUD(t *testing.T) {
 	}
 
 	created := mustCreateConnection(t, server.URL, token, projectID, map[string]any{
-		"name":   "pg-main",
-		"type":   "relational",
-		"status": "connected",
+		"name":    "pg-main",
+		"type":    "relational",
+		"enabled": true,
 		"config": map[string]any{
 			"host":     "localhost",
 			"port":     5432,
@@ -122,8 +122,8 @@ func TestConnectionsCRUD(t *testing.T) {
 	}
 
 	updated := mustUpdateConnection(t, server.URL, token, projectID, created.ID, map[string]any{
-		"name":   "pg-main-2",
-		"status": "disconnected",
+		"name":    "pg-main-2",
+		"enabled": false,
 		"config": map[string]any{
 			"host":     "127.0.0.1",
 			"port":     5432,
@@ -133,14 +133,54 @@ func TestConnectionsCRUD(t *testing.T) {
 	if updated.Name != "pg-main-2" {
 		t.Fatalf("期望更新后的名称为 pg-main-2，实际为 %q", updated.Name)
 	}
-	if updated.Status != "disconnected" {
-		t.Fatalf("期望更新后的状态为 disconnected，实际为 %q", updated.Status)
+	if updated.Enabled {
+		t.Fatal("期望更新后的连接处于停用状态")
 	}
 	if updated.Config["database"] != "factory_v2" {
 		t.Fatalf("期望更新后的 config.database 为 factory_v2，实际为 %#v", updated.Config["database"])
 	}
+	pointID := uuid.NewString()
+	if _, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_points(id,project_id,path,name,source_type,source_id,data_type,created_by,updated_by)
+		VALUES($1,$2,'source.pg-main-2.value','source-value','source.test',$3,'float64',$4,$4)
+	`, pointID, projectID, created.ID, userID); err != nil {
+		t.Fatalf("写入删除影响测试数据点失败: %v", err)
+	}
+	alarmID := uuid.NewString()
+	if _, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_alarm_items(id,project_id,datapoint_id,display_name,name_key,mode,alarm_type,evaluation_mode,trigger_fingerprint,created_by,updated_by)
+		VALUES($1,$2,$3,'删除阻断报警','删除阻断报警','point','threshold','single',$4,$5,$5)
+	`, alarmID, projectID, pointID, strings.Repeat("a", 64), userID); err != nil {
+		t.Fatalf("写入删除阻断报警失败: %v", err)
+	}
+	impactResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/connections/"+created.ID+"/delete-impact", token, nil)
+	var impact struct {
+		CanDelete           bool `json:"canDelete"`
+		GeneratedDatapoints struct {
+			Count  int    `json:"count"`
+			Action string `json:"action"`
+		} `json:"generatedDatapoints"`
+		BlockingUsages []any `json:"blockingUsages"`
+	}
+	if err := json.Unmarshal(impactResponse.Data, &impact); err != nil {
+		t.Fatalf("解析接入源删除影响失败: %v", err)
+	}
+	if impact.CanDelete || impact.GeneratedDatapoints.Count != 1 || impact.GeneratedDatapoints.Action != "mark_invalid" || len(impact.BlockingUsages) != 1 {
+		t.Fatalf("接入源删除影响不符合预期: %#v", impact)
+	}
+	doJSONRequestWithStatus(t, http.MethodDelete, server.URL+"/api/v1/data/projects/"+projectID+"/connections/"+created.ID, token, nil, http.StatusConflict)
+	if _, err := fixture.pool.Exec(ctx, `DELETE FROM data_alarm_items WHERE id=$1`, alarmID); err != nil {
+		t.Fatalf("清理删除阻断报警失败: %v", err)
+	}
 
 	mustDeleteConnection(t, server.URL, token, projectID, created.ID)
+	var pointStatus string
+	if err := fixture.pool.QueryRow(ctx, `SELECT status FROM data_points WHERE id=$1`, pointID).Scan(&pointStatus); err != nil {
+		t.Fatalf("读取来源删除后的数据点失败: %v", err)
+	}
+	if pointStatus != "invalid" {
+		t.Fatalf("期望来源删除后数据点保留并失效，实际状态为 %q", pointStatus)
+	}
 
 	finalList := mustListConnections(t, server.URL, token, projectID)
 	if len(finalList) != 0 {
@@ -185,14 +225,17 @@ func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
 		Capabilities: []string{"project:read", "project:write"},
 	})
 
-	rejected := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/connections", token, map[string]any{
-		"name":   "opcua-legacy",
-		"type":   "opcua",
-		"status": "connected",
+	rejected, statusCode := doJSONRequestAllowStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/connections", token, map[string]any{
+		"name":    "opcua-legacy",
+		"type":    "opcua",
+		"enabled": true,
 		"config": map[string]any{
 			"endpoint": "opc.tcp://127.0.0.1:4840",
 		},
-	}, http.StatusBadRequest)
+	})
+	if statusCode != http.StatusOK {
+		t.Fatalf("业务参数错误应沿用统一响应包络，实际 HTTP 状态为 %d", statusCode)
+	}
 	if rejected.Code != apperrors.PublicCodeBadRequest || !strings.Contains(rejected.Msg, "连接类型不受支持") {
 		t.Fatalf("expected generic connection API to reject industrial type, got %#v", rejected)
 	}
@@ -209,7 +252,7 @@ type connectionPayload struct {
 	TenantID  string         `json:"tenantId"`
 	Name      string         `json:"name"`
 	Type      string         `json:"type"`
-	Status    string         `json:"status"`
+	Enabled   bool           `json:"enabled"`
 	Config    map[string]any `json:"config"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`

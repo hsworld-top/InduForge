@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
-func TestProtocolWave2DedicatedTDengineAndCollectorBoundary(t *testing.T) {
+func TestTDengineAndOPCDevelopmentBoundary(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -29,7 +28,7 @@ func TestProtocolWave2DedicatedTDengineAndCollectorBoundary(t *testing.T) {
 
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
-	secret := "protocol-wave2-secret-01"
+	secret := "tdengine-opc-secret-01"
 
 	srv, err := app.NewServer(config.Config{
 		Addr:                       ":0",
@@ -49,30 +48,26 @@ func TestProtocolWave2DedicatedTDengineAndCollectorBoundary(t *testing.T) {
 
 	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
 		UserID:       userID,
-		TenantID:     "tenant-wave2",
+		TenantID:     "tenant-tdengine-opc",
 		ProjectIDs:   []string{projectID},
 		Capabilities: []string{"project:read", "project:write"},
 	})
-
-	for _, path := range []string{"opcua/configs", "s7/configs", "modbus/configs"} {
-		doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/"+path, token, map[string]any{"name": "legacy-industrial-source"}, http.StatusNotFound)
-	}
 
 	tdengine := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, map[string]any{
 		"name": "td-main", "protocol": "ws", "host": "127.0.0.1", "port": 6041,
 		"username": "root", "databaseName": "factory", "timezone": "Asia/Shanghai",
 		"secrets": map[string]string{"password": "taosdata"},
 	})
-	var created protocolWave1ConnectionPayload
+	var created protocolConnectionConnectionPayload
 	if err := json.Unmarshal(tdengine.Data, &created); err != nil || created.ID == "" || created.Type != "tdengine" {
 		t.Fatalf("expected dedicated TDengine connection, got %#v, err=%v", created, err)
 	}
 	updatedTDengine := doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs/"+created.ID, token, map[string]any{
-		"name": "td-updated", "status": "disconnected", "protocol": "wss", "host": "td.example.local", "port": 6041,
+		"name": "td-updated", "enabled": false, "protocol": "wss", "host": "td.example.local", "port": 6041,
 		"username": "root", "databaseName": "factory", "timezone": "Asia/Shanghai", "tlsSkipVerify": true,
 		"secrets": map[string]string{"password": "updated-taos-secret"},
 	})
-	var updated protocolWave1ConnectionPayload
+	var updated protocolConnectionConnectionPayload
 	if err := json.Unmarshal(updatedTDengine.Data, &updated); err != nil || updated.Name != "td-updated" {
 		t.Fatalf("expected dedicated TDengine update, got %#v, err=%v", updated, err)
 	}
@@ -87,19 +82,5 @@ func TestProtocolWave2DedicatedTDengineAndCollectorBoundary(t *testing.T) {
 	})
 	if validOpcda.Code != apperrors.SuccessCode {
 		t.Fatalf("expected OPC DA contract validation success, got %#v", validOpcda)
-	}
-}
-
-func assertPhaseBoundaryError(t *testing.T, envelope apiEnvelope, protocolName string) {
-	t.Helper()
-
-	if envelope.Code == apperrors.SuccessCode {
-		t.Fatalf("expected %s endpoint to be blocked by phase boundary", protocolName)
-	}
-	if envelope.Code != apperrors.PublicCodeBadRequest {
-		t.Fatalf("expected code %d for %s phase boundary, got %d", apperrors.PublicCodeBadRequest, protocolName, envelope.Code)
-	}
-	if !strings.Contains(envelope.Msg, "Phase 1 正式范围") {
-		t.Fatalf("expected %s phase boundary message, got %q", protocolName, envelope.Msg)
 	}
 }

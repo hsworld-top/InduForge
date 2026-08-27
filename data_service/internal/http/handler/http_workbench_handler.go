@@ -144,6 +144,7 @@ func (h *HTTPWorkbenchHandler) UpdateRequest(w http.ResponseWriter, r *http.Requ
 		return err
 	}
 	_, input.HasGroupID = raw["groupId"]
+	_, input.HasOutputs = raw["outputs"]
 	request, err := h.service.UpdateRequest(r.Context(), r.PathValue("projectId"), r.PathValue("requestId"), claims.UserID, input)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

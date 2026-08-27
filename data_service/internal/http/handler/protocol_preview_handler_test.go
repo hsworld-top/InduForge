@@ -30,9 +30,9 @@ func (s *fakeProtocolPreviewHandlerService) Preview(ctx context.Context, project
 	}, nil
 }
 
-func TestProtocolWave1Handler_PreviewProtocolParsesBody(t *testing.T) {
+func TestProtocolConnectionHandler_PreviewProtocolParsesBody(t *testing.T) {
 	fakeService := &fakeProtocolPreviewHandlerService{}
-	handler := NewProtocolWave1Handler(nil, fakeService)
+	handler := NewProtocolConnectionHandler(nil, fakeService)
 	body, err := json.Marshal(map[string]any{
 		"limit":     25,
 		"timeoutMs": 12000,

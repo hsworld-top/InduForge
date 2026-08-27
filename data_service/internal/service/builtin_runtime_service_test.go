@@ -2,11 +2,33 @@ package service
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
+
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
+
+func TestBuiltinSQLExecutionErrorExposesActionablePostgresMessage(t *testing.T) {
+	err := wrapBuiltinSQLExecutionError(&pgconn.PgError{
+		Message:  `syntax error at or near "SELEC"`,
+		Position: 1,
+		Hint:     "Check the statement keyword.",
+	})
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected AppError, got %T", err)
+	}
+	for _, expected := range []string{"SELEC", "位置 1", "Check the statement keyword"} {
+		if !strings.Contains(appErr.Message, expected) {
+			t.Fatalf("expected public message %q to contain %q", appErr.Message, expected)
+		}
+	}
+}
 
 func TestRejectDangerousBuiltinSQL(t *testing.T) {
 	cases := []string{

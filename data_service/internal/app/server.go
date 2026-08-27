@@ -174,8 +174,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	connectionRepository := repository.NewConnectionRepository(pool)
 	connectionRepository.SetSecretCipher(connectionCipher)
 	connectionSecretRepository := repository.NewConnectionSecretRepository(pool, connectionCipher)
-	accessSourceRepository := repository.NewAccessSourceRepository(pool)
-	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
+	alarmRepository := repository.NewAlarmRepository(pool)
 	historyStorageRepository := repository.NewHistoryStorageRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	collectorDevRepository := repository.NewCollectorDevRepository(pool)
@@ -190,15 +189,14 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool, connectionCipher)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
-	protocolWave1Repository := repository.NewProtocolWave1Repository(pool, connectionCipher)
-	protocolWave2Repository := repository.NewProtocolWave2Repository(pool, connectionCipher)
+	protocolConnectionRepository := repository.NewProtocolConnectionRepository(pool, connectionCipher)
+	tdengineOPCRepository := repository.NewTDengineOPCRepository(pool, connectionCipher)
 	kafkaWorkbenchRepository := repository.NewKafkaWorkbenchRepository(pool)
 	httpWorkbenchRepository := repository.NewHTTPWorkbenchRepository(pool, connectionCipher)
 	websocketWorkbenchRepository := repository.NewWebSocketWorkbenchRepository(pool, connectionCipher)
 	realtimeStoreRepository := repository.NewRealtimeStoreRepository(pool)
 	computeRepository := repository.NewComputeRepository(pool)
 
-	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
 	var alarmCipher *collectorsecurity.AlarmSecretCipher
 	if len(cfg.AlarmSecretKey) == 32 {
 		alarmCipher, err = collectorsecurity.NewAlarmSecretCipher(cfg.AlarmSecretKey, cfg.AlarmSecretKeyVersion)
@@ -207,9 +205,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 			return nil, nil, err
 		}
 	}
-	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository, alarmCipher)
-	alarmItemService := service.NewAlarmItemService(alarmPolicyRepository, dataPointRepository)
-	alarmPolicyService.SetAlarmItemService(alarmItemService)
+	alarmSettingsService := service.NewAlarmSettingsService(alarmRepository, dataPointRepository, alarmCipher)
+	alarmItemService := service.NewAlarmItemService(alarmRepository, dataPointRepository)
+	alarmSettingsService.SetAlarmItemService(alarmItemService)
 	historyStorageService := service.NewHistoryStorageService(historyStorageRepository)
 	collectorDevService := service.NewCollectorDevService(collectorDevRepository)
 	collectorCatalogService := service.NewCollectorCatalogService(collectorCatalog)
@@ -248,7 +246,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		}
 		collectorImportHandler = handler.NewCollectorImportHandler(collectorImportService)
 	}
-	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmPolicyRepository, queryRepository, contractCheckRepository)
+	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRepository, queryRepository, contractCheckRepository)
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
 	connectionService.SetSecretRepository(connectionSecretRepository)
@@ -263,10 +261,10 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttService.SetSecretRepository(connectionSecretRepository)
 	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
-	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
-	protocolPreviewService := service.NewProtocolPreviewService(protocolWave1Repository, service.NewDefaultProtocolPreviewAdapters())
+	protocolConnectionService := service.NewProtocolConnectionService(protocolConnectionRepository)
+	protocolPreviewService := service.NewProtocolPreviewService(protocolConnectionRepository, service.NewDefaultProtocolPreviewAdapters())
 	protocolPreviewService.SetSecretRepository(connectionSecretRepository)
-	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
+	tdengineOPCService := service.NewTDengineOPCService(tdengineOPCRepository)
 	kafkaWorkbenchService := service.NewKafkaWorkbenchService(kafkaWorkbenchRepository)
 	httpWorkbenchService := service.NewHTTPWorkbenchService(httpWorkbenchRepository, connectionRepository)
 	httpWorkbenchService.SetSecretRepository(connectionSecretRepository)
@@ -281,9 +279,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		dataPointRepository,
 		queryService,
 	)
+	computeService.SetDataPointValueResolver(dataPointService)
 
-	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
-	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService, alarmItemService)
+	alarmHandler := handler.NewAlarmHandler(alarmSettingsService, alarmItemService)
 	historyStorageHandler := handler.NewHistoryStorageHandler(historyStorageService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	collectorDevHandler := handler.NewCollectorDevHandler(collectorDevService)
@@ -295,8 +293,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
-	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service, protocolPreviewService)
-	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
+	protocolConnectionHandler := handler.NewProtocolConnectionHandler(protocolConnectionService, protocolPreviewService)
+	tdengineOPCHandler := handler.NewTDengineOPCHandler(tdengineOPCService)
 	kafkaWorkbenchHandler := handler.NewKafkaWorkbenchHandler(kafkaWorkbenchService)
 	httpWorkbenchHandler := handler.NewHTTPWorkbenchHandler(httpWorkbenchService)
 	websocketWorkbenchHandler := handler.NewWebSocketWorkbenchHandler(websocketWorkbenchService)
@@ -304,10 +302,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	computeHandler := handler.NewComputeHandler(computeService)
 
 	routeOptions := []router.Option{
-		router.WithAlarmPolicyRoutes(alarmPolicyHandler, jwtValidator),
+		router.WithAlarmRoutes(alarmHandler, jwtValidator),
 		router.WithHistoryStorageRoutes(historyStorageHandler, jwtValidator),
 		router.WithBuiltinRuntimeRoutes(builtinRuntimeHandler, jwtValidator),
-		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
 		router.WithCollectorDevRoutes(collectorDevHandler, collectorDevService, jwtValidator),
 		router.WithCollectorCatalogRoutes(collectorCatalogHandler, jwtValidator),
@@ -316,8 +313,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
-		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
-		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
+		router.WithProtocolConnectionRoutes(protocolConnectionHandler, jwtValidator),
+		router.WithTDengineOPCRoutes(tdengineOPCHandler, jwtValidator),
 		router.WithKafkaWorkbenchRoutes(kafkaWorkbenchHandler, jwtValidator),
 		router.WithHTTPWorkbenchRoutes(httpWorkbenchHandler, jwtValidator),
 		router.WithWebSocketWorkbenchRoutes(websocketWorkbenchHandler, jwtValidator),
@@ -331,14 +328,13 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	}
 	routeSummaryParts := []string{
 		"connections=enabled",
-		"accessSources=enabled",
 		"data=enabled",
 		"builtinRuntime=enabled",
 		"mqtt=enabled",
 		"s7Modeling=enabled",
 		"projectSnapshot=enabled",
-		"protocolWave1=enabled",
-		"protocolWave2=enabled",
+		"protocolConnection=enabled",
+		"tdengineOPC=enabled",
 		"kafkaWorkbench=enabled",
 		"httpWorkbench=enabled",
 		"websocketWorkbench=enabled",

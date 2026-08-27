@@ -8,18 +8,18 @@ import (
 	"github.com/indu-forge/data_service/internal/service"
 )
 
-// ProtocolWave2Handler 负责 TDengine 配置和 OPC DA 合约接口。
-type ProtocolWave2Handler struct {
-	service *service.ProtocolWave2Service
+// TDengineOPCHandler 负责 TDengine 配置和 OPC DA 合约接口。
+type TDengineOPCHandler struct {
+	service *service.TDengineOPCService
 }
 
-// NewProtocolWave2Handler 创建第二波协议处理器。
-func NewProtocolWave2Handler(protocolService *service.ProtocolWave2Service) *ProtocolWave2Handler {
-	return &ProtocolWave2Handler{service: protocolService}
+// NewTDengineOPCHandler 创建TDengine 与 OPC DA处理器。
+func NewTDengineOPCHandler(protocolService *service.TDengineOPCService) *TDengineOPCHandler {
+	return &TDengineOPCHandler{service: protocolService}
 }
 
 // CreateTdengineConfig 创建 TDengine 配置。
-func (h *ProtocolWave2Handler) CreateTdengineConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *TDengineOPCHandler) CreateTdengineConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func (h *ProtocolWave2Handler) CreateTdengineConfig(w http.ResponseWriter, r *ht
 
 	var request struct {
 		Name            string            `json:"name"`
-		Status          string            `json:"status"`
+		Enabled         *bool             `json:"enabled"`
 		Protocol        string            `json:"protocol"`
 		Host            string            `json:"host"`
 		Port            *int              `json:"port"`
@@ -45,7 +45,7 @@ func (h *ProtocolWave2Handler) CreateTdengineConfig(w http.ResponseWriter, r *ht
 
 	connection, err := h.service.CreateTdengineConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateTdengineConfigInput{
 		Name:     request.Name,
-		Status:   request.Status,
+		Enabled:  request.Enabled,
 		Protocol: request.Protocol, Host: request.Host, Port: request.Port, Username: request.Username,
 		Database:      request.Database,
 		Timezone:      request.Timezone,
@@ -61,14 +61,14 @@ func (h *ProtocolWave2Handler) CreateTdengineConfig(w http.ResponseWriter, r *ht
 	return nil
 }
 
-func (h *ProtocolWave2Handler) UpdateTdengineConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *TDengineOPCHandler) UpdateTdengineConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var request struct {
 		Name            string            `json:"name"`
-		Status          string            `json:"status"`
+		Enabled         *bool             `json:"enabled"`
 		Protocol        string            `json:"protocol"`
 		Host            string            `json:"host"`
 		Port            *int              `json:"port"`
@@ -83,7 +83,7 @@ func (h *ProtocolWave2Handler) UpdateTdengineConfig(w http.ResponseWriter, r *ht
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	connection, err := h.service.UpdateTdengineConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateTdengineConfigInput{Name: request.Name, Status: request.Status, Protocol: request.Protocol, Host: request.Host, Port: request.Port, Username: request.Username, Database: request.Database, Timezone: request.Timezone, TLSSkipVerify: request.TLSSkipVerify, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
+	connection, err := h.service.UpdateTdengineConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateTdengineConfigInput{Name: request.Name, Enabled: request.Enabled, Protocol: request.Protocol, Host: request.Host, Port: request.Port, Username: request.Username, Database: request.Database, Timezone: request.Timezone, TLSSkipVerify: request.TLSSkipVerify, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -92,7 +92,7 @@ func (h *ProtocolWave2Handler) UpdateTdengineConfig(w http.ResponseWriter, r *ht
 }
 
 // ValidateOpcdaContract 校验 OPC DA 合约字段。
-func (h *ProtocolWave2Handler) ValidateOpcdaContract(w http.ResponseWriter, r *http.Request) error {
+func (h *TDengineOPCHandler) ValidateOpcdaContract(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
 		return err
 	}

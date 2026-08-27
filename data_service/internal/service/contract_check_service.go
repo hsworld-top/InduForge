@@ -61,11 +61,11 @@ type ContractCheckService struct {
 	datapoints *repository.DataPointRepository
 	queries    *repository.QueryRepository
 	compute    *repository.ComputeRepository
-	alarms     *repository.AlarmPolicyRepository
+	alarms     *repository.AlarmRepository
 	checks     *repository.ContractCheckRepository
 }
 
-func NewContractCheckService(datapoints *repository.DataPointRepository, compute *repository.ComputeRepository, alarms *repository.AlarmPolicyRepository, deps ...any) *ContractCheckService {
+func NewContractCheckService(datapoints *repository.DataPointRepository, compute *repository.ComputeRepository, alarms *repository.AlarmRepository, deps ...any) *ContractCheckService {
 	var queries *repository.QueryRepository
 	var checks *repository.ContractCheckRepository
 	for _, dep := range deps {
@@ -230,8 +230,10 @@ func (s *ContractCheckService) validateAccess(claims *auth.Claims, projectID str
 }
 
 func (s *ContractCheckService) loadProjectDatapoints(ctx context.Context, projectID string) ([]repository.DataPointRecord, error) {
-	records, _, err := s.datapoints.ListByProject(ctx, projectID, repository.DataPointListFilter{Page: 1, PageSize: 1000})
-	return records, err
+	// 契约检查必须覆盖全量对象，不能用超大 pageSize 绕过仓储的分页上限。
+	return loadAllContractCheckPages(500, func(page, pageSize int) ([]repository.DataPointRecord, int, error) {
+		return s.datapoints.ListByProject(ctx, projectID, repository.DataPointListFilter{Page: page, PageSize: pageSize})
+	})
 }
 
 func (s *ContractCheckService) loadProjectQueryIndex(ctx context.Context, projectID string) (map[string]repository.QueryRecord, error) {
@@ -239,7 +241,9 @@ func (s *ContractCheckService) loadProjectQueryIndex(ctx context.Context, projec
 	if s.queries == nil {
 		return result, nil
 	}
-	records, _, err := s.queries.ListByProject(ctx, projectID, repository.QueryListFilter{Page: 1, PageSize: 1000})
+	records, err := loadAllContractCheckPages(100, func(page, pageSize int) ([]repository.QueryRecord, int, error) {
+		return s.queries.ListByProject(ctx, projectID, repository.QueryListFilter{Page: page, PageSize: pageSize})
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -250,8 +254,28 @@ func (s *ContractCheckService) loadProjectQueryIndex(ctx context.Context, projec
 }
 
 func (s *ContractCheckService) loadProjectComputeUnits(ctx context.Context, projectID string) ([]repository.ComputeUnitRecord, error) {
-	records, _, err := s.compute.ListUnits(ctx, projectID, repository.ComputeUnitListFilter{Page: 1, PageSize: 1000})
-	return records, err
+	return loadAllContractCheckPages(100, func(page, pageSize int) ([]repository.ComputeUnitRecord, int, error) {
+		return s.compute.ListUnits(ctx, projectID, repository.ComputeUnitListFilter{Page: page, PageSize: pageSize})
+	})
+}
+
+// loadAllContractCheckPages 按仓储允许的页大小读完全部记录。
+// total 可在并发写入时变化，因此同时以空页和短页作为终止条件，避免死循环。
+func loadAllContractCheckPages[T any](pageSize int, load func(page, pageSize int) ([]T, int, error)) ([]T, error) {
+	if pageSize <= 0 {
+		return []T{}, nil
+	}
+	result := make([]T, 0)
+	for page := 1; ; page++ {
+		records, total, err := load(page, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, records...)
+		if len(records) == 0 || len(records) < pageSize || len(result) >= total {
+			return result, nil
+		}
+	}
 }
 
 func (s *ContractCheckService) loadProjectAlarmItems(ctx context.Context, projectID string) ([]repository.AlarmItemRecord, error) {
@@ -309,7 +333,7 @@ func checkComputeContracts(units []repository.ComputeUnitRecord, datapoints map[
 				})
 			}
 		}
-		for _, binding := range extractComputeOutputBindings(unit) {
+		for _, binding := range unit.Outputs {
 			if point, ok := datapoints[binding.Path]; !ok || point.Status != "active" {
 				items = append(items, ContractCheckResultItem{
 					Module:     "compute",

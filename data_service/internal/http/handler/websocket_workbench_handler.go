@@ -138,6 +138,7 @@ func (h *WebSocketWorkbenchHandler) UpdateSession(w http.ResponseWriter, r *http
 		return err
 	}
 	_, input.HasGroupID = raw["groupId"]
+	_, input.HasOutputs = raw["outputs"]
 	session, err := h.service.UpdateSession(r.Context(), r.PathValue("projectId"), r.PathValue("sessionId"), claims.UserID, input)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

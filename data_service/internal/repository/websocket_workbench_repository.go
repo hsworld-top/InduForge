@@ -52,6 +52,7 @@ type WebSocketSessionRecord struct {
 	DataPointPath  *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	Outputs        []SourceOutputMappingRecord
 }
 
 type CreateWebSocketSessionGroupParams struct {
@@ -90,6 +91,7 @@ type CreateWebSocketSessionParams struct {
 	DefaultValue    *string
 	UserID          string
 	Secrets         map[string]string
+	Outputs         []SourceOutputMappingParam
 }
 
 type UpdateWebSocketSessionParams struct {
@@ -110,6 +112,7 @@ type UpdateWebSocketSessionParams struct {
 	DefaultValue    *string
 	UserID          string
 	Secrets         map[string]string
+	Outputs         []SourceOutputMappingParam
 }
 
 // WebSocketSessionPreviewSnapshot 描述短连接预览后要持久化的最后消息。
@@ -119,7 +122,7 @@ type WebSocketSessionPreviewSnapshot struct {
 	LastDiagnostic  *string
 	Quality         string
 	LastMessageAt   time.Time
-	DefaultValue    *string
+	OutputValues    map[string]*string
 	DataPointConfig map[string]any
 	UserID          string
 }
@@ -271,10 +274,12 @@ func (r *WebSocketWorkbenchRepository) ListSessionsPage(ctx context.Context, pro
 		       s.sort_order, s.last_message, s.last_diagnostic, s.quality, s.last_message_at,
 		       dp.id, dp.path, s.created_at, s.updated_at
 		FROM data_websocket_sessions s
-		LEFT JOIN data_points dp
-		  ON dp.project_id = s.project_id
-		 AND dp.source_type = 'websocket.session'
-		 AND dp.source_config->>'sessionId' = s.id::text
+		LEFT JOIN LATERAL (
+		  SELECT point.id,point.path FROM data_points point
+		  WHERE point.project_id=s.project_id AND point.source_type='websocket.session'
+		    AND point.source_config->>'sessionId'=s.id::text
+		  ORDER BY point.created_at LIMIT 1
+		) dp ON true
 		WHERE `+whereSQL+`
 		ORDER BY s.sort_order ASC, s.updated_at DESC
 		LIMIT $`+fmt.Sprint(len(args)+1)+` OFFSET $`+fmt.Sprint(len(args)+2), queryArgs...)
@@ -289,6 +294,12 @@ func (r *WebSocketWorkbenchRepository) ListSessionsPage(ctx context.Context, pro
 		if scanErr != nil {
 			return nil, 0, scanErr
 		}
+		outputs, outputErr := listSourceOutputMappings(ctx, r.pool, "websocket", record.ID)
+		if outputErr != nil {
+			return nil, 0, outputErr
+		}
+		record.Outputs = outputs
+		setLegacyWebSocketOutputSummary(&record)
 		result = append(result, record)
 	}
 	if err := rows.Err(); err != nil {
@@ -304,10 +315,12 @@ func (r *WebSocketWorkbenchRepository) GetSession(ctx context.Context, projectID
 		       s.sort_order, s.last_message, s.last_diagnostic, s.quality, s.last_message_at,
 		       dp.id, dp.path, s.created_at, s.updated_at
 		FROM data_websocket_sessions s
-		LEFT JOIN data_points dp
-		  ON dp.project_id = s.project_id
-		 AND dp.source_type = 'websocket.session'
-		 AND dp.source_config->>'sessionId' = s.id::text
+		LEFT JOIN LATERAL (
+		  SELECT point.id,point.path FROM data_points point
+		  WHERE point.project_id=s.project_id AND point.source_type='websocket.session'
+		    AND point.source_config->>'sessionId'=s.id::text
+		  ORDER BY point.created_at LIMIT 1
+		) dp ON true
 		WHERE s.project_id = $1 AND s.id = $2
 	`, projectID, sessionID))
 	if err != nil {
@@ -316,10 +329,20 @@ func (r *WebSocketWorkbenchRepository) GetSession(ctx context.Context, projectID
 		}
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 WebSocket 会话失败", err)
 	}
+	outputs, err := listSourceOutputMappings(ctx, r.pool, "websocket", record.ID)
+	if err != nil {
+		return nil, err
+	}
+	record.Outputs = outputs
+	setLegacyWebSocketOutputSummary(&record)
 	return &record, nil
 }
 
 func (r *WebSocketWorkbenchRepository) CreateSessionWithDataPoint(ctx context.Context, params CreateWebSocketSessionParams) (*WebSocketSessionRecord, error) {
+	encoded, err := marshalWebSocketSessionFields(params.Headers, params.Auth, params.Protocols, params.Messages, params.Settings)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 WebSocket 会话创建事务失败", err)
@@ -336,7 +359,7 @@ func (r *WebSocketWorkbenchRepository) CreateSessionWithDataPoint(ctx context.Co
 		RETURNING id, project_id, connection_id, group_id, name, url, headers, auth,
 		          protocols, messages, settings, enabled, sort_order, last_message,
 		          last_diagnostic, quality, last_message_at, created_at, updated_at
-	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.URL, mustMarshalJSONArray(params.Headers), mustMarshalJSONObject(params.Auth), mustMarshalJSONArray(params.Protocols), mustMarshalJSONArray(params.Messages), mustMarshalJSONObject(params.Settings), params.Enabled, params.SortOrder, params.UserID).Scan(
+	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.URL, encoded.headers, encoded.auth, encoded.protocols, encoded.messages, encoded.settings, params.Enabled, params.SortOrder, params.UserID).Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Name, &record.URL,
 		newJSONScanner(&record.Headers), newJSONScanner(&record.Auth), newJSONScanner(&record.Protocols),
 		newJSONScanner(&record.Messages), newJSONScanner(&record.Settings), &record.Enabled, &record.SortOrder,
@@ -347,12 +370,15 @@ func (r *WebSocketWorkbenchRepository) CreateSessionWithDataPoint(ctx context.Co
 		return nil, translateWebSocketWorkbenchWriteError(err, "创建 WebSocket 会话失败")
 	}
 
-	dataPointID, dataPointPath, err := upsertWebSocketSessionDataPoint(ctx, tx, record, params.DataPointPath, params.DataPointConfig, params.DefaultValue, params.UserID)
+	outputs, err := syncSourceOutputMappingsTx(ctx, tx, sourceOutputOwner{Kind: "websocket", ID: record.ID,
+		ProjectID: record.ProjectID, SourceType: "websocket.session", SourceID: record.ConnectionID,
+		PathPrefix: params.DataPointPath, Status: protocolOutputStatus(record.Enabled), BaseConfig: params.DataPointConfig,
+		DefaultValue: params.DefaultValue, UserID: params.UserID}, params.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	record.DataPointID = &dataPointID
-	record.DataPointPath = &dataPointPath
+	record.Outputs = outputs
+	setLegacyWebSocketOutputSummary(&record)
 	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "ws."+record.ID+".", params.Secrets); err != nil {
 		return nil, err
 	}
@@ -364,6 +390,10 @@ func (r *WebSocketWorkbenchRepository) CreateSessionWithDataPoint(ctx context.Co
 }
 
 func (r *WebSocketWorkbenchRepository) UpdateSessionWithDataPoint(ctx context.Context, params UpdateWebSocketSessionParams) (*WebSocketSessionRecord, error) {
+	encoded, err := marshalWebSocketSessionFields(params.Headers, params.Auth, params.Protocols, params.Messages, params.Settings)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 WebSocket 会话更新事务失败", err)
@@ -389,7 +419,7 @@ func (r *WebSocketWorkbenchRepository) UpdateSessionWithDataPoint(ctx context.Co
 		RETURNING id, project_id, connection_id, group_id, name, url, headers, auth,
 		          protocols, messages, settings, enabled, sort_order, last_message,
 		          last_diagnostic, quality, last_message_at, created_at, updated_at
-	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.URL, mustMarshalJSONArray(params.Headers), mustMarshalJSONObject(params.Auth), mustMarshalJSONArray(params.Protocols), mustMarshalJSONArray(params.Messages), mustMarshalJSONObject(params.Settings), params.Enabled, params.SortOrder, params.UserID).Scan(
+	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.URL, encoded.headers, encoded.auth, encoded.protocols, encoded.messages, encoded.settings, params.Enabled, params.SortOrder, params.UserID).Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Name, &record.URL,
 		newJSONScanner(&record.Headers), newJSONScanner(&record.Auth), newJSONScanner(&record.Protocols),
 		newJSONScanner(&record.Messages), newJSONScanner(&record.Settings), &record.Enabled, &record.SortOrder,
@@ -403,12 +433,15 @@ func (r *WebSocketWorkbenchRepository) UpdateSessionWithDataPoint(ctx context.Co
 		return nil, translateWebSocketWorkbenchWriteError(err, "更新 WebSocket 会话失败")
 	}
 
-	dataPointID, dataPointPath, err := upsertWebSocketSessionDataPoint(ctx, tx, record, params.DataPointPath, params.DataPointConfig, params.DefaultValue, params.UserID)
+	outputs, err := syncSourceOutputMappingsTx(ctx, tx, sourceOutputOwner{Kind: "websocket", ID: record.ID,
+		ProjectID: record.ProjectID, SourceType: "websocket.session", SourceID: record.ConnectionID,
+		PathPrefix: params.DataPointPath, Status: protocolOutputStatus(record.Enabled), BaseConfig: params.DataPointConfig,
+		DefaultValue: params.DefaultValue, UserID: params.UserID}, params.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	record.DataPointID = &dataPointID
-	record.DataPointPath = &dataPointPath
+	record.Outputs = outputs
+	setLegacyWebSocketOutputSummary(&record)
 	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "ws."+record.ID+".", params.Secrets); err != nil {
 		return nil, err
 	}
@@ -430,6 +463,13 @@ func (r *WebSocketWorkbenchRepository) DeleteSessionWithDataPoint(ctx context.Co
 		if err == pgx.ErrNoRows {
 			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "WebSocket 会话不存在")
 		}
+		return err
+	}
+	pointIDs, err := sourceOutputPointIDsForUpdate(ctx, tx, "websocket", sessionID)
+	if err != nil {
+		return err
+	}
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, pointIDs); err != nil {
 		return err
 	}
 
@@ -490,25 +530,33 @@ func (r *WebSocketWorkbenchRepository) SavePreviewSnapshot(ctx context.Context, 
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "WebSocket 会话不存在")
 	}
 
-	if snapshot.DefaultValue != nil {
+	for mappingID, outputValue := range snapshot.OutputValues {
+		if outputValue == nil {
+			continue
+		}
 		_, err = tx.Exec(ctx, `
-			UPDATE data_points
-			SET default_value = $3,
-			    source_config = $4::jsonb,
-			    updated_by = $5,
-			    updated_at = now()
-			WHERE project_id = $1
-			  AND source_type = 'websocket.session'
-			  AND source_config->>'sessionId' = $2
-		`, projectID, snapshot.SessionID, snapshot.DefaultValue, string(configPayload), snapshot.UserID)
+			UPDATE data_points point
+			SET default_value=$4,source_config=point.source_config || $5::jsonb,updated_by=$6,updated_at=now()
+			FROM data_source_output_mappings mapping
+			WHERE mapping.id=$3 AND mapping.websocket_session_id=$2 AND mapping.datapoint_id=point.id
+			  AND point.project_id=$1
+		`, projectID, snapshot.SessionID, mappingID, outputValue, string(configPayload), snapshot.UserID)
 		if err != nil {
-			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写回 WebSocket 会话数据点失败", err)
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写回 WebSocket 会话输出点失败", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 WebSocket 消息写回事务失败", err)
 	}
 	return nil
+}
+
+func setLegacyWebSocketOutputSummary(record *WebSocketSessionRecord) {
+	if record == nil || len(record.Outputs) == 0 {
+		return
+	}
+	record.DataPointID = &record.Outputs[0].DataPointID
+	record.DataPointPath = &record.Outputs[0].DataPointPath
 }
 
 func upsertWebSocketSessionDataPoint(ctx context.Context, tx pgx.Tx, record WebSocketSessionRecord, path string, sourceConfig map[string]any, defaultValue *string, userID string) (string, string, error) {
@@ -623,6 +671,28 @@ func normalizeWebSocketSessionJSONDefaults(record *WebSocketSessionRecord) {
 	if record.Settings == nil {
 		record.Settings = map[string]any{}
 	}
+}
+
+type encodedWebSocketSessionFields struct {
+	headers   string
+	auth      string
+	protocols string
+	messages  string
+	settings  string
+}
+
+func marshalWebSocketSessionFields(headers []any, auth map[string]any, protocols, messages []any, settings map[string]any) (encodedWebSocketSessionFields, error) {
+	values := []any{headers, auth, protocols, messages, settings}
+	labels := []string{"请求头", "认证", "子协议", "消息", "设置"}
+	encoded := make([]string, len(values))
+	for index, value := range values {
+		payload, err := json.Marshal(value)
+		if err != nil {
+			return encodedWebSocketSessionFields{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "WebSocket "+labels[index]+"无法序列化", err)
+		}
+		encoded[index] = string(payload)
+	}
+	return encodedWebSocketSessionFields{headers: encoded[0], auth: encoded[1], protocols: encoded[2], messages: encoded[3], settings: encoded[4]}, nil
 }
 
 func translateWebSocketWorkbenchWriteError(err error, fallback string) error {

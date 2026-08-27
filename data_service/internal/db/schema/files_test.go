@@ -12,6 +12,11 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 		t.Fatal(err)
 	}
 	baseline := string(payload)
+	for _, extension := range []string{"pgcrypto", "pg_trgm"} {
+		if !strings.Contains(baseline, "CREATE EXTENSION IF NOT EXISTS "+extension) {
+			t.Fatalf("数据库最终基线缺少扩展 %s", extension)
+		}
+	}
 	for _, table := range []string{
 		"data_connections",
 		"data_collector_connections",
@@ -20,6 +25,10 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 		"collector_dev_agents",
 		"data_history_storage_configs",
 		"data_history_storage_targets",
+		"data_source_output_mappings",
+		"data_compute_dependencies",
+		"data_compute_unit_outputs",
+		"data_connection_secrets",
 	} {
 		if !strings.Contains(baseline, "CREATE TABLE "+table+" (") {
 			t.Fatalf("数据库结构基线缺少表 %s", table)
@@ -31,6 +40,43 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 	}
 	if strings.Contains(baseline, "schema_migrations") {
 		t.Fatalf("数据库结构基线不得包含迁移版本表")
+	}
+	for _, legacy := range []string{"alarm_low", "alarm_high", "data_alarm_policies", "data_alarm_configurations", "data_storage_policies"} {
+		if strings.Contains(baseline, legacy) {
+			t.Fatalf("数据库最终基线仍包含旧字段或旧模型 %s", legacy)
+		}
+	}
+	if count := strings.Count(baseline, "CREATE TABLE "); count != 58 {
+		t.Fatalf("数据库最终基线表数量应为 58，实际为 %d", count)
+	}
+}
+
+func TestDatapointAndOutputSchemasUseCanonicalTypes(t *testing.T) {
+	payload, err := Files.ReadFile("schema.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := string(payload)
+	for _, table := range []string{"data_points", "data_mqtt_tags", "data_source_output_mappings", "data_compute_unit_outputs"} {
+		start := strings.Index(baseline, "CREATE TABLE "+table+" (")
+		if start < 0 {
+			t.Fatalf("数据库结构基线缺少表 %s", table)
+		}
+		end := strings.Index(baseline[start:], "\n);")
+		if end < 0 {
+			t.Fatalf("无法读取表 %s 定义", table)
+		}
+		definition := baseline[start : start+end]
+		for _, expected := range []string{"'bool'", "'int8'", "'uint64'", "'float32'", "'float64'", "'decimal'", "'bytes'", "'datetime'", "'object'", "'array'"} {
+			if !strings.Contains(definition, expected) {
+				t.Fatalf("表 %s 缺少规范数据类型 %s", table, expected)
+			}
+		}
+		for _, legacy := range []string{"'number'", "'double'", "'integer'", "'boolean'", "'json'"} {
+			if strings.Contains(definition, legacy) {
+				t.Fatalf("表 %s 仍接受旧类型别名 %s", table, legacy)
+			}
+		}
 	}
 }
 
@@ -60,7 +106,7 @@ func TestCollectorPointSchemaEnforcesConnectionNameUniqueness(t *testing.T) {
 	}
 }
 
-func TestCollectorConnectionSchemaHasNoConnectionEnabledColumn(t *testing.T) {
+func TestCollectorConnectionSchemaHasEnabledAndAcquisitionDefaults(t *testing.T) {
 	payload, err := Files.ReadFile("schema.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -72,8 +118,10 @@ func TestCollectorConnectionSchemaHasNoConnectionEnabledColumn(t *testing.T) {
 		t.Fatal("未找到工业连接表定义")
 	}
 	definition := baseline[start : start+end]
-	if strings.Contains(definition, "enabled boolean") {
-		t.Fatal("工业连接表不应包含连接级 enabled 字段")
+	for _, expected := range []string{"is_enabled boolean", "default_acquisition jsonb"} {
+		if !strings.Contains(definition, expected) {
+			t.Fatalf("工业连接表缺少阶段 D 最终字段 %s", expected)
+		}
 	}
 }
 func TestCollectorTaskSchemaAllowsConnectionSessionOperations(t *testing.T) {

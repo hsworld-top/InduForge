@@ -142,6 +142,7 @@ CREATE TABLE data_alarm_items (
     description text,
     mode character varying(20) DEFAULT 'point'::character varying NOT NULL,
     alarm_type character varying(30) NOT NULL,
+    preset_slot character varying(30),
     evaluation_mode character varying(30) DEFAULT 'single'::character varying NOT NULL,
     derived_expression text DEFAULT ''::text NOT NULL,
     trigger_fingerprint character varying(64) NOT NULL,
@@ -161,7 +162,8 @@ CREATE TABLE data_alarm_items (
     CONSTRAINT data_alarm_items_channel_ids_array_check CHECK ((jsonb_typeof(notification_channel_ids) = 'array'::text)),
     CONSTRAINT data_alarm_items_contract_object_check CHECK ((jsonb_typeof(contract) = 'object'::text)),
     CONSTRAINT data_alarm_items_mode_check CHECK (((mode)::text = ANY ((ARRAY['point'::character varying, 'derived'::character varying])::text[]))),
-    CONSTRAINT data_alarm_items_type_check CHECK (((alarm_type)::text = ANY ((ARRAY['threshold'::character varying, 'range'::character varying, 'state'::character varying, 'transition'::character varying, 'text_match'::character varying, 'rate_of_change'::character varying, 'deviation'::character varying, 'offline'::character varying, 'expression'::character varying])::text[]))),
+    CONSTRAINT data_alarm_items_type_check CHECK (((alarm_type)::text = ANY ((ARRAY['threshold'::character varying, 'range'::character varying, 'state'::character varying, 'transition'::character varying, 'text_match'::character varying, 'rate_of_change'::character varying, 'deviation'::character varying, 'offline'::character varying, 'quality'::character varying, 'stale'::character varying, 'derived'::character varying])::text[]))),
+    CONSTRAINT data_alarm_items_preset_slot_check CHECK ((preset_slot IS NULL) OR ((mode)::text = 'point'::text AND (preset_slot)::text = ANY ((ARRAY['limit'::character varying, 'rate'::character varying, 'deviation'::character varying, 'state'::character varying, 'transition'::character varying, 'text'::character varying, 'quality'::character varying, 'stale'::character varying, 'offline'::character varying])::text[]))),
     CONSTRAINT data_alarm_items_evaluation_mode_check CHECK (((evaluation_mode)::text = ANY ((ARRAY['single'::character varying, 'highest_matching'::character varying])::text[]))),
     CONSTRAINT data_alarm_items_shape_check CHECK ((((mode)::text = 'point'::text AND datapoint_id IS NOT NULL AND derived_expression = ''::text) OR ((mode)::text = 'derived'::text AND datapoint_id IS NULL AND derived_expression <> ''::text))),
     CONSTRAINT data_alarm_items_notification_mode_check CHECK (((notification_mode)::text = ANY ((ARRAY['inherit'::character varying, 'off'::character varying, 'custom'::character varying])::text[]))),
@@ -199,11 +201,15 @@ CREATE TABLE data_alarm_project_settings (
     repeat_interval_seconds integer,
     default_message_template text DEFAULT '{{pointName}} 当前值 {{value}}，触发 {{conditionLabel}}'::text NOT NULL,
     default_channel_ids jsonb DEFAULT '["runtime_inapp"]'::jsonb NOT NULL,
+    severity_definitions jsonb DEFAULT '[{"key":"info","displayName":"提示","color":"#3b82f6","sortOrder":10,"isBuiltin":true},{"key":"warning","displayName":"警告","color":"#f59e0b","sortOrder":20,"isBuiltin":true},{"key":"major","displayName":"重要","color":"#f97316","sortOrder":30,"isBuiltin":true},{"key":"critical","displayName":"紧急","color":"#ef4444","sortOrder":40,"isBuiltin":true}]'::jsonb NOT NULL,
+    escalation_rules jsonb DEFAULT '[]'::jsonb NOT NULL,
     created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_alarm_project_settings_channel_ids_array_check CHECK ((jsonb_typeof(default_channel_ids) = 'array'::text)),
+    CONSTRAINT data_alarm_project_settings_severity_definitions_array_check CHECK ((jsonb_typeof(severity_definitions) = 'array'::text)),
+    CONSTRAINT data_alarm_project_settings_escalation_rules_array_check CHECK ((jsonb_typeof(escalation_rules) = 'array'::text)),
     CONSTRAINT data_alarm_project_settings_repeat_interval_check CHECK (((repeat_interval_seconds IS NULL) OR (repeat_interval_seconds > 0)))
 );
 
@@ -259,9 +265,9 @@ CREATE TABLE data_alarm_item_conditions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_alarm_item_conditions_deadband_check CHECK ((deadband >= (0)::double precision)),
     CONSTRAINT data_alarm_item_conditions_delays_check CHECK (((trigger_delay_ms >= 0) AND (clear_delay_ms >= 0))),
-    CONSTRAINT data_alarm_item_conditions_kind_check CHECK (((kind)::text = ANY ((ARRAY['threshold'::character varying, 'range'::character varying, 'state'::character varying, 'transition'::character varying, 'text_match'::character varying, 'rate_of_change'::character varying, 'deviation'::character varying, 'offline'::character varying, 'expression'::character varying])::text[]))),
+    CONSTRAINT data_alarm_item_conditions_kind_check CHECK (((kind)::text = ANY ((ARRAY['threshold'::character varying, 'range'::character varying, 'state'::character varying, 'transition'::character varying, 'text_match'::character varying, 'rate_of_change'::character varying, 'deviation'::character varying, 'offline'::character varying, 'quality'::character varying, 'stale'::character varying])::text[]))),
     CONSTRAINT data_alarm_item_conditions_params_object_check CHECK ((jsonb_typeof(params) = 'object'::text)),
-    CONSTRAINT data_alarm_item_conditions_severity_check CHECK (((severity)::text = ANY ((ARRAY['info'::character varying, 'warning'::character varying, 'major'::character varying, 'critical'::character varying])::text[])))
+    CONSTRAINT data_alarm_item_conditions_severity_check CHECK (((severity)::text ~ '^[a-z][a-z0-9_]{0,29}$'::text))
 );
 
 
@@ -277,12 +283,18 @@ CREATE TABLE data_alarm_notification_channels (
     config jsonb DEFAULT '{}'::jsonb NOT NULL,
     secret_status jsonb DEFAULT '{}'::jsonb NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
+    last_test_status character varying(20) DEFAULT 'not_tested'::character varying NOT NULL,
+    last_tested_at timestamp with time zone,
+    last_test_duration_ms integer,
+    last_test_message character varying(500),
     created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_alarm_notification_channels_config_check CHECK ((jsonb_typeof(config) = 'object'::text)),
     CONSTRAINT data_alarm_notification_channels_secret_status_check CHECK ((jsonb_typeof(secret_status) = 'object'::text)),
+    CONSTRAINT data_alarm_notification_channels_last_test_status_check CHECK (((last_test_status)::text = ANY ((ARRAY['not_tested'::character varying, 'succeeded'::character varying, 'failed'::character varying])::text[]))),
+    CONSTRAINT data_alarm_notification_channels_last_test_duration_check CHECK (((last_test_duration_ms IS NULL) OR (last_test_duration_ms >= 0))),
     CONSTRAINT data_alarm_notification_channels_type_check CHECK (((channel_type)::text = ANY ((ARRAY['webhook'::character varying, 'dingtalk'::character varying, 'wecom'::character varying])::text[])))
 );
 
@@ -368,20 +380,21 @@ CREATE TABLE data_collector_connections (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     name text NOT NULL,
     code text NOT NULL,
-    status text DEFAULT 'unknown'::text NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    default_acquisition jsonb DEFAULT '{"intervalMs":1000,"timeoutMs":3000,"retryCount":0,"deadband":0,"changeOnly":false,"priority":0}'::jsonb NOT NULL,
     display_order integer DEFAULT 0 NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,
     CONSTRAINT data_collector_connections_code_check CHECK (((char_length(code) >= 1) AND (char_length(code) <= 100))),
     CONSTRAINT data_collector_connections_config_check CHECK ((jsonb_typeof(config) = 'object'::text)),
+    CONSTRAINT data_collector_connections_default_acquisition_check CHECK ((jsonb_typeof(default_acquisition) = 'object'::text)),
     CONSTRAINT data_collector_connections_display_order_check CHECK ((display_order >= 0)),
     CONSTRAINT data_collector_connections_driver_id_check CHECK (((driver_id = lower(driver_id)) AND (driver_id ~ '^[a-z0-9][a-z0-9.-]*$'::text))),
     CONSTRAINT data_collector_connections_driver_version_check CHECK (((char_length(driver_version) >= 1) AND (char_length(driver_version) <= 50))),
     CONSTRAINT data_collector_connections_metadata_check CHECK ((jsonb_typeof(metadata) = 'object'::text)),
     CONSTRAINT data_collector_connections_name_check CHECK (((char_length(TRIM(BOTH FROM name)) >= 1) AND (char_length(TRIM(BOTH FROM name)) <= 100))),
     CONSTRAINT data_collector_connections_protocol_family_check CHECK (((protocol_family = lower(protocol_family)) AND (protocol_family ~ '^[a-z0-9][a-z0-9-]*$'::text))),
-    CONSTRAINT data_collector_connections_schema_version_check CHECK ((schema_version > 0)),
-    CONSTRAINT data_collector_connections_status_check CHECK ((status = ANY (ARRAY['unknown'::text, 'connected'::text, 'disconnected'::text, 'error'::text])))
+    CONSTRAINT data_collector_connections_schema_version_check CHECK ((schema_version > 0))
 );
 
 
@@ -449,18 +462,20 @@ CREATE TABLE data_collector_points (
     data_type text NOT NULL,
     element_count integer DEFAULT 1 NOT NULL,
     read_options jsonb DEFAULT '{}'::jsonb NOT NULL,
-    acquisition jsonb DEFAULT '{}'::jsonb NOT NULL,
+    acquisition_mode text DEFAULT 'inherit'::text NOT NULL,
+    acquisition_overrides jsonb DEFAULT '{}'::jsonb NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_collector_points_acquisition_check CHECK ((jsonb_typeof(acquisition) = 'object'::text)),
+    CONSTRAINT data_collector_points_acquisition_mode_check CHECK ((acquisition_mode = ANY (ARRAY['inherit'::text, 'override'::text]))),
+    CONSTRAINT data_collector_points_acquisition_overrides_check CHECK ((jsonb_typeof(acquisition_overrides) = 'object'::text)),
     CONSTRAINT data_collector_points_address_check CHECK ((jsonb_typeof(address) = 'object'::text)),
     CONSTRAINT data_collector_points_address_schema_version_check CHECK ((address_schema_version > 0)),
     CONSTRAINT data_collector_points_address_text_check CHECK (((char_length(TRIM(BOTH FROM address_text)) >= 1) AND (char_length(TRIM(BOTH FROM address_text)) <= 500))),
     CONSTRAINT data_collector_points_code_check CHECK (((char_length(TRIM(BOTH FROM code)) >= 1) AND (char_length(TRIM(BOTH FROM code)) <= 100))),
-    CONSTRAINT data_collector_points_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text]))),
+    CONSTRAINT data_collector_points_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text, 'object'::text, 'array'::text]))),
     CONSTRAINT data_collector_points_element_count_check CHECK ((element_count >= 1)),
     CONSTRAINT data_collector_points_metadata_check CHECK ((jsonb_typeof(metadata) = 'object'::text)),
     CONSTRAINT data_collector_points_name_check CHECK (((char_length(TRIM(BOTH FROM name)) >= 1) AND (char_length(TRIM(BOTH FROM name)) <= 200))),
@@ -504,6 +519,30 @@ CREATE TABLE data_compute_folders (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_compute_folders_name_check CHECK ((char_length(name) <= 100))
 );
+
+
+--
+-- Name: data_compute_dependencies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_compute_dependencies (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    project_id uuid NOT NULL,
+    language text NOT NULL,
+    package_name text NOT NULL,
+    import_name text NOT NULL,
+    version text NOT NULL,
+    created_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_compute_dependencies_language_check CHECK ((language = ANY (ARRAY['js'::text, 'python'::text]))),
+    CONSTRAINT data_compute_dependencies_package_name_check CHECK ((char_length(package_name) BETWEEN 1 AND 160)),
+    CONSTRAINT data_compute_dependencies_import_name_check CHECK ((char_length(import_name) BETWEEN 1 AND 160)),
+    CONSTRAINT data_compute_dependencies_version_check CHECK ((char_length(version) BETWEEN 1 AND 80)),
+    CONSTRAINT data_compute_dependencies_project_package_key UNIQUE (project_id, language, package_name)
+);
+
+CREATE INDEX data_compute_dependencies_project_language_idx ON data_compute_dependencies USING btree (project_id, language, package_name);
 
 
 --
@@ -558,7 +597,6 @@ CREATE TABLE data_compute_units (
     trigger_type text DEFAULT 'manual'::text NOT NULL,
     trigger_config jsonb DEFAULT '{}'::jsonb NOT NULL,
     input_bindings jsonb DEFAULT '{}'::jsonb NOT NULL,
-    output_bindings jsonb DEFAULT '{}'::jsonb NOT NULL,
     timeout_ms integer DEFAULT 3000 NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
     created_by uuid NOT NULL,
@@ -569,10 +607,54 @@ CREATE TABLE data_compute_units (
     CONSTRAINT data_compute_units_input_bindings_check CHECK ((jsonb_typeof(input_bindings) = 'object'::text)),
     CONSTRAINT data_compute_units_language_check CHECK ((language = ANY (ARRAY['js'::text, 'python'::text]))),
     CONSTRAINT data_compute_units_name_check CHECK ((char_length(name) <= 100)),
-    CONSTRAINT data_compute_units_output_bindings_check CHECK ((jsonb_typeof(output_bindings) = 'object'::text)),
     CONSTRAINT data_compute_units_timeout_ms_check CHECK (((timeout_ms > 0) AND (timeout_ms <= 120000))),
     CONSTRAINT data_compute_units_trigger_config_check CHECK ((jsonb_typeof(trigger_config) = 'object'::text)),
-    CONSTRAINT data_compute_units_trigger_type_check CHECK ((trigger_type = ANY (ARRAY['manual'::text, 'timer'::text, 'datapoint_change'::text])))
+    CONSTRAINT data_compute_units_trigger_type_check CHECK ((trigger_type = ANY (ARRAY['manual'::text, 'schedule'::text, 'datapoint_change'::text, 'condition'::text])))
+);
+
+
+--
+-- Name: data_compute_unit_datapoint_refs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_compute_unit_datapoint_refs (
+    project_id uuid NOT NULL,
+    compute_unit_id uuid NOT NULL,
+    datapoint_id uuid NOT NULL,
+    role text NOT NULL,
+    alias text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_compute_unit_datapoint_refs_role_check CHECK ((role = ANY (ARRAY['input'::text, 'trigger'::text]))),
+    CONSTRAINT data_compute_unit_datapoint_refs_alias_check CHECK ((((role = 'input'::text) AND (alias IS NOT NULL) AND (btrim(alias) <> ''::text)) OR ((role = 'trigger'::text) AND (alias IS NULL)))),
+    CONSTRAINT data_compute_unit_datapoint_refs_sort_order_check CHECK ((sort_order >= 0))
+);
+
+
+--
+-- Name: data_compute_unit_outputs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_compute_unit_outputs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    compute_unit_id uuid NOT NULL,
+    datapoint_id uuid NOT NULL,
+    output_key text NOT NULL,
+    path text NOT NULL,
+    data_type text NOT NULL,
+    unit text,
+    precision_num integer,
+    null_policy text DEFAULT 'error'::text NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_compute_unit_outputs_key_check CHECK (((char_length(btrim(output_key)) >= 1) AND (char_length(output_key) <= 100))),
+    CONSTRAINT data_compute_unit_outputs_path_check CHECK (((char_length(btrim(path)) >= 1) AND (char_length(path) <= 255))),
+    CONSTRAINT data_compute_unit_outputs_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text, 'object'::text, 'array'::text]))),
+    CONSTRAINT data_compute_unit_outputs_precision_check CHECK (((precision_num IS NULL) OR (precision_num >= 0))),
+    CONSTRAINT data_compute_unit_outputs_null_policy_check CHECK ((null_policy = ANY (ARRAY['error'::text, 'skip'::text]))),
+    CONSTRAINT data_compute_unit_outputs_sort_order_check CHECK ((sort_order >= 0))
 );
 
 
@@ -586,13 +668,10 @@ CREATE TABLE data_connections (
     name text NOT NULL,
     type text NOT NULL,
     category text DEFAULT 'api'::text NOT NULL,
-    status text DEFAULT 'unknown'::text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
     retry_count integer DEFAULT 3 NOT NULL,
     retry_interval_ms integer DEFAULT 5000 NOT NULL,
     health_check_interval_ms integer DEFAULT 30000 NOT NULL,
-    last_connected_at timestamp with time zone,
-    last_error_message text,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     display_order integer DEFAULT 0 NOT NULL,
     created_by uuid NOT NULL,
@@ -605,8 +684,26 @@ CREATE TABLE data_connections (
     CONSTRAINT data_connections_name_check CHECK ((char_length(name) <= 100)),
     CONSTRAINT data_connections_retry_count_check CHECK ((retry_count >= 0)),
     CONSTRAINT data_connections_retry_interval_ms_check CHECK ((retry_interval_ms >= 0)),
-    CONSTRAINT data_connections_status_check CHECK ((status = ANY (ARRAY['connected'::text, 'disconnected'::text, 'error'::text, 'unknown'::text]))),
     CONSTRAINT data_connections_type_check CHECK ((type = ANY (ARRAY['relational'::text, 'mqtt'::text, 'websocket'::text, 'http'::text, 'kafka'::text, 'redis'::text, 'tdengine'::text, 'builtin.relation'::text, 'builtin.timeseries'::text, 'builtin.realtime'::text, 'builtin.message'::text])))
+);
+
+
+--
+-- Name: data_connection_test_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_connection_test_records (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    connection_id uuid NOT NULL,
+    status text NOT NULL,
+    duration_ms integer NOT NULL,
+    message text NOT NULL,
+    tested_by uuid,
+    tested_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_connection_test_records_status_check CHECK ((status = ANY (ARRAY['succeeded'::text, 'failed'::text]))),
+    CONSTRAINT data_connection_test_records_duration_check CHECK ((duration_ms >= 0)),
+    CONSTRAINT data_connection_test_records_message_check CHECK ((char_length(message) <= 500))
 );
 
 
@@ -777,8 +874,8 @@ CREATE TABLE data_kafka_fields (
     topic_mapping_id uuid NOT NULL,
     group_id uuid,
     name text NOT NULL,
-    value_path text NOT NULL,
-    key_path text DEFAULT ''::text NOT NULL,
+    value_path jsonb DEFAULT '[]'::jsonb NOT NULL,
+    key_path jsonb DEFAULT '[]'::jsonb NOT NULL,
     data_type text NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
     description text DEFAULT ''::text NOT NULL,
@@ -791,10 +888,10 @@ CREATE TABLE data_kafka_fields (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_kafka_fields_data_type_check CHECK ((char_length(data_type) <= 50)),
-    CONSTRAINT data_kafka_fields_key_path_check CHECK ((char_length(key_path) <= 500)),
+    CONSTRAINT data_kafka_fields_key_path_check CHECK ((jsonb_typeof(key_path) = 'array'::text)),
     CONSTRAINT data_kafka_fields_name_check CHECK ((char_length(name) <= 100)),
     CONSTRAINT data_kafka_fields_quality_check CHECK ((quality = ANY (ARRAY['good'::text, 'bad'::text, 'unknown'::text]))),
-    CONSTRAINT data_kafka_fields_value_path_check CHECK ((char_length(value_path) <= 500))
+    CONSTRAINT data_kafka_fields_value_path_check CHECK ((jsonb_typeof(value_path) = 'array'::text))
 );
 
 
@@ -999,7 +1096,7 @@ CREATE TABLE data_mqtt_tags (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_mqtt_tags_code_check CHECK ((char_length(code) <= 100)),
-    CONSTRAINT data_mqtt_tags_data_type_check CHECK ((data_type = ANY (ARRAY['string'::text, 'number'::text, 'boolean'::text, 'object'::text, 'array'::text]))),
+    CONSTRAINT data_mqtt_tags_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text, 'object'::text, 'array'::text]))),
     CONSTRAINT data_mqtt_tags_name_check CHECK ((char_length(name) <= 100)),
     CONSTRAINT data_mqtt_tags_parse_type_check CHECK ((parse_type = ANY (ARRAY['jsonpath'::text, 'regex'::text, 'script'::text, 'fixed'::text, 'batch_jsonpath'::text]))),
     CONSTRAINT data_mqtt_tags_unit_check CHECK (((unit IS NULL) OR (char_length(unit) <= 50))),
@@ -1026,8 +1123,6 @@ CREATE TABLE data_points (
     default_value text,
     min_value numeric(20,6),
     max_value numeric(20,6),
-    alarm_low numeric(20,6),
-    alarm_high numeric(20,6),
     tags jsonb DEFAULT '[]'::jsonb NOT NULL,
     attribute_defaults jsonb DEFAULT '{}'::jsonb NOT NULL,
     refresh_mode text DEFAULT 'auto'::text NOT NULL,
@@ -1039,9 +1134,8 @@ CREATE TABLE data_points (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_points_alarm_range_check CHECK ((((alarm_low IS NULL) OR (alarm_high IS NULL) OR (alarm_low <= alarm_high)) AND ((min_value IS NULL) OR (alarm_low IS NULL) OR (min_value <= alarm_low)) AND ((max_value IS NULL) OR (alarm_high IS NULL) OR (alarm_high <= max_value)))),
     CONSTRAINT data_points_attribute_defaults_check CHECK ((jsonb_typeof(attribute_defaults) = 'object'::text)),
-    CONSTRAINT data_points_data_type_check CHECK ((char_length(data_type) <= 20)),
+    CONSTRAINT data_points_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text, 'object'::text, 'array'::text]))),
     CONSTRAINT data_points_min_max_check CHECK (((min_value IS NULL) OR (max_value IS NULL) OR (min_value <= max_value))),
     CONSTRAINT data_points_name_check CHECK ((char_length(name) <= 100)),
     CONSTRAINT data_points_path_check CHECK ((char_length(path) <= 255)),
@@ -1102,7 +1196,7 @@ CREATE TABLE data_queries (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_queries_cache_ttl_seconds_check CHECK ((cache_ttl_seconds >= 0)),
     CONSTRAINT data_queries_config_check CHECK ((jsonb_typeof(config) = 'object'::text)),
-    CONSTRAINT data_queries_name_check CHECK ((char_length(name) <= 200)),
+    CONSTRAINT data_queries_name_check CHECK ((char_length(name) <= 100)),
     CONSTRAINT data_queries_query_type_check CHECK ((query_type = ANY (ARRAY['sql'::text, 'tags'::text, 'http'::text, 'mqtt_pub'::text, 'mqtt_sub'::text]))),
     CONSTRAINT data_queries_timeout_ms_check CHECK ((timeout_ms >= 0))
 );
@@ -1125,6 +1219,41 @@ CREATE TABLE data_realtime_keys (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT data_realtime_keys_provider_check CHECK ((provider = ANY (ARRAY['redis'::text, 'builtin'::text])))
+);
+
+
+--
+-- Name: data_source_output_mappings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_source_output_mappings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    query_id uuid,
+    http_request_id uuid,
+    websocket_session_id uuid,
+    realtime_key_id uuid,
+    datapoint_id uuid NOT NULL,
+    output_key text NOT NULL,
+    display_name text NOT NULL,
+    selector_kind text NOT NULL,
+    selector_column text,
+    selector_path jsonb DEFAULT '[]'::jsonb NOT NULL,
+    data_type text NOT NULL,
+    unit text,
+    precision_num integer,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_source_output_mappings_owner_check CHECK ((num_nonnulls(query_id, http_request_id, websocket_session_id, realtime_key_id) = 1)),
+    CONSTRAINT data_source_output_mappings_key_check CHECK (((char_length(btrim(output_key)) >= 1) AND (char_length(output_key) <= 100))),
+    CONSTRAINT data_source_output_mappings_name_check CHECK (((char_length(btrim(display_name)) >= 1) AND (char_length(display_name) <= 100))),
+    CONSTRAINT data_source_output_mappings_selector_kind_check CHECK ((selector_kind = ANY (ARRAY['whole'::text, 'column'::text, 'path'::text]))),
+    CONSTRAINT data_source_output_mappings_selector_shape_check CHECK ((((selector_kind = 'whole'::text) AND (selector_column IS NULL) AND (selector_path = '[]'::jsonb)) OR ((selector_kind = 'column'::text) AND (selector_column IS NOT NULL) AND (char_length(btrim(selector_column)) > 0) AND (selector_path = '[]'::jsonb)) OR ((selector_kind = 'path'::text) AND (selector_column IS NULL) AND (jsonb_array_length(selector_path) > 0)))),
+    CONSTRAINT data_source_output_mappings_selector_path_check CHECK ((jsonb_typeof(selector_path) = 'array'::text)),
+    CONSTRAINT data_source_output_mappings_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text, 'object'::text, 'array'::text]))),
+    CONSTRAINT data_source_output_mappings_precision_check CHECK (((precision_num IS NULL) OR (precision_num >= 0))),
+    CONSTRAINT data_source_output_mappings_sort_order_check CHECK ((sort_order >= 0))
 );
 
 
@@ -1200,6 +1329,7 @@ CREATE TABLE data_history_storage_configs (
     project_id uuid NOT NULL,
     access_source_id uuid,
     collector_connection_id uuid,
+    compute_unit_id uuid,
     datapoint_id uuid,
     is_enabled boolean DEFAULT true NOT NULL,
     write_mode text DEFAULT 'on_change'::text NOT NULL,
@@ -1211,7 +1341,7 @@ CREATE TABLE data_history_storage_configs (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_history_storage_configs_scope_check CHECK ((num_nonnulls(access_source_id, collector_connection_id, datapoint_id) = 1)),
+    CONSTRAINT data_history_storage_configs_scope_check CHECK ((num_nonnulls(access_source_id, collector_connection_id, compute_unit_id, datapoint_id) = 1)),
     CONSTRAINT data_history_storage_configs_write_mode_check CHECK ((write_mode = ANY (ARRAY['every_sample'::text, 'interval_latest'::text, 'on_change'::text, 'periodic_snapshot'::text]))),
     CONSTRAINT data_history_storage_configs_interval_check CHECK (((interval_ms IS NULL) OR (interval_ms > 0))),
     CONSTRAINT data_history_storage_configs_deadband_check CHECK (((deadband IS NULL) OR (deadband >= (0)::numeric))),
@@ -1661,11 +1791,34 @@ ALTER TABLE ONLY data_compute_units
 
 
 --
+-- Name: data_compute_unit_datapoint_refs data_compute_unit_datapoint_refs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_compute_unit_datapoint_refs
+    ADD CONSTRAINT data_compute_unit_datapoint_refs_pkey PRIMARY KEY (compute_unit_id, role, datapoint_id);
+
+ALTER TABLE ONLY data_compute_unit_outputs
+    ADD CONSTRAINT data_compute_unit_outputs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY data_compute_unit_outputs
+    ADD CONSTRAINT data_compute_unit_outputs_unit_key UNIQUE (compute_unit_id, output_key);
+
+ALTER TABLE ONLY data_compute_unit_outputs
+    ADD CONSTRAINT data_compute_unit_outputs_project_path_key UNIQUE (project_id, path);
+
+ALTER TABLE ONLY data_compute_unit_outputs
+    ADD CONSTRAINT data_compute_unit_outputs_datapoint_key UNIQUE (datapoint_id);
+
+
+--
 -- Name: data_connections data_connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY data_connections
     ADD CONSTRAINT data_connections_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY data_connection_test_records
+    ADD CONSTRAINT data_connection_test_records_pkey PRIMARY KEY (id);
 
 
 --
@@ -1899,6 +2052,12 @@ ALTER TABLE ONLY data_realtime_keys
 ALTER TABLE ONLY data_realtime_keys
     ADD CONSTRAINT data_realtime_keys_project_id_connection_id_key_path_key UNIQUE (project_id, connection_id, key_path);
 
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_datapoint_key UNIQUE (datapoint_id);
+
 
 --
 -- Name: data_redis_configs data_redis_configs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -2099,6 +2258,7 @@ CREATE INDEX data_alarm_items_project_updated_idx ON data_alarm_items USING btre
 CREATE INDEX data_alarm_items_datapoint_idx ON data_alarm_items USING btree (project_id, datapoint_id, updated_at DESC) WHERE (datapoint_id IS NOT NULL);
 CREATE UNIQUE INDEX data_alarm_items_point_name_key ON data_alarm_items USING btree (datapoint_id, name_key) WHERE (mode = 'point'::text);
 CREATE UNIQUE INDEX data_alarm_items_point_trigger_key ON data_alarm_items USING btree (datapoint_id, trigger_fingerprint) WHERE (mode = 'point'::text);
+CREATE UNIQUE INDEX data_alarm_items_point_preset_slot_key ON data_alarm_items USING btree (datapoint_id, preset_slot) WHERE (mode = 'point'::text AND preset_slot IS NOT NULL);
 CREATE UNIQUE INDEX data_alarm_items_derived_name_key ON data_alarm_items USING btree (project_id, name_key) WHERE (mode = 'derived'::text);
 CREATE UNIQUE INDEX data_alarm_items_derived_trigger_key ON data_alarm_items USING btree (project_id, trigger_fingerprint) WHERE (mode = 'derived'::text);
 
@@ -2307,6 +2467,27 @@ CREATE INDEX data_compute_units_project_language_idx ON data_compute_units USING
 
 
 --
+-- Name: data_compute_unit_datapoint_refs_project_point_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX data_compute_unit_datapoint_refs_project_point_idx ON data_compute_unit_datapoint_refs USING btree (project_id, datapoint_id, role);
+
+
+--
+-- Name: data_compute_unit_datapoint_refs_input_alias_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX data_compute_unit_datapoint_refs_input_alias_key ON data_compute_unit_datapoint_refs USING btree (compute_unit_id, alias) WHERE (role = 'input'::text);
+
+
+--
+-- Name: data_compute_unit_datapoint_refs_trigger_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX data_compute_unit_datapoint_refs_trigger_key ON data_compute_unit_datapoint_refs USING btree (compute_unit_id) WHERE (role = 'trigger'::text);
+
+
+--
 -- Name: data_connections_project_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2319,19 +2500,14 @@ CREATE INDEX data_connections_project_created_idx ON data_connections USING btre
 
 CREATE UNIQUE INDEX data_connections_project_name_key ON data_connections USING btree (project_id, name);
 
+CREATE INDEX data_connection_test_records_connection_idx ON data_connection_test_records USING btree (project_id, connection_id, tested_at DESC);
+
 
 --
 -- Name: data_connections_project_order_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX data_connections_project_order_idx ON data_connections USING btree (project_id, display_order, created_at DESC);
-
-
---
--- Name: data_connections_project_status_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX data_connections_project_status_idx ON data_connections USING btree (project_id, status);
 
 
 --
@@ -2655,6 +2831,14 @@ CREATE INDEX data_queries_type_enabled_idx ON data_queries USING btree (query_ty
 
 CREATE INDEX data_realtime_keys_connection_idx ON data_realtime_keys USING btree (project_id, connection_id, provider, key_path);
 
+CREATE UNIQUE INDEX data_source_output_mappings_query_key ON data_source_output_mappings USING btree (query_id, output_key) WHERE (query_id IS NOT NULL);
+
+CREATE UNIQUE INDEX data_source_output_mappings_http_key ON data_source_output_mappings USING btree (http_request_id, output_key) WHERE (http_request_id IS NOT NULL);
+
+CREATE UNIQUE INDEX data_source_output_mappings_websocket_key ON data_source_output_mappings USING btree (websocket_session_id, output_key) WHERE (websocket_session_id IS NOT NULL);
+
+CREATE UNIQUE INDEX data_source_output_mappings_realtime_key ON data_source_output_mappings USING btree (realtime_key_id, output_key) WHERE (realtime_key_id IS NOT NULL);
+
 
 --
 -- Name: data_redis_configs_mode_idx; Type: INDEX; Schema: public; Owner: -
@@ -2689,6 +2873,8 @@ CREATE UNIQUE INDEX data_history_storage_configs_access_source_key ON data_histo
 --
 
 CREATE UNIQUE INDEX data_history_storage_configs_collector_key ON data_history_storage_configs USING btree (project_id, collector_connection_id) WHERE (collector_connection_id IS NOT NULL);
+
+CREATE UNIQUE INDEX data_history_storage_configs_compute_key ON data_history_storage_configs USING btree (project_id, compute_unit_id) WHERE (compute_unit_id IS NOT NULL);
 
 
 --
@@ -2947,6 +3133,31 @@ ALTER TABLE ONLY data_compute_units
 
 
 --
+-- Name: data_compute_unit_datapoint_refs data_compute_unit_datapoint_refs_unit_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_compute_unit_datapoint_refs
+    ADD CONSTRAINT data_compute_unit_datapoint_refs_unit_fkey FOREIGN KEY (compute_unit_id) REFERENCES data_compute_units(id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_compute_unit_datapoint_refs data_compute_unit_datapoint_refs_datapoint_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_compute_unit_datapoint_refs
+    ADD CONSTRAINT data_compute_unit_datapoint_refs_datapoint_fkey FOREIGN KEY (datapoint_id) REFERENCES data_points(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY data_compute_unit_outputs
+    ADD CONSTRAINT data_compute_unit_outputs_unit_fkey FOREIGN KEY (compute_unit_id) REFERENCES data_compute_units(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY data_compute_unit_outputs
+    ADD CONSTRAINT data_compute_unit_outputs_datapoint_fkey FOREIGN KEY (datapoint_id) REFERENCES data_points(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY data_connection_test_records
+    ADD CONSTRAINT data_connection_test_records_connection_fkey FOREIGN KEY (connection_id) REFERENCES data_connections(id) ON DELETE CASCADE;
+
+
+--
 -- Name: data_http_configs data_http_configs_connection_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3161,6 +3372,21 @@ ALTER TABLE ONLY data_queries
 ALTER TABLE ONLY data_realtime_keys
     ADD CONSTRAINT data_realtime_keys_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES data_connections(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_query_fkey FOREIGN KEY (query_id) REFERENCES data_queries(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_http_fkey FOREIGN KEY (http_request_id) REFERENCES data_http_requests(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_websocket_fkey FOREIGN KEY (websocket_session_id) REFERENCES data_websocket_sessions(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_realtime_fkey FOREIGN KEY (realtime_key_id) REFERENCES data_realtime_keys(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY data_source_output_mappings
+    ADD CONSTRAINT data_source_output_mappings_datapoint_fkey FOREIGN KEY (datapoint_id) REFERENCES data_points(id) ON DELETE RESTRICT;
+
 
 --
 -- Name: data_redis_configs data_redis_configs_connection_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -3192,6 +3418,9 @@ ALTER TABLE ONLY data_history_storage_configs
 
 ALTER TABLE ONLY data_history_storage_configs
     ADD CONSTRAINT data_history_storage_configs_collector_fkey FOREIGN KEY (collector_connection_id) REFERENCES data_collector_connections(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY data_history_storage_configs
+    ADD CONSTRAINT data_history_storage_configs_compute_fkey FOREIGN KEY (compute_unit_id) REFERENCES data_compute_units(id) ON DELETE CASCADE;
 
 
 --

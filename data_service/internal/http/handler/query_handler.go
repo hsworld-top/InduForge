@@ -50,18 +50,19 @@ func (h *QueryHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var request struct {
-		Name            string         `json:"name"`
-		Description     *string        `json:"description"`
-		Category        *string        `json:"category"`
-		GroupID         *string        `json:"groupId"`
-		ConnectionID    string         `json:"connectionId"`
-		QueryType       string         `json:"queryType"`
-		Config          map[string]any `json:"config"`
-		Transformer     *string        `json:"transformer"`
-		IsEnabled       *bool          `json:"isEnabled"`
-		TimeoutMS       *int           `json:"timeoutMs"`
-		CacheEnabled    *bool          `json:"cacheEnabled"`
-		CacheTtlSeconds *int           `json:"cacheTtlSeconds"`
+		Name            string                      `json:"name"`
+		Description     *string                     `json:"description"`
+		Category        *string                     `json:"category"`
+		GroupID         *string                     `json:"groupId"`
+		ConnectionID    string                      `json:"connectionId"`
+		QueryType       string                      `json:"queryType"`
+		Config          map[string]any              `json:"config"`
+		Transformer     *string                     `json:"transformer"`
+		IsEnabled       *bool                       `json:"isEnabled"`
+		TimeoutMS       *int                        `json:"timeoutMs"`
+		CacheEnabled    *bool                       `json:"cacheEnabled"`
+		CacheTtlSeconds *int                        `json:"cacheTtlSeconds"`
+		Outputs         []service.SourceOutputInput `json:"outputs"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -80,6 +81,7 @@ func (h *QueryHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		TimeoutMS:       request.TimeoutMS,
 		CacheEnabled:    request.CacheEnabled,
 		CacheTtlSeconds: request.CacheTtlSeconds,
+		Outputs:         request.Outputs,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -203,6 +205,7 @@ func validateQueryUpdatePayloadKeys(raw map[string]json.RawMessage) error {
 		"timeoutMs":       {},
 		"cacheEnabled":    {},
 		"cacheTtlSeconds": {},
+		"outputs":         {},
 	}
 
 	for field := range raw {
@@ -306,6 +309,14 @@ func parseQueryUpdateInput(raw map[string]json.RawMessage) (service.UpdateQueryI
 			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "cacheTtlSeconds 字段格式无效", err)
 		}
 		input.CacheTtlSeconds = &next
+	}
+	if value, ok := raw["outputs"]; ok {
+		var next []service.SourceOutputInput
+		if err := json.Unmarshal(value, &next); err != nil {
+			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "outputs 字段格式无效", err)
+		}
+		input.Outputs = next
+		input.HasOutputs = true
 	}
 
 	return input, nil

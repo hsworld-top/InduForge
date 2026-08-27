@@ -24,7 +24,7 @@ type ProtocolPreviewInput struct {
 	Options   map[string]any `json:"options"`
 }
 
-// ProtocolPreviewResult 是所有 Phase 1 协议统一返回给 datacenter 的抓样结果。
+// ProtocolPreviewResult 是所有 开发态协议 协议统一返回给 datacenter 的抓样结果。
 type ProtocolPreviewResult struct {
 	Protocol      string         `json:"protocol"`
 	ConnectionID  string         `json:"connectionId"`
@@ -35,6 +35,7 @@ type ProtocolPreviewResult struct {
 	Diagnostics   map[string]any `json:"diagnostics"`
 	DurationMS    int64          `json:"durationMs"`
 	Truncated     bool           `json:"truncated"`
+	Warnings      []string       `json:"warnings,omitempty"`
 	EffectiveTime time.Time      `json:"-"`
 }
 
@@ -123,7 +124,9 @@ func (s *ProtocolPreviewService) Preview(ctx context.Context, projectID, connect
 	})
 	if err != nil {
 		result = failedProtocolPreviewResult(protocol, connectionID, startedAt, err)
-		_ = s.recordPreview(ctx, connection, result, err)
+		if recordErr := s.recordPreview(ctx, connection, result, err); recordErr != nil {
+			result.Warnings = append(result.Warnings, "预览失败，且执行摘要保存失败: "+recordErr.Error())
+		}
 		return result, err
 	}
 	if result == nil {
@@ -131,7 +134,8 @@ func (s *ProtocolPreviewService) Preview(ctx context.Context, projectID, connect
 	}
 	fillProtocolPreviewDefaults(result, protocol, connectionID, startedAt)
 	if recordErr := s.recordPreview(ctx, connection, result, nil); recordErr != nil {
-		return nil, recordErr
+		// 外部预览结果与开发态执行摘要不是同一事务；摘要失败以 warning 返回，不能伪装成预览失败。
+		result.Warnings = append(result.Warnings, "预览成功，但执行摘要保存失败: "+recordErr.Error())
 	}
 	return result, nil
 }

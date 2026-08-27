@@ -43,13 +43,6 @@ var reservedPhase2ConnectionTypes = map[string]string{
 	"tdengine": "TDengine",
 }
 
-var allowedConnectionStatus = map[string]struct{}{
-	"connected":    {},
-	"disconnected": {},
-	"error":        {},
-	"unknown":      {},
-}
-
 var allowedKafkaSecurityProtocols = map[string]struct{}{
 	"PLAINTEXT":      {},
 	"SSL":            {},
@@ -65,20 +58,35 @@ var allowedKafkaSaslMechanisms = map[string]struct{}{
 
 // Connection 表示面向 HTTP 层返回的连接对象。
 type Connection struct {
-	ID               string          `json:"id"`
-	ProjectID        string          `json:"projectId"`
-	TenantID         string          `json:"tenantId"`
-	Name             string          `json:"name"`
-	Type             string          `json:"type"`
-	Status           string          `json:"status"`
-	Config           map[string]any  `json:"config"`
-	RelationalConfig map[string]any  `json:"relationalConfig,omitempty"`
-	MqttConfig       map[string]any  `json:"mqttConfig,omitempty"`
-	SecretStatus     map[string]bool `json:"secretStatus"`
-	DisplayOrder     int             `json:"displayOrder"`
-	VariableCount    int             `json:"variableCount"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	UpdatedAt        time.Time       `json:"updatedAt"`
+	ID                 string                   `json:"id"`
+	ProjectID          string                   `json:"projectId"`
+	TenantID           string                   `json:"tenantId"`
+	Name               string                   `json:"name"`
+	Type               string                   `json:"type"`
+	Enabled            bool                     `json:"enabled"`
+	ConfigurationState string                   `json:"configurationState"`
+	TestCapability     ConnectionTestCapability `json:"testCapability"`
+	LastTest           ConnectionLastTest       `json:"lastTest"`
+	Config             map[string]any           `json:"config"`
+	RelationalConfig   map[string]any           `json:"relationalConfig,omitempty"`
+	MqttConfig         map[string]any           `json:"mqttConfig,omitempty"`
+	SecretStatus       map[string]bool          `json:"secretStatus"`
+	DisplayOrder       int                      `json:"displayOrder"`
+	VariableCount      int                      `json:"variableCount"`
+	CreatedAt          time.Time                `json:"createdAt"`
+	UpdatedAt          time.Time                `json:"updatedAt"`
+}
+
+type ConnectionTestCapability struct {
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type ConnectionLastTest struct {
+	Status     string     `json:"status"`
+	TestedAt   *time.Time `json:"testedAt,omitempty"`
+	DurationMS *int       `json:"durationMs,omitempty"`
+	Message    *string    `json:"message,omitempty"`
 }
 
 // ConnectionTestResult 表示连接测试响应。
@@ -92,17 +100,17 @@ type ConnectionTestResult struct {
 
 // CreateConnectionInput 表示创建连接的业务输入。
 type CreateConnectionInput struct {
-	Name   string
-	Type   string
-	Status string
-	Config map[string]any
+	Name    string
+	Type    string
+	Enabled *bool
+	Config  map[string]any
 }
 
 // UpdateConnectionInput 表示更新连接的业务输入。
 type UpdateConnectionInput struct {
 	Name      *string
 	Type      *string
-	Status    *string
+	Enabled   *bool
 	Config    map[string]any
 	HasConfig bool
 }
@@ -154,7 +162,7 @@ func (s *ConnectionService) ListConnections(ctx context.Context, projectID, tena
 	}
 	for _, record := range records {
 		connection := toConnection(record, tenantID)
-		connection.SecretStatus = statuses[record.ID]
+		connection.SecretStatus = normalizeConnectionSecretStatus(statuses[record.ID])
 		connections = append(connections, connection)
 	}
 
@@ -184,7 +192,7 @@ func (s *ConnectionService) ListConnectionsPage(ctx context.Context, projectID, 
 	}
 	for _, record := range records {
 		connection := toConnection(record, tenantID)
-		connection.SecretStatus = statuses[record.ID]
+		connection.SecretStatus = normalizeConnectionSecretStatus(statuses[record.ID])
 		connections = append(connections, connection)
 	}
 	return connections, total, nil
@@ -208,7 +216,46 @@ func (s *ConnectionService) GetConnection(ctx context.Context, projectID, connec
 			return nil, err
 		}
 	}
+	connection.SecretStatus = normalizeConnectionSecretStatus(connection.SecretStatus)
 	return &connection, nil
+}
+
+// RevealConnectionSecret 按需返回单个已保存密钥。该能力仅供编辑表单主动查看，
+// HTTP 层必须使用写权限保护，并禁止响应缓存，避免列表和详情接口携带明文。
+func (s *ConnectionService) RevealConnectionSecret(ctx context.Context, projectID, connectionID, key string) (string, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return "", err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return "", err
+	}
+	key = strings.TrimSpace(key)
+	if key != "password" && key != "option.password" {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "不支持查看该密钥")
+	}
+	if _, err := s.repository.GetByProjectAndID(ctx, projectID, connectionID); err != nil {
+		return "", err
+	}
+	if s.secrets == nil {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "接入源密钥服务未初始化")
+	}
+	value, found, err := s.secrets.Resolve(ctx, connectionID, key)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "接入源未配置密码")
+	}
+	return value, nil
+}
+
+// normalizeConnectionSecretStatus 保证 API 始终返回 JSON 对象而不是 null。
+// 无密钥的内置运行库也需要符合前端稳定 Schema，否则单条记录会导致整页解析失败。
+func normalizeConnectionSecretStatus(status map[string]bool) map[string]bool {
+	if status == nil {
+		return map[string]bool{}
+	}
+	return status
 }
 
 func (s *ConnectionService) connectionSecretStatuses(ctx context.Context, records []repository.ConnectionRecord) (map[string]map[string]bool, error) {
@@ -279,7 +326,6 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, ten
 		normalized, err := normalizeBuiltinStoreCreateInput(projectID, CreateConnectionInput{
 			Name:   input.Name,
 			Type:   connectionType,
-			Status: input.Status,
 			Config: input.Config,
 		})
 		if err != nil {
@@ -291,8 +337,8 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, ten
 			Name:      normalized.Name,
 			Type:      normalized.Type,
 			Category:  normalized.Category,
-			Status:    normalized.Status,
 			Config:    normalized.Config,
+			IsEnabled: input.Enabled,
 		})
 		if err != nil {
 			return nil, err
@@ -300,10 +346,6 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, ten
 
 		connection := toConnection(*record, tenantID)
 		return &connection, nil
-	}
-	status, err := normalizeConnectionStatus(input.Status)
-	if err != nil {
-		return nil, err
 	}
 	config, err := normalizeConnectionConfig(input.Config)
 	if err != nil {
@@ -317,7 +359,7 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, ten
 		Name:            name,
 		Type:            connectionType,
 		Category:        category,
-		Status:          status,
+		IsEnabled:       input.Enabled,
 		Config:          config,
 		Secrets:         secrets,
 		ClearSecretKeys: clearSecretKeys,
@@ -341,7 +383,7 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 	if err := validateUserID(userID); err != nil {
 		return nil, err
 	}
-	if input.Name == nil && input.Type == nil && input.Status == nil && !input.HasConfig {
+	if input.Name == nil && input.Type == nil && input.Enabled == nil && !input.HasConfig {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要提供一个待更新字段")
 	}
 
@@ -385,14 +427,6 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 		}
 	}
 
-	nextStatus := current.Status
-	if input.Status != nil {
-		nextStatus, err = normalizeConnectionStatus(*input.Status)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	nextConfig := current.Config
 	if input.HasConfig {
 		nextConfig, err = normalizeConnectionConfig(input.Config)
@@ -402,7 +436,6 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 	}
 	if isBuiltinStoreType(nextType) {
 		nextCategory = "builtin"
-		nextStatus = "connected"
 		if input.HasConfig {
 			nextConfig = mergeBuiltinConfigUpdate(current.Config, input.Config)
 		}
@@ -410,13 +443,19 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 	secrets, clearSecretKeys, nextConfig := extractGenericConnectionSecrets(nextConfig)
 
 	record, err := s.repository.Update(ctx, repository.UpdateConnectionParams{
-		ID:              connectionID,
-		ProjectID:       projectID,
-		UserID:          userID,
-		Name:            nextName,
-		Type:            nextType,
-		Category:        nextCategory,
-		Status:          nextStatus,
+		ID:        connectionID,
+		ProjectID: projectID,
+		UserID:    userID,
+		Name:      nextName,
+		Type:      nextType,
+		Category:  nextCategory,
+		IsEnabled: func() *bool {
+			if input.Enabled != nil {
+				return input.Enabled
+			}
+			value := current.IsEnabled
+			return &value
+		}(),
 		Config:          nextConfig,
 		Secrets:         secrets,
 		ClearSecretKeys: clearSecretKeys,
@@ -438,7 +477,18 @@ func (s *ConnectionService) DeleteConnection(ctx context.Context, projectID, con
 		return err
 	}
 
-	return s.repository.Delete(ctx, projectID, connectionID)
+	return s.repository.DeleteWithImpact(ctx, projectID, connectionID, "")
+}
+
+// GetConnectionDeleteImpact 返回删除前的精确拥有对象与阻断引用摘要。
+func (s *ConnectionService) GetConnectionDeleteImpact(ctx context.Context, projectID, connectionID string) (*repository.SourceDeleteImpactRecord, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	return s.repository.GetDeleteImpact(ctx, projectID, connectionID)
 }
 
 // TestConnection 使用临时连接配置测试外部数据源连通性。
@@ -467,6 +517,58 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 	default:
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源类型暂不支持连接测试")
 	}
+}
+
+// TestSavedConnection 对已保存配置执行来源级测试，并只持久化脱敏摘要。
+func (s *ConnectionService) TestSavedConnection(ctx context.Context, projectID, connectionID, userID string) (*ConnectionTestResult, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetByProjectAndID(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	capability := connectionTestCapability(record.Type)
+	if capability.Status != "supported" || record.Type == "mqtt" {
+		reason := capability.Reason
+		if record.Type == "mqtt" {
+			reason = "请在 MQTT 工作台中测试 Broker 连接"
+		}
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, reason)
+	}
+	config := cloneMap(record.Config)
+	if s.secrets != nil {
+		secrets, resolveErr := s.secrets.ResolveAll(ctx, connectionID)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		for key, value := range secrets {
+			config[key] = value
+		}
+	}
+	startedAt := time.Now()
+	result, testErr := s.TestConnection(ctx, projectID, CreateConnectionInput{Type: record.Type, Config: config})
+	durationMS := int(time.Since(startedAt).Milliseconds())
+	status, message := "succeeded", "连接测试成功"
+	if testErr != nil {
+		status, message = "failed", testErr.Error()
+	}
+	if len(message) > 500 {
+		message = message[:500]
+	}
+	if saveErr := s.repository.SaveTestRecord(ctx, projectID, connectionID, userID, status, durationMS, message); saveErr != nil {
+		return nil, saveErr
+	}
+	if testErr != nil {
+		return nil, testErr
+	}
+	return result, nil
 }
 
 func normalizeConnectionTestType(connectionType string) (string, error) {
@@ -790,34 +892,6 @@ func kafkaSaslMechanism(options map[string]any) (sasl.Mechanism, error) {
 	}
 }
 
-// UpdateConnectionStatus 更新连接状态。
-func (s *ConnectionService) UpdateConnectionStatus(ctx context.Context, projectID, connectionID, status string) (*Connection, error) {
-	if err := validateProjectID(projectID); err != nil {
-		return nil, err
-	}
-	if err := validateConnectionID(connectionID); err != nil {
-		return nil, err
-	}
-	nextStatus, err := normalizeConnectionStatus(status)
-	if err != nil {
-		return nil, err
-	}
-
-	record, err := s.repository.UpdateStatus(ctx, projectID, connectionID, nextStatus)
-	if err != nil {
-		return nil, err
-	}
-
-	current, err := s.repository.GetByProjectAndID(ctx, projectID, connectionID)
-	if err != nil {
-		return nil, err
-	}
-	current.Status = record.Status
-	current.UpdatedAt = record.UpdatedAt
-	connection := toConnection(*current, "")
-	return &connection, nil
-}
-
 // ListTables 返回外部关系库表列表。
 func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectionID string) ([]RelationalTable, error) {
 	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
@@ -842,7 +916,6 @@ func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectio
 		return nil, err
 	}
 	defer runtime.Close()
-
 	schema := runtime.SearchPath()
 	query, args := relationalListTablesQuery(runtime.DBType(), schema)
 	rows, err := runtime.Query(ctx, query, args...)
@@ -1202,7 +1275,6 @@ func (s *ConnectionService) GetTableData(ctx context.Context, projectID, connect
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取表字段元信息失败", err)
 	}
-
 	resultRows := make([][]any, 0)
 	for rows.Next() {
 		values, err := rows.Values()
@@ -1239,19 +1311,25 @@ func (s *ConnectionService) GetTableData(ctx context.Context, projectID, connect
 // ExecuteSQL 执行 SQL 工作台语句。
 // 工作台不做表级 DDL/DML 限制，实际权限由数据库账号和内置库 schema 隔离决定。
 func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectionID, sqlText string, parameters []any) (*RelationalQueryResult, error) {
+	execCtx, cancel := context.WithTimeout(ctx, developmentSQLTimeout*time.Second)
+	defer cancel()
+	ctx = execCtx
 	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
 	}
-	sqlText = strings.TrimSpace(sqlText)
-	if sqlText == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL 不能为空")
+	sqlText, err = normalizeSQLText(sqlText)
+	if err != nil {
+		return nil, err
 	}
 	if err := ensureSQLWorkbenchDatabaseBoundary(sqlText); err != nil {
 		return nil, err
 	}
 	if connection.Type == "tdengine" {
-		if err := validateTDengineReadOnlySQL(sqlText); err != nil {
+		if err := validateSQLParameterCount("tdengine", sqlText, parameters); err != nil {
+			return nil, err
+		}
+		if err := validateTDengineSingleSQL(sqlText); err != nil {
 			return nil, err
 		}
 		runtime, err := connectTDengineRuntime(ctx, connection.Config)
@@ -1260,11 +1338,18 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 		}
 		defer runtime.Close()
 		startedAt := time.Now()
-		columns, rows, err := runtime.query(ctx, sqlText, parameters...)
+		if !sqlWorkbenchStatementReturnsRows(sqlText) {
+			affected, err := runtime.execAffected(ctx, sqlText, parameters...)
+			if err != nil {
+				return nil, err
+			}
+			return &RelationalQueryResult{Columns: []string{}, ColumnTypes: map[string]string{}, Rows: [][]any{}, RowCount: int(affected), ExecutionTime: time.Since(startedAt).Milliseconds(), Limits: developmentSQLLimits()}, nil
+		}
+		columns, columnTypes, rows, truncatedBy, err := runtime.queryBounded(ctx, sqlText, developmentSQLMaxRows, developmentSQLMaxBytes, parameters...)
 		if err != nil {
 			return nil, err
 		}
-		return &RelationalQueryResult{Columns: columns, Rows: rows, RowCount: len(rows), ExecutionTime: time.Since(startedAt).Milliseconds()}, nil
+		return &RelationalQueryResult{Columns: columns, ColumnTypes: columnTypes, Rows: rows, RowCount: len(rows), ExecutionTime: time.Since(startedAt).Milliseconds(), Truncated: truncatedBy != "", TruncatedBy: truncatedBy, Limits: developmentSQLLimits()}, nil
 	}
 	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
 		if err != nil {
@@ -1272,6 +1357,9 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 		}
 		if s.builtinRuntime == nil {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		if err := validateSQLParameterCount("postgresql", sqlText, parameters); err != nil {
+			return nil, err
 		}
 		result, err := s.builtinRuntime.ExecuteSQLInSchema(ctx, schemaName, sqlText, parameters, 500)
 		if err != nil {
@@ -1285,6 +1373,9 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 		return nil, err
 	}
 	defer runtime.Close()
+	if err := validateSQLParameterCount(runtime.DBType(), sqlText, parameters); err != nil {
+		return nil, err
+	}
 
 	startTime := time.Now()
 	if isSQLWorkbenchQuery(sqlText) {
@@ -1292,20 +1383,22 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 	}
 	affected, err := runtime.ExecAffected(ctx, sqlText, parameters...)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行 SQL 失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, sqlExecutionErrorMessage("执行 SQL 失败", err), err)
 	}
 	return &RelationalQueryResult{
 		Columns:       []string{},
+		ColumnTypes:   map[string]string{},
 		Rows:          [][]any{},
 		RowCount:      int(affected),
 		ExecutionTime: time.Since(startTime).Milliseconds(),
+		Limits:        developmentSQLLimits(),
 	}, nil
 }
 
 func executeRelationalQuerySQL(ctx context.Context, runtime *relationalRuntime, sqlText string, parameters []any, startTime time.Time) (*RelationalQueryResult, error) {
 	rows, err := runtime.Query(ctx, sqlText, parameters...)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行 SQL 失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, sqlExecutionErrorMessage("执行 SQL 失败", err), err)
 	}
 	defer rows.Close()
 
@@ -1313,18 +1406,34 @@ func executeRelationalQuerySQL(ctx context.Context, runtime *relationalRuntime, 
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 SQL 字段元信息失败", err)
 	}
+	databaseTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 SQL 字段类型失败", err)
+	}
 
 	resultRows := make([][]any, 0)
+	resultBytes := 0
+	truncatedBy := ""
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 SQL 结果失败", err)
 		}
 		row := make([]any, 0, len(values))
-		for _, value := range values {
-			row = append(row, normalizeQueryValue(value))
+		for index, value := range values {
+			databaseType := ""
+			if index < len(databaseTypes) {
+				databaseType = databaseTypes[index]
+			}
+			row = append(row, normalizeSQLValue(value, databaseType))
+		}
+		accepted, reason, nextBytes := admitSQLResultRow(len(resultRows), resultBytes, developmentSQLMaxRows, developmentSQLMaxBytes, row)
+		if !accepted {
+			truncatedBy = reason
+			break
 		}
 		resultRows = append(resultRows, row)
+		resultBytes = nextBytes
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 SQL 结果失败", err)
@@ -1332,15 +1441,18 @@ func executeRelationalQuerySQL(ctx context.Context, runtime *relationalRuntime, 
 
 	return &RelationalQueryResult{
 		Columns:       columns,
+		ColumnTypes:   canonicalSQLColumnTypes(columns, databaseTypes),
 		Rows:          resultRows,
 		RowCount:      len(resultRows),
 		ExecutionTime: time.Since(startTime).Milliseconds(),
+		Truncated:     truncatedBy != "",
+		TruncatedBy:   truncatedBy,
+		Limits:        developmentSQLLimits(),
 	}, nil
 }
 
 func isSQLWorkbenchQuery(sqlText string) bool {
-	normalized := strings.TrimSpace(strings.ToLower(sqlText))
-	return strings.HasPrefix(normalized, "select") || strings.HasPrefix(normalized, "with") || strings.HasPrefix(normalized, "show") || strings.HasPrefix(normalized, "describe") || strings.HasPrefix(normalized, "desc")
+	return sqlWorkbenchStatementReturnsRows(sqlText)
 }
 
 func ensureSQLWorkbenchDatabaseBoundary(sqlText string) error {
@@ -1466,7 +1578,11 @@ func builtinSQLSchemaFromRecord(connection *repository.ConnectionRecord) (string
 
 func builtinSQLResultToRelational(result *BuiltinSQLExecuteResult) *RelationalQueryResult {
 	if result == nil {
-		return &RelationalQueryResult{Columns: []string{}, Rows: [][]any{}}
+		return &RelationalQueryResult{Columns: []string{}, ColumnTypes: map[string]string{}, Rows: [][]any{}, Limits: developmentSQLLimits()}
+	}
+	columnTypes := result.ColumnTypes
+	if columnTypes == nil {
+		columnTypes = map[string]string{}
 	}
 	rows := make([][]any, 0, len(result.Rows))
 	for _, row := range result.Rows {
@@ -1478,9 +1594,13 @@ func builtinSQLResultToRelational(result *BuiltinSQLExecuteResult) *RelationalQu
 	}
 	return &RelationalQueryResult{
 		Columns:       append([]string{}, result.Columns...),
+		ColumnTypes:   columnTypes,
 		Rows:          rows,
 		RowCount:      result.RowCount,
 		ExecutionTime: result.ExecutionTime,
+		Truncated:     result.Truncated,
+		TruncatedBy:   result.TruncatedBy,
+		Limits:        result.Limits,
 	}
 }
 
@@ -1650,19 +1770,45 @@ func toConnection(record repository.ConnectionRecord, tenantID string) Connectio
 		mqttConfig = cloneMap(record.Config)
 	}
 	return Connection{
-		ID:               record.ID,
-		ProjectID:        record.ProjectID,
-		TenantID:         tenantID,
-		Name:             record.Name,
-		Type:             record.Type,
-		Status:           record.Status,
-		Config:           cloneMap(record.Config),
-		RelationalConfig: relationalConfig,
-		MqttConfig:       mqttConfig,
-		DisplayOrder:     record.DisplayOrder,
-		VariableCount:    record.VariableCount,
-		CreatedAt:        record.CreatedAt,
-		UpdatedAt:        record.UpdatedAt,
+		ID:                 record.ID,
+		ProjectID:          record.ProjectID,
+		TenantID:           tenantID,
+		Name:               record.Name,
+		Type:               record.Type,
+		Enabled:            record.IsEnabled,
+		ConfigurationState: connectionConfigurationState(record),
+		TestCapability:     connectionTestCapability(record.Type),
+		LastTest:           ConnectionLastTest{Status: record.LastTestStatus, TestedAt: record.LastTestedAt, DurationMS: record.LastTestDurationMS, Message: record.LastTestMessage},
+		Config:             cloneMap(record.Config),
+		RelationalConfig:   relationalConfig,
+		MqttConfig:         mqttConfig,
+		DisplayOrder:       record.DisplayOrder,
+		VariableCount:      record.VariableCount,
+		CreatedAt:          record.CreatedAt,
+		UpdatedAt:          record.UpdatedAt,
+	}
+}
+
+func connectionConfigurationState(record repository.ConnectionRecord) string {
+	if isBuiltinStoreType(record.Type) {
+		return "ready"
+	}
+	if len(record.Config) == 0 {
+		return "incomplete"
+	}
+	return "ready"
+}
+
+func connectionTestCapability(connectionType string) ConnectionTestCapability {
+	switch connectionType {
+	case "relational", "kafka", "redis", "tdengine":
+		return ConnectionTestCapability{Status: "supported"}
+	case "mqtt":
+		return ConnectionTestCapability{Status: "unsupported", Reason: "请在 MQTT 工作台中测试 Broker 连接"}
+	case "http", "websocket":
+		return ConnectionTestCapability{Status: "unsupported", Reason: "该类型没有来源级地址，请在请求或会话工作台中测试"}
+	default:
+		return ConnectionTestCapability{Status: "unsupported", Reason: "当前接入源不需要来源级连接测试"}
 	}
 }
 
@@ -1732,17 +1878,6 @@ func isStoredProtocolConnectionType(connectionType string) bool {
 	default:
 		return false
 	}
-}
-
-func normalizeConnectionStatus(status string) (string, error) {
-	status = strings.TrimSpace(strings.ToLower(status))
-	if status == "" {
-		return "unknown", nil
-	}
-	if _, ok := allowedConnectionStatus[status]; !ok {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接状态不受支持")
-	}
-	return status, nil
 }
 
 func normalizeConnectionConfig(config map[string]any) (map[string]any, error) {
@@ -1826,11 +1961,19 @@ func (s *ConnectionService) listPostgresTableIndexes(ctx context.Context, runtim
 
 func relationalListTablesQuery(dbType, schema string) (string, []any) {
 	switch dbType {
-	case "mysql", "sqlserver":
+	case "mysql":
 		return `
         SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
         FROM information_schema.tables
         WHERE TABLE_SCHEMA = ?
+          AND TABLE_TYPE IN ('BASE TABLE', 'VIEW')
+        ORDER BY TABLE_NAME
+    `, []any{schema}
+	case "sqlserver":
+		return `
+        SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
+        FROM information_schema.tables
+        WHERE TABLE_SCHEMA = @schema
           AND TABLE_TYPE IN ('BASE TABLE', 'VIEW')
         ORDER BY TABLE_NAME
     `, []any{schema}

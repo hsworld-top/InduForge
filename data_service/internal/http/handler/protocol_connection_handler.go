@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -11,9 +10,9 @@ import (
 	"github.com/indu-forge/data_service/internal/service"
 )
 
-// ProtocolWave1Handler 负责第一波协议（kafka/http/ws/redis）接口。
-type ProtocolWave1Handler struct {
-	service        *service.ProtocolWave1Service
+// ProtocolConnectionHandler 负责协议连接（kafka/http/ws/redis）接口。
+type ProtocolConnectionHandler struct {
+	service        *service.ProtocolConnectionService
 	previewService protocolPreviewService
 }
 
@@ -21,17 +20,13 @@ type protocolPreviewService interface {
 	Preview(ctx context.Context, projectID, connectionID string, input service.ProtocolPreviewInput) (*service.ProtocolPreviewResult, error)
 }
 
-// NewProtocolWave1Handler 创建第一波协议处理器。
-func NewProtocolWave1Handler(protocolService *service.ProtocolWave1Service, previewServices ...protocolPreviewService) *ProtocolWave1Handler {
-	handler := &ProtocolWave1Handler{service: protocolService}
-	if len(previewServices) > 0 {
-		handler.previewService = previewServices[0]
-	}
-	return handler
+// NewProtocolConnectionHandler 创建协议连接处理器。
+func NewProtocolConnectionHandler(protocolService *service.ProtocolConnectionService, previewService protocolPreviewService) *ProtocolConnectionHandler {
+	return &ProtocolConnectionHandler{service: protocolService, previewService: previewService}
 }
 
 // CreateKafkaConfig 创建 Kafka Source 配置。
-func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) CreateKafkaConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -39,7 +34,7 @@ func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.
 
 	var request struct {
 		Name            string            `json:"name"`
-		Status          string            `json:"status"`
+		Enabled         *bool             `json:"enabled"`
 		Brokers         string            `json:"brokers"`
 		Topic           string            `json:"topic"`
 		ConsumerGroup   string            `json:"consumerGroup"`
@@ -54,7 +49,7 @@ func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.
 
 	connection, err := h.service.CreateKafkaConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateKafkaConfigInput{
 		Name:          request.Name,
-		Status:        request.Status,
+		Enabled:       request.Enabled,
 		Brokers:       request.Brokers,
 		Topic:         request.Topic,
 		ConsumerGroup: request.ConsumerGroup,
@@ -70,39 +65,8 @@ func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.
 	return nil
 }
 
-// PreviewKafkaTopic 预览 Kafka Topic 数据。
-func (h *ProtocolWave1Handler) PreviewKafkaTopic(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-
-	if h.previewService != nil {
-		result, err := h.previewService.Preview(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.ProtocolPreviewInput{})
-		if err != nil {
-			return normalizeRepresentativeHandlerError(err)
-		}
-		rows := make([]service.KafkaPreview, 0, len(result.Samples))
-		for _, sample := range result.Samples {
-			rows = append(rows, service.KafkaPreview{
-				Topic:   toStringForHandler(result.Diagnostics["topic"]),
-				Payload: toStringForHandler(sample),
-			})
-		}
-		response.WriteSuccess(w, middleware.RequestID(r.Context()), rows)
-		return nil
-	}
-
-	rows, err := h.service.PreviewKafkaTopic(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), rows)
-	return nil
-}
-
-// PreviewProtocol 统一执行 Phase 1 协议短时真实抓样。
-func (h *ProtocolWave1Handler) PreviewProtocol(w http.ResponseWriter, r *http.Request) error {
+// PreviewProtocol 统一执行开发态协议短时真实抓样。
+func (h *ProtocolConnectionHandler) PreviewProtocol(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
 		return err
 	}
@@ -124,7 +88,7 @@ func (h *ProtocolWave1Handler) PreviewProtocol(w http.ResponseWriter, r *http.Re
 }
 
 // CreateHTTPConfig 创建 HTTP Source 配置。
-func (h *ProtocolWave1Handler) CreateHTTPConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) CreateHTTPConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -132,7 +96,7 @@ func (h *ProtocolWave1Handler) CreateHTTPConfig(w http.ResponseWriter, r *http.R
 
 	var request struct {
 		Name        string `json:"name"`
-		Status      string `json:"status"`
+		Enabled     *bool  `json:"enabled"`
 		Description string `json:"description"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
@@ -141,7 +105,7 @@ func (h *ProtocolWave1Handler) CreateHTTPConfig(w http.ResponseWriter, r *http.R
 
 	connection, err := h.service.CreateHTTPConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateHTTPConfigInput{
 		Name:        request.Name,
-		Status:      request.Status,
+		Enabled:     request.Enabled,
 		Description: request.Description,
 	})
 	if err != nil {
@@ -153,7 +117,7 @@ func (h *ProtocolWave1Handler) CreateHTTPConfig(w http.ResponseWriter, r *http.R
 }
 
 // CreateWebSocketConfig 创建 WebSocket Source 配置。
-func (h *ProtocolWave1Handler) CreateWebSocketConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) CreateWebSocketConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -161,7 +125,7 @@ func (h *ProtocolWave1Handler) CreateWebSocketConfig(w http.ResponseWriter, r *h
 
 	var request struct {
 		Name        string `json:"name"`
-		Status      string `json:"status"`
+		Enabled     *bool  `json:"enabled"`
 		Description string `json:"description"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
@@ -170,7 +134,7 @@ func (h *ProtocolWave1Handler) CreateWebSocketConfig(w http.ResponseWriter, r *h
 
 	connection, err := h.service.CreateWebSocketConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateWebSocketConfigInput{
 		Name:        request.Name,
-		Status:      request.Status,
+		Enabled:     request.Enabled,
 		Description: request.Description,
 	})
 	if err != nil {
@@ -182,7 +146,7 @@ func (h *ProtocolWave1Handler) CreateWebSocketConfig(w http.ResponseWriter, r *h
 }
 
 // CreateRedisConfig 创建 Redis Source 配置。
-func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) CreateRedisConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -190,7 +154,7 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 
 	var request struct {
 		Name            string            `json:"name"`
-		Status          string            `json:"status"`
+		Enabled         *bool             `json:"enabled"`
 		Address         string            `json:"address"`
 		DB              *int              `json:"db"`
 		Username        *string           `json:"username"`
@@ -207,7 +171,7 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 
 	connection, err := h.service.CreateRedisConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateRedisConfigInput{
 		Name:       request.Name,
-		Status:     request.Status,
+		Enabled:    request.Enabled,
 		Address:    request.Address,
 		DB:         request.DB,
 		Username:   request.Username,
@@ -225,14 +189,14 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 	return nil
 }
 
-func (h *ProtocolWave1Handler) UpdateKafkaConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) UpdateKafkaConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var request struct {
 		Name            string            `json:"name"`
-		Status          string            `json:"status"`
+		Enabled         *bool             `json:"enabled"`
 		Brokers         string            `json:"brokers"`
 		Topic           string            `json:"topic"`
 		ConsumerGroup   string            `json:"consumerGroup"`
@@ -244,61 +208,61 @@ func (h *ProtocolWave1Handler) UpdateKafkaConfig(w http.ResponseWriter, r *http.
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.UpdateKafkaConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateKafkaConfigInput{Name: request.Name, Status: request.Status, Brokers: request.Brokers, Topic: request.Topic, ConsumerGroup: request.ConsumerGroup, StartPosition: request.StartPosition, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
+	result, err := h.service.UpdateKafkaConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateKafkaConfigInput{Name: request.Name, Enabled: request.Enabled, Brokers: request.Brokers, Topic: request.Topic, ConsumerGroup: request.ConsumerGroup, StartPosition: request.StartPosition, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
-func (h *ProtocolWave1Handler) UpdateHTTPConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) UpdateHTTPConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var request struct {
 		Name        string `json:"name"`
-		Status      string `json:"status"`
+		Enabled     *bool  `json:"enabled"`
 		Description string `json:"description"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.UpdateHTTPConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateHTTPConfigInput{Name: request.Name, Status: request.Status, Description: request.Description})
+	result, err := h.service.UpdateHTTPConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateHTTPConfigInput{Name: request.Name, Enabled: request.Enabled, Description: request.Description})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
-func (h *ProtocolWave1Handler) UpdateWebSocketConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) UpdateWebSocketConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var request struct {
 		Name        string `json:"name"`
-		Status      string `json:"status"`
+		Enabled     *bool  `json:"enabled"`
 		Description string `json:"description"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.UpdateWebSocketConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateWebSocketConfigInput{Name: request.Name, Status: request.Status, Description: request.Description})
+	result, err := h.service.UpdateWebSocketConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateWebSocketConfigInput{Name: request.Name, Enabled: request.Enabled, Description: request.Description})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
-func (h *ProtocolWave1Handler) UpdateRedisConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *ProtocolConnectionHandler) UpdateRedisConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var request struct {
 		Name            string            `json:"name"`
-		Status          string            `json:"status"`
+		Enabled         *bool             `json:"enabled"`
 		Address         string            `json:"address"`
 		DB              *int              `json:"db"`
 		Username        *string           `json:"username"`
@@ -312,25 +276,10 @@ func (h *ProtocolWave1Handler) UpdateRedisConfig(w http.ResponseWriter, r *http.
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.UpdateRedisConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateRedisConfigInput{Name: request.Name, Status: request.Status, Address: request.Address, DB: request.DB, Username: request.Username, Password: request.Password, KeyPattern: request.KeyPattern, Mode: request.Mode, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
+	result, err := h.service.UpdateRedisConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateRedisConfigInput{Name: request.Name, Enabled: request.Enabled, Address: request.Address, DB: request.DB, Username: request.Username, Password: request.Password, KeyPattern: request.KeyPattern, Mode: request.Mode, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
-}
-
-func toStringForHandler(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return typed
-	case nil:
-		return ""
-	default:
-		payload, err := json.Marshal(typed)
-		if err != nil {
-			return ""
-		}
-		return string(payload)
-	}
 }

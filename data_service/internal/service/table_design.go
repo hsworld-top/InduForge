@@ -228,6 +228,9 @@ func normalizeTableDesignIdentifier(value, label string) (string, error) {
 	if !tableDesignIdentifierPattern.MatchString(value) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, label+"只能包含字母、数字、下划线，且不能以数字开头")
 	}
+	if len(value) > 63 {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, label+"长度不能超过 63 个字符")
+	}
 	return value, nil
 }
 

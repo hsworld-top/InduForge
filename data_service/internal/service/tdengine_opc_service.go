@@ -14,7 +14,7 @@ const phase2ProtocolBoundaryMessage = "已进入工业协议配置阶段，请�
 // CreateTdengineConfigInput 表示创建 TDengine 配置输入。
 type CreateTdengineConfigInput struct {
 	Name            string
-	Status          string
+	Enabled         *bool
 	Protocol        string
 	Host            string
 	Port            *int
@@ -38,18 +38,18 @@ type OpcdaContractValidateResult struct {
 	Valid bool `json:"valid"`
 }
 
-// ProtocolWave2Service 负责 TDengine 配置和 OPC DA 合约校验。
-type ProtocolWave2Service struct {
-	repository *repository.ProtocolWave2Repository
+// TDengineOPCService 负责 TDengine 配置和 OPC DA 合约校验。
+type TDengineOPCService struct {
+	repository *repository.TDengineOPCRepository
 }
 
-// NewProtocolWave2Service 创建第二波协议服务。
-func NewProtocolWave2Service(repo *repository.ProtocolWave2Repository) *ProtocolWave2Service {
-	return &ProtocolWave2Service{repository: repo}
+// NewTDengineOPCService 创建TDengine 与 OPC DA服务。
+func NewTDengineOPCService(repo *repository.TDengineOPCRepository) *TDengineOPCService {
+	return &TDengineOPCService{repository: repo}
 }
 
 // CreateTdengineConfig 创建 TDengine 配置。
-func (s *ProtocolWave2Service) CreateTdengineConfig(ctx context.Context, projectID, userID string, input CreateTdengineConfigInput) (*ProtocolConnection, error) {
+func (s *TDengineOPCService) CreateTdengineConfig(ctx context.Context, projectID, userID string, input CreateTdengineConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -57,10 +57,6 @@ func (s *ProtocolWave2Service) CreateTdengineConfig(ctx context.Context, project
 		return nil, err
 	}
 	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +78,7 @@ func (s *ProtocolWave2Service) CreateTdengineConfig(ctx context.Context, project
 		ProjectID: projectID,
 		UserID:    userID,
 		Name:      name,
-		Status:    status,
+		IsEnabled: input.Enabled,
 		Protocol:  protocol, Host: host, Port: port, Username: username,
 		DatabaseName:  database,
 		Timezone:      normalizeOptionalText(input.Timezone),
@@ -97,7 +93,7 @@ func (s *ProtocolWave2Service) CreateTdengineConfig(ctx context.Context, project
 	return &connection, nil
 }
 
-func (s *ProtocolWave2Service) UpdateTdengineConfig(ctx context.Context, projectID, connectionID, userID string, input CreateTdengineConfigInput) (*ProtocolConnection, error) {
+func (s *TDengineOPCService) UpdateTdengineConfig(ctx context.Context, projectID, connectionID, userID string, input CreateTdengineConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -108,10 +104,6 @@ func (s *ProtocolWave2Service) UpdateTdengineConfig(ctx context.Context, project
 		return nil, err
 	}
 	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +118,7 @@ func (s *ProtocolWave2Service) UpdateTdengineConfig(ctx context.Context, project
 	if err := validateConnectionOptionsContainNoSecrets(input.Options); err != nil {
 		return nil, err
 	}
-	record, err := s.repository.UpdateTdengineConfig(ctx, connectionID, repository.CreateTdengineConfigParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Protocol: protocol, Host: host, Port: port, Username: username, DatabaseName: database, Timezone: normalizeOptionalText(input.Timezone), TLSSkipVerify: input.TLSSkipVerify, Options: cloneMap(input.Options), Secrets: normalizeSecretInput(input.Secrets), ClearSecretKeys: input.ClearSecretKeys})
+	record, err := s.repository.UpdateTdengineConfig(ctx, connectionID, repository.CreateTdengineConfigParams{ProjectID: projectID, UserID: userID, Name: name, IsEnabled: input.Enabled, Protocol: protocol, Host: host, Port: port, Username: username, DatabaseName: database, Timezone: normalizeOptionalText(input.Timezone), TLSSkipVerify: input.TLSSkipVerify, Options: cloneMap(input.Options), Secrets: normalizeSecretInput(input.Secrets), ClearSecretKeys: input.ClearSecretKeys})
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +163,7 @@ func normalizeSecretInput(input map[string]string) map[string]string {
 }
 
 // ValidateOpcdaContract 校验 OPC DA 发布契约字段。
-func (s *ProtocolWave2Service) ValidateOpcdaContract(input OpcdaContractValidateInput) (*OpcdaContractValidateResult, error) {
+func (s *TDengineOPCService) ValidateOpcdaContract(input OpcdaContractValidateInput) (*OpcdaContractValidateResult, error) {
 	itemPath := strings.TrimSpace(input.ItemPath)
 	if itemPath == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "itemPath 不能为空")
@@ -182,48 +174,48 @@ func (s *ProtocolWave2Service) ValidateOpcdaContract(input OpcdaContractValidate
 	return &OpcdaContractValidateResult{Valid: true}, nil
 }
 
-func wave2TextFromMap(input map[string]any, key string, fallback string) string {
+func tdengineOPCTextFromMap(input map[string]any, key string, fallback string) string {
 	if value, ok := input[key]; ok {
-		if text := strings.TrimSpace(toWave2String(value)); text != "" {
+		if text := strings.TrimSpace(toTDengineOPCString(value)); text != "" {
 			return text
 		}
 	}
 	return fallback
 }
 
-func wave2OptionalStringFromMap(input map[string]any, key string) *string {
-	text := wave2TextFromMap(input, key, "")
+func tdengineOPCOptionalStringFromMap(input map[string]any, key string) *string {
+	text := tdengineOPCTextFromMap(input, key, "")
 	if text == "" {
 		return nil
 	}
 	return &text
 }
 
-func wave2PositiveIntFromMap(input map[string]any, key string, fallback int) int {
-	value := wave2IntFromAny(input[key], fallback)
+func tdengineOPCPositiveIntFromMap(input map[string]any, key string, fallback int) int {
+	value := tdengineOPCIntFromAny(input[key], fallback)
 	if value <= 0 {
 		return fallback
 	}
 	return value
 }
 
-func wave2NonNegativeIntFromMap(input map[string]any, key string, fallback int) int {
-	value := wave2IntFromAny(input[key], fallback)
+func tdengineOPCNonNegativeIntFromMap(input map[string]any, key string, fallback int) int {
+	value := tdengineOPCIntFromAny(input[key], fallback)
 	if value < 0 {
 		return fallback
 	}
 	return value
 }
 
-func wave2OptionalPositiveIntFromMap(input map[string]any, key string) *int {
-	value := wave2IntFromAny(input[key], 0)
+func tdengineOPCOptionalPositiveIntFromMap(input map[string]any, key string) *int {
+	value := tdengineOPCIntFromAny(input[key], 0)
 	if value <= 0 {
 		return nil
 	}
 	return &value
 }
 
-func wave2BoolFromMap(input map[string]any, key string, fallback bool) bool {
+func tdengineOPCBoolFromMap(input map[string]any, key string, fallback bool) bool {
 	value, ok := input[key]
 	if !ok {
 		return fallback
@@ -235,7 +227,7 @@ func wave2BoolFromMap(input map[string]any, key string, fallback bool) bool {
 	return typed
 }
 
-func wave2AnySliceFromMap(input map[string]any, key string, fallback []any) []any {
+func tdengineOPCAnySliceFromMap(input map[string]any, key string, fallback []any) []any {
 	raw, ok := input[key]
 	if !ok {
 		return fallback
@@ -246,7 +238,7 @@ func wave2AnySliceFromMap(input map[string]any, key string, fallback []any) []an
 	}
 	result := make([]any, 0, len(values))
 	for _, value := range values {
-		if text := strings.TrimSpace(toWave2String(value)); text != "" {
+		if text := strings.TrimSpace(toTDengineOPCString(value)); text != "" {
 			result = append(result, text)
 		}
 	}
@@ -256,7 +248,7 @@ func wave2AnySliceFromMap(input map[string]any, key string, fallback []any) []an
 	return result
 }
 
-func wave2IntFromAny(value any, fallback int) int {
+func tdengineOPCIntFromAny(value any, fallback int) int {
 	switch typed := value.(type) {
 	case int:
 		return typed
@@ -273,7 +265,7 @@ func wave2IntFromAny(value any, fallback int) int {
 	}
 }
 
-func toWave2String(value any) string {
+func toTDengineOPCString(value any) string {
 	if text, ok := value.(string); ok {
 		return text
 	}

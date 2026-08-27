@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,15 +14,20 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/denisenkom/go-mssqldb"
-	_ "github.com/go-sql-driver/mysql"
+	mssql "github.com/denisenkom/go-mssqldb"
+	"github.com/denisenkom/go-mssqldb/msdsn"
+	mysql "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
-var readOnlySQLPrefixPattern = regexp.MustCompile(`(?is)^\s*(select|with)\b`)
+var (
+	readOnlySQLPrefixPattern       = regexp.MustCompile(`(?is)^\s*(select|with)\b`)
+	postgresDollarQuoteOpenPattern = regexp.MustCompile(`^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$`)
+)
 
 // RelationalTable 表示关系库表元信息。
 type RelationalTable struct {
@@ -110,10 +118,14 @@ type RelationalTableData struct {
 
 // RelationalQueryResult 表示 SQL 工作台执行结果。
 type RelationalQueryResult struct {
-	Columns       []string `json:"columns"`
-	Rows          [][]any  `json:"rows"`
-	RowCount      int      `json:"rowCount"`
-	ExecutionTime int64    `json:"executionTime"`
+	Columns       []string          `json:"columns"`
+	ColumnTypes   map[string]string `json:"columnTypes"`
+	Rows          [][]any           `json:"rows"`
+	RowCount      int               `json:"rowCount"`
+	ExecutionTime int64             `json:"executionTime"`
+	Truncated     bool              `json:"truncated"`
+	TruncatedBy   string            `json:"truncatedBy,omitempty"`
+	Limits        SQLResultLimits   `json:"limits"`
 }
 
 // CreateRelationalTableInput 是工作台结构化建表的领域输入。
@@ -158,25 +170,27 @@ type CreateRelationalTimeseriesInput struct {
 }
 
 type relationalRuntimeConfig struct {
-	DBType                 string
-	DatabaseURL            string
-	Host                   string
-	Port                   int
-	Database               string
-	Username               string
-	Password               string
-	Schema                 string
-	SSLMode                string
-	Charset                string
-	Encrypt                bool
-	TrustServerCertificate bool
+	DBType      string
+	DatabaseURL string
+	Host        string
+	Port        int
+	Database    string
+	Username    string
+	Password    string
+	Schema      string
+	SSLMode     string
+	SSLCA       string
+	SSLCert     string
+	SSLKey      string
+	Charset     string
 }
 
 type relationalRuntime struct {
-	dbType     string
-	searchPath string
-	pgPool     *pgxpool.Pool
-	sqlDB      *sql.DB
+	dbType             string
+	searchPath         string
+	pgPool             *pgxpool.Pool
+	sqlDB              *sql.DB
+	mysqlTLSConfigName string
 }
 
 type relationalTx interface {
@@ -191,6 +205,7 @@ type relationalRows interface {
 	Close()
 	Err() error
 	Columns() ([]string, error)
+	ColumnTypes() ([]string, error)
 	Values() ([]any, error)
 }
 
@@ -214,6 +229,9 @@ func connectRelationalRuntime(ctx context.Context, config map[string]any) (*rela
 		poolConfig, err := pgxpool.ParseConfig(databaseURL)
 		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "PostgreSQL 连接串格式无效", err)
+		}
+		if err := applyPostgreSQLTLSConfig(poolConfig, runtimeConfig); err != nil {
+			return nil, err
 		}
 		poolConfig.MaxConns = 4
 		poolConfig.MinConns = 0
@@ -247,13 +265,16 @@ func connectRelationalRuntime(ctx context.Context, config map[string]any) (*rela
 			pgPool:     pool,
 		}, nil
 	case "mysql":
-		databaseURL := runtimeConfig.DatabaseURL
-		if databaseURL == "" {
-			databaseURL = buildMySQLDSN(runtimeConfig)
+		databaseURL, tlsConfigName, err := prepareMySQLDSN(runtimeConfig)
+		if err != nil {
+			return nil, err
 		}
 
 		db, err := sql.Open("mysql", databaseURL)
 		if err != nil {
+			if tlsConfigName != "" {
+				mysql.DeregisterTLSConfig(tlsConfigName)
+			}
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MySQL 连接串格式无效", err)
 		}
 		db.SetMaxOpenConns(4)
@@ -262,13 +283,17 @@ func connectRelationalRuntime(ctx context.Context, config map[string]any) (*rela
 		db.SetConnMaxLifetime(5 * time.Minute)
 		if err := db.PingContext(ctx); err != nil {
 			_ = db.Close()
+			if tlsConfigName != "" {
+				mysql.DeregisterTLSConfig(tlsConfigName)
+			}
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接 MySQL 失败", err)
 		}
 
 		return &relationalRuntime{
-			dbType:     runtimeConfig.DBType,
-			searchPath: runtimeConfig.Database,
-			sqlDB:      db,
+			dbType:             runtimeConfig.DBType,
+			searchPath:         runtimeConfig.Database,
+			sqlDB:              db,
+			mysqlTLSConfigName: tlsConfigName,
 		}, nil
 	case "sqlserver":
 		databaseURL := runtimeConfig.DatabaseURL
@@ -276,10 +301,11 @@ func connectRelationalRuntime(ctx context.Context, config map[string]any) (*rela
 			databaseURL = buildSQLServerDSN(runtimeConfig)
 		}
 
-		db, err := sql.Open("sqlserver", databaseURL)
+		connector, err := prepareSQLServerConnector(databaseURL, runtimeConfig)
 		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL Server 连接串格式无效", err)
 		}
+		db := sql.OpenDB(connector)
 		db.SetMaxOpenConns(4)
 		db.SetMaxIdleConns(1)
 		db.SetConnMaxIdleTime(30 * time.Second)
@@ -350,22 +376,6 @@ func parseRelationalRuntimeConfig(config map[string]any) (relationalRuntimeConfi
 		return defaultValue
 	}
 
-	getBool := func(keys ...string) bool {
-		for _, key := range keys {
-			raw, ok := config[key]
-			if !ok || raw == nil {
-				continue
-			}
-			switch typed := raw.(type) {
-			case bool:
-				return typed
-			case string:
-				return strings.EqualFold(strings.TrimSpace(typed), "true")
-			}
-		}
-		return false
-	}
-
 	dbType := strings.ToLower(strings.TrimSpace(getString("dbType", "db_type")))
 	if dbType == "" {
 		dbType = "postgresql"
@@ -382,25 +392,37 @@ func parseRelationalRuntimeConfig(config map[string]any) (relationalRuntimeConfi
 		}
 	}
 
-	sslMode := "disable"
-	if getBool("ssl") {
-		sslMode = "require"
+	sslConfig := mapFromAny(config["sslConfig"])
+	sslMode := strings.ToLower(strings.TrimSpace(toString(sslConfig["mode"])))
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	if !validRelationalTLSMode(dbType, sslMode) {
+		return relationalRuntimeConfig{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TLS 模式与当前数据库类型不匹配")
 	}
 
 	return relationalRuntimeConfig{
-		DBType:                 dbType,
-		DatabaseURL:            databaseURL,
-		Host:                   getString("host"),
-		Port:                   getInt(defaultRelationalPort(dbType), "port"),
-		Database:               getString("database", "dbname"),
-		Username:               getString("username", "user"),
-		Password:               getString("password"),
-		Schema:                 schema,
-		SSLMode:                sslMode,
-		Charset:                getString("charset"),
-		Encrypt:                getBool("encrypt"),
-		TrustServerCertificate: getBool("trustServerCertificate"),
+		DBType:      dbType,
+		DatabaseURL: databaseURL,
+		Host:        getString("host"),
+		Port:        getInt(defaultRelationalPort(dbType), "port"),
+		Database:    getString("database", "dbname"),
+		Username:    getString("username", "user"),
+		Password:    getString("password"),
+		Schema:      schema,
+		SSLMode:     sslMode,
+		SSLCA:       toString(sslConfig["ca"]),
+		SSLCert:     toString(sslConfig["cert"]),
+		SSLKey:      toString(sslConfig["key"]),
+		Charset:     getString("charset"),
 	}, nil
+}
+
+func validRelationalTLSMode(dbType, mode string) bool {
+	if dbType == "sqlserver" {
+		return mode == "disable" || mode == "require" || mode == "verify-full"
+	}
+	return mode == "disable" || mode == "prefer" || mode == "require" || mode == "verify-ca" || mode == "verify-full"
 }
 
 func defaultRelationalPort(dbType string) int {
@@ -448,12 +470,12 @@ func buildMySQLDSN(config relationalRuntimeConfig) string {
 func buildSQLServerDSN(config relationalRuntimeConfig) string {
 	query := url.Values{}
 	query.Set("database", config.Database)
-	if config.Encrypt {
+	if config.SSLMode != "disable" {
 		query.Set("encrypt", "true")
 	} else {
 		query.Set("encrypt", "disable")
 	}
-	if config.TrustServerCertificate {
+	if config.SSLMode == "require" {
 		query.Set("TrustServerCertificate", "true")
 	}
 
@@ -465,6 +487,141 @@ func buildSQLServerDSN(config relationalRuntimeConfig) string {
 	}).String()
 }
 
+// buildRelationalTLSConfig 将统一关系库 TLS 配置转换为 Go TLS 配置。
+// require 只保证链路加密；verify-ca 校验证书链；verify-full 同时校验主机名。
+func buildRelationalTLSConfig(config relationalRuntimeConfig) (*tls.Config, error) {
+	if config.SSLMode == "disable" || config.SSLMode == "prefer" {
+		return nil, nil
+	}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: config.Host}
+	if config.SSLMode == "require" {
+		tlsConfig.InsecureSkipVerify = true //nolint:gosec // require 语义仅要求加密，不校验证书。
+	}
+	if strings.TrimSpace(config.SSLCA) != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil || roots == nil {
+			roots = x509.NewCertPool()
+		}
+		if !roots.AppendCertsFromPEM([]byte(config.SSLCA)) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "CA 证书不是有效的 PEM 内容")
+		}
+		tlsConfig.RootCAs = roots
+	}
+	certText := strings.TrimSpace(config.SSLCert)
+	keyText := strings.TrimSpace(config.SSLKey)
+	if (certText == "") != (keyText == "") {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "客户端证书和私钥必须同时配置")
+	}
+	if certText != "" {
+		certificate, err := tls.X509KeyPair([]byte(config.SSLCert), []byte(config.SSLKey))
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "客户端证书或私钥无效", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{certificate}
+	}
+	if config.SSLMode == "verify-ca" {
+		tlsConfig.InsecureSkipVerify = true //nolint:gosec // 由 VerifyConnection 校验证书链，但按模式忽略主机名。
+		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
+			if len(state.PeerCertificates) == 0 {
+				return errors.New("服务端未提供证书")
+			}
+			intermediates := x509.NewCertPool()
+			for _, certificate := range state.PeerCertificates[1:] {
+				intermediates.AddCert(certificate)
+			}
+			_, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{
+				Roots: tlsConfig.RootCAs, Intermediates: intermediates,
+				KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			})
+			return err
+		}
+	}
+	return tlsConfig, nil
+}
+
+func applyPostgreSQLTLSConfig(poolConfig *pgxpool.Config, config relationalRuntimeConfig) error {
+	if config.SSLMode == "disable" || config.SSLMode == "prefer" {
+		return nil
+	}
+	tlsConfig, err := buildRelationalTLSConfig(config)
+	if err != nil {
+		return err
+	}
+	poolConfig.ConnConfig.TLSConfig = tlsConfig
+	for _, fallback := range poolConfig.ConnConfig.Fallbacks {
+		if fallback.TLSConfig != nil {
+			fallback.TLSConfig = tlsConfig.Clone()
+		}
+	}
+	return nil
+}
+
+func prepareMySQLDSN(config relationalRuntimeConfig) (string, string, error) {
+	dsn := config.DatabaseURL
+	if dsn == "" {
+		dsn = buildMySQLDSN(config)
+	}
+	parsed, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MySQL 连接串格式无效", err)
+	}
+	switch config.SSLMode {
+	case "disable":
+		parsed.TLSConfig = "false"
+	case "prefer":
+		parsed.TLSConfig = "preferred"
+	default:
+		tlsConfig, err := buildRelationalTLSConfig(config)
+		if err != nil {
+			return "", "", err
+		}
+		name := "induforge-" + uuid.NewString()
+		if err := mysql.RegisterTLSConfig(name, tlsConfig); err != nil {
+			return "", "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "注册 MySQL TLS 配置失败", err)
+		}
+		parsed.TLSConfig = name
+		return parsed.FormatDSN(), name, nil
+	}
+	return parsed.FormatDSN(), "", nil
+}
+
+func prepareSQLServerConnector(dsn string, config relationalRuntimeConfig) (*mssql.Connector, error) {
+	parsed, _, err := msdsn.Parse(dsn)
+	if err != nil {
+		return nil, err
+	}
+	if config.SSLMode == "disable" {
+		parsed.Encryption = msdsn.EncryptionDisabled
+		parsed.TLSConfig = nil
+		return mssql.NewConnectorConfig(parsed), nil
+	}
+	tlsConfig, err := buildRelationalTLSConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	// SQL Server 的 TLS 记录需要关闭动态分片，以匹配 TDS 包边界。
+	tlsConfig.DynamicRecordSizingDisabled = true
+	parsed.Encryption = msdsn.EncryptionRequired
+	parsed.TLSConfig = tlsConfig
+	return mssql.NewConnectorConfig(parsed), nil
+}
+
+func sqlExecutionErrorMessage(prefix string, err error) string {
+	detail := ""
+	if err != nil {
+		detail = strings.Join(strings.Fields(err.Error()), " ")
+	}
+	if detail == "" {
+		return prefix
+	}
+	const maxDetailLength = 420
+	detailRunes := []rune(detail)
+	if len(detailRunes) > maxDetailLength {
+		detail = string(detailRunes[:maxDetailLength]) + "…"
+	}
+	return prefix + "：" + detail
+}
+
 func (r *relationalRuntime) Close() {
 	if r == nil {
 		return
@@ -474,6 +631,9 @@ func (r *relationalRuntime) Close() {
 	}
 	if r.sqlDB != nil {
 		_ = r.sqlDB.Close()
+	}
+	if r.mysqlTLSConfigName != "" {
+		mysql.DeregisterTLSConfig(r.mysqlTLSConfigName)
 	}
 }
 
@@ -631,6 +791,17 @@ func (r *pgxRowsAdapter) Columns() ([]string, error) {
 	}
 	return columns, nil
 }
+func (r *pgxRowsAdapter) ColumnTypes() ([]string, error) {
+	types := make([]string, 0, len(r.rows.FieldDescriptions()))
+	for _, field := range r.rows.FieldDescriptions() {
+		name := ""
+		if dataType, ok := r.rows.Conn().TypeMap().TypeForOID(field.DataTypeOID); ok {
+			name = dataType.Name
+		}
+		types = append(types, name)
+	}
+	return types, nil
+}
 func (r *pgxRowsAdapter) Values() ([]any, error) {
 	return r.rows.Values()
 }
@@ -644,6 +815,17 @@ func (r *sqlRowsAdapter) Scan(dest ...any) error     { return r.rows.Scan(dest..
 func (r *sqlRowsAdapter) Close()                     { _ = r.rows.Close() }
 func (r *sqlRowsAdapter) Err() error                 { return r.rows.Err() }
 func (r *sqlRowsAdapter) Columns() ([]string, error) { return r.rows.Columns() }
+func (r *sqlRowsAdapter) ColumnTypes() ([]string, error) {
+	columnTypes, err := r.rows.ColumnTypes()
+	if err != nil {
+		return nil, err
+	}
+	types := make([]string, 0, len(columnTypes))
+	for _, columnType := range columnTypes {
+		types = append(types, columnType.DatabaseTypeName())
+	}
+	return types, nil
+}
 func (r *sqlRowsAdapter) Values() ([]any, error) {
 	columns, err := r.rows.Columns()
 	if err != nil {
@@ -658,11 +840,9 @@ func (r *sqlRowsAdapter) Values() ([]any, error) {
 		return nil, err
 	}
 
-	result := make([]any, 0, len(values))
-	for _, value := range values {
-		result = append(result, normalizeQueryValue(value))
-	}
-	return result, nil
+	// 保留驱动原始值，调用方会结合 ColumnTypes 做最终规范化。
+	// 若在这里提前把 []byte 转为字符串，BLOB/VARBINARY 会丢失类型信息并产生乱码。
+	return values, nil
 }
 
 type pgxRowAdapter struct {
@@ -693,15 +873,144 @@ func prepareSQLServerNamedArgs(query string, args []any) ([]any, error) {
 	if len(matches) == 0 {
 		return args, nil
 	}
-	if len(matches) != len(args) {
+	names := make([]string, 0, len(matches))
+	seen := map[string]struct{}{}
+	for _, match := range matches {
+		name := strings.ToLower(match[1])
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, match[1])
+	}
+	if len(names) != len(args) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL Server 参数数量与 SQL 中的 @param 不一致")
 	}
 
-	namedArgs := make([]any, 0, len(matches))
-	for index, match := range matches {
-		namedArgs = append(namedArgs, sql.Named(match[1], args[index]))
+	namedArgs := make([]any, 0, len(names))
+	for index, name := range names {
+		namedArgs = append(namedArgs, sql.Named(name, args[index]))
 	}
 	return namedArgs, nil
+}
+
+// validateSQLParameterCount 在进入驱动前校验值参数数量，避免把表名、列名或 SQL 片段误当成可绑定参数。
+func validateSQLParameterCount(dbType, query string, args []any) error {
+	normalized := stripSQLLiteralsAndComments(query)
+	expected := 0
+	switch strings.ToLower(strings.TrimSpace(dbType)) {
+	case "postgres", "postgresql", "builtin.relation", "builtin.timeseries":
+		matches := regexp.MustCompile(`\$(\d+)`).FindAllStringSubmatch(normalized, -1)
+		seen := map[int]struct{}{}
+		for _, match := range matches {
+			index, err := strconv.Atoi(match[1])
+			if err != nil || index < 1 {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "PostgreSQL 参数必须使用 $1、$2…")
+			}
+			seen[index] = struct{}{}
+			if index > expected {
+				expected = index
+			}
+		}
+		for index := 1; index <= expected; index++ {
+			if _, ok := seen[index]; !ok {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "PostgreSQL 参数序号必须从 $1 连续递增")
+			}
+		}
+	case "sqlserver", "mssql":
+		matches := regexp.MustCompile(`@([A-Za-z_][A-Za-z0-9_]*)`).FindAllStringSubmatch(normalized, -1)
+		seen := map[string]struct{}{}
+		for _, match := range matches {
+			seen[strings.ToLower(match[1])] = struct{}{}
+		}
+		expected = len(seen)
+	default:
+		expected = strings.Count(normalized, "?")
+	}
+	if expected != len(args) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("SQL 值参数数量不匹配：SQL 需要 %d 个，实际提交 %d 个", expected, len(args)))
+	}
+	return nil
+}
+
+func stripSQLLiteralsAndComments(query string) string {
+	var builder strings.Builder
+	inSingle, inDouble, inLineComment, inBlockComment := false, false, false, false
+	for index := 0; index < len(query); index++ {
+		current := query[index]
+		next := byte(0)
+		if index+1 < len(query) {
+			next = query[index+1]
+		}
+		if inLineComment {
+			if current == '\n' {
+				inLineComment = false
+				builder.WriteByte(current)
+			} else {
+				builder.WriteByte(' ')
+			}
+			continue
+		}
+		if inBlockComment {
+			if current == '*' && next == '/' {
+				inBlockComment = false
+				builder.WriteString("  ")
+				index++
+			} else {
+				builder.WriteByte(' ')
+			}
+			continue
+		}
+		if !inSingle && !inDouble && current == '-' && next == '-' {
+			inLineComment = true
+			builder.WriteString("  ")
+			index++
+			continue
+		}
+		if !inSingle && !inDouble && current == '/' && next == '*' {
+			inBlockComment = true
+			builder.WriteString("  ")
+			index++
+			continue
+		}
+		if !inSingle && !inDouble && current == '$' {
+			// PostgreSQL 函数体通常使用 $$ 或 $tag$ 引用；其中的 $1 是函数形参，
+			// 不能计入工作台外层 SQL 的绑定参数数量。
+			delimiter := postgresDollarQuoteOpenPattern.FindString(query[index:])
+			if delimiter != "" {
+				bodyStart := index + len(delimiter)
+				closingOffset := strings.Index(query[bodyStart:], delimiter)
+				end := len(query)
+				if closingOffset >= 0 {
+					end = bodyStart + closingOffset + len(delimiter)
+				}
+				builder.WriteString(strings.Repeat(" ", end-index))
+				index = end - 1
+				continue
+			}
+		}
+		if !inDouble && current == '\'' {
+			if inSingle && next == '\'' {
+				builder.WriteString("  ")
+				index++
+				continue
+			}
+			inSingle = !inSingle
+			builder.WriteByte(' ')
+			continue
+		}
+		if !inSingle && current == '"' {
+			inDouble = !inDouble
+			builder.WriteByte(' ')
+			continue
+		}
+		if inSingle || inDouble {
+			builder.WriteByte(' ')
+		} else {
+			builder.WriteByte(current)
+		}
+	}
+	return builder.String()
 }
 
 func ensureReadOnlySQLText(sqlText string) error {

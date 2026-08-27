@@ -23,7 +23,7 @@ import (
 
 const maxProtocolPreviewPayloadBytes = 64 * 1024
 
-// NewDefaultProtocolPreviewAdapters 返回生产环境默认启用的 Phase 1 短时抓样 adapter。
+// NewDefaultProtocolPreviewAdapters 返回生产环境默认启用的 开发态协议 短时抓样 adapter。
 func NewDefaultProtocolPreviewAdapters() map[string]ProtocolPreviewAdapter {
 	return map[string]ProtocolPreviewAdapter{
 		"kafka":     KafkaPreviewAdapter{},
@@ -440,7 +440,10 @@ func previewValueType(value any) string {
 		for key, field := range typed {
 			properties[key] = previewValueType(field)
 		}
-		payload, _ := json.Marshal(properties)
+		payload, err := json.Marshal(properties)
+		if err != nil {
+			return "object"
+		}
 		return "object:" + string(payload)
 	case []any:
 		return "array"

@@ -85,6 +85,26 @@ func (h *ConnectionHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// RevealSecret 在用户主动操作时返回单个已保存密码；响应禁止被浏览器或代理缓存。
+func (h *ConnectionHandler) RevealSecret(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var request struct {
+		Key string `json:"key"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	value, err := h.service.RevealConnectionSecret(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.Key)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]string{"value": value})
+	return nil
+}
+
 // Create 创建项目连接。
 func (h *ConnectionHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
@@ -93,20 +113,20 @@ func (h *ConnectionHandler) Create(w http.ResponseWriter, r *http.Request) error
 	}
 
 	var request struct {
-		Name   string         `json:"name"`
-		Type   string         `json:"type"`
-		Status string         `json:"status"`
-		Config map[string]any `json:"config"`
+		Name    string         `json:"name"`
+		Type    string         `json:"type"`
+		Enabled *bool          `json:"enabled"`
+		Config  map[string]any `json:"config"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 
 	connection, err := h.service.CreateConnection(r.Context(), r.PathValue("projectId"), claims.TenantID, claims.UserID, service.CreateConnectionInput{
-		Name:   request.Name,
-		Type:   request.Type,
-		Status: request.Status,
-		Config: request.Config,
+		Name:    request.Name,
+		Type:    request.Type,
+		Enabled: request.Enabled,
+		Config:  request.Config,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -146,12 +166,12 @@ func (h *ConnectionHandler) Update(w http.ResponseWriter, r *http.Request) error
 		}
 		input.Type = &connectionType
 	}
-	if value, ok := raw["status"]; ok {
-		var status string
-		if err := json.Unmarshal(value, &status); err != nil {
-			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "status 字段格式无效", err)
+	if value, ok := raw["enabled"]; ok {
+		var enabled bool
+		if err := json.Unmarshal(value, &enabled); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "enabled 字段格式无效", err)
 		}
-		input.Status = &status
+		input.Enabled = &enabled
 	}
 	if value, ok := raw["config"]; ok {
 		var config map[string]any
@@ -178,6 +198,20 @@ func (h *ConnectionHandler) Update(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+// TestSavedConnection 使用数据库中已保存且已解密的配置执行一次来源级测试并保存脱敏摘要。
+func (h *ConnectionHandler) TestSavedConnection(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.TestSavedConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // Delete 删除项目连接。
 func (h *ConnectionHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
@@ -189,6 +223,24 @@ func (h *ConnectionHandler) Delete(w http.ResponseWriter, r *http.Request) error
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
+	return nil
+}
+
+// DeleteImpact 返回接入源删除前的拥有对象与阻断引用。
+func (h *ConnectionHandler) DeleteImpact(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	impact, err := h.service.GetConnectionDeleteImpact(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
+		"scopeType": impact.ScopeType, "scopeId": impact.ScopeID, "name": impact.Name,
+		"canDelete":           impact.CanDelete(),
+		"generatedDatapoints": map[string]any{"count": impact.GeneratedPointCount, "action": "mark_invalid"},
+		"ownedResources":      impact.OwnedResources, "blockingUsages": impact.BlockingUsages,
+	})
 	return nil
 }
 
@@ -210,28 +262,6 @@ func (h *ConnectionHandler) TestConnection(w http.ResponseWriter, r *http.Reques
 		Type:   request.Type,
 		Config: request.Config,
 	})
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
-	return nil
-}
-
-// UpdateStatus 更新连接状态。
-func (h *ConnectionHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-
-	var request struct {
-		Status string `json:"status"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-
-	result, err := h.service.UpdateConnectionStatus(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.Status)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -615,10 +645,10 @@ func decodeJSONBody(r *http.Request, target any) error {
 
 func validateUpdatePayloadKeys(raw map[string]json.RawMessage) error {
 	allowedFields := map[string]struct{}{
-		"name":   {},
-		"type":   {},
-		"status": {},
-		"config": {},
+		"name":    {},
+		"type":    {},
+		"enabled": {},
+		"config":  {},
 	}
 
 	for field := range raw {

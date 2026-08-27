@@ -2,13 +2,11 @@ package service
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/indu-forge/data_service/internal/auth"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -22,6 +20,8 @@ var allowedQueryTypes = map[string]struct{}{
 	"mqtt_pub": {},
 	"mqtt_sub": {},
 }
+
+const maxSavedSQLBytes = 1024 * 1024
 
 // Query 表示面向 HTTP 层返回的查询对象。
 type Query struct {
@@ -41,6 +41,7 @@ type Query struct {
 	CacheTtlSeconds int            `json:"cacheTtlSeconds"`
 	CreatedAt       time.Time      `json:"createdAt"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
+	Outputs         []SourceOutput `json:"outputs"`
 }
 
 // QueryPagination 表示查询列表分页信息。
@@ -59,9 +60,14 @@ type QueryListResult struct {
 
 // QueryExecutionResult 表示查询执行后的返回结果。
 type QueryExecutionResult struct {
-	Data          any   `json:"data"`
-	ExecutionTime int64 `json:"executionTime"`
-	RowCount      int   `json:"rowCount"`
+	Data          any               `json:"data"`
+	Columns       []string          `json:"columns"`
+	ColumnTypes   map[string]string `json:"columnTypes"`
+	ExecutionTime int64             `json:"executionTime"`
+	RowCount      int               `json:"rowCount"`
+	Truncated     bool              `json:"truncated"`
+	TruncatedBy   string            `json:"truncatedBy,omitempty"`
+	Limits        SQLResultLimits   `json:"limits"`
 }
 
 // QueryListFilter 表示 service 层对查询列表的入口参数。
@@ -88,6 +94,7 @@ type CreateQueryInput struct {
 	TimeoutMS       *int
 	CacheEnabled    *bool
 	CacheTtlSeconds *int
+	Outputs         []SourceOutputInput
 }
 
 // UpdateQueryInput 表示更新查询时的业务输入。
@@ -105,6 +112,8 @@ type UpdateQueryInput struct {
 	TimeoutMS       *int
 	CacheEnabled    *bool
 	CacheTtlSeconds *int
+	Outputs         []SourceOutputInput
+	HasOutputs      bool
 }
 
 // ExecuteQueryInput 表示查询执行时的输入。
@@ -216,7 +225,8 @@ func (s *QueryService) CreateQuery(ctx context.Context, projectID, userID string
 		}
 	}
 
-	if _, err := s.connections.GetByProjectAndID(ctx, projectID, connectionID); err != nil {
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, connectionID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -237,7 +247,7 @@ func (s *QueryService) CreateQuery(ctx context.Context, projectID, userID string
 		cacheTtlSeconds = *input.CacheTtlSeconds
 	}
 
-	record, err := s.repository.Create(ctx, repository.CreateQueryParams{
+	createParams := repository.CreateQueryParams{
 		ProjectID:       projectID,
 		ConnectionID:    connectionID,
 		UserID:          userID,
@@ -252,11 +262,19 @@ func (s *QueryService) CreateQuery(ctx context.Context, projectID, userID string
 		TimeoutMS:       timeoutMS,
 		CacheEnabled:    cacheEnabled,
 		CacheTtlSeconds: cacheTtlSeconds,
-	})
-	if err != nil {
-		return nil, err
 	}
-	if err := s.syncQueryDataPoint(ctx, *record, userID); err != nil {
+	var record *repository.QueryRecord
+	if len(input.Outputs) == 0 {
+		// 查询定义与数据点显式解耦：普通保存只写查询，用户主动生成时才创建输出映射。
+		record, err = s.repository.Create(ctx, createParams)
+	} else {
+		outputs, normalizeErr := normalizeSourceOutputs(input.Outputs, defaultQueryOutput(name))
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		record, err = s.repository.CreateWithOutput(ctx, createParams, buildQueryOutputDataPoint(*connection, name, cloneOptionalString(input.Description), config, outputs, userID, queryType == "sql"))
+	}
+	if err != nil {
 		return nil, err
 	}
 
@@ -308,14 +326,6 @@ func (s *QueryService) UpdateQuery(ctx context.Context, claims *auth.Claims, que
 	if err != nil {
 		return nil, err
 	}
-	if updated.QueryType == "sql" {
-		if err := s.syncQueryDataPoint(ctx, *updated, userID); err != nil {
-			return nil, err
-		}
-	} else if s.datapoints != nil {
-		_, _ = s.datapoints.MarkInvalidBySource(ctx, updated.ProjectID, "db.query", updated.ID, &userID)
-	}
-
 	query := toQuery(*updated)
 	return &query, nil
 }
@@ -330,9 +340,6 @@ func (s *QueryService) DeleteQuery(ctx context.Context, claims *auth.Claims, que
 	if err := s.repository.Delete(ctx, record.ProjectID, queryID); err != nil {
 		return err
 	}
-	if s.datapoints != nil {
-		_, _ = s.datapoints.MarkInvalidBySource(ctx, record.ProjectID, "db.query", queryID, nil)
-	}
 	return nil
 }
 
@@ -345,7 +352,7 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 	if err := validateUserID(userID); err != nil {
 		return nil, err
 	}
-	if input.Name == nil && input.Description == nil && input.Category == nil && input.GroupID == nil && input.ConnectionID == nil && input.QueryType == nil && !input.HasConfig && input.Transformer == nil && input.IsEnabled == nil && input.TimeoutMS == nil && input.CacheEnabled == nil && input.CacheTtlSeconds == nil {
+	if input.Name == nil && input.Description == nil && input.Category == nil && input.GroupID == nil && input.ConnectionID == nil && input.QueryType == nil && !input.HasConfig && input.Transformer == nil && input.IsEnabled == nil && input.TimeoutMS == nil && input.CacheEnabled == nil && input.CacheTtlSeconds == nil && !input.HasOutputs {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要提供一个待更新字段")
 	}
 
@@ -436,7 +443,11 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 		nextCacheTtlSeconds = *input.CacheTtlSeconds
 	}
 
-	updated, err := s.repository.Update(ctx, repository.UpdateQueryParams{
+	connection, err := s.connections.GetByProjectAndID(ctx, current.ProjectID, nextConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	updateParams := repository.UpdateQueryParams{
 		ID:              current.ID,
 		ProjectID:       current.ProjectID,
 		ConnectionID:    nextConnectionID,
@@ -452,7 +463,21 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 		TimeoutMS:       nextTimeoutMS,
 		CacheEnabled:    nextCacheEnabled,
 		CacheTtlSeconds: nextCacheTtlSeconds,
-	})
+	}
+	outputs := sourceOutputParamsFromRecords(current.Outputs)
+	if input.HasOutputs {
+		outputs, err = normalizeSourceOutputs(input.Outputs, defaultQueryOutput(nextName))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var updated *repository.QueryRecord
+	if input.HasOutputs {
+		updated, err = s.repository.UpdateWithOutput(ctx, updateParams, buildQueryOutputDataPoint(*connection, nextName, nextDescription, nextConfig, outputs, userID, nextQueryType == "sql"))
+	} else {
+		// 未显式提交 outputs 时保留现有映射，不让查询保存隐式创建或改写数据点。
+		updated, err = s.repository.Update(ctx, updateParams)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -460,8 +485,8 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 	return updated, nil
 }
 
-// executeRecord 负责真正执行 sql 查询。
-// 关键分支：先强制只读 SQL，再进入只读事务执行，防止查询接口被滥用于写操作。
+// executeRecord 负责真正执行已保存 SQL。
+// 数据点可显式建模为写操作：普通 DML 返回影响行数，RETURNING/OUTPUT 返回结果集。
 func (s *QueryService) executeRecord(ctx context.Context, record repository.QueryRecord, parameters map[string]any) (*QueryExecutionResult, error) {
 	if record.QueryType != "sql" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持 sql 查询执行")
@@ -471,17 +496,13 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureReadOnlySQL(sqlText); err != nil {
-		return nil, err
-	}
-
 	args, err := buildQueryExecutionArgs(record.Config, parameters)
 	if err != nil {
 		return nil, err
 	}
 
 	timeoutMS := record.TimeoutMS
-	if timeoutMS <= 0 {
+	if timeoutMS <= 0 || timeoutMS > developmentSQLTimeout*1000 {
 		timeoutMS = 30000
 	}
 
@@ -500,22 +521,29 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 		return nil, err
 	}
 	defer runtime.Close()
-
-	tx, err := runtime.BeginReadOnlyTx(execCtx)
-	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建只读执行会话失败", err)
+	if err := validateSQLParameterCount(runtime.DBType(), sqlText, args); err != nil {
+		return nil, err
 	}
-	defer func() {
-		rollbackErr := tx.Rollback(execCtx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			// 只读查询场景下，回滚错误不影响业务返回。
-		}
-	}()
 
 	start := time.Now()
-	rows, err := tx.Query(execCtx, sqlText, args...)
+	if !sqlWorkbenchStatementReturnsRows(sqlText) {
+		affected, err := runtime.ExecAffected(execCtx, sqlText, args...)
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, sqlExecutionErrorMessage("执行 SQL 失败", err), err)
+		}
+		return &QueryExecutionResult{
+			Data:          []map[string]any{},
+			Columns:       []string{},
+			ColumnTypes:   map[string]string{},
+			ExecutionTime: time.Since(start).Milliseconds(),
+			RowCount:      int(affected),
+			Limits:        developmentSQLLimits(),
+		}, nil
+	}
+
+	rows, err := runtime.Query(execCtx, sqlText, args...)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "执行查询失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, sqlExecutionErrorMessage("执行查询失败", err), err)
 	}
 	defer rows.Close()
 
@@ -523,7 +551,13 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取查询字段元信息失败", err)
 	}
+	databaseTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取查询字段类型失败", err)
+	}
 	resultRows := make([]map[string]any, 0)
+	resultBytes := 0
+	truncatedBy := ""
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
@@ -532,9 +566,19 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 
 		row := make(map[string]any, len(values))
 		for i, field := range columnNames {
-			row[field] = normalizeQueryValue(values[i])
+			databaseType := ""
+			if i < len(databaseTypes) {
+				databaseType = databaseTypes[i]
+			}
+			row[field] = normalizeSQLValue(values[i], databaseType)
+		}
+		accepted, reason, nextBytes := admitSQLResultRow(len(resultRows), resultBytes, developmentSQLMaxRows, developmentSQLMaxBytes, row)
+		if !accepted {
+			truncatedBy = reason
+			break
 		}
 		resultRows = append(resultRows, row)
+		resultBytes = nextBytes
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历查询结果失败", err)
@@ -543,8 +587,13 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	executionTime := time.Since(start).Milliseconds()
 	return &QueryExecutionResult{
 		Data:          resultRows,
+		Columns:       columnNames,
+		ColumnTypes:   canonicalSQLColumnTypes(columnNames, databaseTypes),
 		ExecutionTime: executionTime,
 		RowCount:      len(resultRows),
+		Truncated:     truncatedBy != "",
+		TruncatedBy:   truncatedBy,
+		Limits:        developmentSQLLimits(),
 	}, nil
 }
 
@@ -556,7 +605,10 @@ func (s *QueryService) executeTDengineRecord(ctx context.Context, record reposit
 	if connection.Type != "tdengine" {
 		return nil, false, nil
 	}
-	if err := validateTDengineReadOnlySQL(sqlText); err != nil {
+	if err := validateTDengineSingleSQL(sqlText); err != nil {
+		return nil, true, err
+	}
+	if err := validateSQLParameterCount("tdengine", sqlText, args); err != nil {
 		return nil, true, err
 	}
 	if s.secrets != nil {
@@ -572,7 +624,14 @@ func (s *QueryService) executeTDengineRecord(ctx context.Context, record reposit
 	}
 	defer runtime.Close()
 	started := time.Now()
-	columns, rows, err := runtime.query(ctx, sqlText, args...)
+	if !sqlWorkbenchStatementReturnsRows(sqlText) {
+		affected, err := runtime.execAffected(ctx, sqlText, args...)
+		if err != nil {
+			return nil, true, err
+		}
+		return &QueryExecutionResult{Data: []map[string]any{}, Columns: []string{}, ColumnTypes: map[string]string{}, ExecutionTime: time.Since(started).Milliseconds(), RowCount: int(affected), Limits: developmentSQLLimits()}, true, nil
+	}
+	columns, columnTypes, rows, truncatedBy, err := runtime.queryBounded(ctx, sqlText, developmentSQLMaxRows, developmentSQLMaxBytes, args...)
 	if err != nil {
 		return nil, true, err
 	}
@@ -586,7 +645,7 @@ func (s *QueryService) executeTDengineRecord(ctx context.Context, record reposit
 		}
 		resultRows = append(resultRows, item)
 	}
-	return &QueryExecutionResult{Data: resultRows, ExecutionTime: time.Since(started).Milliseconds(), RowCount: len(resultRows)}, true, nil
+	return &QueryExecutionResult{Data: resultRows, Columns: columns, ColumnTypes: columnTypes, ExecutionTime: time.Since(started).Milliseconds(), RowCount: len(resultRows), Truncated: truncatedBy != "", TruncatedBy: truncatedBy, Limits: developmentSQLLimits()}, true, nil
 }
 
 // executionRuntimeForRecord 根据 query 关联的连接配置返回执行 SQL 的目标运行时。
@@ -598,6 +657,15 @@ func (s *QueryService) executionRuntimeForRecord(ctx context.Context, record rep
 	}
 	if connection.Type != "relational" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接执行 SQL")
+	}
+	// 连接记录只保存非敏感配置；已保存查询经数据点 GET 回放时也必须注入密钥，
+	// 否则会与工作台执行链路产生差异并使用空密码连接外部数据库。
+	if s.secrets != nil {
+		values, resolveErr := s.secrets.ResolveAll(ctx, connection.ID)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		connection.Config = injectConnectionSecrets(connection.Config, values)
 	}
 	return connectRelationalRuntime(ctx, connection.Config)
 }
@@ -614,6 +682,9 @@ func (s *QueryService) executeBuiltinRecord(ctx context.Context, record reposito
 	if s.builtin == nil {
 		return nil, true, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
 	}
+	if err := validateSQLParameterCount("postgresql", sqlText, args); err != nil {
+		return nil, true, err
+	}
 	result, err := s.builtin.ExecuteSQLInSchema(ctx, schemaName, sqlText, args, 500)
 	if err != nil {
 		return nil, true, err
@@ -621,45 +692,44 @@ func (s *QueryService) executeBuiltinRecord(ctx context.Context, record reposito
 	return builtinQueryResult(result), true, nil
 }
 
-func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository.QueryRecord, userID string) error {
-	if s == nil || s.datapoints == nil || record.QueryType != "sql" {
-		return nil
-	}
-	connection, err := s.connections.GetByProjectAndID(ctx, record.ProjectID, record.ConnectionID)
-	if err != nil {
-		return err
-	}
-	if connection.Type != "relational" && connection.Type != "tdengine" && connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
-		return nil
-	}
-
-	path := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(record.Name)
+func buildQueryOutputDataPoint(connection repository.ConnectionRecord, name string, description *string, config map[string]any, outputs []repository.SourceOutputMappingParam, userID string, enabled bool) repository.QueryOutputDataPointParams {
+	supported := connection.Type == "relational" || connection.Type == "tdengine" || connection.Type == "builtin.relation" || connection.Type == "builtin.timeseries"
+	pathPrefix := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(name)
 	sourceConfig := map[string]any{
 		"mode":         "query",
-		"connectionId": record.ConnectionID,
+		"connectionId": connection.ID,
 	}
-	if parameters, ok := record.Config["parameters"]; ok {
+	if parameters, ok := config["parameters"]; ok {
 		sourceConfig["parameters"] = parameters
 	}
-	return s.upsertQueryDataPoint(ctx, repository.CreateDataPointParams{
-		ProjectID:    record.ProjectID,
-		UserID:       &userID,
-		Path:         path,
-		Name:         record.Name,
-		Description:  cloneOptionalString(record.Description),
-		SourceType:   "db.query",
-		SourceID:     &record.ID,
+	return repository.QueryOutputDataPointParams{
+		Enabled:      enabled && supported,
+		PathPrefix:   pathPrefix,
+		Description:  cloneOptionalString(description),
 		SourceConfig: sourceConfig,
-		DataType:     "object",
-		Tags:         []any{},
-		RefreshMode:  "manual",
-		Status:       "active",
-	})
+		Outputs:      outputs,
+		UserID:       userID,
+	}
+}
+
+func defaultQueryOutput(name string) SourceOutputInput {
+	return SourceOutputInput{Key: "result", DisplayName: name, Selector: SourceOutputSelector{Kind: "whole"}, DataType: "object"}
+}
+
+func sourceOutputParamsFromRecords(records []repository.SourceOutputMappingRecord) []repository.SourceOutputMappingParam {
+	result := make([]repository.SourceOutputMappingParam, 0, len(records))
+	for _, record := range records {
+		id := record.ID
+		result = append(result, repository.SourceOutputMappingParam{ID: &id, Key: record.Key, DisplayName: record.DisplayName,
+			Selector: record.Selector, DataType: record.DataType, Unit: record.Unit, PrecisionNum: record.PrecisionNum,
+			SortOrder: record.SortOrder})
+	}
+	return result
 }
 
 func builtinQueryResult(result *BuiltinSQLExecuteResult) *QueryExecutionResult {
 	if result == nil {
-		return &QueryExecutionResult{Data: []map[string]any{}, ExecutionTime: 0, RowCount: 0}
+		return &QueryExecutionResult{Data: []map[string]any{}, Columns: []string{}, ExecutionTime: 0, RowCount: 0, Limits: developmentSQLLimits()}
 	}
 	rows := make([]map[string]any, 0, len(result.Rows))
 	for _, row := range result.Rows {
@@ -671,18 +741,14 @@ func builtinQueryResult(result *BuiltinSQLExecuteResult) *QueryExecutionResult {
 	}
 	return &QueryExecutionResult{
 		Data:          rows,
+		Columns:       result.Columns,
+		ColumnTypes:   result.ColumnTypes,
 		ExecutionTime: result.ExecutionTime,
 		RowCount:      result.RowCount,
+		Truncated:     result.Truncated,
+		TruncatedBy:   result.TruncatedBy,
+		Limits:        result.Limits,
 	}
-}
-
-func (s *QueryService) upsertQueryDataPoint(ctx context.Context, input repository.CreateDataPointParams) error {
-	existing, err := s.datapoints.GetByProjectAndPath(ctx, input.ProjectID, input.Path)
-	if err == nil && existing != nil && (existing.SourceID == nil || *existing.SourceID != *input.SourceID || existing.SourceType != input.SourceType) {
-		input.Path = input.Path + "_" + (*input.SourceID)[:8]
-	}
-	_, err = s.datapoints.UpsertBySource(ctx, input)
-	return err
 }
 
 // loadQueryForClaims 读取查询并校验当前 claims 的项目边界。
@@ -724,16 +790,24 @@ func toQuery(record repository.QueryRecord) Query {
 		CacheTtlSeconds: record.CacheTtlSeconds,
 		CreatedAt:       record.CreatedAt,
 		UpdatedAt:       record.UpdatedAt,
+		Outputs:         sourceOutputsFromRecords(record.Outputs),
 	}
 }
 
 func normalizeQueryName(name string) (string, error) {
+	original := name
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询名称不能为空")
 	}
-	if len([]rune(name)) > 200 {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询名称长度不能超过 200 个字符")
+	if original != name {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询名称不能包含首尾空格")
+	}
+	if len([]rune(name)) > 100 {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询名称长度不能超过 100 个字符")
+	}
+	if containsControlCharacter(name) {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询名称不能包含换行、制表符或其他控制字符")
 	}
 	return name, nil
 }
@@ -768,7 +842,18 @@ func extractQuerySQL(config map[string]any) (string, error) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "sql 配置无效")
 	}
 
-	return strings.TrimSpace(sqlText), nil
+	return normalizeSQLText(sqlText)
+}
+
+func normalizeSQLText(sqlText string) (string, error) {
+	sqlText = strings.TrimSpace(sqlText)
+	if sqlText == "" {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL 不能为空")
+	}
+	if len([]byte(sqlText)) > maxSavedSQLBytes {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL 内容不能超过 1 MiB")
+	}
+	return sqlText, nil
 }
 
 func ensureReadOnlySQL(sqlText string) error {
@@ -825,12 +910,7 @@ func buildQueryExecutionArgs(config map[string]any, parameters map[string]any) (
 }
 
 func normalizeQueryValue(value any) any {
-	switch v := value.(type) {
-	case []byte:
-		return string(v)
-	default:
-		return value
-	}
+	return normalizeSQLValue(value, "")
 }
 
 func cloneOptionalString(value *string) *string {

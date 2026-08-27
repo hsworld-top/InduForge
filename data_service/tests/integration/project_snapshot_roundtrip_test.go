@@ -13,6 +13,7 @@ import (
 	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
@@ -54,9 +55,9 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	})
 
 	relational := mustCreateConnection(t, server.URL, token, projectID, map[string]any{
-		"name":   "pg-main",
-		"type":   "relational",
-		"status": "connected",
+		"name":    "pg-main",
+		"type":    "relational",
+		"enabled": true,
 		"config": map[string]any{
 			"dbType":   "postgresql",
 			"host":     "127.0.0.1",
@@ -126,14 +127,13 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 				ProjectID: projectID,
 				Name:      "pg-replaced",
 				Type:      "relational",
-				Status:    "connected",
+				IsEnabled: true,
 				Config: map[string]any{
 					"dbType":   "postgresql",
 					"host":     "10.0.0.9",
 					"port":     5432,
 					"database": "factory_v2",
 					"username": "svc_user",
-					"password": "svc_pass",
 				},
 			},
 			{
@@ -141,7 +141,7 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 				ProjectID: projectID,
 				Name:      "mqtt-replaced",
 				Type:      "mqtt",
-				Status:    "connected",
+				IsEnabled: true,
 				Config: map[string]any{
 					"brokerUrl": "tcp://127.0.0.1:1884",
 				},
@@ -194,7 +194,7 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 				SubscriptionID: replacementSubscriptionID,
 				Name:           "tag-replaced",
 				Code:           "tag_replaced",
-				DataType:       "number",
+				DataType:       "float64",
 				ParseType:      "jsonpath",
 				ParseRule:      "$.value",
 				Validation:     map[string]any{},
@@ -210,7 +210,7 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 				SourceType:         "query",
 				SourceID:           &replacementSourceID,
 				SourceConfig:       map[string]any{"column": "value"},
-				DataType:           "number",
+				DataType:           "float64",
 				Tags:               []any{"temperature"},
 				RuntimePermissions: repository.DefaultDataPointRuntimePermissions(),
 				RefreshMode:        "auto",
@@ -290,9 +290,9 @@ func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 	})
 
 	original := mustCreateConnection(t, server.URL, token, projectID, map[string]any{
-		"name":   "pg-stable",
-		"type":   "relational",
-		"status": "connected",
+		"name":    "pg-stable",
+		"type":    "relational",
+		"enabled": true,
 		"config": map[string]any{
 			"dbType": "postgresql",
 			"host":   "127.0.0.1",
@@ -306,7 +306,7 @@ func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 				ID:        uuid.NewString(),
 				ProjectID: projectID,
 				Type:      "relational",
-				Status:    "connected",
+				IsEnabled: true,
 				Config:    map[string]any{},
 			},
 		},
@@ -324,7 +324,7 @@ func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 	}
 }
 
-func TestProjectSnapshotReplaceRejectsPhase2ReservedConnections(t *testing.T) {
+func TestProjectSnapshotReplaceRejectsUnsupportedConnectionType(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -362,9 +362,9 @@ func TestProjectSnapshotReplaceRejectsPhase2ReservedConnections(t *testing.T) {
 	})
 
 	original := mustCreateConnection(t, server.URL, token, projectID, map[string]any{
-		"name":   "pg-stable",
-		"type":   "relational",
-		"status": "connected",
+		"name":    "pg-stable",
+		"type":    "relational",
+		"enabled": true,
 		"config": map[string]any{
 			"dbType": "postgresql",
 			"host":   "127.0.0.1",
@@ -372,20 +372,23 @@ func TestProjectSnapshotReplaceRejectsPhase2ReservedConnections(t *testing.T) {
 		},
 	})
 
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/snapshot", token, repository.ProjectSnapshot{
+	rejected := doJSONRequestWithStatus(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/snapshot", token, repository.ProjectSnapshot{
 		Connections: []repository.ConnectionRecord{
 			{
 				ID:        uuid.NewString(),
 				ProjectID: projectID,
 				Name:      "opcua-rejected",
 				Type:      "opcua",
-				Status:    "connected",
+				IsEnabled: true,
 				Config: map[string]any{
 					"endpoint": "opc.tcp://127.0.0.1:4840",
 				},
 			},
 		},
-	}, http.StatusOK), "OPC UA")
+	}, http.StatusOK)
+	if rejected.Code == apperrors.SuccessCode || rejected.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected unsupported OPC UA connection to be rejected, got %#v", rejected)
+	}
 
 	currentSnapshot := mustGetProjectSnapshot(t, server.URL, token, projectID)
 	if len(currentSnapshot.Connections) != 1 {

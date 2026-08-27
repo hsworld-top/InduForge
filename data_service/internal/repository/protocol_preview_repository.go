@@ -37,7 +37,7 @@ type CreateAccessSourceRecordParams struct {
 }
 
 // GetPreviewConnection 按连接类型读取短时抓样需要的配置。
-func (r *ProtocolWave1Repository) GetPreviewConnection(ctx context.Context, projectID, connectionID string) (*ProtocolPreviewConnectionRecord, error) {
+func (r *ProtocolConnectionRepository) GetPreviewConnection(ctx context.Context, projectID, connectionID string) (*ProtocolPreviewConnectionRecord, error) {
 	var (
 		record        ProtocolPreviewConnectionRecord
 		configPayload []byte
@@ -100,7 +100,7 @@ func (r *ProtocolWave1Repository) GetPreviewConnection(ctx context.Context, proj
 }
 
 // CreateAccessSourceRecord 写入开发态抓样摘要，避免持久化原始样本和 payload。
-func (r *ProtocolWave1Repository) CreateAccessSourceRecord(ctx context.Context, params CreateAccessSourceRecordParams) error {
+func (r *ProtocolConnectionRepository) CreateAccessSourceRecord(ctx context.Context, params CreateAccessSourceRecordParams) error {
 	detailPayload, err := json.Marshal(params.Detail)
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "接入源记录 detail 格式无效", err)

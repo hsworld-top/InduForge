@@ -58,6 +58,7 @@ type WebSocketSession struct {
 	LastMessageAt  *time.Time     `json:"lastMessageAt"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	UpdatedAt      time.Time      `json:"updatedAt"`
+	Outputs        []SourceOutput `json:"outputs"`
 }
 
 type CreateWebSocketSessionGroupInput struct {
@@ -74,30 +75,33 @@ type UpdateWebSocketSessionGroupInput struct {
 }
 
 type CreateWebSocketSessionInput struct {
-	GroupID   *string        `json:"groupId"`
-	Name      string         `json:"name"`
-	URL       string         `json:"url"`
-	Headers   []any          `json:"headers"`
-	Auth      map[string]any `json:"auth"`
-	Protocols []any          `json:"protocols"`
-	Messages  []any          `json:"messages"`
-	Settings  map[string]any `json:"settings"`
-	Enabled   bool           `json:"enabled"`
-	SortOrder int            `json:"sortOrder"`
+	GroupID   *string             `json:"groupId"`
+	Name      string              `json:"name"`
+	URL       string              `json:"url"`
+	Headers   []any               `json:"headers"`
+	Auth      map[string]any      `json:"auth"`
+	Protocols []any               `json:"protocols"`
+	Messages  []any               `json:"messages"`
+	Settings  map[string]any      `json:"settings"`
+	Enabled   bool                `json:"enabled"`
+	SortOrder int                 `json:"sortOrder"`
+	Outputs   []SourceOutputInput `json:"outputs"`
 }
 
 type UpdateWebSocketSessionInput struct {
-	GroupID    *string        `json:"groupId"`
-	HasGroupID bool           `json:"-"`
-	Name       string         `json:"name"`
-	URL        string         `json:"url"`
-	Headers    []any          `json:"headers"`
-	Auth       map[string]any `json:"auth"`
-	Protocols  []any          `json:"protocols"`
-	Messages   []any          `json:"messages"`
-	Settings   map[string]any `json:"settings"`
-	Enabled    bool           `json:"enabled"`
-	SortOrder  int            `json:"sortOrder"`
+	GroupID    *string             `json:"groupId"`
+	HasGroupID bool                `json:"-"`
+	Name       string              `json:"name"`
+	URL        string              `json:"url"`
+	Headers    []any               `json:"headers"`
+	Auth       map[string]any      `json:"auth"`
+	Protocols  []any               `json:"protocols"`
+	Messages   []any               `json:"messages"`
+	Settings   map[string]any      `json:"settings"`
+	Enabled    bool                `json:"enabled"`
+	SortOrder  int                 `json:"sortOrder"`
+	Outputs    []SourceOutputInput `json:"outputs"`
+	HasOutputs bool                `json:"-"`
 }
 
 type WebSocketSessionListResult struct {
@@ -355,7 +359,8 @@ func (s *WebSocketWorkbenchService) ConnectPreview(ctx context.Context, projectI
 	result, previewErr := s.executePreview(ctx, *connection, *record)
 	quality := "good"
 	diagnostic := ""
-	var defaultValue *string
+	outputValues := map[string]*string{}
+	var mappingErr error
 	var lastMessage any
 	lastAt := time.Now().UTC()
 	if previewErr != nil {
@@ -372,8 +377,11 @@ func (s *WebSocketWorkbenchService) ConnectPreview(ctx context.Context, projectI
 		last := result.Messages[len(result.Messages)-1]
 		lastMessage = last
 		lastAt = last.Timestamp
-		value := stringifyJSONValue(last)
-		defaultValue = &value
+		outputValues, mappingErr = snapshotValuesForSourceOutputs(last.Payload, record.Outputs)
+		if mappingErr != nil {
+			quality = "bad"
+			diagnostic = mappingErr.Error()
+		}
 	} else {
 		lastMessage = map[string]any{"message": "预览未读取到消息"}
 	}
@@ -384,11 +392,14 @@ func (s *WebSocketWorkbenchService) ConnectPreview(ctx context.Context, projectI
 		LastDiagnostic:  diagPtr,
 		Quality:         quality,
 		LastMessageAt:   lastAt,
-		DefaultValue:    defaultValue,
+		OutputValues:    outputValues,
 		DataPointConfig: webSocketSessionSourceConfig(*connection, *record),
 		UserID:          userID,
 	}); err != nil {
 		return nil, err
+	}
+	if mappingErr != nil {
+		return nil, mappingErr
 	}
 	return result, nil
 }
@@ -600,6 +611,10 @@ func (s *WebSocketWorkbenchService) normalizeCreateSession(ctx context.Context, 
 	}
 	record := repository.WebSocketSessionRecord{ProjectID: projectID, ConnectionID: connection.ID, GroupID: groupID, Name: name, URL: sessionURL}
 	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRows(input.Headers), normalizeWebSocketAuth(input.Auth))
+	outputs, err := normalizeSourceOutputs(input.Outputs, SourceOutputInput{Key: "message", DisplayName: name, Selector: SourceOutputSelector{Kind: "whole"}, DataType: "object"})
+	if err != nil {
+		return repository.CreateWebSocketSessionParams{}, err
+	}
 	return repository.CreateWebSocketSessionParams{
 		ProjectID: projectID, ConnectionID: connection.ID, GroupID: groupID, Name: name, URL: sessionURL,
 		Headers: headers, Auth: auth, Secrets: secrets,
@@ -607,6 +622,7 @@ func (s *WebSocketWorkbenchService) normalizeCreateSession(ctx context.Context, 
 		Settings: normalizeWebSocketSettings(input.Settings), Enabled: true, SortOrder: input.SortOrder,
 		DataPointPath:   buildWebSocketDataPointPath(connection.Name, name),
 		DataPointConfig: webSocketSessionSourceConfig(connection, record), UserID: userID,
+		Outputs: outputs,
 	}, nil
 }
 
@@ -626,6 +642,13 @@ func (s *WebSocketWorkbenchService) normalizeUpdateSession(ctx context.Context, 
 	record.Name = name
 	record.URL = sessionURL
 	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRowsOrDefault(input.Headers, current.Headers), normalizeMapOrDefault(input.Auth, current.Auth, normalizeWebSocketAuth))
+	outputs := sourceOutputParamsFromRecords(current.Outputs)
+	if input.HasOutputs {
+		outputs, err = normalizeSourceOutputs(input.Outputs, SourceOutputInput{Key: "message", DisplayName: name, Selector: SourceOutputSelector{Kind: "whole"}, DataType: "object"})
+		if err != nil {
+			return repository.UpdateWebSocketSessionParams{}, err
+		}
+	}
 	return repository.UpdateWebSocketSessionParams{
 		ID: current.ID, ProjectID: projectID, GroupID: groupID, Name: name, URL: sessionURL,
 		Headers:   headers,
@@ -639,6 +662,7 @@ func (s *WebSocketWorkbenchService) normalizeUpdateSession(ctx context.Context, 
 		DataPointConfig: webSocketSessionSourceConfig(connection, record),
 		DefaultValue:    defaultValueFromSnapshot(current.LastMessage),
 		UserID:          userID,
+		Outputs:         outputs,
 	}, nil
 }
 
@@ -1002,5 +1026,6 @@ func toWebSocketSession(record repository.WebSocketSessionRecord) WebSocketSessi
 		DataPointPath: httpStringValue(record.DataPointPath), LastMessage: record.LastMessage,
 		LastDiagnostic: httpStringValue(record.LastDiagnostic), Quality: fallbackTrimmed(record.Quality, "unknown"),
 		LastMessageAt: record.LastMessageAt, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt,
+		Outputs: sourceOutputsFromRecords(record.Outputs),
 	}
 }
