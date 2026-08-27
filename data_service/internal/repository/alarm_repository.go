@@ -16,7 +16,7 @@ import (
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
-type AlarmPolicyGroupRecord struct {
+type AlarmGroupRecord struct {
 	ID          string    `json:"id"`
 	ProjectID   string    `json:"projectId"`
 	Name        string    `json:"name"`
@@ -30,14 +30,32 @@ type AlarmPolicyGroupRecord struct {
 }
 
 type AlarmProjectSettingsRecord struct {
-	ProjectID              string    `json:"projectId"`
-	NotifyOnRaise          bool      `json:"notifyOnRaise"`
-	NotifyOnClear          bool      `json:"notifyOnClear"`
-	RepeatIntervalSeconds  *int      `json:"repeatIntervalSeconds"`
-	DefaultMessageTemplate string    `json:"defaultMessageTemplate"`
-	DefaultChannelIDs      []string  `json:"defaultChannelIds"`
-	CreatedAt              time.Time `json:"createdAt"`
-	UpdatedAt              time.Time `json:"updatedAt"`
+	ProjectID              string                          `json:"projectId"`
+	NotifyOnRaise          bool                            `json:"notifyOnRaise"`
+	NotifyOnClear          bool                            `json:"notifyOnClear"`
+	RepeatIntervalSeconds  *int                            `json:"repeatIntervalSeconds"`
+	DefaultMessageTemplate string                          `json:"defaultMessageTemplate"`
+	DefaultChannelIDs      []string                        `json:"defaultChannelIds"`
+	SeverityDefinitions    []AlarmSeverityDefinitionRecord `json:"severityDefinitions"`
+	EscalationRules        []AlarmEscalationRuleRecord     `json:"escalationRules"`
+	CreatedAt              time.Time                       `json:"createdAt"`
+	UpdatedAt              time.Time                       `json:"updatedAt"`
+}
+
+type AlarmSeverityDefinitionRecord struct {
+	Key         string `json:"key"`
+	DisplayName string `json:"displayName"`
+	Color       string `json:"color"`
+	SortOrder   int    `json:"sortOrder"`
+	IsBuiltin   bool   `json:"isBuiltin"`
+}
+
+type AlarmEscalationRuleRecord struct {
+	ID                    string `json:"id"`
+	SourceSeverity        string `json:"sourceSeverity"`
+	TargetSeverity        string `json:"targetSeverity"`
+	UnacknowledgedSeconds int    `json:"unacknowledgedSeconds"`
+	IsEnabled             bool   `json:"isEnabled"`
 }
 
 type AlarmHistorySettingsRecord struct {
@@ -50,15 +68,19 @@ type AlarmHistorySettingsRecord struct {
 }
 
 type AlarmNotificationChannelRecord struct {
-	ID           string         `json:"id"`
-	ProjectID    string         `json:"projectId"`
-	Name         string         `json:"name"`
-	ChannelType  string         `json:"channelType"`
-	Config       map[string]any `json:"config"`
-	SecretStatus map[string]any `json:"secretStatus"`
-	IsEnabled    bool           `json:"isEnabled"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UpdatedAt    time.Time      `json:"updatedAt"`
+	ID                 string         `json:"id"`
+	ProjectID          string         `json:"projectId"`
+	Name               string         `json:"name"`
+	ChannelType        string         `json:"channelType"`
+	Config             map[string]any `json:"config"`
+	SecretStatus       map[string]any `json:"secretStatus"`
+	IsEnabled          bool           `json:"isEnabled"`
+	LastTestStatus     string         `json:"lastTestStatus"`
+	LastTestedAt       *time.Time     `json:"lastTestedAt,omitempty"`
+	LastTestDurationMS *int           `json:"lastTestDurationMs,omitempty"`
+	LastTestMessage    *string        `json:"lastTestMessage,omitempty"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
 }
 
 type EncryptedAlarmChannelSecret struct {
@@ -66,14 +88,14 @@ type EncryptedAlarmChannelSecret struct {
 	Value           []byte
 }
 
-type AlarmPolicyGroupListFilter struct {
+type AlarmGroupListFilter struct {
 	Search   string
 	ParentID *string
 	Page     int
 	PageSize int
 }
 
-type SaveAlarmPolicyGroupParams struct {
+type SaveAlarmGroupParams struct {
 	ID, ProjectID, UserID, Name string
 	ParentID                    *string
 	Description                 *string
@@ -85,6 +107,12 @@ type SaveAlarmProjectSettingsParams struct {
 	NotifyOnRaise, NotifyOnClear              bool
 	RepeatIntervalSeconds                     *int
 	DefaultChannelIDs                         []string
+}
+
+type SaveAlarmLevelSettingsParams struct {
+	ProjectID, UserID   string
+	SeverityDefinitions []AlarmSeverityDefinitionRecord
+	EscalationRules     []AlarmEscalationRuleRecord
 }
 
 type SaveAlarmHistorySettingsParams struct {
@@ -112,7 +140,7 @@ type AlarmConfigSyncOperationParams struct {
 	Resource        string
 	Action          string
 	ID              string
-	Group           *SaveAlarmPolicyGroupParams
+	Group           *SaveAlarmGroupParams
 	AlarmItem       *SaveAlarmItemParams
 	Settings        *SaveAlarmProjectSettingsParams
 	HistorySettings *SaveAlarmHistorySettingsParams
@@ -125,13 +153,13 @@ type AlarmConfigSyncResultRecord struct {
 	Idempotent       bool
 }
 
-type AlarmPolicyRepository struct{ pool *pgxpool.Pool }
+type AlarmRepository struct{ pool *pgxpool.Pool }
 
-func NewAlarmPolicyRepository(pool *pgxpool.Pool) *AlarmPolicyRepository {
-	return &AlarmPolicyRepository{pool: pool}
+func NewAlarmRepository(pool *pgxpool.Pool) *AlarmRepository {
+	return &AlarmRepository{pool: pool}
 }
 
-func (r *AlarmPolicyRepository) ListGroups(ctx context.Context, projectID string, filter AlarmPolicyGroupListFilter) ([]AlarmPolicyGroupRecord, int, error) {
+func (r *AlarmRepository) ListGroups(ctx context.Context, projectID string, filter AlarmGroupListFilter) ([]AlarmGroupRecord, int, error) {
 	page, size := normalizePageAndSize(filter.Page, filter.PageSize, 50, 200)
 	args := []any{projectID}
 	where := []string{"g.project_id = $1"}
@@ -164,9 +192,9 @@ func (r *AlarmPolicyRepository) ListGroups(ctx context.Context, projectID string
 		return nil, 0, wrapAlarmRepo("查询报警目录失败", err)
 	}
 	defer rows.Close()
-	result := make([]AlarmPolicyGroupRecord, 0)
+	result := make([]AlarmGroupRecord, 0)
 	for rows.Next() {
-		var item AlarmPolicyGroupRecord
+		var item AlarmGroupRecord
 		if err := rows.Scan(&item.ID, &item.ProjectID, &item.Name, &item.ParentID, &item.Description, &item.SortOrder, &item.FullPath, &item.HasChildren, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, 0, wrapAlarmRepo("读取报警目录失败", err)
 		}
@@ -175,7 +203,7 @@ func (r *AlarmPolicyRepository) ListGroups(ctx context.Context, projectID string
 	return result, total, rows.Err()
 }
 
-func (r *AlarmPolicyRepository) ListAllGroups(ctx context.Context, projectID string) ([]AlarmPolicyGroupRecord, error) {
+func (r *AlarmRepository) ListAllGroups(ctx context.Context, projectID string) ([]AlarmGroupRecord, error) {
 	rows, err := r.pool.Query(ctx, `WITH RECURSIVE paths AS (
         SELECT id,project_id,name,parent_id,description,sort_order,name::text AS full_path,created_at,updated_at FROM data_alarm_groups WHERE project_id=$1 AND parent_id IS NULL
         UNION ALL SELECT c.id,c.project_id,c.name,c.parent_id,c.description,c.sort_order,(p.full_path || ' / ' || c.name),c.created_at,c.updated_at FROM data_alarm_groups c JOIN paths p ON p.id=c.parent_id WHERE c.project_id=$1
@@ -184,9 +212,9 @@ func (r *AlarmPolicyRepository) ListAllGroups(ctx context.Context, projectID str
 		return nil, wrapAlarmRepo("查询报警目录失败", err)
 	}
 	defer rows.Close()
-	items := make([]AlarmPolicyGroupRecord, 0)
+	items := make([]AlarmGroupRecord, 0)
 	for rows.Next() {
-		var item AlarmPolicyGroupRecord
+		var item AlarmGroupRecord
 		if err := rows.Scan(&item.ID, &item.ProjectID, &item.Name, &item.ParentID, &item.Description, &item.SortOrder, &item.FullPath, &item.HasChildren, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, wrapAlarmRepo("读取报警目录失败", err)
 		}
@@ -195,7 +223,7 @@ func (r *AlarmPolicyRepository) ListAllGroups(ctx context.Context, projectID str
 	return items, rows.Err()
 }
 
-func (r *AlarmPolicyRepository) GetGroup(ctx context.Context, projectID, id string) (*AlarmPolicyGroupRecord, error) {
+func (r *AlarmRepository) GetGroup(ctx context.Context, projectID, id string) (*AlarmGroupRecord, error) {
 	groups, err := r.ListAllGroups(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -209,7 +237,7 @@ func (r *AlarmPolicyRepository) GetGroup(ctx context.Context, projectID, id stri
 	return nil, alarmNotFound("报警目录不存在")
 }
 
-func (r *AlarmPolicyRepository) SaveGroup(ctx context.Context, p SaveAlarmPolicyGroupParams) (*AlarmPolicyGroupRecord, error) {
+func (r *AlarmRepository) SaveGroup(ctx context.Context, p SaveAlarmGroupParams) (*AlarmGroupRecord, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, wrapAlarmRepo("开启报警目录事务失败", err)
@@ -238,7 +266,7 @@ func (r *AlarmPolicyRepository) SaveGroup(ctx context.Context, p SaveAlarmPolicy
 	return r.GetGroup(ctx, p.ProjectID, id)
 }
 
-func (r *AlarmPolicyRepository) DeleteGroup(ctx context.Context, projectID, id string) error {
+func (r *AlarmRepository) DeleteGroup(ctx context.Context, projectID, id string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return wrapAlarmRepo("开启删除报警目录事务失败", err)
@@ -260,8 +288,8 @@ func (r *AlarmPolicyRepository) DeleteGroup(ctx context.Context, projectID, id s
 	return nil
 }
 
-func (r *AlarmPolicyRepository) GetProjectSettings(ctx context.Context, projectID string) (*AlarmProjectSettingsRecord, error) {
-	item, err := scanAlarmProjectSettings(r.pool.QueryRow(ctx, `SELECT project_id,notify_on_raise,notify_on_clear,repeat_interval_seconds,default_message_template,default_channel_ids,created_at,updated_at FROM data_alarm_project_settings WHERE project_id=$1`, projectID))
+func (r *AlarmRepository) GetProjectSettings(ctx context.Context, projectID string) (*AlarmProjectSettingsRecord, error) {
+	item, err := scanAlarmProjectSettings(r.pool.QueryRow(ctx, `SELECT project_id,notify_on_raise,notify_on_clear,repeat_interval_seconds,default_message_template,default_channel_ids,severity_definitions,escalation_rules,created_at,updated_at FROM data_alarm_project_settings WHERE project_id=$1`, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -271,7 +299,34 @@ func (r *AlarmPolicyRepository) GetProjectSettings(ctx context.Context, projectI
 	return &item, nil
 }
 
-func (r *AlarmPolicyRepository) SaveProjectSettings(ctx context.Context, p SaveAlarmProjectSettingsParams) (*AlarmProjectSettingsRecord, error) {
+func (r *AlarmRepository) SaveLevelSettings(ctx context.Context, p SaveAlarmLevelSettingsParams) (*AlarmProjectSettingsRecord, error) {
+	definitions, err := json.Marshal(p.SeverityDefinitions)
+	if err != nil {
+		return nil, wrapAlarmRepo("编码报警级别失败", err)
+	}
+	rules, err := json.Marshal(p.EscalationRules)
+	if err != nil {
+		return nil, wrapAlarmRepo("编码报警升级规则失败", err)
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, wrapAlarmRepo("开启报警级别设置事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `INSERT INTO data_alarm_project_settings(project_id,severity_definitions,escalation_rules,created_by,updated_by) VALUES($1,$2::jsonb,$3::jsonb,$4,$4) ON CONFLICT(project_id) DO UPDATE SET severity_definitions=EXCLUDED.severity_definitions,escalation_rules=EXCLUDED.escalation_rules,updated_by=EXCLUDED.updated_by,updated_at=now()`, p.ProjectID, string(definitions), string(rules), p.UserID)
+	if err != nil {
+		return nil, translateAlarmWrite("保存报警级别设置失败", err)
+	}
+	if _, err = incrementAlarmConfigRevision(ctx, tx, p.ProjectID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, wrapAlarmRepo("提交报警级别设置失败", err)
+	}
+	return r.GetProjectSettings(ctx, p.ProjectID)
+}
+
+func (r *AlarmRepository) SaveProjectSettings(ctx context.Context, p SaveAlarmProjectSettingsParams) (*AlarmProjectSettingsRecord, error) {
 	channels, err := json.Marshal(p.DefaultChannelIDs)
 	if err != nil {
 		return nil, wrapAlarmRepo("编码默认通知渠道失败", err)
@@ -294,7 +349,7 @@ func (r *AlarmPolicyRepository) SaveProjectSettings(ctx context.Context, p SaveA
 	return r.GetProjectSettings(ctx, p.ProjectID)
 }
 
-func (r *AlarmPolicyRepository) GetHistorySettings(ctx context.Context, projectID string) (*AlarmHistorySettingsRecord, error) {
+func (r *AlarmRepository) GetHistorySettings(ctx context.Context, projectID string) (*AlarmHistorySettingsRecord, error) {
 	item, err := scanAlarmHistorySettings(r.pool.QueryRow(ctx, `SELECT project_id,is_enabled,retention_days,store_notification_deliveries,created_at,updated_at FROM data_alarm_history_settings WHERE project_id=$1`, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -305,7 +360,7 @@ func (r *AlarmPolicyRepository) GetHistorySettings(ctx context.Context, projectI
 	return &item, nil
 }
 
-func (r *AlarmPolicyRepository) SaveHistorySettings(ctx context.Context, p SaveAlarmHistorySettingsParams) (*AlarmHistorySettingsRecord, error) {
+func (r *AlarmRepository) SaveHistorySettings(ctx context.Context, p SaveAlarmHistorySettingsParams) (*AlarmHistorySettingsRecord, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, wrapAlarmRepo("开启报警历史设置事务失败", err)
@@ -324,8 +379,8 @@ func (r *AlarmPolicyRepository) SaveHistorySettings(ctx context.Context, p SaveA
 	return r.GetHistorySettings(ctx, p.ProjectID)
 }
 
-func (r *AlarmPolicyRepository) ListChannels(ctx context.Context, projectID string) ([]AlarmNotificationChannelRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id,project_id,name,channel_type,config,secret_status,is_enabled,created_at,updated_at FROM data_alarm_notification_channels WHERE project_id=$1 ORDER BY updated_at DESC`, projectID)
+func (r *AlarmRepository) ListChannels(ctx context.Context, projectID string) ([]AlarmNotificationChannelRecord, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id,project_id,name,channel_type,config,secret_status,is_enabled,last_test_status,last_tested_at,last_test_duration_ms,last_test_message,created_at,updated_at FROM data_alarm_notification_channels WHERE project_id=$1 ORDER BY updated_at DESC`, projectID)
 	if err != nil {
 		return nil, wrapAlarmRepo("查询通知渠道失败", err)
 	}
@@ -341,15 +396,22 @@ func (r *AlarmPolicyRepository) ListChannels(ctx context.Context, projectID stri
 	return items, rows.Err()
 }
 
-func (r *AlarmPolicyRepository) GetChannel(ctx context.Context, projectID, id string) (*AlarmNotificationChannelRecord, error) {
-	item, err := scanAlarmChannel(r.pool.QueryRow(ctx, `SELECT id,project_id,name,channel_type,config,secret_status,is_enabled,created_at,updated_at FROM data_alarm_notification_channels WHERE project_id=$1 AND id=$2`, projectID, id))
+func (r *AlarmRepository) GetChannel(ctx context.Context, projectID, id string) (*AlarmNotificationChannelRecord, error) {
+	item, err := scanAlarmChannel(r.pool.QueryRow(ctx, `SELECT id,project_id,name,channel_type,config,secret_status,is_enabled,last_test_status,last_tested_at,last_test_duration_ms,last_test_message,created_at,updated_at FROM data_alarm_notification_channels WHERE project_id=$1 AND id=$2`, projectID, id))
 	if err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
-func (r *AlarmPolicyRepository) SaveChannel(ctx context.Context, p SaveAlarmNotificationChannelParams) (*AlarmNotificationChannelRecord, error) {
+func (r *AlarmRepository) SaveChannelTestResult(ctx context.Context, projectID, id, status string, durationMS int, message string) (*AlarmNotificationChannelRecord, error) {
+	if _, err := r.pool.Exec(ctx, `UPDATE data_alarm_notification_channels SET last_test_status=$3,last_tested_at=now(),last_test_duration_ms=$4,last_test_message=$5 WHERE project_id=$1 AND id=$2`, projectID, id, status, durationMS, message); err != nil {
+		return nil, wrapAlarmRepo("保存通知渠道测试结果失败", err)
+	}
+	return r.GetChannel(ctx, projectID, id)
+}
+
+func (r *AlarmRepository) SaveChannel(ctx context.Context, p SaveAlarmNotificationChannelParams) (*AlarmNotificationChannelRecord, error) {
 	config, status, err := marshalAlarmJSON(p.Config, p.SecretStatus)
 	if err != nil {
 		return nil, err
@@ -391,7 +453,7 @@ func (r *AlarmPolicyRepository) SaveChannel(ctx context.Context, p SaveAlarmNoti
 	return r.GetChannel(ctx, p.ProjectID, id)
 }
 
-func (r *AlarmPolicyRepository) DeleteChannel(ctx context.Context, projectID, id string) error {
+func (r *AlarmRepository) DeleteChannel(ctx context.Context, projectID, id string) error {
 	var used bool
 	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM data_alarm_project_settings WHERE project_id=$1 AND default_channel_ids ? $2) OR EXISTS(SELECT 1 FROM data_alarm_items WHERE project_id=$1 AND notification_channel_ids ? $2)`, projectID, id).Scan(&used)
 	if err != nil {
@@ -418,7 +480,7 @@ func (r *AlarmPolicyRepository) DeleteChannel(ctx context.Context, projectID, id
 	return tx.Commit(ctx)
 }
 
-func (r *AlarmPolicyRepository) GetSyncState(ctx context.Context, projectID string) (AlarmConfigSyncStateRecord, error) {
+func (r *AlarmRepository) GetSyncState(ctx context.Context, projectID string) (AlarmConfigSyncStateRecord, error) {
 	var item AlarmConfigSyncStateRecord
 	err := r.pool.QueryRow(ctx, `SELECT project_id,config_revision,sync_epoch,last_sequence,last_idempotency_key,updated_at FROM data_alarm_config_sync_state WHERE project_id=$1`, projectID).Scan(&item.ProjectID, &item.ConfigRevision, &item.SyncEpoch, &item.LastSequence, &item.LastIdempotencyKey, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -431,7 +493,7 @@ func (r *AlarmPolicyRepository) GetSyncState(ctx context.Context, projectID stri
 }
 
 // ApplyConfigSync 在单一事务中应用节点回写的开发态报警配置。
-func (r *AlarmPolicyRepository) ApplyConfigSync(ctx context.Context, projectID, actorID, syncEpoch string, sequence int64, idempotencyKey string, operations []AlarmConfigSyncOperationParams) (AlarmConfigSyncResultRecord, error) {
+func (r *AlarmRepository) ApplyConfigSync(ctx context.Context, projectID, actorID, syncEpoch string, sequence int64, idempotencyKey string, operations []AlarmConfigSyncOperationParams) (AlarmConfigSyncResultRecord, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return AlarmConfigSyncResultRecord{}, wrapAlarmRepo("开启报警配置同步事务失败", err)
@@ -685,13 +747,19 @@ func incrementAlarmConfigRevision(ctx context.Context, tx pgx.Tx, projectID stri
 
 func scanAlarmProjectSettings(s alarmScanner) (AlarmProjectSettingsRecord, error) {
 	var item AlarmProjectSettingsRecord
-	var ids []byte
-	err := s.Scan(&item.ProjectID, &item.NotifyOnRaise, &item.NotifyOnClear, &item.RepeatIntervalSeconds, &item.DefaultMessageTemplate, &ids, &item.CreatedAt, &item.UpdatedAt)
+	var ids, definitions, rules []byte
+	err := s.Scan(&item.ProjectID, &item.NotifyOnRaise, &item.NotifyOnClear, &item.RepeatIntervalSeconds, &item.DefaultMessageTemplate, &ids, &definitions, &rules, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return item, err
 	}
 	if err = json.Unmarshal(ids, &item.DefaultChannelIDs); err != nil {
 		return item, wrapAlarmRepo("解析默认通知渠道失败", err)
+	}
+	if err = json.Unmarshal(definitions, &item.SeverityDefinitions); err != nil {
+		return item, wrapAlarmRepo("解析报警级别失败", err)
+	}
+	if err = json.Unmarshal(rules, &item.EscalationRules); err != nil {
+		return item, wrapAlarmRepo("解析报警升级规则失败", err)
 	}
 	return item, nil
 }
@@ -709,7 +777,8 @@ func scanAlarmHistorySettings(s alarmScanner) (AlarmHistorySettingsRecord, error
 func scanAlarmChannel(s alarmScanner) (AlarmNotificationChannelRecord, error) {
 	var item AlarmNotificationChannelRecord
 	var config, status []byte
-	err := s.Scan(&item.ID, &item.ProjectID, &item.Name, &item.ChannelType, &config, &status, &item.IsEnabled, &item.CreatedAt, &item.UpdatedAt)
+	err := s.Scan(&item.ID, &item.ProjectID, &item.Name, &item.ChannelType, &config, &status, &item.IsEnabled,
+		&item.LastTestStatus, &item.LastTestedAt, &item.LastTestDurationMS, &item.LastTestMessage, &item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return item, alarmNotFound("通知渠道不存在")
 	}

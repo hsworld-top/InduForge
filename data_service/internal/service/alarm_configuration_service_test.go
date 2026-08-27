@@ -68,7 +68,7 @@ func TestNormalizeConfigurationConditionsSupportsSingleConditionKinds(t *testing
 		{name: "state", category: "boolean", condition: AlarmCondition{Kind: "state", Operator: "eq", Severity: "info", Params: map[string]any{"expected": true}}},
 		{name: "transition", category: "boolean", condition: AlarmCondition{Kind: "transition", Operator: "changed", Severity: "critical", Params: map[string]any{}}},
 		{name: "text", category: "text", condition: AlarmCondition{Kind: "text_match", Operator: "contains", Severity: "warning", Params: map[string]any{"expected": "fault"}}},
-		{name: "rate", category: "number", condition: AlarmCondition{Kind: "rate_of_change", Operator: "gt", Severity: "major", Params: map[string]any{"limit": 2.0, "windowMs": 1000.0}}},
+		{name: "rate", category: "number", condition: AlarmCondition{Kind: "rate_of_change", Operator: "gt", Severity: "major", Params: map[string]any{"direction": "absolute", "limit": 2.0, "windowMs": 1000.0}}},
 		{name: "deviation", category: "number", condition: AlarmCondition{Kind: "deviation", Operator: "gt", Severity: "warning", Params: map[string]any{"baseline": 10.0, "limit": 2.0}}},
 		{name: "offline", category: "number", condition: AlarmCondition{Kind: "offline", Operator: "is_offline", Severity: "critical", Params: map[string]any{}}},
 	}
@@ -168,6 +168,7 @@ func TestAlarmTriggerFingerprintIgnoresPresentationAndNotification(t *testing.T)
 	base.Description = alarmTestStringPointer("说明")
 	base.Conditions[0].Label = "另一标签"
 	base.Conditions[0].Severity = "critical"
+	base.Conditions[0].Params["configurationMode"] = "advanced"
 	base.Notification = AlarmNotificationSettings{Mode: "off"}
 	second, err := alarmTriggerFingerprint(base)
 	if err != nil {
@@ -183,9 +184,71 @@ func TestAlarmTriggerFingerprintIgnoresPresentationAndNotification(t *testing.T)
 	}
 }
 
+func TestNormalizeConfigurationConditionsRemovesObsoletePriority(t *testing.T) {
+	conditions, err := normalizeConfigurationConditions([]AlarmCondition{{Kind: "state", Operator: "eq", Severity: "warning", Params: map[string]any{"expected": true, "priority": 90}}}, "boolean", "single", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := conditions[0].Params["priority"]; exists {
+		t.Fatalf("obsolete priority should be removed: %#v", conditions[0].Params)
+	}
+}
+
+func TestNormalizeAlarmLevelSettingsSupportsCustomSeverityAndEscalation(t *testing.T) {
+	definitions := defaultAlarmSeverityDefinitions()
+	definitions = append(definitions, AlarmSeverityDefinition{Key: "shutdown", DisplayName: "停机", Color: "#991b1b", SortOrder: 50})
+	settings, err := normalizeAlarmLevelSettings("project", SaveAlarmLevelSettingsInput{
+		SeverityDefinitions: definitions,
+		EscalationRules: []AlarmEscalationRule{{
+			SourceSeverity:        "critical",
+			TargetSeverity:        "shutdown",
+			UnacknowledgedSeconds: 300,
+			IsEnabled:             true,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(settings.EscalationRules) != 1 || settings.EscalationRules[0].ID == "" {
+		t.Fatalf("normalized escalation rules = %#v", settings.EscalationRules)
+	}
+	allowed, order := map[string]bool{}, map[string]int{}
+	for _, definition := range settings.SeverityDefinitions {
+		allowed[definition.Key] = true
+		order[definition.Key] = definition.SortOrder
+	}
+	_, err = normalizeConfigurationConditionsWithPolicy([]AlarmCondition{{Kind: "state", Operator: "eq", Severity: "shutdown", Params: map[string]any{"expected": true}}}, "boolean", "single", false, allowed, order)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNormalizeAlarmLevelSettingsRejectsMissingBuiltinAndDowngrade(t *testing.T) {
+	definitions := defaultAlarmSeverityDefinitions()[1:]
+	if _, err := normalizeAlarmLevelSettings("project", SaveAlarmLevelSettingsInput{SeverityDefinitions: definitions}); err == nil {
+		t.Fatal("missing builtin severity should be rejected")
+	}
+	definitions = defaultAlarmSeverityDefinitions()
+	if _, err := normalizeAlarmLevelSettings("project", SaveAlarmLevelSettingsInput{
+		SeverityDefinitions: definitions,
+		EscalationRules:     []AlarmEscalationRule{{ID: "077880a5-0056-4cf0-9a97-7069f78defd6", SourceSeverity: "critical", TargetSeverity: "warning", UnacknowledgedSeconds: 60, IsEnabled: true}},
+	}); err == nil {
+		t.Fatal("severity downgrade should be rejected")
+	}
+}
+
+func TestDefaultAlarmItemNameUsesCompactSuffix(t *testing.T) {
+	if got := defaultAlarmItemName("threshold"); got != "越限" {
+		t.Fatalf("threshold suffix = %q, want 越限", got)
+	}
+	if got := defaultAlarmItemName("rate_of_change"); got != "变化率" {
+		t.Fatalf("rate suffix = %q, want 变化率", got)
+	}
+}
+
 func TestAlarmTriggerFingerprintDistinguishesThresholdAndRateOfChange(t *testing.T) {
 	threshold := SaveAlarmItemInput{Mode: "point", EvaluationMode: "single", Conditions: []AlarmCondition{{Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 80.0}}}}
-	rate := SaveAlarmItemInput{Mode: "point", EvaluationMode: "single", Conditions: []AlarmCondition{{Kind: "rate_of_change", Operator: "gt", Severity: "warning", Params: map[string]any{"limit": 2.0, "windowMs": 60000.0}}}}
+	rate := SaveAlarmItemInput{Mode: "point", EvaluationMode: "single", Conditions: []AlarmCondition{{Kind: "rate_of_change", Operator: "gt", Severity: "warning", Params: map[string]any{"direction": "absolute", "limit": 2.0, "windowMs": 60000.0}}}}
 	thresholdFingerprint, err := alarmTriggerFingerprint(threshold)
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +263,7 @@ func TestAlarmTriggerFingerprintDistinguishesThresholdAndRateOfChange(t *testing
 }
 
 func TestDerivedFingerprintIncludesInputIdentityAndAlias(t *testing.T) {
-	input := SaveAlarmItemInput{Mode: "derived", EvaluationMode: "single", DerivedExpression: "a && b", Inputs: []AlarmItemInput{{DatapointID: "dp-a", InputKey: "a"}, {DatapointID: "dp-b", InputKey: "b"}}, Conditions: []AlarmCondition{{Kind: "expression", Operator: "is_true", Severity: "warning", Params: map[string]any{}}}}
+	input := SaveAlarmItemInput{Mode: "derived", EvaluationMode: "single", DerivedExpression: "a && b", Inputs: []AlarmItemInput{{DatapointID: "dp-a", InputKey: "a"}, {DatapointID: "dp-b", InputKey: "b"}}, Conditions: []AlarmCondition{{Kind: "state", Operator: "eq", Severity: "warning", Params: map[string]any{"expected": true}}}}
 	first, _ := alarmTriggerFingerprint(input)
 	input.Inputs[1].DatapointID = "dp-c"
 	second, _ := alarmTriggerFingerprint(input)
@@ -221,6 +284,25 @@ func TestAlarmConditionsOverlapDistinguishesSeparatedHighAndLowRegions(t *testin
 	}
 }
 
+func TestAlarmConditionsOverlapAvoidsNonNumericFalseWarnings(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  AlarmCondition
+		existing repository.AlarmItemConditionRecord
+	}{
+		{name: "different states", current: AlarmCondition{Kind: "state", Operator: "eq", Params: map[string]any{"expected": true}}, existing: repository.AlarmItemConditionRecord{Kind: "state", Operator: "eq", Params: map[string]any{"expected": false}}},
+		{name: "different text equality", current: AlarmCondition{Kind: "text_match", Operator: "eq", Params: map[string]any{"expected": "running"}}, existing: repository.AlarmItemConditionRecord{Kind: "text_match", Operator: "eq", Params: map[string]any{"expected": "stopped"}}},
+		{name: "disjoint qualities", current: AlarmCondition{Kind: "quality", Operator: "in", Params: map[string]any{"qualities": []any{"bad"}}}, existing: repository.AlarmItemConditionRecord{Kind: "quality", Operator: "in", Params: map[string]any{"qualities": []any{"unknown"}}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if alarmConditionsOverlap([]AlarmCondition{test.current}, []repository.AlarmItemConditionRecord{test.existing}) {
+				t.Fatal("mutually exclusive conditions must not produce overlap warnings")
+			}
+		})
+	}
+}
+
 func alarmTestStringPointer(value string) *string { return &value }
 
 func TestEvaluateAlarmConditionsPausesInvalidQualityButKeepsOfflineIndependent(t *testing.T) {
@@ -235,7 +317,7 @@ func TestEvaluateAlarmConditionsPausesInvalidQualityButKeepsOfflineIndependent(t
 }
 
 func TestEvaluateAlarmConditionSupportsRateAndExplicitTransition(t *testing.T) {
-	rate := AlarmCondition{Kind: "rate_of_change", Operator: "gt", Params: map[string]any{"limit": 2.0, "windowMs": 1000.0}}
+	rate := AlarmCondition{Kind: "rate_of_change", Operator: "gt", Params: map[string]any{"direction": "absolute", "limit": 2.0, "windowMs": 1000.0}}
 	triggered, reason := evaluateAlarmCondition(rate, 15.0, "good", false, map[string]any{"previousValue": 10.0})
 	if !triggered || reason != "evaluated" {
 		t.Fatalf("rate trial = (%v, %s), want triggered", triggered, reason)
@@ -344,7 +426,7 @@ func TestAlarmHistorySettingsDefaultsAndValidation(t *testing.T) {
 }
 
 func TestNormalizeSyncOperationSupportsAlarmHistorySettings(t *testing.T) {
-	service := &AlarmPolicyService{}
+	service := &AlarmSettingsService{}
 	retentionDays := 90
 	payload, err := json.Marshal(SaveAlarmHistorySettingsInput{IsEnabled: false, RetentionDays: &retentionDays, StoreNotificationDeliveries: true})
 	if err != nil {

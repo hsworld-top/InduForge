@@ -23,10 +23,11 @@
         </el-table-column>
         <el-table-column label="最高等级" width="86">
           <template #default="{ row }">
-            <StatusBadge
-              :tone="severityTone(alarmItemHighestSeverity(row))"
-              :text="alarmSeverityLabels[alarmItemHighestSeverity(row)]"
-            />
+            <span
+              class="alarm-point-summary__severity"
+              :style="severityBadgeStyle(highestSeverity(row))"
+              >{{ severityLabel(highestSeverity(row)) }}</span
+            >
           </template>
         </el-table-column>
         <el-table-column label="状态" width="72">
@@ -43,7 +44,7 @@
               type="button"
               class="alarm-point-summary__open"
               :aria-label="`打开报警 ${row.displayName}`"
-              @click="openPolicy(row.id)"
+              @click="openItem(row.id)"
             >
               打开
               <IconTablerArrowRight />
@@ -63,6 +64,7 @@
 
 <script setup lang="ts">
 import IconTablerArrowRight from '~icons/tabler/arrow-right'
+import { watch } from 'vue'
 import type { AlarmItem, AlarmSeverity } from '@/api/schemas/alarm.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
@@ -70,34 +72,46 @@ import {
   alarmConditionLabels,
   alarmItemConditionSummary,
   alarmItemHighestSeverity,
-  alarmSeverityLabels,
-} from '@/models/alarm-policy'
+  alarmSeverityLabel,
+} from '@/models/alarm-item'
+import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     visible: boolean
+    projectId: string
     datapointName?: string
     items?: AlarmItem[]
     loading?: boolean
   }>(),
   { datapointName: '', items: () => [], loading: false },
 )
+const { definitions: severityDefinitions, loadDefinitions } = useAlarmLevelDefinitions(
+  () => props.projectId,
+)
 
 const emit = defineEmits<{
   cancel: []
-  navigate: [policyId?: string]
+  navigate: [itemId?: string]
 }>()
 
-function severityTone(value: AlarmSeverity): 'muted' | 'warning' | 'danger' {
-  return value === 'critical'
-    ? 'danger'
-    : value === 'major' || value === 'warning'
-      ? 'warning'
-      : 'muted'
+function highestSeverity(item: AlarmItem) {
+  return alarmItemHighestSeverity(item, severityDefinitions.value)
+}
+function severityLabel(value: AlarmSeverity) {
+  return alarmSeverityLabel(value, severityDefinitions.value)
+}
+function severityBadgeStyle(value: AlarmSeverity) {
+  const color = severityDefinitions.value.find((item) => item.key === value)?.color ?? '#64748b'
+  return {
+    color,
+    borderColor: `${color}55`,
+    backgroundColor: `${color}14`,
+  }
 }
 
-function openPolicy(policyId: string) {
-  emit('navigate', policyId)
+function openItem(itemId: string) {
+  emit('navigate', itemId)
 }
 
 function openAlarmWorkspace() {
@@ -107,6 +121,12 @@ function openAlarmWorkspace() {
 function handleVisibleChange(value: boolean) {
   if (!value) emit('cancel')
 }
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) void loadDefinitions()
+  },
+)
 </script>
 
 <style scoped>
@@ -136,6 +156,18 @@ function handleVisibleChange(value: boolean) {
 .alarm-point-summary__name span {
   color: var(--dc-text-muted);
   font-size: 11px;
+}
+
+.alarm-point-summary__severity {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 7px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .alarm-point-summary__open {

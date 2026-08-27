@@ -17,23 +17,31 @@ import (
 
 const maxAlarmImportFileSize = 20 << 20
 
-type AlarmPolicyHandler struct {
-	service     *service.AlarmPolicyService
+type AlarmHandler struct {
+	service     *service.AlarmSettingsService
 	itemService *service.AlarmItemService
 }
 
-func NewAlarmPolicyHandler(alarmService *service.AlarmPolicyService, itemServices ...*service.AlarmItemService) *AlarmPolicyHandler {
+func NewAlarmHandler(alarmService *service.AlarmSettingsService, itemServices ...*service.AlarmItemService) *AlarmHandler {
 	var itemService *service.AlarmItemService
 	if len(itemServices) > 0 {
 		itemService = itemServices[0]
 	}
-	return &AlarmPolicyHandler{service: alarmService, itemService: itemService}
+	return &AlarmHandler{service: alarmService, itemService: itemService}
 }
 
-func (h *AlarmPolicyHandler) ListGroups(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ListGroups(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
+	}
+	if r.URL.Query().Get("view") == "tree" {
+		result, treeErr := h.service.ListGroupTree(r.Context(), claims, r.PathValue("projectId"))
+		if treeErr != nil {
+			return normalizeRepresentativeHandlerError(treeErr)
+		}
+		response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+		return nil
 	}
 	page, err := alarmQueryInt(r, "page", 1)
 	if err != nil {
@@ -55,25 +63,12 @@ func (h *AlarmPolicyHandler) ListGroups(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
-func (h *AlarmPolicyHandler) GroupTree(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) CreateGroup(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
-	result, err := h.service.ListAllGroups(r.Context(), claims, r.PathValue("projectId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
-	return nil
-}
-
-func (h *AlarmPolicyHandler) CreateGroup(w http.ResponseWriter, r *http.Request) error {
-	claims, err := requireClaims(r)
-	if err != nil {
-		return err
-	}
-	var input service.SaveAlarmPolicyGroupInput
+	var input service.SaveAlarmGroupInput
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
@@ -85,12 +80,12 @@ func (h *AlarmPolicyHandler) CreateGroup(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
-	var input service.SaveAlarmPolicyGroupInput
+	var input service.SaveAlarmGroupInput
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
@@ -102,7 +97,7 @@ func (h *AlarmPolicyHandler) UpdateGroup(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -114,7 +109,7 @@ func (h *AlarmPolicyHandler) DeleteGroup(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) List(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) List(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -131,7 +126,7 @@ func (h *AlarmPolicyHandler) List(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Get(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -144,7 +139,7 @@ func (h *AlarmPolicyHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Create(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -161,7 +156,7 @@ func (h *AlarmPolicyHandler) Create(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Update(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) Update(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -178,7 +173,7 @@ func (h *AlarmPolicyHandler) Update(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ToggleEnabled(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ToggleEnabled(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -197,7 +192,7 @@ func (h *AlarmPolicyHandler) ToggleEnabled(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -209,7 +204,7 @@ func (h *AlarmPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -226,20 +221,19 @@ func (h *AlarmPolicyHandler) ValidateDraft(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) TestDraft(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) TestDraft(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var input struct {
 		Draft   service.SaveAlarmItemInput `json:"draft"`
-		Values  []any                      `json:"values"`
-		Context map[string]any             `json:"context"`
+		Samples []service.AlarmTrialSample `json:"samples"`
 	}
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.itemService.TestDraft(r.Context(), claims, r.PathValue("projectId"), input.Draft, input.Values, input.Context)
+	result, err := h.itemService.TestDraft(r.Context(), claims, r.PathValue("projectId"), input.Draft, input.Samples)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -247,7 +241,7 @@ func (h *AlarmPolicyHandler) TestDraft(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Contract(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) Contract(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -260,7 +254,7 @@ func (h *AlarmPolicyHandler) Contract(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
-func (h *AlarmPolicyHandler) DatapointSummary(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) DatapointSummary(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -273,7 +267,7 @@ func (h *AlarmPolicyHandler) DatapointSummary(w http.ResponseWriter, r *http.Req
 	return nil
 }
 
-func (h *AlarmPolicyHandler) GetSettings(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) GetSettings(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -286,7 +280,7 @@ func (h *AlarmPolicyHandler) GetSettings(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -303,7 +297,37 @@ func (h *AlarmPolicyHandler) UpdateSettings(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-func (h *AlarmPolicyHandler) GetHistorySettings(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) GetLevelSettings(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.GetLevelSettings(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmHandler) UpdateLevelSettings(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.SaveAlarmLevelSettingsInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateLevelSettings(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmHandler) GetHistorySettings(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -316,7 +340,7 @@ func (h *AlarmPolicyHandler) GetHistorySettings(w http.ResponseWriter, r *http.R
 	return nil
 }
 
-func (h *AlarmPolicyHandler) UpdateHistorySettings(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) UpdateHistorySettings(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -333,7 +357,7 @@ func (h *AlarmPolicyHandler) UpdateHistorySettings(w http.ResponseWriter, r *htt
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ListChannels(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ListChannels(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -346,7 +370,7 @@ func (h *AlarmPolicyHandler) ListChannels(w http.ResponseWriter, r *http.Request
 	return nil
 }
 
-func (h *AlarmPolicyHandler) CreateChannel(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) CreateChannel(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -363,7 +387,7 @@ func (h *AlarmPolicyHandler) CreateChannel(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -380,7 +404,7 @@ func (h *AlarmPolicyHandler) UpdateChannel(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -392,7 +416,20 @@ func (h *AlarmPolicyHandler) DeleteChannel(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) SyncConfig(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) TestChannel(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.TestChannel(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmHandler) SyncConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -409,7 +446,7 @@ func (h *AlarmPolicyHandler) SyncConfig(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
-func (h *AlarmPolicyHandler) BatchCreate(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) BatchCreate(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -426,7 +463,7 @@ func (h *AlarmPolicyHandler) BatchCreate(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ValidateBatchCreate(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ValidateBatchCreate(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -443,7 +480,41 @@ func (h *AlarmPolicyHandler) ValidateBatchCreate(w http.ResponseWriter, r *http.
 	return nil
 }
 
-func (h *AlarmPolicyHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) SavePresetConfiguration(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.SavePresetAlarmConfigurationInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.itemService.SavePresetConfiguration(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmHandler) ValidatePresetConfiguration(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.SavePresetAlarmConfigurationInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.itemService.ValidatePresetConfiguration(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -460,7 +531,7 @@ func (h *AlarmPolicyHandler) BatchUpdate(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) BatchDelete(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) BatchDelete(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -477,7 +548,7 @@ func (h *AlarmPolicyHandler) BatchDelete(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Export(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) Export(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -496,7 +567,7 @@ func (h *AlarmPolicyHandler) Export(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ImportTemplate(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ImportTemplate(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -509,7 +580,7 @@ func (h *AlarmPolicyHandler) ImportTemplate(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ImportPreview(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ImportPreview(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -526,7 +597,7 @@ func (h *AlarmPolicyHandler) ImportPreview(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ImportErrorWorkbook(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ImportErrorWorkbook(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
@@ -543,7 +614,7 @@ func (h *AlarmPolicyHandler) ImportErrorWorkbook(w http.ResponseWriter, r *http.
 	return nil
 }
 
-func (h *AlarmPolicyHandler) ImportApply(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmHandler) ImportApply(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err

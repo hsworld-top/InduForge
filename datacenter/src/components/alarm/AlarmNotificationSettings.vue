@@ -74,6 +74,20 @@
         <el-table-column label="密钥" min-width="150">
           <template #default="{ row }">{{ secretSummary(row) }}</template>
         </el-table-column>
+        <el-table-column label="最近测试" min-width="180">
+          <template #default="{ row }">
+            <el-tooltip
+              :content="row.lastTestMessage || testStatusText(row.lastTestStatus)"
+              placement="top"
+            >
+              <span
+                ><StatusBadge
+                  :tone="testStatusTone(row.lastTestStatus)"
+                  :text="testStatusText(row.lastTestStatus)"
+              /></span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }"
             ><StatusBadge
@@ -81,8 +95,18 @@
               :text="row.isEnabled ? '启用' : '停用'"
           /></template>
         </el-table-column>
-        <el-table-column label="操作" width="100" align="right">
+        <el-table-column label="操作" width="132" align="right">
           <template #default="{ row }">
+            <button
+              v-if="row.id !== 'runtime_inapp'"
+              type="button"
+              class="alarm-notifications__icon"
+              title="发送固定脱敏测试消息"
+              :disabled="channelTestingId === row.id"
+              @click="runChannelTest(row)"
+            >
+              <IconTablerSend />
+            </button>
             <button
               v-if="row.id !== 'runtime_inapp'"
               type="button"
@@ -161,6 +185,7 @@ import { ElMessage } from 'element-plus'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerSend from '~icons/tabler/send'
 import IconTablerTrash from '~icons/tabler/trash'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
@@ -171,6 +196,7 @@ import {
   listAlarmChannels,
   saveAlarmSettings,
   updateAlarmChannel,
+  testAlarmChannel,
 } from '@/api/alarm.api'
 import type {
   AlarmNotificationChannel,
@@ -178,7 +204,7 @@ import type {
 } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
-import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-policy'
+import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-item'
 
 const props = defineProps<{ projectId: string }>()
 const emit = defineEmits<{ changed: [channels: AlarmNotificationChannel[]] }>()
@@ -198,6 +224,7 @@ const settings = reactive({
 const dialogVisible = ref(false)
 const editingChannel = ref<AlarmNotificationChannel | null>(null)
 const channelSaving = ref(false)
+const channelTestingId = ref('')
 const channelDraft = reactive<AlarmNotificationChannelSave>({
   name: '',
   channelType: 'webhook',
@@ -218,14 +245,17 @@ const templateVariables = [
 const enabledChannels = computed(() => channels.value.filter((item) => item.isEnabled))
 
 onMounted(() => void load())
+let loadRequestSeq = 0
 
 async function load() {
+  const seq = ++loadRequestSeq
   loading.value = true
   channelsLoading.value = true
   const [settingsResult, channelsResult] = await Promise.allSettled([
     getAlarmSettings(props.projectId),
     listAlarmChannels(props.projectId),
   ])
+  if (seq !== loadRequestSeq) return
   if (settingsResult.status === 'fulfilled') {
     const data = settingsResult.value
     Object.assign(settings, data)
@@ -340,6 +370,33 @@ async function removeChannel(channel: AlarmNotificationChannel) {
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '删除通知渠道失败'))
   }
+}
+
+async function runChannelTest(channel: AlarmNotificationChannel) {
+  channelTestingId.value = channel.id
+  try {
+    await testAlarmChannel(props.projectId, channel.id)
+    ElMessage.success('测试消息已发送')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '通知渠道测试失败'))
+  } finally {
+    channelTestingId.value = ''
+    await load()
+  }
+}
+
+function testStatusText(status: string) {
+  return (
+    ({ not_tested: '未测试', succeeded: '测试成功', failed: '测试失败' } as Record<string, string>)[
+      status
+    ] || '未测试'
+  )
+}
+
+function testStatusTone(status: string): 'success' | 'danger' | 'muted' {
+  if (status === 'succeeded') return 'success'
+  if (status === 'failed') return 'danger'
+  return 'muted'
 }
 
 function channelTypeLabel(value: string) {

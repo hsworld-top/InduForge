@@ -5,7 +5,7 @@ const ObjectRecordSchema = z.record(z.string(), z.unknown())
 
 export const AlarmItemModeSchema = z.enum(['point', 'derived'])
 export const AlarmEvaluationModeSchema = z.enum(['single', 'highest_matching'])
-export const AlarmSeveritySchema = z.enum(['info', 'warning', 'major', 'critical'])
+export const AlarmSeveritySchema = z.string().regex(/^[a-z][a-z0-9_]{0,29}$/)
 export const AlarmConditionKindSchema = z.enum([
   'threshold',
   'range',
@@ -15,17 +15,32 @@ export const AlarmConditionKindSchema = z.enum([
   'rate_of_change',
   'deviation',
   'offline',
-  'expression',
+  'quality',
+  'stale',
 ])
+export const AlarmTypeSchema = z.union([AlarmConditionKindSchema, z.literal('derived')])
 export const AlarmNotificationModeSchema = z.enum(['inherit', 'off', 'custom'])
 export const AlarmChannelTypeSchema = z.enum(['runtime_inapp', 'webhook', 'dingtalk', 'wecom'])
+export const AlarmPresetSlotSchema = z.enum([
+  'limit',
+  'rate',
+  'deviation',
+  'state',
+  'transition',
+  'text',
+  'quality',
+  'stale',
+  'offline',
+])
 
 export type AlarmItemMode = z.infer<typeof AlarmItemModeSchema>
 export type AlarmEvaluationMode = z.infer<typeof AlarmEvaluationModeSchema>
 export type AlarmSeverity = z.infer<typeof AlarmSeveritySchema>
 export type AlarmConditionKind = z.infer<typeof AlarmConditionKindSchema>
+export type AlarmType = z.infer<typeof AlarmTypeSchema>
 export type AlarmNotificationMode = z.infer<typeof AlarmNotificationModeSchema>
 export type AlarmChannelType = z.infer<typeof AlarmChannelTypeSchema>
+export type AlarmPresetSlot = z.infer<typeof AlarmPresetSlotSchema>
 
 export const AlarmItemInputSchema = z.object({
   id: z.string().default(''),
@@ -93,7 +108,8 @@ export const AlarmItemSchema = z.object({
   displayName: z.string(),
   description: z.string().nullable().optional(),
   mode: AlarmItemModeSchema,
-  alarmType: AlarmConditionKindSchema,
+  alarmType: AlarmTypeSchema,
+  presetSlot: AlarmPresetSlotSchema.nullable().optional(),
   evaluationMode: AlarmEvaluationModeSchema,
   derivedExpression: z.string().default(''),
   inputs: z.array(AlarmItemInputSchema).default([]),
@@ -112,6 +128,7 @@ export const AlarmItemSaveSchema = z
     itemId: z.string().optional(),
     datapointId: z.string().default(''),
     displayName: z.string().trim().max(100).default(''),
+    presetSlot: AlarmPresetSlotSchema.nullable().optional(),
     groupId: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
     mode: AlarmItemModeSchema,
@@ -183,14 +200,42 @@ export const AlarmDraftValidationSchema = z.object({
   warnings: z.array(AlarmDraftIssueSchema).default([]),
 })
 export type AlarmDraftValidation = z.infer<typeof AlarmDraftValidationSchema>
+export const AlarmTrialStepSchema = z.object({
+  observedAt: TimeFieldSchema,
+  sourceTimestamp: TimeFieldSchema.nullable().optional(),
+  value: z.unknown(),
+  inputs: ObjectRecordSchema.optional(),
+  evaluationState: z.enum(['matched', 'not_matched', 'paused']),
+  reason: z.string(),
+  state: z.enum(['normal', 'pending_trigger', 'triggered', 'pending_clear', 'paused']),
+  activeCondition: AlarmConditionSchema.optional(),
+  candidateCondition: AlarmConditionSchema.optional(),
+  candidateElapsedMs: z.number().int().nonnegative(),
+  remainingTriggerDelayMs: z.number().int().nonnegative(),
+  clearElapsedMs: z.number().int().nonnegative(),
+  remainingClearDelayMs: z.number().int().nonnegative(),
+  calculatedRate: z.number().nullable().optional(),
+})
+export type AlarmTrialStep = z.infer<typeof AlarmTrialStepSchema>
+
 export const AlarmTrialResultSchema = z.object({
   triggered: z.boolean(),
   state: z.enum(['triggered', 'not_triggered', 'insufficient_input']),
   selectedCondition: AlarmConditionSchema.nullable().optional(),
-  steps: z.array(ObjectRecordSchema).default([]),
+  steps: z.array(AlarmTrialStepSchema).default([]),
   message: z.string().optional(),
 })
 export type AlarmTrialResult = z.infer<typeof AlarmTrialResultSchema>
+
+export const AlarmTrialSampleSchema = z.object({
+  observedAt: z.string().datetime(),
+  sourceTimestamp: z.string().datetime().nullable().optional(),
+  value: z.unknown().optional(),
+  quality: z.enum(['good', 'bad', 'unknown']).default('good'),
+  offline: z.boolean().default(false),
+  inputs: ObjectRecordSchema.optional(),
+})
+export type AlarmTrialSample = z.infer<typeof AlarmTrialSampleSchema>
 export const AlarmDatapointSummarySchema = z.object({
   datapointId: z.string(),
   items: z.array(AlarmItemSchema).default([]),
@@ -201,7 +246,7 @@ export type AlarmDatapointSummary = z.infer<typeof AlarmDatapointSummarySchema>
 export const AlarmItemFilterSchema = z.object({
   search: z.string().optional(),
   severity: AlarmSeveritySchema.optional(),
-  alarmType: AlarmConditionKindSchema.optional(),
+  alarmType: AlarmTypeSchema.optional(),
   mode: AlarmItemModeSchema.optional(),
   datapointId: z.string().optional(),
   groupId: z.string().nullable().optional(),
@@ -227,6 +272,11 @@ export const AlarmBatchCreateSchema = z.object({
   draft: z.object(AlarmItemSaveSchema.shape).omit({ datapointId: true }),
 })
 export type AlarmBatchCreate = z.infer<typeof AlarmBatchCreateSchema>
+export const AlarmPresetConfigurationSaveSchema = z.object({
+  datapointIds: z.array(z.string()).min(1),
+  drafts: z.array(z.object(AlarmItemSaveSchema.shape).omit({ datapointId: true })).min(1),
+})
+export type AlarmPresetConfigurationSave = z.infer<typeof AlarmPresetConfigurationSaveSchema>
 export const AlarmBatchUpdateSchema = z.object({
   selection: AlarmItemSelectionSchema,
   fields: z.array(z.enum(['isEnabled', 'groupId', 'notification', 'conditions'])).min(1),
@@ -278,6 +328,36 @@ export const AlarmProjectSettingsSaveSchema = AlarmProjectSettingsSchema.pick({
 })
 export type AlarmProjectSettingsSave = z.infer<typeof AlarmProjectSettingsSaveSchema>
 
+export const AlarmSeverityDefinitionSchema = z.object({
+  key: AlarmSeveritySchema,
+  displayName: z.string().trim().min(1).max(20),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  sortOrder: z.number().int(),
+  isBuiltin: z.boolean(),
+})
+export type AlarmSeverityDefinition = z.infer<typeof AlarmSeverityDefinitionSchema>
+
+export const AlarmEscalationRuleSchema = z.object({
+  id: z.string(),
+  sourceSeverity: AlarmSeveritySchema,
+  targetSeverity: AlarmSeveritySchema,
+  unacknowledgedSeconds: z.number().int().min(1).max(604800),
+  isEnabled: z.boolean(),
+})
+export type AlarmEscalationRule = z.infer<typeof AlarmEscalationRuleSchema>
+
+export const AlarmLevelSettingsSchema = z.object({
+  projectId: z.string(),
+  severityDefinitions: z.array(AlarmSeverityDefinitionSchema).min(4).max(20),
+  escalationRules: z.array(AlarmEscalationRuleSchema).default([]),
+})
+export type AlarmLevelSettings = z.infer<typeof AlarmLevelSettingsSchema>
+export const AlarmLevelSettingsSaveSchema = AlarmLevelSettingsSchema.pick({
+  severityDefinitions: true,
+  escalationRules: true,
+})
+export type AlarmLevelSettingsSave = z.infer<typeof AlarmLevelSettingsSaveSchema>
+
 export const AlarmHistorySettingsSchema = z.object({
   projectId: z.string(),
   isEnabled: z.boolean(),
@@ -302,6 +382,10 @@ export const AlarmNotificationChannelSchema = z.object({
   config: ObjectRecordSchema.default({}),
   secretStatus: ObjectRecordSchema.default({}),
   isEnabled: z.boolean(),
+  lastTestStatus: z.enum(['not_tested', 'succeeded', 'failed']).default('not_tested'),
+  lastTestedAt: TimeFieldSchema.optional(),
+  lastTestDurationMs: z.number().int().nonnegative().optional().nullable(),
+  lastTestMessage: z.string().optional().nullable(),
   createdAt: TimeFieldSchema.optional(),
   updatedAt: TimeFieldSchema.optional(),
 })

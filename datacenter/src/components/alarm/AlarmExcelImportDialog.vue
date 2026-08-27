@@ -22,12 +22,29 @@
             >警告 <strong>{{ preview.warningCount }}</strong></span
           >
         </div>
-        <el-table v-if="preview.issues.length" :data="preview.issues" height="230"
+        <el-table
+          v-if="preview.issues.length"
+          :data="preview.issues"
+          height="230"
+          :row-class-name="issueRowClass"
           ><el-table-column prop="sheet" label="工作表" width="110" /><el-table-column
             prop="row"
             label="行"
-            width="64" /><el-table-column prop="message" label="问题" min-width="360"
+            width="64" /><el-table-column label="类型" width="80"
+            ><template #default="{ row }"
+              ><el-tag :type="row.type === 'error' ? 'danger' : 'warning'" size="small">{{
+                row.type === 'error' ? '错误' : '警告'
+              }}</el-tag></template
+            ></el-table-column
+          ><el-table-column prop="message" label="问题" min-width="300"
         /></el-table>
+        <el-checkbox
+          v-if="preview.warningCount > 0"
+          v-model="warningsConfirmed"
+          class="alarm-import__warning-confirm"
+        >
+          我已检查全部警告，确认继续导入并接受这些影响
+        </el-checkbox>
         <button
           v-if="preview.issues.length"
           type="button"
@@ -53,7 +70,12 @@
         v-else
         type="button"
         class="dc-button dc-button--primary"
-        :disabled="!preview || preview.errorCount > 0 || loading"
+        :disabled="
+          !preview ||
+          preview.errorCount > 0 ||
+          (preview.warningCount > 0 && !warningsConfirmed) ||
+          loading
+        "
         @click="apply"
       >
         确认导入
@@ -78,6 +100,7 @@ const step = ref(0)
 const file = ref<File | null>(null)
 const preview = ref<AlarmExcelPreview | null>(null)
 const loading = ref(false)
+const warningsConfirmed = ref(false)
 watch(
   () => props.modelValue,
   (opened) => {
@@ -85,6 +108,7 @@ watch(
       step.value = 0
       file.value = null
       preview.value = null
+      warningsConfirmed.value = false
     }
   },
 )
@@ -111,7 +135,7 @@ async function apply() {
       props.projectId,
       file.value,
       preview.value.digest,
-      preview.value.warningKeys,
+      warningsConfirmed.value ? preview.value.warningKeys : [],
     )
     step.value = 2
     ElMessage.success(`已导入 ${result.affectedCount} 条报警项`)
@@ -122,6 +146,9 @@ async function apply() {
   } finally {
     loading.value = false
   }
+}
+function issueRowClass({ row }: { row: { type: string } }) {
+  return row.type === 'error' ? 'is-error' : 'is-warning'
 }
 async function downloadErrors() {
   if (!file.value) return
@@ -163,5 +190,14 @@ async function downloadErrors() {
   border: 0;
   background: transparent;
   color: var(--dc-primary);
+}
+.alarm-import__warning-confirm {
+  margin-top: 12px;
+}
+:deep(.el-table__row.is-error) {
+  --el-table-tr-bg-color: color-mix(in srgb, var(--el-color-danger) 7%, transparent);
+}
+:deep(.el-table__row.is-warning) {
+  --el-table-tr-bg-color: color-mix(in srgb, var(--el-color-warning) 9%, transparent);
 }
 </style>

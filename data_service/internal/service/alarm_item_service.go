@@ -20,6 +20,11 @@ import (
 )
 
 var alarmItemModes = map[string]bool{"point": true, "derived": true}
+var alarmPresetSlots = map[string]string{
+	"limit": "threshold", "rate": "rate_of_change", "deviation": "deviation",
+	"state": "state", "transition": "transition", "text": "text_match",
+	"quality": "quality", "stale": "stale", "offline": "offline",
+}
 
 type AlarmItemInput struct {
 	ID          string `json:"id"`
@@ -36,6 +41,7 @@ type AlarmItem struct {
 	DisplayName       string                    `json:"displayName"`
 	Mode              string                    `json:"mode"`
 	AlarmType         string                    `json:"alarmType"`
+	PresetSlot        *string                   `json:"presetSlot"`
 	EvaluationMode    string                    `json:"evaluationMode"`
 	DerivedExpression string                    `json:"derivedExpression"`
 	DatapointID       string                    `json:"datapointId"`
@@ -71,6 +77,7 @@ type SaveAlarmItemInput struct {
 	ItemID                  string                    `json:"itemId,omitempty"`
 	DatapointID             string                    `json:"datapointId,omitempty"`
 	DisplayName             string                    `json:"displayName"`
+	PresetSlot              *string                   `json:"presetSlot,omitempty"`
 	GroupID                 *string                   `json:"groupId"`
 	Description             *string                   `json:"description"`
 	Mode                    string                    `json:"mode"`
@@ -87,6 +94,11 @@ type SaveAlarmItemInput struct {
 type BatchCreateAlarmItemsInput struct {
 	DatapointIDs []string           `json:"datapointIds"`
 	Draft        SaveAlarmItemInput `json:"draft"`
+}
+
+type SavePresetAlarmConfigurationInput struct {
+	DatapointIDs []string             `json:"datapointIds"`
+	Drafts       []SaveAlarmItemInput `json:"drafts"`
 }
 
 type BatchAlarmItemResult struct {
@@ -138,8 +150,34 @@ type AlarmItemTrialResult struct {
 	Triggered         bool             `json:"triggered"`
 	State             string           `json:"state"`
 	SelectedCondition *AlarmCondition  `json:"selectedCondition,omitempty"`
-	Steps             []map[string]any `json:"steps"`
+	Steps             []AlarmTrialStep `json:"steps"`
 	Message           string           `json:"message,omitempty"`
+}
+
+type AlarmTrialSample struct {
+	ObservedAt      time.Time      `json:"observedAt"`
+	SourceTimestamp *time.Time     `json:"sourceTimestamp"`
+	Value           any            `json:"value"`
+	Quality         string         `json:"quality"`
+	Offline         bool           `json:"offline"`
+	Inputs          map[string]any `json:"inputs,omitempty"`
+}
+
+type AlarmTrialStep struct {
+	ObservedAt              time.Time       `json:"observedAt"`
+	SourceTimestamp         *time.Time      `json:"sourceTimestamp,omitempty"`
+	Value                   any             `json:"value"`
+	Inputs                  map[string]any  `json:"inputs,omitempty"`
+	EvaluationState         string          `json:"evaluationState"`
+	Reason                  string          `json:"reason"`
+	State                   string          `json:"state"`
+	ActiveCondition         *AlarmCondition `json:"activeCondition,omitempty"`
+	CandidateCondition      *AlarmCondition `json:"candidateCondition,omitempty"`
+	CandidateElapsedMS      int64           `json:"candidateElapsedMs"`
+	RemainingTriggerDelayMS int64           `json:"remainingTriggerDelayMs"`
+	ClearElapsedMS          int64           `json:"clearElapsedMs"`
+	RemainingClearDelayMS   int64           `json:"remainingClearDelayMs"`
+	CalculatedRate          *float64        `json:"calculatedRate,omitempty"`
 }
 
 type AlarmItemDatapointSummary struct {
@@ -149,11 +187,11 @@ type AlarmItemDatapointSummary struct {
 }
 
 type AlarmItemService struct {
-	repository *repository.AlarmPolicyRepository
+	repository *repository.AlarmRepository
 	datapoints *repository.DataPointRepository
 }
 
-func NewAlarmItemService(repo *repository.AlarmPolicyRepository, datapoints *repository.DataPointRepository) *AlarmItemService {
+func NewAlarmItemService(repo *repository.AlarmRepository, datapoints *repository.DataPointRepository) *AlarmItemService {
 	return &AlarmItemService{repository: repo, datapoints: datapoints}
 }
 
@@ -240,6 +278,115 @@ func (s *AlarmItemService) BatchCreate(ctx context.Context, claims *auth.Claims,
 		return nil, err
 	}
 	return &BatchAlarmItemResult{AffectedCount: len(created), ItemIDs: created}, nil
+}
+
+// SavePresetConfiguration 将点位式默认配置展开为稳定报警项，并在一个事务内完成新增、更新和移除。
+// preset_slot 仅用于默认配置；完整配置创建的高级报警项不设置该字段，因此允许同类型多条。
+func (s *AlarmItemService) SavePresetConfiguration(ctx context.Context, claims *auth.Claims, projectID string, input SavePresetAlarmConfigurationInput) (*BatchAlarmItemResult, error) {
+	if err := s.writeAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	ids, paramsList, validation, err := s.preparePresetConfiguration(ctx, projectID, input)
+	if err != nil {
+		return nil, err
+	}
+	acknowledged := map[string]bool{}
+	for _, draft := range input.Drafts {
+		for _, key := range draft.AcknowledgedWarningKeys {
+			acknowledged[key] = true
+		}
+	}
+	for _, warning := range validation.Warnings {
+		if warning.AcknowledgementKey != "" && !acknowledged[warning.AcknowledgementKey] {
+			return nil, badAlarm("报警条件存在重叠，请确认后再保存")
+		}
+	}
+	savedIDs, err := s.repository.ReplacePresetAlarmItems(ctx, projectID, claims.UserID, ids, paramsList)
+	if err != nil {
+		return nil, err
+	}
+	return &BatchAlarmItemResult{AffectedCount: len(savedIDs), ItemIDs: savedIDs}, nil
+}
+
+func (s *AlarmItemService) ValidatePresetConfiguration(ctx context.Context, claims *auth.Claims, projectID string, input SavePresetAlarmConfigurationInput) (*AlarmDraftValidation, error) {
+	if err := s.readAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	_, _, validation, err := s.preparePresetConfiguration(ctx, projectID, input)
+	return validation, err
+}
+
+func (s *AlarmItemService) preparePresetConfiguration(ctx context.Context, projectID string, input SavePresetAlarmConfigurationInput) ([]string, []repository.SaveAlarmItemParams, *AlarmDraftValidation, error) {
+	ids := alarmUniqueStrings(input.DatapointIDs)
+	result := &AlarmDraftValidation{Errors: []AlarmDraftIssue{}, Warnings: []AlarmDraftIssue{}}
+	if len(ids) == 0 {
+		return nil, nil, result, badAlarm("至少选择一个数据点")
+	}
+	if len(input.Drafts) == 0 {
+		return nil, nil, result, badAlarm("请至少启用一项报警")
+	}
+	existing, err := s.repository.ListPresetAlarmItemsForDatapoints(ctx, projectID, ids)
+	if err != nil {
+		return nil, nil, result, err
+	}
+	byPointSlot := map[string]repository.AlarmItemRecord{}
+	for _, item := range existing {
+		if item.DatapointID != nil && item.PresetSlot != nil {
+			byPointSlot[*item.DatapointID+":"+*item.PresetSlot] = item
+		}
+	}
+	seenSlots := map[string]bool{}
+	for _, draft := range input.Drafts {
+		slot := strings.TrimSpace(alarmStringPointerValue(draft.PresetSlot))
+		if _, ok := alarmPresetSlots[slot]; !ok {
+			return nil, nil, result, badAlarm("默认报警槽位不受支持")
+		}
+		if seenSlots[slot] {
+			return nil, nil, result, badAlarm("同一种默认报警配置只能提交一次")
+		}
+		seenSlots[slot] = true
+	}
+	paramsList := make([]repository.SaveAlarmItemParams, 0, len(ids)*len(input.Drafts))
+	for _, datapointID := range ids {
+		for _, source := range input.Drafts {
+			draft := source
+			draft.Mode, draft.DatapointID = "point", datapointID
+			slot := strings.TrimSpace(alarmStringPointerValue(draft.PresetSlot))
+			resetAlarmItemChildIDsForCreate(&draft)
+			itemID := ""
+			if current, ok := byPointSlot[datapointID+":"+slot]; ok {
+				itemID, draft.Revision = current.ID, current.Revision
+				// 批量编辑时每个点保留自己的名称；单点编辑则使用表单值，清空可恢复自动命名。
+				if len(ids) > 1 {
+					draft.DisplayName = current.DisplayName
+				}
+			}
+			_, params, validation, normalizeErr := s.normalize(ctx, projectID, itemID, draft)
+			if normalizeErr != nil {
+				return nil, nil, result, normalizeErr
+			}
+			if params.AlarmType != alarmPresetSlots[slot] {
+				return nil, nil, result, badAlarm("默认报警槽位与条件类型不匹配")
+			}
+			params.PresetSlot = &slot
+			params.Contract["presetSlot"] = slot
+			paramsList = append(paramsList, params)
+			result.Errors = append(result.Errors, validation.Errors...)
+			result.Warnings = append(result.Warnings, validation.Warnings...)
+		}
+	}
+	result.Valid = len(result.Errors) == 0
+	if !result.Valid {
+		return ids, paramsList, result, badAlarm(result.Errors[0].Message)
+	}
+	return ids, paramsList, result, nil
+}
+
+func alarmStringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // ValidateBatchCreate 对多点创建草稿逐点执行与最终保存完全相同的校验，避免用户在提交阶段才发现后续点位冲突。
@@ -462,7 +609,7 @@ func (s *AlarmItemService) DatapointSummary(ctx context.Context, claims *auth.Cl
 	return &AlarmItemDatapointSummary{DatapointID: datapointID, Items: items, Count: len(items)}, nil
 }
 
-func (s *AlarmItemService) TestDraft(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmItemInput, values []any, contextValues map[string]any) (*AlarmItemTrialResult, error) {
+func (s *AlarmItemService) TestDraft(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmItemInput, samples []AlarmTrialSample) (*AlarmItemTrialResult, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -473,96 +620,10 @@ func (s *AlarmItemService) TestDraft(ctx context.Context, claims *auth.Claims, p
 	if len(validation.Errors) > 0 {
 		return nil, badAlarm(validation.Errors[0].Message)
 	}
-	if len(values) == 0 {
-		values = []any{nil}
+	if len(samples) == 0 {
+		return nil, badAlarm("报警试算至少需要一个带时间戳的样本")
 	}
-	trialContext := make(map[string]any, len(contextValues)+1)
-	for key, value := range contextValues {
-		trialContext[key] = value
-	}
-	result := &AlarmItemTrialResult{State: "not_triggered", Steps: make([]map[string]any, 0, len(values))}
-	var activeCondition *AlarmCondition
-	active := false
-	triggerElapsed, clearElapsed := int64(0), int64(0)
-	stepInterval := trialSampleInterval(normalized.Conditions, trialContext)
-	for _, sourceValue := range values {
-		value := sourceValue
-		if normalized.Mode == "derived" {
-			inputs, ok := sourceValue.(map[string]any)
-			if !ok {
-				return nil, badAlarm("组合报警试算的每一步必须传入以输入别名为键的对象")
-			}
-			derivedValue, evaluateErr := evaluateDerivedAlarmExpression(normalized.DerivedExpression, inputs)
-			if evaluateErr != nil {
-				return nil, evaluateErr
-			}
-			value = derivedValue
-		}
-		trialContext["alarmActive"] = active
-		current := selectAlarmCondition(normalized.EvaluationMode, normalized.Conditions, value, trialContext)
-		step := map[string]any{"value": value, "state": "normal"}
-		if normalized.Mode == "derived" {
-			step["inputs"] = sourceValue
-		}
-		if current != nil {
-			copy := *current
-			clearElapsed = 0
-			if active {
-				activeCondition = &copy
-			} else {
-				triggerElapsed += stepInterval
-				if triggerElapsed >= copy.TriggerDelayMS {
-					active = true
-					activeCondition = &copy
-				} else {
-					step["state"] = "pending_trigger"
-					step["pendingMs"] = triggerElapsed
-				}
-			}
-			if active {
-				step["state"] = "triggered"
-			}
-			step["conditionId"] = current.ID
-			step["label"] = current.Label
-			step["severity"] = current.Severity
-		} else if active {
-			triggerElapsed = 0
-			clearElapsed += stepInterval
-			if activeCondition == nil || clearElapsed >= activeCondition.ClearDelayMS {
-				active = false
-				activeCondition = nil
-				clearElapsed = 0
-			} else {
-				step["state"] = "pending_clear"
-				step["pendingMs"] = clearElapsed
-			}
-		} else {
-			triggerElapsed = 0
-		}
-		result.Steps = append(result.Steps, step)
-		trialContext["previousValue"] = value
-	}
-	if active && activeCondition != nil {
-		result.Triggered = true
-		result.State = "triggered"
-		result.SelectedCondition = activeCondition
-	}
-	return result, nil
-}
-
-func trialSampleInterval(conditions []AlarmCondition, contextValues map[string]any) int64 {
-	if value, ok := anyFloat(contextValues["sampleIntervalMs"]); ok && value > 0 {
-		return int64(value)
-	}
-	for _, condition := range conditions {
-		if condition.Kind != "rate_of_change" {
-			continue
-		}
-		if value, ok := anyFloat(condition.Params["windowMs"]); ok && value > 0 {
-			return int64(value)
-		}
-	}
-	return 1000
+	return runAlarmTrial(normalized, samples)
 }
 
 func (s *AlarmItemService) normalize(ctx context.Context, projectID, id string, input SaveAlarmItemInput) (SaveAlarmItemInput, repository.SaveAlarmItemParams, *AlarmDraftValidation, error) {
@@ -587,13 +648,17 @@ func (s *AlarmItemService) normalize(ctx context.Context, projectID, id string, 
 		id = uuid.NewString()
 		resetAlarmItemChildIDsForCreate(&input)
 	}
-	params := repository.SaveAlarmItemParams{ID: id, ProjectID: projectID, IsCreate: create, Mode: input.Mode, EvaluationMode: input.EvaluationMode, DerivedExpression: strings.TrimSpace(input.DerivedExpression), GroupID: normalizeID(input.GroupID), Description: normalizeText(input.Description), NotificationMode: input.Notification.Mode, NotifyOnRaise: input.Notification.NotifyOnRaise, NotifyOnClear: input.Notification.NotifyOnClear, RepeatIntervalSeconds: input.Notification.RepeatIntervalSeconds, NotificationChannelIDs: input.Notification.ChannelIDs, MessageTemplate: input.Notification.MessageTemplate, IsEnabled: valueOr(input.IsEnabled, input.Mode == "point"), Revision: input.Revision}
+	params := repository.SaveAlarmItemParams{ID: id, ProjectID: projectID, IsCreate: create, Mode: input.Mode, PresetSlot: normalizeID(input.PresetSlot), EvaluationMode: input.EvaluationMode, DerivedExpression: strings.TrimSpace(input.DerivedExpression), GroupID: normalizeID(input.GroupID), Description: normalizeText(input.Description), NotificationMode: input.Notification.Mode, NotifyOnRaise: input.Notification.NotifyOnRaise, NotifyOnClear: input.Notification.NotifyOnClear, RepeatIntervalSeconds: input.Notification.RepeatIntervalSeconds, NotificationChannelIDs: input.Notification.ChannelIDs, MessageTemplate: input.Notification.MessageTemplate, IsEnabled: valueOr(input.IsEnabled, input.Mode == "point"), Revision: input.Revision}
+	if input.Mode == "derived" && params.PresetSlot != nil {
+		return input, params, validation, badAlarm("组合报警不能使用默认报警槽位")
+	}
 	if input.GroupID != nil {
 		if _, groupErr := s.repository.GetGroup(ctx, projectID, *input.GroupID); groupErr != nil {
 			return input, params, validation, groupErr
 		}
 	}
 	category := ""
+	datapointName := ""
 	if input.Mode == "point" {
 		if strings.TrimSpace(input.DatapointID) == "" {
 			return input, params, validation, badAlarm("普通报警必须选择一个数据点")
@@ -602,7 +667,11 @@ func (s *AlarmItemService) normalize(ctx context.Context, projectID, id string, 
 		if pointErr != nil {
 			return input, params, validation, pointErr
 		}
+		if point.Status == "invalid" && params.IsEnabled {
+			return input, params, validation, badAlarm("失效数据点不能创建或启用报警")
+		}
 		params.DatapointID = &point.ID
+		datapointName = strings.TrimSpace(point.Name)
 		category = alarmDataCategory(point.DataType)
 		input.DerivedExpression = ""
 		params.DerivedExpression = ""
@@ -642,7 +711,11 @@ func (s *AlarmItemService) normalize(ctx context.Context, projectID, id string, 
 			return input, params, validation, err
 		}
 	}
-	input.Conditions, err = normalizeConfigurationConditions(input.Conditions, category, input.EvaluationMode, input.Mode == "derived")
+	allowedSeverities, severityOrder, err := s.alarmSeverityPolicy(ctx, projectID)
+	if err != nil {
+		return input, params, validation, err
+	}
+	input.Conditions, err = normalizeConfigurationConditionsWithPolicy(input.Conditions, category, input.EvaluationMode, input.Mode == "derived", allowedSeverities, severityOrder)
 	if err != nil {
 		return input, params, validation, err
 	}
@@ -657,9 +730,17 @@ func (s *AlarmItemService) normalize(ctx context.Context, projectID, id string, 
 		return input, params, validation, badAlarm("组合报警名称不能为空")
 	}
 	if displayName == "" {
-		displayName, err = s.repository.NextAlarmItemDisplayName(ctx, projectID, *params.DatapointID, defaultAlarmItemName(params.AlarmType))
-		if err != nil {
-			return input, params, validation, err
+		baseName := defaultAlarmItemName(params.AlarmType)
+		if datapointName != "" {
+			baseName = datapointName + "_" + baseName
+		}
+		if create {
+			displayName, err = s.repository.NextAlarmItemDisplayName(ctx, projectID, *params.DatapointID, baseName)
+			if err != nil {
+				return input, params, validation, err
+			}
+		} else {
+			displayName = baseName
 		}
 	}
 	if len([]rune(displayName)) > 100 {
@@ -737,7 +818,51 @@ func alarmConditionsOverlap(current []AlarmCondition, existing []repository.Alar
 	if len(current) != 1 || len(existing) != 1 || current[0].Kind != existing[0].Kind {
 		return false
 	}
-	return current[0].Kind != "offline" && current[0].Kind != "transition"
+	left := current[0]
+	right := AlarmCondition{Kind: existing[0].Kind, Operator: existing[0].Operator, Params: existing[0].Params}
+	switch left.Kind {
+	case "state":
+		leftExpected := fmt.Sprint(left.Params["expected"])
+		rightExpected := fmt.Sprint(right.Params["expected"])
+		if left.Operator == "eq" && right.Operator == "eq" {
+			return leftExpected == rightExpected
+		}
+		if left.Operator == "eq" && right.Operator == "ne" {
+			return leftExpected != rightExpected
+		}
+		if left.Operator == "ne" && right.Operator == "eq" {
+			return leftExpected != rightExpected
+		}
+		return true
+	case "quality":
+		rightValues := map[string]bool{}
+		for _, value := range alarmStringList(right.Params["qualities"]) {
+			rightValues[value] = true
+		}
+		for _, value := range alarmStringList(left.Params["qualities"]) {
+			if rightValues[value] {
+				return true
+			}
+		}
+		return false
+	case "stale":
+		return true
+	case "text_match":
+		leftValue := fmt.Sprint(left.Params["expected"])
+		rightValue := fmt.Sprint(right.Params["expected"])
+		if left.Operator == "eq" && right.Operator == "eq" {
+			return leftValue == rightValue
+		}
+		if left.Operator == "eq" && right.Operator == "contains" {
+			return strings.Contains(leftValue, rightValue)
+		}
+		if left.Operator == "contains" && right.Operator == "eq" {
+			return strings.Contains(rightValue, leftValue)
+		}
+		return left.Operator == right.Operator && leftValue == rightValue
+	default:
+		return false
+	}
 }
 
 func alarmConditionIntervals(conditions []AlarmCondition) ([]alarmNumericInterval, bool) {
@@ -813,6 +938,9 @@ func normalizeAlarmItemInputs(ctx context.Context, s *AlarmItemService, projectI
 		if !ok {
 			return badAlarm("组合报警输入点不存在或不属于当前工程")
 		}
+		if point.Status == "invalid" && params.IsEnabled {
+			return badAlarm("失效数据点不能作为组合报警输入")
+		}
 		if strings.TrimSpace(item.ID) == "" {
 			item.ID = uuid.NewString()
 		}
@@ -827,7 +955,7 @@ func normalizeAlarmItemInputs(ctx context.Context, s *AlarmItemService, projectI
 
 func alarmItemType(input SaveAlarmItemInput) string {
 	if input.Mode == "derived" {
-		return "expression"
+		return "derived"
 	}
 	if input.EvaluationMode == "highest_matching" {
 		return "threshold"
@@ -838,14 +966,23 @@ func alarmItemType(input SaveAlarmItemInput) string {
 	return "threshold"
 }
 func defaultAlarmItemName(kind string) string {
-	return map[string]string{"threshold": "越限报警", "range": "区间报警", "state": "状态报警", "transition": "状态变化报警", "text_match": "文本报警", "rate_of_change": "变化率报警", "deviation": "偏差报警", "offline": "离线报警", "expression": "组合报警"}[kind]
+	return map[string]string{"threshold": "越限", "range": "区间", "state": "状态", "transition": "状态变化", "text_match": "文本", "rate_of_change": "变化率", "deviation": "偏差", "offline": "离线", "quality": "质量", "stale": "数据陈旧", "derived": "组合报警"}[kind]
 }
 
 func normalizeConfigurationConditions(conditions []AlarmCondition, category, evaluationMode string, derived bool) ([]AlarmCondition, error) {
+	allowed, order := defaultAlarmSeverityPolicy()
+	return normalizeConfigurationConditionsWithPolicy(conditions, category, evaluationMode, derived, allowed, order)
+}
+
+func normalizeConfigurationConditionsWithPolicy(conditions []AlarmCondition, category, evaluationMode string, derived bool, allowedSeverities map[string]bool, severityOrder map[string]int) ([]AlarmCondition, error) {
 	result := make([]AlarmCondition, 0, len(conditions))
 	ids := map[string]bool{}
 	for _, condition := range conditions {
-		if !alarmKinds[condition.Kind] || !alarmSeverities[condition.Severity] {
+		if condition.Params == nil {
+			condition.Params = map[string]any{}
+		}
+		delete(condition.Params, "priority")
+		if !alarmConditionKinds[condition.Kind] || !allowedSeverities[condition.Severity] {
 			return nil, badAlarm("报警条件类型或等级不受支持")
 		}
 		if condition.TriggerDelayMS < 0 || condition.ClearDelayMS < 0 || condition.Deadband < 0 {
@@ -854,8 +991,11 @@ func normalizeConfigurationConditions(conditions []AlarmCondition, category, eva
 		if !derived && !conditionAllowedForCategory(condition.Kind, category) {
 			return nil, badAlarm("报警条件与数据点类型不兼容")
 		}
-		if derived && (condition.Kind == "offline" || condition.Kind == "expression") {
-			return nil, badAlarm("组合报警的结果条件不支持离线或表达式类型")
+		if derived && (condition.Kind == "offline" || condition.Kind == "quality" || condition.Kind == "stale") {
+			return nil, badAlarm("组合报警的结果条件不支持离线、质量、陈旧或表达式类型")
+		}
+		if condition.Deadband > 0 && !alarmConditionSupportsDeadband(condition.Kind) {
+			return nil, badAlarm("当前报警条件不支持死区")
 		}
 		if err := validateConditionParams(condition); err != nil {
 			return nil, err
@@ -881,7 +1021,7 @@ func normalizeConfigurationConditions(conditions []AlarmCondition, category, eva
 		result = append(result, condition)
 	}
 	if evaluationMode == "highest_matching" {
-		if err := validateHighestMatchingConditions(result); err != nil {
+		if err := validateHighestMatchingConditions(result, severityOrder); err != nil {
 			return nil, err
 		}
 		sort.SliceStable(result, func(i, j int) bool {
@@ -898,8 +1038,37 @@ func normalizeConfigurationConditions(conditions []AlarmCondition, category, eva
 	}
 	return result, nil
 }
-func validateHighestMatchingConditions(conditions []AlarmCondition) error {
-	severityOrder := map[string]int{"info": 0, "warning": 1, "major": 2, "critical": 3}
+
+func defaultAlarmSeverityPolicy() (map[string]bool, map[string]int) {
+	allowed, order := map[string]bool{}, map[string]int{}
+	for _, definition := range defaultAlarmSeverityDefinitions() {
+		allowed[definition.Key] = true
+		order[definition.Key] = definition.SortOrder
+	}
+	return allowed, order
+}
+
+func (s *AlarmItemService) alarmSeverityPolicy(ctx context.Context, projectID string) (map[string]bool, map[string]int, error) {
+	record, err := s.repository.GetProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if record == nil || len(record.SeverityDefinitions) == 0 {
+		allowed, order := defaultAlarmSeverityPolicy()
+		return allowed, order, nil
+	}
+	allowed, order := map[string]bool{}, map[string]int{}
+	for _, definition := range record.SeverityDefinitions {
+		allowed[definition.Key] = true
+		order[definition.Key] = definition.SortOrder
+	}
+	return allowed, order, nil
+}
+
+func alarmConditionSupportsDeadband(kind string) bool {
+	return kind == "threshold" || kind == "range" || kind == "rate_of_change" || kind == "deviation"
+}
+func validateHighestMatchingConditions(conditions []AlarmCondition, severityOrder map[string]int) error {
 	highs, lows := []AlarmCondition{}, []AlarmCondition{}
 	seen := map[string]bool{}
 	for _, condition := range conditions {
@@ -966,7 +1135,13 @@ func alarmTriggerFingerprint(input SaveAlarmItemInput) (string, error) {
 	}
 	conditions := []fingerprintCondition{}
 	for _, condition := range input.Conditions {
-		conditions = append(conditions, fingerprintCondition{condition.Kind, condition.Operator, condition.Params, condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband})
+		params := make(map[string]any, len(condition.Params))
+		for key, value := range condition.Params {
+			if key != "priority" && key != "configurationMode" {
+				params[key] = value
+			}
+		}
+		conditions = append(conditions, fingerprintCondition{condition.Kind, condition.Operator, params, condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband})
 	}
 	payload := map[string]any{"mode": input.Mode, "evaluationMode": input.EvaluationMode, "conditions": conditions}
 	if input.Mode == "derived" {
@@ -1011,7 +1186,7 @@ func toAlarmItem(record repository.AlarmItemRecord) AlarmItem {
 		}
 		return *pointer
 	}
-	return AlarmItem{ID: record.ID, ProjectID: record.ProjectID, DisplayName: record.DisplayName, Mode: record.Mode, AlarmType: record.AlarmType, EvaluationMode: record.EvaluationMode, DerivedExpression: record.DerivedExpression, DatapointID: value(record.DatapointID), Path: value(record.Path), DatapointName: value(record.DatapointName), DataType: value(record.DataType), GroupID: record.GroupID, GroupName: record.GroupName, Description: record.Description, Inputs: inputs, Conditions: conditions, Notification: AlarmNotificationSettings{Mode: record.NotificationMode, NotifyOnRaise: record.NotifyOnRaise, NotifyOnClear: record.NotifyOnClear, RepeatIntervalSeconds: record.RepeatIntervalSeconds, ChannelIDs: record.NotificationChannelIDs, MessageTemplate: record.MessageTemplate}, IsEnabled: record.IsEnabled, Revision: record.Revision, Contract: record.Contract, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return AlarmItem{ID: record.ID, ProjectID: record.ProjectID, DisplayName: record.DisplayName, Mode: record.Mode, AlarmType: record.AlarmType, PresetSlot: record.PresetSlot, EvaluationMode: record.EvaluationMode, DerivedExpression: record.DerivedExpression, DatapointID: value(record.DatapointID), Path: value(record.Path), DatapointName: value(record.DatapointName), DataType: value(record.DataType), GroupID: record.GroupID, GroupName: record.GroupName, Description: record.Description, Inputs: inputs, Conditions: conditions, Notification: AlarmNotificationSettings{Mode: record.NotificationMode, NotifyOnRaise: record.NotifyOnRaise, NotifyOnClear: record.NotifyOnClear, RepeatIntervalSeconds: record.RepeatIntervalSeconds, ChannelIDs: record.NotificationChannelIDs, MessageTemplate: record.MessageTemplate}, IsEnabled: record.IsEnabled, Revision: record.Revision, Contract: record.Contract, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 func selectAlarmCondition(evaluationMode string, conditions []AlarmCondition, value any, contextValues map[string]any) *AlarmCondition {
 	if evaluationMode != "highest_matching" {

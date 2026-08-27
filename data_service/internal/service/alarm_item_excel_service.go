@@ -21,6 +21,7 @@ import (
 const (
 	alarmExcelItemSheet      = "报警项"
 	alarmExcelConditionSheet = "报警条件"
+	alarmExcelGuideSheet     = "填写说明"
 )
 
 type AlarmItemWorkbook struct {
@@ -62,23 +63,51 @@ func (s *AlarmItemService) BuildImportTemplate(ctx context.Context, claims *auth
 	file := excelize.NewFile()
 	defer file.Close()
 	defaultSheet := file.GetSheetName(0)
-	_ = file.SetSheetName(defaultSheet, alarmExcelItemSheet)
-	_, _ = file.NewSheet(alarmExcelConditionSheet)
-	writeAlarmExcelHeader(file, alarmExcelItemSheet, alarmExcelItemHeaders)
-	writeAlarmExcelHeader(file, alarmExcelConditionSheet, alarmExcelConditionHeaders)
+	if err := file.SetSheetName(defaultSheet, alarmExcelItemSheet); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
+	if _, err := file.NewSheet(alarmExcelConditionSheet); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
+	if _, err := file.NewSheet(alarmExcelGuideSheet); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
+	if err := writeAlarmExcelHeader(file, alarmExcelItemSheet, alarmExcelItemHeaders); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
+	if err := writeAlarmExcelHeader(file, alarmExcelConditionSheet, alarmExcelConditionHeaders); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
+	if err := writeAlarmExcelHeader(file, alarmExcelGuideSheet, []string{"条件类型", "适用数据", "操作符", "参数JSON示例", "说明"}); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
 	itemExample := []any{"", "", "example-1", "", "产线.温度", "", "threshold", "highest_matching", "是", "", "根目录", "inherit", "", "", "", "", ""}
 	conditionExample := []any{"", "example-1", "高", "threshold", "gt", `{"threshold":80}`, "warning", 0, 0, 0}
 	for index, value := range itemExample {
-		cell, _ := excelize.CoordinatesToCellName(index+1, 2)
-		_ = file.SetCellValue(alarmExcelItemSheet, cell, value)
+		if err := setAlarmExcelCell(file, alarmExcelItemSheet, index+1, 2, value); err != nil {
+			return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+		}
 	}
 	for index, value := range conditionExample {
-		cell, _ := excelize.CoordinatesToCellName(index+1, 2)
-		_ = file.SetCellValue(alarmExcelConditionSheet, cell, value)
+		if err := setAlarmExcelCell(file, alarmExcelConditionSheet, index+1, 2, value); err != nil {
+			return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+		}
 	}
-	_ = file.SetColVisible(alarmExcelItemSheet, "D", false)
-	_ = file.SetColWidth(alarmExcelItemSheet, "A", "Q", 18)
-	_ = file.SetColWidth(alarmExcelConditionSheet, "A", "J", 18)
+	guideRows := [][]any{
+		{"threshold", "数值", "gt/gte/lt/lte", `{"threshold":80}`, "越限报警可写多行等级，并使用 highest_matching"},
+		{"rate_of_change", "数值", "gt", `{"direction":"rise","limit":2,"windowMs":60000}`, "direction 为 rise/fall/absolute，速率单位为数值每秒"},
+		{"quality", "全部类型", "in", `{"qualities":["bad","unknown"]}`, "只允许 bad、unknown，可选择一种或两种"},
+		{"stale", "全部类型", "age_gte", `{"maxAgeMs":60000}`, "按源时间判断数据陈旧；缺失源时间持续达到期限也触发"},
+		{"offline", "全部类型", "is_offline", `{}`, "数据点离线时触发"},
+	}
+	for rowIndex, values := range guideRows {
+		if err := setAlarmExcelRow(file, alarmExcelGuideSheet, rowIndex+2, values); err != nil {
+			return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+		}
+	}
+	if err := configureAlarmWorkbook(file, true); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
+	}
 	buffer, err := file.WriteToBuffer()
 	if err != nil {
 		return AlarmItemWorkbook{}, badAlarm("生成报警导入模板失败")
@@ -96,10 +125,18 @@ func (s *AlarmItemService) ExportWorkbook(ctx context.Context, claims *auth.Clai
 	}
 	file := excelize.NewFile()
 	defer file.Close()
-	_ = file.SetSheetName(file.GetSheetName(0), alarmExcelItemSheet)
-	_, _ = file.NewSheet(alarmExcelConditionSheet)
-	writeAlarmExcelHeader(file, alarmExcelItemSheet, alarmExcelItemHeaders)
-	writeAlarmExcelHeader(file, alarmExcelConditionSheet, alarmExcelConditionHeaders)
+	if err := file.SetSheetName(file.GetSheetName(0), alarmExcelItemSheet); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+	}
+	if _, err := file.NewSheet(alarmExcelConditionSheet); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+	}
+	if err := writeAlarmExcelHeader(file, alarmExcelItemSheet, alarmExcelItemHeaders); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+	}
+	if err := writeAlarmExcelHeader(file, alarmExcelConditionSheet, alarmExcelConditionHeaders); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+	}
 	itemRow, conditionRow := 2, 2
 	for _, item := range items {
 		if item.Mode != "point" || item.DatapointID == nil || item.Path == nil {
@@ -107,17 +144,24 @@ func (s *AlarmItemService) ExportWorkbook(ctx context.Context, claims *auth.Clai
 		}
 		channels := strings.Join(item.NotificationChannelIDs, ",")
 		values := []any{item.ID, item.Revision, "", *item.DatapointID, *item.Path, item.DisplayName, item.AlarmType, item.EvaluationMode, alarmExcelBool(item.IsEnabled), valueString(item.GroupID), valueString(item.GroupName), item.NotificationMode, alarmExcelOptionalBool(item.NotifyOnRaise), alarmExcelOptionalBool(item.NotifyOnClear), alarmExcelOptionalInt(item.RepeatIntervalSeconds), channels, item.MessageTemplate}
-		setAlarmExcelRow(file, alarmExcelItemSheet, itemRow, values)
+		if err := setAlarmExcelRow(file, alarmExcelItemSheet, itemRow, values); err != nil {
+			return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+		}
 		itemRow++
 		for _, condition := range item.Conditions {
-			params, _ := json.Marshal(condition.Params)
-			setAlarmExcelRow(file, alarmExcelConditionSheet, conditionRow, []any{item.ID, "", condition.Label, condition.Kind, condition.Operator, string(params), condition.Severity, condition.Deadband, condition.TriggerDelayMS, condition.ClearDelayMS})
+			params, marshalErr := json.Marshal(condition.Params)
+			if marshalErr != nil {
+				return AlarmItemWorkbook{}, badAlarm("报警条件参数无法导出")
+			}
+			if err := setAlarmExcelRow(file, alarmExcelConditionSheet, conditionRow, []any{item.ID, "", condition.Label, condition.Kind, condition.Operator, string(params), condition.Severity, condition.Deadband, condition.TriggerDelayMS, condition.ClearDelayMS}); err != nil {
+				return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+			}
 			conditionRow++
 		}
 	}
-	_ = file.SetColVisible(alarmExcelItemSheet, "D", false)
-	_ = file.SetColWidth(alarmExcelItemSheet, "A", "Q", 18)
-	_ = file.SetColWidth(alarmExcelConditionSheet, "A", "J", 18)
+	if err := configureAlarmWorkbook(file, false); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
+	}
 	buffer, err := file.WriteToBuffer()
 	if err != nil {
 		return AlarmItemWorkbook{}, badAlarm("导出报警项失败")
@@ -151,16 +195,30 @@ func (s *AlarmItemService) BuildImportErrorWorkbook(ctx context.Context, claims 
 	defer file.Close()
 	const issueSheet = "导入问题"
 	if index, _ := file.GetSheetIndex(issueSheet); index >= 0 {
-		_ = file.DeleteSheet(issueSheet)
+		if err := file.DeleteSheet(issueSheet); err != nil {
+			return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+		}
 	}
-	_, _ = file.NewSheet(issueSheet)
-	writeAlarmExcelHeader(file, issueSheet, []string{"工作表", "行", "类型", "原因"})
+	if _, err := file.NewSheet(issueSheet); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+	}
+	if err := writeAlarmExcelHeader(file, issueSheet, []string{"工作表", "行", "类型", "原因"}); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+	}
 	for index, issue := range parsed.preview.Issues {
-		setAlarmExcelRow(file, issueSheet, index+2, []any{issue.Sheet, issue.Row, issue.Type, issue.Message})
+		if err := setAlarmExcelRow(file, issueSheet, index+2, []any{issue.Sheet, issue.Row, issue.Type, issue.Message}); err != nil {
+			return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+		}
 	}
-	_ = file.SetColWidth(issueSheet, "A", "A", 16)
-	_ = file.SetColWidth(issueSheet, "B", "C", 10)
-	_ = file.SetColWidth(issueSheet, "D", "D", 72)
+	if err := file.SetColWidth(issueSheet, "A", "A", 16); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+	}
+	if err := file.SetColWidth(issueSheet, "B", "C", 10); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+	}
+	if err := file.SetColWidth(issueSheet, "D", "D", 72); err != nil {
+		return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
+	}
 	buffer, err := file.WriteToBuffer()
 	if err != nil {
 		return AlarmItemWorkbook{}, badAlarm("生成导入问题工作簿失败")
@@ -472,18 +530,48 @@ func parseAlarmExcelCondition(row []string, header map[string]int) (AlarmConditi
 	return AlarmCondition{Kind: strings.TrimSpace(cell(row, header["条件类型"])), Operator: strings.TrimSpace(cell(row, header["操作符"])), Label: strings.TrimSpace(cell(row, header["等级标签"])), Severity: strings.TrimSpace(cell(row, header["严重度"])), Params: params, Deadband: deadband, TriggerDelayMS: trigger, ClearDelayMS: clearDelay}, nil
 }
 
-func writeAlarmExcelHeader(file *excelize.File, sheet string, headers []string) {
+func writeAlarmExcelHeader(file *excelize.File, sheet string, headers []string) error {
 	for index, header := range headers {
-		cell, _ := excelize.CoordinatesToCellName(index+1, 1)
-		_ = file.SetCellValue(sheet, cell, header)
+		if err := setAlarmExcelCell(file, sheet, index+1, 1, header); err != nil {
+			return err
+		}
 	}
-	_ = file.SetPanes(sheet, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"})
+	return file.SetPanes(sheet, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"})
 }
-func setAlarmExcelRow(file *excelize.File, sheet string, row int, values []any) {
+func setAlarmExcelRow(file *excelize.File, sheet string, row int, values []any) error {
 	for index, value := range values {
-		cell, _ := excelize.CoordinatesToCellName(index+1, row)
-		_ = file.SetCellValue(sheet, cell, value)
+		if err := setAlarmExcelCell(file, sheet, index+1, row, value); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+func setAlarmExcelCell(file *excelize.File, sheet string, column, row int, value any) error {
+	cell, err := excelize.CoordinatesToCellName(column, row)
+	if err != nil {
+		return err
+	}
+	return file.SetCellValue(sheet, cell, value)
+}
+func configureAlarmWorkbook(file *excelize.File, includeGuide bool) error {
+	if err := file.SetColVisible(alarmExcelItemSheet, "D", false); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(alarmExcelItemSheet, "A", "Q", 18); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(alarmExcelConditionSheet, "A", "J", 18); err != nil {
+		return err
+	}
+	if includeGuide {
+		if err := file.SetColWidth(alarmExcelGuideSheet, "A", "D", 24); err != nil {
+			return err
+		}
+		if err := file.SetColWidth(alarmExcelGuideSheet, "E", "E", 60); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func alarmWorkbook(content []byte, name string) AlarmItemWorkbook {
 	return AlarmItemWorkbook{Content: content, ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", FileName: name}

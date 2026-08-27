@@ -1,240 +1,257 @@
 <template>
   <div class="alarm-workspace">
     <section class="alarm-workspace__panel">
-      <header class="alarm-workspace__head">
-        <div class="alarm-workspace__tabs-row">
+      <FilterToolbar>
+        <template #tabs>
           <el-segmented v-model="activeTab" :options="tabOptions" size="small" />
-        </div>
-        <div v-if="activeTab === 'items'" class="alarm-workspace__toolbar-row">
-          <div class="alarm-workspace__toolbar">
-            <el-input
-              v-model="search"
-              class="alarm-workspace__search"
-              size="small"
-              clearable
-              placeholder="搜索数据点或报警名称"
-              :prefix-icon="Search"
-              @keyup.enter="reload"
-            />
-            <PillButton :active="directoryVisible" @click="toggleDirectory"
-              ><template #icon><IconTablerFolders /></template>目录</PillButton
-            >
-            <el-select
-              v-model="modeFilter"
-              size="small"
-              class="alarm-workspace__filter"
-              @change="reload"
-              ><el-option label="全部模式" value="" /><el-option
-                label="点位报警"
-                value="point" /><el-option label="组合报警" value="derived"
-            /></el-select>
-            <el-select
-              v-model="typeFilter"
-              size="small"
-              class="alarm-workspace__filter is-wide"
-              @change="reload"
-              ><el-option label="全部报警类型" value="" /><el-option
-                v-for="kind in conditionKinds"
-                :key="kind"
-                :label="alarmConditionLabels[kind]"
-                :value="kind"
-            /></el-select>
-            <el-select
-              v-model="severityFilter"
-              size="small"
-              class="alarm-workspace__filter"
-              @change="reload"
-              ><el-option label="全部等级" value="" /><el-option
-                v-for="severity in severityValues"
-                :key="severity"
-                :label="alarmSeverityLabels[severity]"
-                :value="severity"
-            /></el-select>
-            <el-select
-              v-model="enabledFilter"
-              size="small"
-              class="alarm-workspace__filter"
-              @change="reload"
-              ><el-option label="全部状态" value="" /><el-option
-                label="已启用"
-                value="true" /><el-option label="已停用" value="false"
-            /></el-select>
-            <button type="button" class="alarm-workspace__icon" title="刷新" @click="loadItems">
-              <IconTablerRefresh />
-            </button>
-          </div>
-          <div class="alarm-workspace__create-actions">
-            <el-dropdown trigger="click" @command="handleExcelCommand"
-              ><button type="button" class="alarm-workspace__secondary">
-                <IconTablerFileSpreadsheet />Excel</button
-              ><template #dropdown
-                ><el-dropdown-menu
-                  ><el-dropdown-item command="template">下载导入模板</el-dropdown-item
-                  ><el-dropdown-item command="import">导入报警项</el-dropdown-item
-                  ><el-dropdown-item command="export" :disabled="pagination.total === 0"
-                    >导出当前范围</el-dropdown-item
-                  ></el-dropdown-menu
-                ></template
-              ></el-dropdown
-            >
-            <button type="button" class="alarm-workspace__secondary" @click="openCreate('derived')">
-              <IconTablerFunction />组合报警
-            </button>
-            <button type="button" class="alarm-workspace__primary" @click="openCreate('point')">
-              <IconTablerPlus />新建报警
-            </button>
-          </div>
-        </div>
-      </header>
+        </template>
+        <template v-if="activeTab === 'items'">
+          <el-input
+            v-model="search"
+            class="alarm-workspace__search"
+            size="small"
+            clearable
+            placeholder="搜索数据点或报警名称"
+            :prefix-icon="Search"
+            @keyup.enter="reload"
+          />
+          <PillButton :active="directoryVisible" @click="toggleDirectory"
+            ><template #icon><IconTablerFolders /></template>目录</PillButton
+          >
+          <el-select
+            v-model="modeFilter"
+            size="small"
+            class="alarm-workspace__filter"
+            @change="reload"
+            ><el-option label="全部模式" value="" /><el-option
+              label="点位报警"
+              value="point" /><el-option label="组合报警" value="derived"
+          /></el-select>
+          <el-select
+            v-model="typeFilter"
+            size="small"
+            class="alarm-workspace__filter is-wide"
+            @change="reload"
+            ><el-option label="全部报警类型" value="" /><el-option
+              v-for="kind in conditionKinds"
+              :key="kind"
+              :label="alarmConditionLabels[kind]"
+              :value="kind"
+          /></el-select>
+          <el-select
+            v-model="severityFilter"
+            size="small"
+            class="alarm-workspace__filter"
+            @change="reload"
+            ><el-option label="全部等级" value="" /><el-option
+              v-for="severity in severityValues"
+              :key="severity"
+              :label="severityLabel(severity)"
+              :value="severity"
+          /></el-select>
+          <el-select
+            v-model="enabledFilter"
+            size="small"
+            class="alarm-workspace__filter"
+            @change="reload"
+            ><el-option label="全部状态" value="" /><el-option
+              label="已启用"
+              value="true" /><el-option label="已停用" value="false"
+          /></el-select>
+          <button type="button" class="alarm-workspace__icon" title="刷新" @click="loadItems">
+            <IconTablerRefresh />
+          </button>
+        </template>
+        <template v-if="activeTab === 'items'" #actions>
+          <el-dropdown trigger="click" @command="handleExcelCommand"
+            ><button type="button" class="alarm-workspace__secondary">
+              <IconTablerFileSpreadsheet />Excel</button
+            ><template #dropdown
+              ><el-dropdown-menu
+                ><el-dropdown-item command="template">下载导入模板</el-dropdown-item
+                ><el-dropdown-item command="import">导入报警项</el-dropdown-item
+                ><el-dropdown-item command="export" :disabled="pagination.total === 0"
+                  >导出当前范围</el-dropdown-item
+                ></el-dropdown-menu
+              ></template
+            ></el-dropdown
+          >
+          <button type="button" class="alarm-workspace__secondary" @click="openCreate('derived')">
+            <IconTablerFunction />组合报警
+          </button>
+          <button type="button" class="alarm-workspace__primary" @click="openCreate('point')">
+            <IconTablerPlus />新建报警
+          </button>
+        </template>
+      </FilterToolbar>
 
       <section class="alarm-workspace__content-panel">
         <template v-if="activeTab === 'items'">
           <AlarmDirectoryPanel
             v-if="directoryVisible"
             :project-id="projectId"
-            :groups="groups"
             :selected-id="groupFilter"
             @select="selectGroup"
-            @changed="loadGroups"
           />
           <div class="alarm-workspace__table-panel">
-            <BulkActionBar
-              :selected-count="batchAffectedCount"
-              item-label="条"
-              @clear="clearBatchSelection"
-            >
-              <button
-                type="button"
-                class="alarm-workspace__batch-action"
-                :class="{ 'is-active': !batchAllResults }"
-                @click="selectCurrentPage"
-              >
-                当前页
-              </button>
-              <button
-                type="button"
-                class="alarm-workspace__batch-action"
-                :class="{ 'is-active': batchAllResults }"
-                :disabled="pagination.total === 0"
-                @click="selectAllResults"
-              >
-                全部结果
-              </button>
-              <button type="button" class="alarm-workspace__batch-action" @click="openBatchEdit">
-                批量修改
-              </button>
-              <button
-                type="button"
-                class="alarm-workspace__batch-action"
-                @click="batchSetEnabled(true)"
-              >
-                启用
-              </button>
-              <button
-                type="button"
-                class="alarm-workspace__batch-action"
-                @click="batchSetEnabled(false)"
-              >
-                停用
-              </button>
-              <button
-                type="button"
-                class="alarm-workspace__batch-action is-danger"
-                @click="batchRemove"
-              >
-                删除
-              </button>
-            </BulkActionBar>
-            <div v-loading="loading" class="alarm-workspace__table-scroll">
-              <el-table
-                ref="tableRef"
-                :data="items"
-                row-key="id"
-                height="100%"
-                scrollbar-always-on
-                class="alarm-workspace__table"
-                @selection-change="handleSelectionChange"
-                @row-dblclick="openEdit"
-              >
-                <el-table-column type="selection" width="46" fixed="left" />
-                <el-table-column label="数据点" min-width="190"
-                  ><template #default="{ row }"
-                    ><button
-                      type="button"
-                      class="alarm-workspace__point-link"
-                      @click="filterByDatapoint(row)"
-                    >
-                      {{ alarmItemPointSummary(row) }}
-                    </button></template
-                  ></el-table-column
+            <TableScroll>
+              <div v-loading="loading" class="alarm-workspace__table-scroll">
+                <el-table
+                  ref="tableRef"
+                  :data="items"
+                  row-key="id"
+                  height="100%"
+                  scrollbar-always-on
+                  class="alarm-workspace__table"
+                  @selection-change="handleSelectionChange"
+                  @row-dblclick="openEdit"
                 >
-                <el-table-column label="报警类型" width="128"
-                  ><template #default="{ row }"
-                    ><span class="alarm-workspace__ellipsis">{{
-                      row.mode === 'derived' ? '组合报警' : alarmConditionLabels[row.alarmType]
-                    }}</span></template
-                  ></el-table-column
-                >
-                <el-table-column label="条件摘要" min-width="190"
-                  ><template #default="{ row }"
-                    ><span
-                      class="alarm-workspace__ellipsis"
-                      :title="alarmItemConditionSummary(row)"
-                      >{{ alarmItemConditionSummary(row) }}</span
-                    ></template
-                  ></el-table-column
-                >
-                <el-table-column label="显示名称" min-width="160"
-                  ><template #default="{ row }"
-                    ><strong class="alarm-workspace__name" :title="row.displayName">{{
-                      row.displayName
-                    }}</strong></template
-                  ></el-table-column
-                >
-                <el-table-column label="最高等级" width="96"
-                  ><template #default="{ row }"
-                    ><StatusBadge
-                      :tone="severityTone(alarmItemHighestSeverity(row))"
-                      :text="alarmSeverityLabels[alarmItemHighestSeverity(row)]" /></template
-                ></el-table-column>
-                <el-table-column label="状态" width="82"
-                  ><template #default="{ row }"
-                    ><el-switch
-                      :model-value="row.isEnabled"
-                      :loading="togglingId === row.id"
-                      @change="toggleItem(row, Boolean($event))" /></template
-                ></el-table-column>
-                <el-table-column label="目录" min-width="130"
-                  ><template #default="{ row }"
-                    ><span class="alarm-workspace__ellipsis">{{
-                      row.groupName || '根目录'
-                    }}</span></template
-                  ></el-table-column
-                >
-                <el-table-column label="操作" width="104" align="right" fixed="right"
-                  ><template #default="{ row }"
-                    ><div class="alarm-workspace__row-actions">
-                      <button type="button" title="编辑" @click="openEdit(row)">
-                        <IconTablerEdit /></button
+                  <el-table-column type="selection" width="46" fixed="left" />
+                  <el-table-column label="报警名称" min-width="170" fixed="left"
+                    ><template #default="{ row }"
+                      ><strong class="alarm-workspace__name" :title="row.displayName">{{
+                        row.displayName
+                      }}</strong></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="数据点" min-width="140"
+                    ><template #default="{ row }"
                       ><button
                         type="button"
-                        class="is-danger"
-                        title="删除"
-                        @click="removeItem(row)"
+                        class="alarm-workspace__point-link"
+                        :title="alarmItemPointSummary(row)"
+                        @click="filterByDatapoint(row)"
                       >
-                        <IconTablerTrash />
-                      </button></div></template
-                ></el-table-column>
-                <template #empty><el-empty :image-size="54" description="暂无报警项" /></template>
-              </el-table>
-            </div>
-            <DataCenterPagination
-              :page="pagination.page"
-              :page-size="pagination.pageSize"
-              :total="pagination.total"
-              :total-pages="pagination.totalPages"
-              @change="changePage"
-            />
+                        {{ alarmItemPointSummary(row) }}
+                      </button></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="数据点路径" min-width="230" show-overflow-tooltip
+                    ><template #default="{ row }"
+                      ><span class="alarm-workspace__path" :title="row.path || '—'">{{
+                        row.path || '—'
+                      }}</span></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="最高等级" width="96"
+                    ><template #default="{ row }"
+                      ><span
+                        class="alarm-workspace__severity"
+                        :style="severityBadgeStyle(highestSeverity(row))"
+                        >{{ severityLabel(highestSeverity(row)) }}</span
+                      ></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="状态" width="82"
+                    ><template #default="{ row }"
+                      ><el-switch
+                        :model-value="row.isEnabled"
+                        :loading="togglingId === row.id"
+                        @change="toggleItem(row, Boolean($event))" /></template
+                  ></el-table-column>
+                  <el-table-column label="报警类型" width="112"
+                    ><template #default="{ row }"
+                      ><span class="alarm-workspace__ellipsis">{{
+                        row.mode === 'derived' ? '组合报警' : alarmConditionLabels[row.alarmType]
+                      }}</span></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="条件摘要" min-width="180"
+                    ><template #default="{ row }"
+                      ><span
+                        class="alarm-workspace__ellipsis"
+                        :title="alarmItemConditionSummary(row)"
+                        >{{ alarmItemConditionSummary(row) }}</span
+                      ></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="目录" min-width="130"
+                    ><template #default="{ row }"
+                      ><span class="alarm-workspace__ellipsis">{{
+                        row.groupName || '根目录'
+                      }}</span></template
+                    ></el-table-column
+                  >
+                  <el-table-column label="操作" width="104" align="right" fixed="right"
+                    ><template #default="{ row }"
+                      ><div class="alarm-workspace__row-actions">
+                        <button type="button" title="编辑" @click="openEdit(row)">
+                          <IconTablerEdit /></button
+                        ><button
+                          type="button"
+                          class="is-danger"
+                          title="删除"
+                          @click="removeItem(row)"
+                        >
+                          <IconTablerTrash />
+                        </button></div></template
+                  ></el-table-column>
+                  <template #empty><el-empty :image-size="54" description="暂无报警项" /></template>
+                </el-table>
+              </div>
+              <template #pagination>
+                <DataCenterPagination
+                  :page="pagination.page"
+                  :page-size="pagination.pageSize"
+                  :total="pagination.total"
+                  :total-pages="pagination.totalPages"
+                  @change="changePage"
+                />
+              </template>
+              <template #floating>
+                <BulkActionBar
+                  :selected-count="batchAffectedCount"
+                  item-label="条"
+                  @clear="clearBatchSelection"
+                >
+                  <button
+                    type="button"
+                    class="alarm-workspace__batch-action"
+                    :class="{ 'is-active': !batchAllResults }"
+                    @click="selectCurrentPage"
+                  >
+                    当前页
+                  </button>
+                  <button
+                    type="button"
+                    class="alarm-workspace__batch-action"
+                    :class="{ 'is-active': batchAllResults }"
+                    :disabled="pagination.total === 0"
+                    @click="selectAllResults"
+                  >
+                    全部结果
+                  </button>
+                  <button
+                    type="button"
+                    class="alarm-workspace__batch-action"
+                    @click="openBatchEdit"
+                  >
+                    批量修改
+                  </button>
+                  <button
+                    type="button"
+                    class="alarm-workspace__batch-action"
+                    @click="batchSetEnabled(true)"
+                  >
+                    启用
+                  </button>
+                  <button
+                    type="button"
+                    class="alarm-workspace__batch-action"
+                    @click="batchSetEnabled(false)"
+                  >
+                    停用
+                  </button>
+                  <button
+                    type="button"
+                    class="alarm-workspace__batch-action is-danger"
+                    @click="batchRemove"
+                  >
+                    删除
+                  </button>
+                </BulkActionBar>
+              </template>
+            </TableScroll>
           </div>
         </template>
         <AlarmNotificationSettings
@@ -242,28 +259,46 @@
           :project-id="projectId"
           @changed="channels = $event"
         />
+        <AlarmLevelSettings
+          v-else-if="activeTab === 'levels'"
+          :project-id="projectId"
+          @changed="levelSettings = $event"
+        />
         <AlarmHistorySettings v-else :project-id="projectId" />
       </section>
     </section>
 
-    <AlarmPolicyDrawer
+    <AlarmItemDrawer
       v-model="drawerVisible"
       :project-id="projectId"
       :mode="creatingMode"
       :item="editingItem"
-      :groups="groups"
       :channels="channels"
       :initial-points="initialPoints"
       :saving="saving"
       @save="saveItem"
       @open-conflict="openById"
     />
+    <AlarmDatapointManagerDialog
+      v-model="pointPickerVisible"
+      :project-id="projectId"
+      mode="point"
+      :points="initialPoints"
+      @apply="applyQuickAlarmPoints"
+    />
+    <QuickAlarmDrawer
+      v-model="quickDrawerVisible"
+      :project-id="projectId"
+      :points="initialPoints"
+      :saving="saving"
+      @save="savePresetItem"
+    />
     <AlarmBatchEditDialog
       v-model="batchEditVisible"
+      :project-id="projectId"
       :selection="currentSelection"
       :affected-count="batchAffectedCount"
       :items="batchAllResults ? [] : selectedItems"
-      :groups="groups"
       :saving="saving"
       @save="applyBatchEdit"
     />
@@ -286,12 +321,16 @@ import AlarmBatchEditDialog from './AlarmBatchEditDialog.vue'
 import AlarmDirectoryPanel from './AlarmDirectoryPanel.vue'
 import AlarmExcelImportDialog from './AlarmExcelImportDialog.vue'
 import AlarmHistorySettings from './AlarmHistorySettings.vue'
+import AlarmLevelSettings from './AlarmLevelSettings.vue'
 import AlarmNotificationSettings from './AlarmNotificationSettings.vue'
-import AlarmPolicyDrawer from './AlarmPolicyDrawer.vue'
+import AlarmItemDrawer from './AlarmItemDrawer.vue'
+import AlarmDatapointManagerDialog from './AlarmDatapointManagerDialog.vue'
+import QuickAlarmDrawer from './QuickAlarmDrawer.vue'
 import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
+import FilterToolbar from '@/components/shared/FilterToolbar.vue'
 import PillButton from '@/components/shared/PillButton.vue'
-import StatusBadge from '@/components/shared/StatusBadge.vue'
+import TableScroll from '@/components/shared/TableScroll.vue'
 import {
   batchCreateAlarmItems,
   batchDeleteAlarmItems,
@@ -301,20 +340,21 @@ import {
   downloadAlarmImportTemplate,
   exportAlarmItems,
   getAlarmItem,
+  getAlarmLevelSettings,
   listAlarmChannels,
-  listAlarmGroupTree,
   listAlarmItems,
   setAlarmItemEnabled,
+  savePresetAlarmConfiguration,
   updateAlarmItem,
 } from '@/api/alarm.api'
 import type {
   AlarmBatchUpdate,
   AlarmConditionKind,
-  AlarmGroup,
   AlarmItem,
   AlarmItemMode,
   AlarmItemSave,
   AlarmItemSelection,
+  AlarmLevelSettings as AlarmLevelSettingsModel,
   AlarmNotificationChannel,
   AlarmSeverity,
 } from '@/api/schemas/alarm.schema'
@@ -323,36 +363,44 @@ import {
   alarmItemConditionSummary,
   alarmItemHighestSeverity,
   alarmItemPointSummary,
-  alarmSeverityLabels,
+  alarmSeverityLabel,
+  defaultAlarmSeverityDefinitions,
   ensureBuiltinAlarmNotificationChannel,
   type AlarmPointSelection,
-} from '@/models/alarm-policy'
+} from '@/models/alarm-item'
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
 
 const props = withDefaults(
   defineProps<{
     projectId: string
-    selectedPolicyId?: string
+    selectedItemId?: string
     initialDatapoints?: AlarmPointSelection[]
   }>(),
-  { selectedPolicyId: '', initialDatapoints: () => [] },
+  { selectedItemId: '', initialDatapoints: () => [] },
 )
-const emit = defineEmits<{ 'close-selected-policy': [] }>()
+const emit = defineEmits<{ 'close-selected-item': [] }>()
 const { confirm } = useConfirm()
-const activeTab = ref<'items' | 'notifications' | 'history'>('items')
+const activeTab = ref<'items' | 'levels' | 'notifications' | 'history'>('items')
 const tabOptions = [
   { label: '报警配置', value: 'items' },
+  { label: '级别与升级', value: 'levels' },
   { label: '通知设置', value: 'notifications' },
   { label: '报警历史', value: 'history' },
 ]
 const items = ref<AlarmItem[]>([])
-const groups = ref<AlarmGroup[]>([])
 const channels = ref<AlarmNotificationChannel[]>([])
+const levelSettings = ref<AlarmLevelSettingsModel>({
+  projectId: props.projectId,
+  severityDefinitions: defaultAlarmSeverityDefinitions.map((item) => ({ ...item })),
+  escalationRules: [],
+})
 const loading = ref(false)
 const saving = ref(false)
 const togglingId = ref('')
 const drawerVisible = ref(false)
+const pointPickerVisible = ref(false)
+const quickDrawerVisible = ref(false)
 const batchEditVisible = ref(false)
 const importVisible = ref(false)
 const creatingMode = ref<AlarmItemMode>('point')
@@ -370,7 +418,9 @@ const enabledFilter = ref('')
 const groupFilter = ref('')
 const datapointFilter = ref('')
 const directoryVisible = ref(localStorage.getItem('datacenter.alarm.directory-visible') === 'true')
-const severityValues: AlarmSeverity[] = ['info', 'warning', 'major', 'critical']
+const severityValues = computed(() =>
+  levelSettings.value.severityDefinitions.map((item) => item.key),
+)
 const conditionKinds: AlarmConditionKind[] = [
   'threshold',
   'range',
@@ -379,10 +429,13 @@ const conditionKinds: AlarmConditionKind[] = [
   'text_match',
   'rate_of_change',
   'deviation',
+  'quality',
+  'stale',
   'offline',
-  'expression',
 ]
-const pagination = reactive({ page: 1, pageSize: 20, total: 0, totalPages: 1 })
+const pagination = reactive({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
+let itemRequestSeq = 0
+let channelRequestSeq = 0
 const activeFilter = computed(() => ({
   search: search.value.trim() || undefined,
   mode: modeFilter.value || undefined,
@@ -403,6 +456,7 @@ const batchAffectedCount = computed(() =>
 
 async function loadItems() {
   if (!props.projectId) return
+  const seq = ++itemRequestSeq
   loading.value = true
   try {
     const result = await listAlarmItems(props.projectId, {
@@ -410,32 +464,38 @@ async function loadItems() {
       pageSize: pagination.pageSize,
       ...activeFilter.value,
     })
+    if (seq !== itemRequestSeq) return
     items.value = result.list
     pagination.total = result.pagination.total
-    pagination.totalPages = Math.max(1, Math.ceil(pagination.total / pagination.pageSize))
+    pagination.totalPages =
+      pagination.total === 0 ? 0 : Math.ceil(pagination.total / pagination.pageSize)
     await nextTick()
     restoreCurrentPageSelection()
   } catch (error) {
+    if (seq !== itemRequestSeq) return
     ElMessage.error(getApiErrorMessage(error, '加载报警项失败'))
   } finally {
-    loading.value = false
-  }
-}
-async function loadGroups() {
-  try {
-    groups.value = await listAlarmGroupTree(props.projectId)
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载报警目录失败'))
+    if (seq === itemRequestSeq) loading.value = false
   }
 }
 async function loadChannels() {
+  const seq = ++channelRequestSeq
   try {
-    channels.value = ensureBuiltinAlarmNotificationChannel(
+    const result = ensureBuiltinAlarmNotificationChannel(
       props.projectId,
       await listAlarmChannels(props.projectId),
     )
+    if (seq === channelRequestSeq) channels.value = result
   } catch (error) {
+    if (seq !== channelRequestSeq) return
     ElMessage.error(getApiErrorMessage(error, '加载通知渠道失败'))
+  }
+}
+async function loadLevelSettings() {
+  try {
+    levelSettings.value = await getAlarmLevelSettings(props.projectId)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载报警级别失败'))
   }
 }
 async function reload() {
@@ -465,7 +525,35 @@ function openCreate(mode: AlarmItemMode) {
   creatingMode.value = mode
   editingItem.value = null
   initialPoints.value = props.initialDatapoints.map((point) => ({ ...point }))
-  drawerVisible.value = true
+  if (mode === 'derived') {
+    drawerVisible.value = true
+    return
+  }
+  if (initialPoints.value.length) quickDrawerVisible.value = true
+  else pointPickerVisible.value = true
+}
+function applyQuickAlarmPoints(points: AlarmPointSelection[]) {
+  initialPoints.value = points
+  pointPickerVisible.value = false
+  quickDrawerVisible.value = true
+}
+async function savePresetItem(payload: AlarmItemSave | AlarmItemSave[], datapointIds: string[]) {
+  const payloads = Array.isArray(payload) ? payload : [payload]
+  saving.value = true
+  try {
+    await savePresetAlarmConfiguration(props.projectId, {
+      datapointIds,
+      drafts: payloads.map(({ datapointId: _datapointId, ...draft }) => draft),
+    })
+    quickDrawerVisible.value = false
+    ElMessage.success('报警配置已保存')
+    clearBatchSelection()
+    await loadItems()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '保存报警配置失败'))
+  } finally {
+    saving.value = false
+  }
 }
 function openEdit(item: AlarmItem) {
   void openById(item.id)
@@ -473,6 +561,20 @@ function openEdit(item: AlarmItem) {
 async function openById(id: string) {
   try {
     const item = await getAlarmItem(props.projectId, id)
+    if (item.mode === 'point' && item.presetSlot) {
+      creatingMode.value = 'point'
+      editingItem.value = null
+      initialPoints.value = [
+        {
+          datapointId: item.datapointId,
+          path: item.path,
+          name: item.datapointName || item.path,
+          dataType: item.dataType,
+        },
+      ]
+      quickDrawerVisible.value = true
+      return
+    }
     creatingMode.value = item.mode
     editingItem.value = item
     initialPoints.value = []
@@ -640,33 +742,44 @@ async function handleExcelCommand(command: string) {
     ElMessage.error(getApiErrorMessage(error, '处理 Excel 失败'))
   }
 }
-function severityTone(severity: AlarmSeverity) {
-  return ({ info: 'info', warning: 'warning', major: 'warning', critical: 'danger' } as const)[
-    severity
-  ]
+function severityLabel(severity: AlarmSeverity) {
+  return alarmSeverityLabel(severity, levelSettings.value.severityDefinitions)
+}
+function severityBadgeStyle(severity: AlarmSeverity) {
+  const color =
+    levelSettings.value.severityDefinitions.find((item) => item.key === severity)?.color ??
+    '#64748b'
+  return {
+    color,
+    borderColor: `${color}55`,
+    backgroundColor: `${color}14`,
+  }
+}
+function highestSeverity(item: AlarmItem) {
+  return alarmItemHighestSeverity(item, levelSettings.value.severityDefinitions)
 }
 watch(search, () => {
   window.clearTimeout((loadItems as unknown as { timer?: number }).timer)
   ;(loadItems as unknown as { timer?: number }).timer = window.setTimeout(reload, 250)
 })
 watch(
-  () => props.selectedPolicyId,
+  () => props.selectedItemId,
   (id) => {
     if (id) void openById(id)
   },
   { immediate: true },
 )
 watch(drawerVisible, (opened) => {
-  if (!opened && props.selectedPolicyId) emit('close-selected-policy')
+  if (!opened && props.selectedItemId) emit('close-selected-item')
 })
 watch(
   () => props.projectId,
   async () => {
     pagination.page = 1
-    await Promise.all([loadItems(), loadGroups(), loadChannels()])
+    await Promise.all([loadItems(), loadChannels(), loadLevelSettings()])
   },
 )
-onMounted(() => Promise.all([loadItems(), loadGroups(), loadChannels()]))
+onMounted(() => Promise.all([loadItems(), loadChannels(), loadLevelSettings()]))
 </script>
 
 <style scoped>
@@ -680,34 +793,6 @@ onMounted(() => Promise.all([loadItems(), loadGroups(), loadChannels()]))
   flex-direction: column;
   background: var(--dc-surface-raised);
 }
-.alarm-workspace__head {
-  flex: 0 0 auto;
-  min-width: 0;
-  border-bottom: 1px solid var(--dc-border);
-}
-.alarm-workspace__tabs-row {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  padding: 8px 14px;
-}
-.alarm-workspace__toolbar-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 14px 10px;
-  border-top: 1px solid var(--dc-border);
-}
-.alarm-workspace__toolbar {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 1px;
-}
 .alarm-workspace__search {
   flex: 0 1 230px;
   min-width: 160px;
@@ -718,11 +803,6 @@ onMounted(() => Promise.all([loadItems(), loadGroups(), loadChannels()]))
 }
 .alarm-workspace__filter.is-wide {
   width: 132px;
-}
-.alarm-workspace__create-actions {
-  display: flex;
-  gap: 8px;
-  flex: 0 0 auto;
 }
 .alarm-workspace__primary,
 .alarm-workspace__secondary,
@@ -810,24 +890,37 @@ onMounted(() => Promise.all([loadItems(), loadGroups(), loadChannels()]))
   opacity: 0.45;
 }
 .alarm-workspace__table-scroll {
+  height: 100%;
   min-width: 0;
   min-height: 0;
   flex: 1;
   overflow-x: auto;
 }
-.alarm-workspace__table-panel > .dc-pagination {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
-}
 .alarm-workspace__table {
-  min-width: 1180px;
+  min-width: 1290px;
 }
 .alarm-workspace__name,
+.alarm-workspace__path,
 .alarm-workspace__ellipsis {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alarm-workspace__path {
+  color: var(--dc-text-muted);
+  font-family: var(--dc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+.alarm-workspace__severity {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 .alarm-workspace__point-link {
@@ -861,18 +954,5 @@ onMounted(() => Promise.all([loadItems(), loadGroups(), loadChannels()]))
 }
 .alarm-workspace__row-actions button.is-danger {
   color: var(--dc-danger);
-}
-@media (max-width: 900px) {
-  .alarm-workspace__toolbar-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .alarm-workspace__toolbar {
-    width: 100%;
-  }
-  .alarm-workspace__create-actions {
-    width: 100%;
-  }
 }
 </style>

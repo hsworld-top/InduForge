@@ -24,13 +24,14 @@ import (
 const defaultAlarmMessageTemplate = "{{pointName}} 当前值 {{value}}，触发 {{conditionLabel}}"
 const defaultAlarmHistoryRetentionDays = 30
 
+var alarmSeverityKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,29}$`)
+
 var (
-	alarmSeverities = map[string]bool{"info": true, "warning": true, "major": true, "critical": true}
-	alarmKinds      = map[string]bool{"threshold": true, "range": true, "state": true, "transition": true, "text_match": true, "rate_of_change": true, "deviation": true, "offline": true, "expression": true}
-	numericTypes    = map[string]bool{"number": true, "integer": true, "float": true, "double": true, "decimal": true, "int": true, "int8": true, "int16": true, "int32": true, "int64": true, "uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true, "float32": true, "float64": true, "numeric": true}
+	alarmConditionKinds = map[string]bool{"threshold": true, "range": true, "state": true, "transition": true, "text_match": true, "rate_of_change": true, "deviation": true, "offline": true, "quality": true, "stale": true}
+	numericTypes        = map[string]bool{"number": true, "integer": true, "float": true, "double": true, "decimal": true, "int": true, "int8": true, "int16": true, "int32": true, "int64": true, "uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true, "float32": true, "float64": true, "numeric": true}
 )
 
-type AlarmPolicyGroup struct {
+type AlarmGroup struct {
 	ID          string    `json:"id"`
 	ProjectID   string    `json:"projectId"`
 	Name        string    `json:"name"`
@@ -64,9 +65,9 @@ type AlarmNotificationSettings struct {
 	MessageTemplate       string   `json:"messageTemplate"`
 }
 
-type AlarmPolicyGroupListResult struct {
-	List       []AlarmPolicyGroup `json:"list"`
-	Pagination Pagination         `json:"pagination"`
+type AlarmGroupListResult struct {
+	List       []AlarmGroup `json:"list"`
+	Pagination Pagination   `json:"pagination"`
 }
 
 type Pagination struct {
@@ -75,7 +76,7 @@ type Pagination struct {
 	Total    int `json:"total"`
 }
 
-type SaveAlarmPolicyGroupInput struct {
+type SaveAlarmGroupInput struct {
 	Name        string  `json:"name"`
 	ParentID    *string `json:"parentId"`
 	Description *string `json:"description"`
@@ -101,6 +102,33 @@ type SaveAlarmProjectSettingsInput struct {
 	DefaultChannelIDs      []string `json:"defaultChannelIds"`
 }
 
+type AlarmSeverityDefinition struct {
+	Key         string `json:"key"`
+	DisplayName string `json:"displayName"`
+	Color       string `json:"color"`
+	SortOrder   int    `json:"sortOrder"`
+	IsBuiltin   bool   `json:"isBuiltin"`
+}
+
+type AlarmEscalationRule struct {
+	ID                    string `json:"id"`
+	SourceSeverity        string `json:"sourceSeverity"`
+	TargetSeverity        string `json:"targetSeverity"`
+	UnacknowledgedSeconds int    `json:"unacknowledgedSeconds"`
+	IsEnabled             bool   `json:"isEnabled"`
+}
+
+type AlarmLevelSettings struct {
+	ProjectID           string                    `json:"projectId"`
+	SeverityDefinitions []AlarmSeverityDefinition `json:"severityDefinitions"`
+	EscalationRules     []AlarmEscalationRule     `json:"escalationRules"`
+}
+
+type SaveAlarmLevelSettingsInput struct {
+	SeverityDefinitions []AlarmSeverityDefinition `json:"severityDefinitions"`
+	EscalationRules     []AlarmEscalationRule     `json:"escalationRules"`
+}
+
 type AlarmHistorySettings struct {
 	ProjectID                   string    `json:"projectId"`
 	IsEnabled                   bool      `json:"isEnabled"`
@@ -117,15 +145,19 @@ type SaveAlarmHistorySettingsInput struct {
 }
 
 type AlarmNotificationChannel struct {
-	ID           string         `json:"id"`
-	ProjectID    string         `json:"projectId"`
-	Name         string         `json:"name"`
-	ChannelType  string         `json:"channelType"`
-	Config       map[string]any `json:"config"`
-	SecretStatus map[string]any `json:"secretStatus"`
-	IsEnabled    bool           `json:"isEnabled"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UpdatedAt    time.Time      `json:"updatedAt"`
+	ID                 string         `json:"id"`
+	ProjectID          string         `json:"projectId"`
+	Name               string         `json:"name"`
+	ChannelType        string         `json:"channelType"`
+	Config             map[string]any `json:"config"`
+	SecretStatus       map[string]any `json:"secretStatus"`
+	IsEnabled          bool           `json:"isEnabled"`
+	LastTestStatus     string         `json:"lastTestStatus"`
+	LastTestedAt       *time.Time     `json:"lastTestedAt,omitempty"`
+	LastTestDurationMS *int           `json:"lastTestDurationMs,omitempty"`
+	LastTestMessage    *string        `json:"lastTestMessage,omitempty"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
 }
 
 type SaveAlarmNotificationChannelInput struct {
@@ -165,41 +197,41 @@ type AlarmConditionTrialResult struct {
 	Message             string           `json:"message,omitempty"`
 }
 
-type AlarmPolicyService struct {
-	repository *repository.AlarmPolicyRepository
+type AlarmSettingsService struct {
+	repository *repository.AlarmRepository
 	datapoints *repository.DataPointRepository
 	cipher     *security.AlarmSecretCipher
 	alarmItems *AlarmItemService
 }
 
-func (s *AlarmPolicyService) SetAlarmItemService(alarmItems *AlarmItemService) {
+func (s *AlarmSettingsService) SetAlarmItemService(alarmItems *AlarmItemService) {
 	s.alarmItems = alarmItems
 }
 
-func NewAlarmPolicyService(repo *repository.AlarmPolicyRepository, datapoints *repository.DataPointRepository, ciphers ...*security.AlarmSecretCipher) *AlarmPolicyService {
+func NewAlarmSettingsService(repo *repository.AlarmRepository, datapoints *repository.DataPointRepository, ciphers ...*security.AlarmSecretCipher) *AlarmSettingsService {
 	var cipher *security.AlarmSecretCipher
 	if len(ciphers) > 0 {
 		cipher = ciphers[0]
 	}
-	return &AlarmPolicyService{repository: repo, datapoints: datapoints, cipher: cipher}
+	return &AlarmSettingsService{repository: repo, datapoints: datapoints, cipher: cipher}
 }
 
-func (s *AlarmPolicyService) ListGroups(ctx context.Context, claims *auth.Claims, projectID, search string, parentID *string, page, pageSize int) (*AlarmPolicyGroupListResult, error) {
+func (s *AlarmSettingsService) ListGroups(ctx context.Context, claims *auth.Claims, projectID, search string, parentID *string, page, pageSize int) (*AlarmGroupListResult, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
 	}
-	records, total, err := s.repository.ListGroups(ctx, projectID, repository.AlarmPolicyGroupListFilter{Search: search, ParentID: parentID, Page: page, PageSize: pageSize})
+	records, total, err := s.repository.ListGroups(ctx, projectID, repository.AlarmGroupListFilter{Search: search, ParentID: parentID, Page: page, PageSize: pageSize})
 	if err != nil {
 		return nil, err
 	}
-	items := make([]AlarmPolicyGroup, 0, len(records))
+	items := make([]AlarmGroup, 0, len(records))
 	for _, record := range records {
 		items = append(items, toAlarmGroup(record))
 	}
-	return &AlarmPolicyGroupListResult{List: items, Pagination: Pagination{Page: positive(page, 1), PageSize: positive(pageSize, 50), Total: total}}, nil
+	return &AlarmGroupListResult{List: items, Pagination: Pagination{Page: positive(page, 1), PageSize: positive(pageSize, 50), Total: total}}, nil
 }
 
-func (s *AlarmPolicyService) ListAllGroups(ctx context.Context, claims *auth.Claims, projectID string) ([]AlarmPolicyGroup, error) {
+func (s *AlarmSettingsService) ListAllGroups(ctx context.Context, claims *auth.Claims, projectID string) ([]AlarmGroup, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -207,20 +239,32 @@ func (s *AlarmPolicyService) ListAllGroups(ctx context.Context, claims *auth.Cla
 	if err != nil {
 		return nil, err
 	}
-	items := make([]AlarmPolicyGroup, 0, len(records))
+	items := make([]AlarmGroup, 0, len(records))
 	for _, record := range records {
 		items = append(items, toAlarmGroup(record))
 	}
 	return items, nil
 }
 
-func (s *AlarmPolicyService) CreateGroup(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmPolicyGroupInput) (*AlarmPolicyGroup, error) {
+// ListGroupTree 为目录选择器返回完整层级，避免用分页结果拼出不完整的父子树。
+func (s *AlarmSettingsService) ListGroupTree(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmGroupListResult, error) {
+	items, err := s.ListAllGroups(ctx, claims, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return &AlarmGroupListResult{
+		List:       items,
+		Pagination: Pagination{Page: 1, PageSize: len(items), Total: len(items)},
+	}, nil
+}
+
+func (s *AlarmSettingsService) CreateGroup(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmGroupInput) (*AlarmGroup, error) {
 	return s.saveGroup(ctx, claims, projectID, "", input)
 }
-func (s *AlarmPolicyService) UpdateGroup(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmPolicyGroupInput) (*AlarmPolicyGroup, error) {
+func (s *AlarmSettingsService) UpdateGroup(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmGroupInput) (*AlarmGroup, error) {
 	return s.saveGroup(ctx, claims, projectID, id, input)
 }
-func (s *AlarmPolicyService) saveGroup(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmPolicyGroupInput) (*AlarmPolicyGroup, error) {
+func (s *AlarmSettingsService) saveGroup(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmGroupInput) (*AlarmGroup, error) {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -242,21 +286,21 @@ func (s *AlarmPolicyService) saveGroup(ctx context.Context, claims *auth.Claims,
 			}
 		}
 	}
-	record, err := s.repository.SaveGroup(ctx, repository.SaveAlarmPolicyGroupParams{ID: id, ProjectID: projectID, UserID: claims.UserID, Name: name, ParentID: normalizeID(input.ParentID), Description: normalizeText(input.Description), SortOrder: input.SortOrder})
+	record, err := s.repository.SaveGroup(ctx, repository.SaveAlarmGroupParams{ID: id, ProjectID: projectID, UserID: claims.UserID, Name: name, ParentID: normalizeID(input.ParentID), Description: normalizeText(input.Description), SortOrder: input.SortOrder})
 	if err != nil {
 		return nil, err
 	}
 	result := toAlarmGroup(*record)
 	return &result, nil
 }
-func (s *AlarmPolicyService) DeleteGroup(ctx context.Context, claims *auth.Claims, projectID, id string) error {
+func (s *AlarmSettingsService) DeleteGroup(ctx context.Context, claims *auth.Claims, projectID, id string) error {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return err
 	}
 	return s.repository.DeleteGroup(ctx, projectID, id)
 }
 
-func (s *AlarmPolicyService) GetSettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmProjectSettings, error) {
+func (s *AlarmSettingsService) GetSettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmProjectSettings, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -270,7 +314,7 @@ func (s *AlarmPolicyService) GetSettings(ctx context.Context, claims *auth.Claim
 	item := toAlarmSettings(*record)
 	return &item, nil
 }
-func (s *AlarmPolicyService) UpdateSettings(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmProjectSettingsInput) (*AlarmProjectSettings, error) {
+func (s *AlarmSettingsService) UpdateSettings(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmProjectSettingsInput) (*AlarmProjectSettings, error) {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -292,7 +336,156 @@ func (s *AlarmPolicyService) UpdateSettings(ctx context.Context, claims *auth.Cl
 	return &item, nil
 }
 
-func (s *AlarmPolicyService) GetHistorySettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmHistorySettings, error) {
+func (s *AlarmSettingsService) GetLevelSettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmLevelSettings, error) {
+	if err := s.readAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil || len(record.SeverityDefinitions) == 0 {
+		return &AlarmLevelSettings{ProjectID: projectID, SeverityDefinitions: defaultAlarmSeverityDefinitions(), EscalationRules: []AlarmEscalationRule{}}, nil
+	}
+	return alarmLevelSettingsFromRecord(*record), nil
+}
+
+func (s *AlarmSettingsService) UpdateLevelSettings(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmLevelSettingsInput) (*AlarmLevelSettings, error) {
+	if err := s.writeAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeAlarmLevelSettings(projectID, input)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.repository.ListAllAlarmItems(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]bool, len(normalized.SeverityDefinitions))
+	for _, definition := range normalized.SeverityDefinitions {
+		allowed[definition.Key] = true
+	}
+	for _, item := range items {
+		for _, condition := range item.Conditions {
+			if !allowed[condition.Severity] {
+				return nil, badAlarm("正在使用的报警级别不能删除")
+			}
+		}
+	}
+	record, err := s.repository.SaveLevelSettings(ctx, repository.SaveAlarmLevelSettingsParams{
+		ProjectID:           projectID,
+		UserID:              claims.UserID,
+		SeverityDefinitions: toAlarmSeverityDefinitionRecords(normalized.SeverityDefinitions),
+		EscalationRules:     toAlarmEscalationRuleRecords(normalized.EscalationRules),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return alarmLevelSettingsFromRecord(*record), nil
+}
+
+func defaultAlarmSeverityDefinitions() []AlarmSeverityDefinition {
+	return []AlarmSeverityDefinition{
+		{Key: "info", DisplayName: "提示", Color: "#3b82f6", SortOrder: 10, IsBuiltin: true},
+		{Key: "warning", DisplayName: "警告", Color: "#f59e0b", SortOrder: 20, IsBuiltin: true},
+		{Key: "major", DisplayName: "重要", Color: "#f97316", SortOrder: 30, IsBuiltin: true},
+		{Key: "critical", DisplayName: "紧急", Color: "#ef4444", SortOrder: 40, IsBuiltin: true},
+	}
+}
+
+func normalizeAlarmLevelSettings(projectID string, input SaveAlarmLevelSettingsInput) (*AlarmLevelSettings, error) {
+	if len(input.SeverityDefinitions) < 4 || len(input.SeverityDefinitions) > 20 {
+		return nil, badAlarm("报警级别数量必须在 4 到 20 之间")
+	}
+	builtin := map[string]bool{"info": true, "warning": true, "major": true, "critical": true}
+	seen, order := map[string]bool{}, map[string]int{}
+	definitions := make([]AlarmSeverityDefinition, 0, len(input.SeverityDefinitions))
+	for _, source := range input.SeverityDefinitions {
+		item := source
+		item.Key = strings.ToLower(strings.TrimSpace(item.Key))
+		item.DisplayName = strings.TrimSpace(item.DisplayName)
+		item.Color = strings.ToLower(strings.TrimSpace(item.Color))
+		if !alarmSeverityKeyPattern.MatchString(item.Key) || seen[item.Key] {
+			return nil, badAlarm("报警级别标识格式无效或重复")
+		}
+		if item.DisplayName == "" || len([]rune(item.DisplayName)) > 20 {
+			return nil, badAlarm("报警级别名称不能为空且不能超过 20 个字符")
+		}
+		if !regexp.MustCompile(`^#[0-9a-f]{6}$`).MatchString(item.Color) {
+			return nil, badAlarm("报警级别颜色必须使用六位十六进制颜色")
+		}
+		if builtin[item.Key] != item.IsBuiltin {
+			return nil, badAlarm("内置报警级别不能删除或改为自定义级别")
+		}
+		seen[item.Key], order[item.Key] = true, item.SortOrder
+		definitions = append(definitions, item)
+	}
+	for key := range builtin {
+		if !seen[key] {
+			return nil, badAlarm("提示、警告、重要和紧急四个内置级别不能删除")
+		}
+	}
+	sort.SliceStable(definitions, func(i, j int) bool { return definitions[i].SortOrder < definitions[j].SortOrder })
+	rules := make([]AlarmEscalationRule, 0, len(input.EscalationRules))
+	ruleKeys := map[string]bool{}
+	for _, source := range input.EscalationRules {
+		item := source
+		item.SourceSeverity = strings.TrimSpace(item.SourceSeverity)
+		item.TargetSeverity = strings.TrimSpace(item.TargetSeverity)
+		if !seen[item.SourceSeverity] || !seen[item.TargetSeverity] || item.SourceSeverity == item.TargetSeverity {
+			return nil, badAlarm("报警升级规则引用的级别无效")
+		}
+		if order[item.TargetSeverity] <= order[item.SourceSeverity] {
+			return nil, badAlarm("报警只能升级到更高等级")
+		}
+		if item.UnacknowledgedSeconds < 1 || item.UnacknowledgedSeconds > 604800 {
+			return nil, badAlarm("未确认升级时间必须在 1 秒到 7 天之间")
+		}
+		if item.ID == "" {
+			item.ID = uuid.NewString()
+		} else if _, err := uuid.Parse(item.ID); err != nil {
+			return nil, badAlarm("报警升级规则 ID 格式无效")
+		}
+		key := item.SourceSeverity + ":" + strconv.Itoa(item.UnacknowledgedSeconds)
+		if ruleKeys[key] {
+			return nil, badAlarm("同一级别在相同时间只能配置一条升级规则")
+		}
+		ruleKeys[key] = true
+		rules = append(rules, item)
+	}
+	return &AlarmLevelSettings{ProjectID: projectID, SeverityDefinitions: definitions, EscalationRules: rules}, nil
+}
+
+func alarmLevelSettingsFromRecord(record repository.AlarmProjectSettingsRecord) *AlarmLevelSettings {
+	definitions := make([]AlarmSeverityDefinition, 0, len(record.SeverityDefinitions))
+	for _, item := range record.SeverityDefinitions {
+		definitions = append(definitions, AlarmSeverityDefinition{Key: item.Key, DisplayName: item.DisplayName, Color: item.Color, SortOrder: item.SortOrder, IsBuiltin: item.IsBuiltin})
+	}
+	rules := make([]AlarmEscalationRule, 0, len(record.EscalationRules))
+	for _, item := range record.EscalationRules {
+		rules = append(rules, AlarmEscalationRule{ID: item.ID, SourceSeverity: item.SourceSeverity, TargetSeverity: item.TargetSeverity, UnacknowledgedSeconds: item.UnacknowledgedSeconds, IsEnabled: item.IsEnabled})
+	}
+	return &AlarmLevelSettings{ProjectID: record.ProjectID, SeverityDefinitions: definitions, EscalationRules: rules}
+}
+
+func toAlarmSeverityDefinitionRecords(items []AlarmSeverityDefinition) []repository.AlarmSeverityDefinitionRecord {
+	result := make([]repository.AlarmSeverityDefinitionRecord, 0, len(items))
+	for _, item := range items {
+		result = append(result, repository.AlarmSeverityDefinitionRecord{Key: item.Key, DisplayName: item.DisplayName, Color: item.Color, SortOrder: item.SortOrder, IsBuiltin: item.IsBuiltin})
+	}
+	return result
+}
+
+func toAlarmEscalationRuleRecords(items []AlarmEscalationRule) []repository.AlarmEscalationRuleRecord {
+	result := make([]repository.AlarmEscalationRuleRecord, 0, len(items))
+	for _, item := range items {
+		result = append(result, repository.AlarmEscalationRuleRecord{ID: item.ID, SourceSeverity: item.SourceSeverity, TargetSeverity: item.TargetSeverity, UnacknowledgedSeconds: item.UnacknowledgedSeconds, IsEnabled: item.IsEnabled})
+	}
+	return result
+}
+
+func (s *AlarmSettingsService) GetHistorySettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmHistorySettings, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -308,7 +501,7 @@ func (s *AlarmPolicyService) GetHistorySettings(ctx context.Context, claims *aut
 	return &item, nil
 }
 
-func (s *AlarmPolicyService) UpdateHistorySettings(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmHistorySettingsInput) (*AlarmHistorySettings, error) {
+func (s *AlarmSettingsService) UpdateHistorySettings(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmHistorySettingsInput) (*AlarmHistorySettings, error) {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -329,7 +522,7 @@ func (s *AlarmPolicyService) UpdateHistorySettings(ctx context.Context, claims *
 	return &item, nil
 }
 
-func (s *AlarmPolicyService) ListChannels(ctx context.Context, claims *auth.Claims, projectID string) ([]AlarmNotificationChannel, error) {
+func (s *AlarmSettingsService) ListChannels(ctx context.Context, claims *auth.Claims, projectID string) ([]AlarmNotificationChannel, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -337,22 +530,26 @@ func (s *AlarmPolicyService) ListChannels(ctx context.Context, claims *auth.Clai
 	if err != nil {
 		return nil, err
 	}
-	items := []AlarmNotificationChannel{{ID: "runtime_inapp", ProjectID: projectID, Name: "运行端站内通知", ChannelType: "runtime_inapp", Config: map[string]any{"recipientScope": "project_runtime_users"}, SecretStatus: map[string]any{}, IsEnabled: true}}
+	items := []AlarmNotificationChannel{defaultAlarmNotificationChannel(projectID)}
 	for _, record := range records {
 		items = append(items, toAlarmChannel(record))
 	}
 	return items, nil
 }
-func (s *AlarmPolicyService) CreateChannel(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmNotificationChannelInput) (*AlarmNotificationChannel, error) {
+
+func defaultAlarmNotificationChannel(projectID string) AlarmNotificationChannel {
+	return AlarmNotificationChannel{ID: "runtime_inapp", ProjectID: projectID, Name: "运行端站内通知", ChannelType: "runtime_inapp", Config: map[string]any{"recipientScope": "project_runtime_users"}, SecretStatus: map[string]any{}, IsEnabled: true, LastTestStatus: "not_tested"}
+}
+func (s *AlarmSettingsService) CreateChannel(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmNotificationChannelInput) (*AlarmNotificationChannel, error) {
 	return s.saveChannel(ctx, claims, projectID, "", input)
 }
-func (s *AlarmPolicyService) UpdateChannel(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmNotificationChannelInput) (*AlarmNotificationChannel, error) {
+func (s *AlarmSettingsService) UpdateChannel(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmNotificationChannelInput) (*AlarmNotificationChannel, error) {
 	if id == "runtime_inapp" {
 		return nil, badAlarm("内置站内通知不能修改")
 	}
 	return s.saveChannel(ctx, claims, projectID, id, input)
 }
-func (s *AlarmPolicyService) saveChannel(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmNotificationChannelInput) (*AlarmNotificationChannel, error) {
+func (s *AlarmSettingsService) saveChannel(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmNotificationChannelInput) (*AlarmNotificationChannel, error) {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -409,7 +606,7 @@ func (s *AlarmPolicyService) saveChannel(ctx context.Context, claims *auth.Claim
 	item := toAlarmChannel(*record)
 	return &item, nil
 }
-func (s *AlarmPolicyService) DeleteChannel(ctx context.Context, claims *auth.Claims, projectID, id string) error {
+func (s *AlarmSettingsService) DeleteChannel(ctx context.Context, claims *auth.Claims, projectID, id string) error {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return err
 	}
@@ -419,8 +616,37 @@ func (s *AlarmPolicyService) DeleteChannel(ctx context.Context, claims *auth.Cla
 	return s.repository.DeleteChannel(ctx, projectID, id)
 }
 
+func (s *AlarmSettingsService) TestChannel(ctx context.Context, claims *auth.Claims, projectID, id string) (*AlarmNotificationChannel, error) {
+	if err := s.writeAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	if id == "runtime_inapp" {
+		return nil, badAlarm("内置站内通知不需要测试")
+	}
+	record, err := s.repository.GetChannel(ctx, projectID, id)
+	if err != nil {
+		return nil, err
+	}
+	startedAt := time.Now()
+	testErr := sendAlarmChannelTest(ctx, *record)
+	duration := int(time.Since(startedAt).Milliseconds())
+	status, message := "succeeded", "测试消息已送达目标服务器"
+	if testErr != nil {
+		status, message = "failed", sanitizeAlarmTestMessage(testErr.Error())
+	}
+	updated, saveErr := s.repository.SaveChannelTestResult(ctx, projectID, id, status, duration, message)
+	if saveErr != nil {
+		return nil, saveErr
+	}
+	if testErr != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, message)
+	}
+	item := toAlarmChannel(*updated)
+	return &item, nil
+}
+
 // SyncConfig 接收后续节点同步代理上报的开发态配置增量，不记录节点来源。
-func (s *AlarmPolicyService) SyncConfig(ctx context.Context, claims *auth.Claims, projectID string, input AlarmConfigSyncInput) (*AlarmConfigSyncResult, error) {
+func (s *AlarmSettingsService) SyncConfig(ctx context.Context, claims *auth.Claims, projectID string, input AlarmConfigSyncInput) (*AlarmConfigSyncResult, error) {
 	if err := s.writeAccess(claims, projectID); err != nil {
 		return nil, err
 	}
@@ -453,7 +679,7 @@ func (s *AlarmPolicyService) SyncConfig(ctx context.Context, claims *auth.Claims
 	return &AlarmConfigSyncResult{ConfigRevision: record.ConfigRevision, AcceptedSequence: record.AcceptedSequence, Idempotent: record.Idempotent}, nil
 }
 
-func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, projectID, actorID string, operation AlarmConfigSyncOperation) (repository.AlarmConfigSyncOperationParams, error) {
+func (s *AlarmSettingsService) normalizeSyncOperation(ctx context.Context, projectID, actorID string, operation AlarmConfigSyncOperation) (repository.AlarmConfigSyncOperationParams, error) {
 	resource := strings.TrimSpace(operation.Resource)
 	action := strings.TrimSpace(operation.Action)
 	if action != "upsert" && action != "delete" {
@@ -477,7 +703,7 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 	}
 	switch resource {
 	case "group":
-		var data SaveAlarmPolicyGroupInput
+		var data SaveAlarmGroupInput
 		if err := decodeAlarmSyncData(operation.Data, &data); err != nil {
 			return result, err
 		}
@@ -489,7 +715,7 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 		if data.ParentID != nil && *data.ParentID == id {
 			return result, badAlarm("目录不能移动到自身")
 		}
-		result.Group = &repository.SaveAlarmPolicyGroupParams{ID: id, ProjectID: projectID, UserID: actorID, Name: name, ParentID: data.ParentID, Description: normalizeText(data.Description), SortOrder: data.SortOrder}
+		result.Group = &repository.SaveAlarmGroupParams{ID: id, ProjectID: projectID, UserID: actorID, Name: name, ParentID: data.ParentID, Description: normalizeText(data.Description), SortOrder: data.SortOrder}
 	case "alarm_item":
 		if s.alarmItems == nil {
 			return result, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "报警项同步服务未初始化")
@@ -567,7 +793,7 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 	return result, nil
 }
 
-func (s *AlarmPolicyService) normalizeSyncChannel(projectID, actorID, id string, input SaveAlarmNotificationChannelInput, secretStatus map[string]any) (repository.SaveAlarmNotificationChannelParams, error) {
+func (s *AlarmSettingsService) normalizeSyncChannel(projectID, actorID, id string, input SaveAlarmNotificationChannelInput, secretStatus map[string]any) (repository.SaveAlarmNotificationChannelParams, error) {
 	name, err := requiredName(input.Name, "渠道名称")
 	if err != nil {
 		return repository.SaveAlarmNotificationChannelParams{}, err
@@ -635,7 +861,7 @@ func normalizeNotificationShape(input AlarmNotificationSettings) (AlarmNotificat
 	return input, nil
 }
 
-func (s *AlarmPolicyService) validateChannelIDs(ctx context.Context, projectID string, ids []string) error {
+func (s *AlarmSettingsService) validateChannelIDs(ctx context.Context, projectID string, ids []string) error {
 	channels, err := s.repository.ListChannels(ctx, projectID)
 	if err != nil {
 		return err
@@ -701,6 +927,9 @@ func validateConditionParams(c AlarmCondition) error {
 				return badAlarm("指定状态变化必须填写不同的起始值和目标值")
 			}
 		}
+		if c.TriggerDelayMS != 0 {
+			return badAlarm("状态变化报警不支持触发延时")
+		}
 	case "text_match":
 		if c.Operator != "eq" && c.Operator != "ne" && c.Operator != "contains" && c.Operator != "regex" {
 			return badAlarm("文本条件操作符不受支持")
@@ -715,13 +944,14 @@ func validateConditionParams(c AlarmCondition) error {
 			}
 		}
 	case "rate_of_change":
-		if c.Operator != "gt" && c.Operator != "gte" && c.Operator != "lt" && c.Operator != "lte" {
-			return badAlarm("变化率条件操作符不受支持")
+		if c.Operator != "gt" {
+			return badAlarm("变化率报警只支持超过设定速率")
 		}
 		limit, lok := number("limit")
 		window, wok := number("windowMs")
-		if !lok || limit < 0 || !wok || window <= 0 {
-			return badAlarm("变化率阈值不能为负且统计窗口必须为正数")
+		direction, _ := params["direction"].(string)
+		if !lok || limit <= 0 || !wok || window <= 0 || (direction != "rise" && direction != "fall" && direction != "absolute") {
+			return badAlarm("变化率必须选择方向，并填写正数阈值和统计窗口")
 		}
 	case "deviation":
 		if _, ok := number("baseline"); !ok {
@@ -731,13 +961,49 @@ func validateConditionParams(c AlarmCondition) error {
 		if !ok || limit < 0 {
 			return badAlarm("偏差值不能为负数")
 		}
-	case "expression":
-		expression, ok := params["expression"].(string)
-		if !ok || strings.TrimSpace(expression) == "" {
-			return badAlarm("表达式条件不能为空")
+	case "quality":
+		if c.Operator != "in" {
+			return badAlarm("质量报警操作符不受支持")
+		}
+		qualities := alarmStringList(params["qualities"])
+		if len(qualities) == 0 {
+			return badAlarm("质量报警至少选择一种非良好质量")
+		}
+		seen := map[string]bool{}
+		for _, quality := range qualities {
+			if quality != "bad" && quality != "unknown" {
+				return badAlarm("质量报警只支持 bad 或 unknown")
+			}
+			seen[quality] = true
+		}
+		if len(seen) != len(qualities) {
+			return badAlarm("质量报警不能重复选择质量")
+		}
+	case "stale":
+		if c.Operator != "age_gte" {
+			return badAlarm("数据陈旧报警操作符不受支持")
+		}
+		maxAge, ok := number("maxAgeMs")
+		if !ok || maxAge <= 0 {
+			return badAlarm("数据陈旧时间必须为正数")
 		}
 	}
 	return nil
+}
+
+func alarmStringList(value any) []string {
+	result := []string{}
+	switch raw := value.(type) {
+	case []string:
+		for _, item := range raw {
+			result = append(result, strings.TrimSpace(item))
+		}
+	case []any:
+		for _, item := range raw {
+			result = append(result, strings.TrimSpace(fmt.Sprint(item)))
+		}
+	}
+	return result
 }
 
 func validateChannelConfig(channelType string, config map[string]any) error {
@@ -885,23 +1151,26 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 		if sampleInterval, ok := anyFloat(context["sampleIntervalMs"]); ok && sampleInterval > 0 {
 			window = sampleInterval
 		}
-		rate := abs(current-before) / (window / 1000)
-		switch c.Operator {
-		case "gt":
-			return rate > limit, "evaluated"
-		case "gte":
-			return rate >= limit, "evaluated"
-		case "lt":
-			return rate < limit, "evaluated"
-		case "lte":
-			return rate <= limit, "evaluated"
+		delta := current - before
+		direction, _ := c.Params["direction"].(string)
+		rate := abs(delta) / (window / 1000)
+		if direction == "rise" {
+			rate = delta / (window / 1000)
 		}
+		if direction == "fall" {
+			rate = -delta / (window / 1000)
+		}
+		threshold := limit
+		if active {
+			threshold = max(limit-c.Deadband, 0)
+		}
+		return rate > threshold, "evaluated"
 	}
 	return false, "unsupported_trial"
 }
 
-func toAlarmGroup(record repository.AlarmPolicyGroupRecord) AlarmPolicyGroup {
-	return AlarmPolicyGroup{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ParentID: record.ParentID, Description: record.Description, SortOrder: record.SortOrder, FullPath: record.FullPath, HasChildren: record.HasChildren, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+func toAlarmGroup(record repository.AlarmGroupRecord) AlarmGroup {
+	return AlarmGroup{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ParentID: record.ParentID, Description: record.Description, SortOrder: record.SortOrder, FullPath: record.FullPath, HasChildren: record.HasChildren, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 func toAlarmSettings(record repository.AlarmProjectSettingsRecord) AlarmProjectSettings {
 	return AlarmProjectSettings{ProjectID: record.ProjectID, NotifyOnRaise: record.NotifyOnRaise, NotifyOnClear: record.NotifyOnClear, RepeatIntervalSeconds: record.RepeatIntervalSeconds, DefaultMessageTemplate: record.DefaultMessageTemplate, DefaultChannelIDs: record.DefaultChannelIDs, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
@@ -921,10 +1190,12 @@ func defaultAlarmHistorySettings(projectID string) AlarmHistorySettings {
 	return AlarmHistorySettings{ProjectID: projectID, IsEnabled: true, RetentionDays: &retentionDays, StoreNotificationDeliveries: true}
 }
 func toAlarmChannel(record repository.AlarmNotificationChannelRecord) AlarmNotificationChannel {
-	return AlarmNotificationChannel{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ChannelType: record.ChannelType, Config: alarmCloneMap(record.Config), SecretStatus: alarmCloneMap(record.SecretStatus), IsEnabled: record.IsEnabled, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return AlarmNotificationChannel{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ChannelType: record.ChannelType, Config: alarmCloneMap(record.Config), SecretStatus: alarmCloneMap(record.SecretStatus), IsEnabled: record.IsEnabled,
+		LastTestStatus: record.LastTestStatus, LastTestedAt: record.LastTestedAt, LastTestDurationMS: record.LastTestDurationMS, LastTestMessage: record.LastTestMessage,
+		CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 
-func (s *AlarmPolicyService) readAccess(claims *auth.Claims, projectID string) error {
+func (s *AlarmSettingsService) readAccess(claims *auth.Claims, projectID string) error {
 	if s == nil || s.repository == nil || s.datapoints == nil {
 		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "报警服务未初始化")
 	}
@@ -939,14 +1210,14 @@ func (s *AlarmPolicyService) readAccess(claims *auth.Claims, projectID string) e
 	}
 	return nil
 }
-func (s *AlarmPolicyService) writeAccess(claims *auth.Claims, projectID string) error {
+func (s *AlarmSettingsService) writeAccess(claims *auth.Claims, projectID string) error {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return err
 	}
 	return validateUserID(claims.UserID)
 }
 func conditionAllowedForCategory(kind, category string) bool {
-	if kind == "offline" {
+	if kind == "offline" || kind == "quality" || kind == "stale" {
 		return true
 	}
 	switch category {
@@ -954,8 +1225,10 @@ func conditionAllowedForCategory(kind, category string) bool {
 		return kind == "threshold" || kind == "range" || kind == "rate_of_change" || kind == "deviation"
 	case "boolean":
 		return kind == "state" || kind == "transition"
+	case "text":
+		return kind == "state" || kind == "transition" || kind == "text_match"
 	default:
-		return kind == "state" || kind == "text_match"
+		return false
 	}
 }
 func alarmDataCategory(dataType string) string {
@@ -966,13 +1239,16 @@ func alarmDataCategory(dataType string) string {
 	if value == "bool" || value == "boolean" {
 		return "boolean"
 	}
+	if value == "object" || value == "array" || value == "json" || value == "bytes" || value == "byte[]" || value == "datetime" || value == "date" || value == "timestamp" {
+		return "structured"
+	}
 	return "text"
 }
 func defaultConditionLabel(c AlarmCondition) string {
-	labels := map[string]string{"threshold": "阈值报警", "range": "区间报警", "state": "状态报警", "transition": "状态变化报警", "text_match": "文本报警", "rate_of_change": "变化率报警", "deviation": "偏差报警", "offline": "数据点离线", "expression": "表达式报警"}
+	labels := map[string]string{"threshold": "阈值报警", "range": "区间报警", "state": "状态报警", "transition": "状态变化报警", "text_match": "文本报警", "rate_of_change": "变化率报警", "deviation": "偏差报警", "offline": "数据点离线", "quality": "数据质量异常", "stale": "数据长时间未更新"}
 	return labels[c.Kind]
 }
-func groupIsDescendant(groups []repository.AlarmPolicyGroupRecord, parentID, candidateID string) bool {
+func groupIsDescendant(groups []repository.AlarmGroupRecord, parentID, candidateID string) bool {
 	parents := map[string]*string{}
 	for _, group := range groups {
 		parents[group.ID] = group.ParentID

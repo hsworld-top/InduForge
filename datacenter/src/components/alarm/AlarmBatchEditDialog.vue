@@ -10,17 +10,13 @@
       /></label>
       <label class="alarm-batch__row"
         ><el-checkbox v-model="fields.groupId">移动目录</el-checkbox
-        ><el-select
+        ><AlarmGroupSelect
           v-model="patch.groupId"
+          :project-id="projectId"
           :disabled="!fields.groupId"
-          clearable
-          placeholder="根目录"
-          ><el-option label="根目录" :value="null" /><el-option
-            v-for="group in groups"
-            :key="group.id"
-            :label="group.fullPath || group.name"
-            :value="group.id" /></el-select
-      ></label>
+        />
+        ></label
+      >
       <label class="alarm-batch__row"
         ><el-checkbox v-model="fields.notification">通知方式</el-checkbox
         ><el-select v-model="patch.notification.mode" :disabled="!fields.notification"
@@ -35,21 +31,46 @@
           <article v-for="condition in patch.conditions" :key="condition.id">
             <el-input v-model="condition.label" placeholder="等级标签" />
             <el-select v-model="condition.severity"
-              ><el-option label="提示" value="info" /><el-option
-                label="警告"
-                value="warning" /><el-option label="重要" value="major" /><el-option
-                label="紧急"
-                value="critical"
+              ><el-option
+                v-for="item in severityDefinitions"
+                :key="item.key"
+                :label="item.displayName"
+                :value="item.key"
             /></el-select>
             <el-input-number
               v-if="condition.kind === 'threshold'"
               :model-value="Number(condition.params.threshold)"
               @update:model-value="condition.params = { ...condition.params, threshold: $event }"
             />
-            <el-input-number
+            <div
               v-else-if="condition.kind === 'rate_of_change'"
-              :model-value="Number(condition.params.limit)"
-              @update:model-value="condition.params = { ...condition.params, limit: $event }"
+              class="alarm-batch__condition-pair"
+            >
+              <el-select
+                :model-value="String(condition.params.direction || 'absolute')"
+                @update:model-value="condition.params = { ...condition.params, direction: $event }"
+                ><el-option label="上升" value="rise" /><el-option
+                  label="下降"
+                  value="fall" /><el-option label="绝对" value="absolute"
+              /></el-select>
+              <el-input-number
+                :model-value="Number(condition.params.limit)"
+                :min="0"
+                @update:model-value="condition.params = { ...condition.params, limit: $event }"
+              />
+            </div>
+            <el-select
+              v-else-if="condition.kind === 'quality'"
+              :model-value="condition.params.qualities"
+              multiple
+              @update:model-value="condition.params = { ...condition.params, qualities: $event }"
+              ><el-option label="异常" value="bad" /><el-option label="未知" value="unknown"
+            /></el-select>
+            <el-input-number
+              v-else-if="condition.kind === 'stale'"
+              :model-value="Number(condition.params.maxAgeMs)"
+              :min="1"
+              @update:model-value="condition.params = { ...condition.params, maxAgeMs: $event }"
             />
           </article>
         </div>
@@ -73,23 +94,20 @@
 import { computed, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import DcDrawer from '@/components/shared/DcDrawer.vue'
-import type {
-  AlarmBatchUpdate,
-  AlarmGroup,
-  AlarmItem,
-  AlarmItemSelection,
-} from '@/api/schemas/alarm.schema'
+import AlarmGroupSelect from './AlarmGroupSelect.vue'
+import type { AlarmBatchUpdate, AlarmItem, AlarmItemSelection } from '@/api/schemas/alarm.schema'
+import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
 
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
+    projectId: string
     selection: AlarmItemSelection
     affectedCount: number
     items?: AlarmItem[]
-    groups?: AlarmGroup[]
     saving?: boolean
   }>(),
-  { items: () => [], groups: () => [], saving: false },
+  { items: () => [], saving: false },
 )
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -111,6 +129,9 @@ const patch = reactive({
   notification: { mode: 'inherit' as const, channelIds: [] as string[], messageTemplate: '' },
   conditions: [] as AlarmItem['conditions'],
 })
+const { definitions: severityDefinitions, loadDefinitions } = useAlarmLevelDefinitions(
+  () => props.projectId,
+)
 const conditionsCompatible = computed(
   () =>
     props.items.length > 0 &&
@@ -125,6 +146,7 @@ watch(
   () => props.modelValue,
   (opened) => {
     if (!opened) return
+    void loadDefinitions()
     Object.assign(fields, {
       isEnabled: false,
       groupId: false,
@@ -193,6 +215,11 @@ function submit() {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px 130px;
   gap: 8px;
+}
+.alarm-batch__condition-pair {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 6px;
 }
 .alarm-batch footer {
   display: flex;

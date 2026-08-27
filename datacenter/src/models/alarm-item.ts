@@ -9,6 +9,7 @@ import type {
   AlarmItemSave,
   AlarmNotificationChannel,
   AlarmSeverity,
+  AlarmSeverityDefinition,
 } from '@/api/schemas/alarm.schema'
 
 export type AlarmPointCategory = 'number' | 'boolean' | 'text' | 'structured'
@@ -32,6 +33,7 @@ export function builtinAlarmNotificationChannel(projectId: string): AlarmNotific
     config: { recipientScope: 'project_runtime_users' },
     secretStatus: {},
     isEnabled: true,
+    lastTestStatus: 'not_tested',
   }
 }
 export function ensureBuiltinAlarmNotificationChannel(
@@ -43,11 +45,51 @@ export function ensureBuiltinAlarmNotificationChannel(
     : [builtinAlarmNotificationChannel(projectId), ...channels]
 }
 
-export const alarmSeverityLabels: Record<AlarmSeverity, string> = {
+export const alarmSeverityLabels: Record<string, string> = {
   info: '提示',
   warning: '警告',
   major: '重要',
   critical: '紧急',
+}
+export const defaultAlarmSeverityDefinitions: AlarmSeverityDefinition[] = [
+  {
+    key: 'info',
+    displayName: '提示',
+    color: '#3b82f6',
+    sortOrder: 10,
+    isBuiltin: true,
+  },
+  {
+    key: 'warning',
+    displayName: '警告',
+    color: '#f59e0b',
+    sortOrder: 20,
+    isBuiltin: true,
+  },
+  {
+    key: 'major',
+    displayName: '重要',
+    color: '#f97316',
+    sortOrder: 30,
+    isBuiltin: true,
+  },
+  {
+    key: 'critical',
+    displayName: '紧急',
+    color: '#ef4444',
+    sortOrder: 40,
+    isBuiltin: true,
+  },
+]
+export function alarmSeverityLabel(
+  severity: AlarmSeverity,
+  definitions: AlarmSeverityDefinition[] = [],
+) {
+  return (
+    definitions.find((definition) => definition.key === severity)?.displayName ||
+    alarmSeverityLabels[severity] ||
+    severity
+  )
 }
 export const alarmConditionLabels: Record<AlarmConditionKind, string> = {
   threshold: '越限报警',
@@ -58,14 +100,18 @@ export const alarmConditionLabels: Record<AlarmConditionKind, string> = {
   rate_of_change: '变化率报警',
   deviation: '偏差报警',
   offline: '离线报警',
-  expression: '组合报警',
+  quality: '质量报警',
+  stale: '数据陈旧报警',
 }
 
 export function alarmPointCategory(dataType?: string): AlarmPointCategory {
   const value = String(dataType || '').toLowerCase()
   if (/^(u?int\d*|float\d*|double|decimal|number|numeric)$/.test(value)) return 'number'
   if (value === 'bool' || value === 'boolean') return 'boolean'
-  if (value === 'object' || value === 'array' || value === 'json') return 'structured'
+  if (
+    ['object', 'array', 'json', 'bytes', 'byte[]', 'datetime', 'date', 'timestamp'].includes(value)
+  )
+    return 'structured'
   return 'text'
 }
 export function compatibleAlarmPoints(points: AlarmPointSelection[]) {
@@ -86,14 +132,18 @@ export function conditionKindsFor(
       'range',
       'rate_of_change',
       'deviation',
+      'quality',
+      'stale',
       'offline',
     ]
     // 数值点的越限由 highest_matching 统一管理，避免“其他类型”重复创建单阈值越限。
     return evaluationMode === 'single' ? kinds.filter((kind) => kind !== 'threshold') : kinds
   }
   if (alarmPointCategory(points[0]?.dataType) === 'boolean')
-    return ['state', 'transition', 'offline']
-  return ['state', 'text_match', 'offline']
+    return ['state', 'transition', 'quality', 'stale', 'offline']
+  if (alarmPointCategory(points[0]?.dataType) === 'structured')
+    return ['quality', 'stale', 'offline']
+  return ['state', 'transition', 'text_match', 'quality', 'stale', 'offline']
 }
 
 export function createAlarmCondition(
@@ -109,7 +159,8 @@ export function createAlarmCondition(
     rate_of_change: 'gt',
     deviation: 'gt',
     offline: 'is_offline',
-    expression: 'is_true',
+    quality: 'in',
+    stale: 'age_gte',
   }
   const params: Partial<Record<AlarmConditionKind, Record<string, unknown>>> = {
     threshold: { threshold: null },
@@ -117,9 +168,10 @@ export function createAlarmCondition(
     state: { expected: true },
     transition: { from: false, to: true },
     text_match: { expected: '' },
-    rate_of_change: { limit: null, windowMs: 60000 },
+    rate_of_change: { direction: 'absolute', limit: null, windowMs: 60000 },
     deviation: { baseline: null, limit: null },
-    expression: { expression: '' },
+    quality: { qualities: ['bad'] },
+    stale: { maxAgeMs: 60000 },
   }
   return {
     id: crypto.randomUUID(),
@@ -187,6 +239,7 @@ export function alarmItemToDraft(item: AlarmItem): AlarmItemDraft {
     itemId: item.id,
     datapointId: item.datapointId,
     displayName: item.displayName,
+    presetSlot: item.presetSlot || null,
     groupId: item.groupId || null,
     description: item.description || null,
     mode: item.mode,
@@ -275,8 +328,13 @@ export function alarmItemPointSummary(item: AlarmItem) {
     ? first.name || first.path
     : `组合报警 · ${first.name || first.path} 等 ${item.inputs.length} 点`
 }
-export function alarmItemHighestSeverity(item: AlarmItem): AlarmSeverity {
-  const order: AlarmSeverity[] = ['info', 'warning', 'major', 'critical']
+export function alarmItemHighestSeverity(
+  item: AlarmItem,
+  definitions: AlarmSeverityDefinition[] = [],
+): AlarmSeverity {
+  const order = definitions.length
+    ? definitions.map((definition) => definition.key)
+    : ['info', 'warning', 'major', 'critical']
   return item.conditions.reduce<AlarmSeverity>(
     (highest, condition) =>
       order.indexOf(condition.severity) > order.indexOf(highest) ? condition.severity : highest,

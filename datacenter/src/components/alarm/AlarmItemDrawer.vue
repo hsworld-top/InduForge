@@ -1,5 +1,5 @@
 <template>
-  <DcDrawer v-model="visible" :title="drawerTitle" :width="700" :max="820">
+  <DcDrawer v-model="visible" :title="drawerTitle" :width="760" :max="920">
     <template #actions>
       <button type="button" class="alarm-editor__icon" title="关闭" @click="visible = false">
         <IconTablerX />
@@ -15,24 +15,48 @@
         >。
       </section>
 
-      <section class="alarm-editor__section">
-        <div class="alarm-editor__grid" :class="{ 'is-point-create': !showIdentityFields }">
+      <section class="alarm-editor__context-card">
+        <div v-if="showIdentityFields" class="alarm-editor__grid">
           <label v-if="showIdentityFields" class="alarm-editor__field is-wide"
-            ><span>{{ draft.mode === 'derived' ? '组合报警名称' : '显示名称（可选）' }}</span
+            ><span>{{ draft.mode === 'derived' ? '组合报警名称' : '报警名称（可选）' }}</span
             ><el-input
               v-model="draft.displayName"
               maxlength="100"
               placeholder="普通报警留空时按类型自动生成"
           /></label>
+        </div>
+
+        <div class="alarm-editor__context-grid">
+          <div class="alarm-editor__point-field">
+            <span>{{ draft.mode === 'derived' ? '组合输入点' : '报警数据点' }}</span>
+            <div v-if="draft.selectedPoints.length" class="alarm-editor__point-compact">
+              <div>
+                <strong>{{ pointPreview }}</strong>
+                <small v-if="selectedPointPath" :title="selectedPointPath">
+                  {{ selectedPointPath }}
+                </small>
+              </div>
+              <button v-if="canManagePoints" type="button" @click="pointPickerVisible = true">
+                调整
+              </button>
+            </div>
+            <button
+              v-else
+              type="button"
+              class="alarm-editor__choose-point"
+              @click="pointPickerVisible = true"
+            >
+              <IconTablerPlus />选择数据点
+            </button>
+          </div>
           <label class="alarm-editor__field"
             ><span>目录</span
-            ><el-select v-model="draft.groupId" clearable placeholder="根目录"
-              ><el-option label="根目录" :value="null" /><el-option
-                v-for="group in groups"
-                :key="group.id"
-                :label="group.fullPath || group.name"
-                :value="group.id" /></el-select
-          ></label>
+            ><AlarmGroupSelect
+              v-model="draft.groupId"
+              :project-id="projectId"
+              :initial-label="item?.groupName || ''"
+            />
+          </label>
           <label class="alarm-editor__field is-switch"
             ><span>启用</span><el-switch v-model="draft.isEnabled"
           /></label>
@@ -42,36 +66,7 @@
         /></label>
       </section>
 
-      <section class="alarm-editor__section">
-        <div class="alarm-editor__section-head">
-          <div>
-            <h3>{{ draft.mode === 'derived' ? '组合输入点' : '报警数据点' }}</h3>
-            <p>只应用到明确选择的数据点；后续新建点不会自动加入。</p>
-          </div>
-          <button
-            v-if="canManagePoints"
-            type="button"
-            class="alarm-editor__secondary"
-            @click="pointPickerVisible = true"
-          >
-            <IconTablerPlus />{{ selectedPointCount ? '管理数据点' : '选择数据点' }}
-          </button>
-        </div>
-        <div v-if="draft.selectedPoints.length" class="alarm-editor__point-summary">
-          <div>
-            <strong>已选择 {{ selectedPointCount }} 个数据点</strong><span>{{ pointPreview }}</span
-            ><small v-if="!item && draft.mode === 'point'"
-              >保存后将创建 {{ selectedPointCount }} 条独立报警项，后续可分别维护。</small
-            >
-          </div>
-          <button v-if="canManagePoints" type="button" @click="pointPickerVisible = true">
-            查看与调整
-          </button>
-        </div>
-        <div v-else class="alarm-editor__empty">请选择要配置报警的数据点</div>
-      </section>
-
-      <section v-if="draft.mode === 'derived'" class="alarm-editor__section">
+      <section v-if="draft.mode === 'derived'" class="alarm-editor__section is-card">
         <div class="alarm-editor__section-head">
           <div>
             <h3>组合表达式</h3>
@@ -95,7 +90,7 @@
         />
       </section>
 
-      <section class="alarm-editor__section">
+      <section class="alarm-editor__section is-card">
         <div class="alarm-editor__section-head">
           <div>
             <h3>{{ draft.evaluationMode === 'highest_matching' ? '越限等级' : '报警条件' }}</h3>
@@ -119,10 +114,14 @@
             </button>
           </div>
           <div class="alarm-editor__levels">
+            <div class="alarm-editor__level-head" aria-hidden="true">
+              <span>等级名称</span><span>方向</span><span>阈值</span><span>严重度</span
+              ><span></span>
+            </div>
             <article
               v-for="(condition, index) in draft.conditions"
               :key="condition.id"
-              class="alarm-editor__level"
+              :class="['alarm-editor__level', `is-${condition.severity}`]"
             >
               <el-input
                 v-model="condition.label"
@@ -141,12 +140,15 @@
                 placeholder="阈值"
                 @update:model-value="setThreshold(condition, $event)"
               />
-              <el-select v-model="condition.severity" class="alarm-editor__severity"
+              <el-select
+                v-model="condition.severity"
+                class="alarm-editor__severity"
+                @change="applyConditionSeverity(condition, $event)"
                 ><el-option
-                  v-for="severity in severityOptions"
-                  :key="severity"
-                  :label="alarmSeverityLabels[severity]"
-                  :value="severity"
+                  v-for="option in severityOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
               /></el-select>
               <button
                 type="button"
@@ -263,9 +265,16 @@
               @update:model-value="setParam(singleCondition, 'expected', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'rate_of_change'"
+            ><el-select
+              :model-value="String(singleCondition.params.direction || 'absolute')"
+              @update:model-value="setParam(singleCondition, 'direction', $event)"
+              ><el-option label="上升速率" value="rise" /><el-option
+                label="下降速率"
+                value="fall" /><el-option label="绝对变化率" value="absolute" /></el-select
             ><el-input-number
               :model-value="numberParam(singleCondition, 'limit')"
-              placeholder="变化率"
+              :min="0"
+              placeholder="速率阈值"
               @update:model-value="setParam(singleCondition, 'limit', $event)" /><el-input-number
               :model-value="numberParam(singleCondition, 'windowMs')"
               :min="1"
@@ -282,16 +291,43 @@
               placeholder="偏差"
               @update:model-value="setParam(singleCondition, 'limit', $event)"
           /></template>
-          <el-select v-model="singleCondition.severity"
+          <template v-else-if="singleCondition.kind === 'quality'">
+            <el-select
+              :model-value="qualityParams(singleCondition)"
+              multiple
+              placeholder="选择异常质量"
+              @update:model-value="setParam(singleCondition, 'qualities', $event)"
+              ><el-option label="异常" value="bad" /><el-option
+                label="未知 / 不确定"
+                value="unknown"
+            /></el-select>
+          </template>
+          <template v-else-if="singleCondition.kind === 'stale'">
+            <el-input-number
+              :model-value="staleDisplayValue(singleCondition)"
+              :min="1"
+              placeholder="未更新时间"
+              @update:model-value="setStaleDisplayValue(singleCondition, $event)"
+            />
+            <el-select v-model="staleUnit" @change="refreshStaleDisplay">
+              <el-option label="秒" value="seconds" />
+              <el-option label="分钟" value="minutes" />
+              <el-option label="小时" value="hours" />
+            </el-select>
+          </template>
+          <el-select
+            v-model="singleCondition.severity"
+            @change="applyConditionSeverity(singleCondition, $event)"
             ><el-option
-              v-for="severity in severityOptions"
-              :key="severity"
-              :label="alarmSeverityLabels[severity]"
-              :value="severity"
+              v-for="option in severityOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
           /></el-select>
           <div v-if="advancedVisible" class="alarm-editor__level-advanced">
-            <label>死区<el-input-number v-model="singleCondition.deadband" :min="0" /></label
-            ><label
+            <label v-if="conditionSupportsDeadband(singleCondition.kind)"
+              >死区<el-input-number v-model="singleCondition.deadband" :min="0" /></label
+            ><label v-if="singleCondition.kind !== 'transition'"
               >触发延时 ms<el-input-number
                 v-model="singleCondition.triggerDelayMs"
                 :min="0" /></label
@@ -302,13 +338,14 @@
         </article>
       </section>
 
-      <section class="alarm-editor__section is-collapsible">
+      <section class="alarm-editor__section is-card is-collapsible">
         <button
           type="button"
           class="alarm-editor__collapse"
           @click="advancedVisible = !advancedVisible"
         >
-          <span>高级设置</span><IconTablerChevronDown :class="{ 'is-open': advancedVisible }" />
+          <span>通知与高级设置</span
+          ><IconTablerChevronDown :class="{ 'is-open': advancedVisible }" />
         </button>
         <div v-if="advancedVisible" class="alarm-editor__advanced">
           <label class="alarm-editor__field"
@@ -335,24 +372,54 @@
         </div>
       </section>
 
-      <section class="alarm-editor__section is-collapsible">
+      <section class="alarm-editor__section is-card is-collapsible">
         <button type="button" class="alarm-editor__collapse" @click="debugVisible = !debugVisible">
           <span>开发调试</span><IconTablerChevronDown :class="{ 'is-open': debugVisible }" />
         </button>
         <div v-if="debugVisible" class="alarm-editor__debug">
-          <div v-if="draft.mode === 'derived'" class="alarm-editor__debug-inputs">
-            <label v-for="point in draft.selectedPoints" :key="point.datapointId"
-              ><span>{{ point.inputKey || point.name }}</span
-              ><el-input
-                v-model="derivedTrialInputs[point.inputKey || point.datapointId]"
-                placeholder="模拟值"
-            /></label>
+          <div class="alarm-editor__trial-table">
+            <div class="alarm-editor__trial-row is-head">
+              <span>时间偏移 ms</span
+              ><span>{{ draft.mode === 'derived' ? '输入 JSON' : '值' }}</span
+              ><span>质量</span><span>离线</span><span>源时间 / 龄期 ms</span><span></span>
+            </div>
+            <div v-for="row in trialRows" :key="row.id" class="alarm-editor__trial-row">
+              <el-input-number v-model="row.offsetMs" :min="0" controls-position="right" />
+              <el-input
+                v-if="draft.mode === 'derived'"
+                v-model="row.inputsText"
+                placeholder='{"temperature": 80, "running": true}'
+              />
+              <el-input v-else v-model="row.valueText" placeholder="模拟值" />
+              <el-select v-model="row.quality"
+                ><el-option label="正常" value="good" /><el-option
+                  label="异常"
+                  value="bad" /><el-option label="未知" value="unknown"
+              /></el-select>
+              <el-checkbox v-model="row.offline" />
+              <div class="alarm-editor__source-time">
+                <el-checkbox v-model="row.hasSourceTimestamp">有</el-checkbox>
+                <el-input-number
+                  v-model="row.sourceAgeMs"
+                  :disabled="!row.hasSourceTimestamp"
+                  :min="0"
+                  controls-position="right"
+                />
+              </div>
+              <button
+                type="button"
+                class="alarm-editor__icon is-danger"
+                :disabled="trialRows.length === 1"
+                @click="removeTrialRow(row.id)"
+              >
+                <IconTablerTrash />
+              </button>
+            </div>
           </div>
-          <el-input v-else v-model="trialValues" placeholder="输入模拟值，多个值用逗号分隔" />
-          <label v-if="needsSampleInterval" class="alarm-editor__trial-interval"
-            ><span>相邻模拟值间隔 ms</span
-            ><el-input-number v-model="trialIntervalMs" :min="1" controls-position="right" /></label
-          ><button
+          <button type="button" class="alarm-editor__secondary" @click="addTrialRow">
+            <IconTablerPlus />增加样本
+          </button>
+          <button
             type="button"
             class="alarm-editor__secondary"
             :disabled="trialLoading"
@@ -368,6 +435,33 @@
           >
             查看契约
           </button>
+          <div v-if="trialResult" class="alarm-editor__trial-result">
+            <div class="alarm-editor__trial-result-head">
+              <strong>试算过程</strong>
+              <span>{{ trialResult.triggered ? '最终处于报警' : '最终未报警' }}</span>
+            </div>
+            <div class="alarm-editor__result-table">
+              <div class="alarm-editor__result-row is-head">
+                <span>时间</span><span>判定</span><span>状态</span><span>活动等级</span
+                ><span>候选等级</span><span>剩余触发 / 清除</span><span>说明</span>
+              </div>
+              <div
+                v-for="(step, index) in trialResult.steps"
+                :key="`${step.observedAt}-${index}`"
+                class="alarm-editor__result-row"
+              >
+                <span>{{ formatTrialTime(step.observedAt) }}</span>
+                <span>{{ trialEvaluationLabel(step.evaluationState) }}</span>
+                <span>{{ trialStateLabel(step.state) }}</span>
+                <span>{{ step.activeCondition?.label || '—' }}</span>
+                <span>{{ step.candidateCondition?.label || '—' }}</span>
+                <span
+                  >{{ step.remainingTriggerDelayMs }} / {{ step.remainingClearDelayMs }} ms</span
+                >
+                <span>{{ trialReasonLabel(step.reason, step.calculatedRate) }}</span>
+              </div>
+            </div>
+          </div>
           <pre v-if="debugOutput">{{ debugOutput }}</pre>
         </div>
       </section>
@@ -375,7 +469,7 @@
       <footer class="alarm-editor__footer">
         <button type="button" class="alarm-editor__cancel" @click="visible = false">取消</button
         ><button type="submit" class="alarm-editor__primary" :disabled="saving">
-          <IconTablerDeviceFloppy />{{ saving ? '保存中' : '保存' }}
+          <IconTablerDeviceFloppy />{{ saveButtonText }}
         </button>
       </footer>
     </form>
@@ -400,15 +494,16 @@ import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerX from '~icons/tabler/x'
 import AlarmDatapointManagerDialog from './AlarmDatapointManagerDialog.vue'
 import DcDrawer from '@/components/shared/DcDrawer.vue'
+import AlarmGroupSelect from './AlarmGroupSelect.vue'
 import type {
   AlarmCondition,
   AlarmConditionKind,
   AlarmItem,
   AlarmItemMode,
   AlarmItemSave,
-  AlarmGroup,
   AlarmNotificationChannel,
-  AlarmSeverity,
+  AlarmTrialResult,
+  AlarmTrialSample,
 } from '@/api/schemas/alarm.schema'
 import { AlarmItemSaveSchema } from '@/api/schemas/alarm.schema'
 import {
@@ -420,7 +515,6 @@ import {
 import {
   alarmConditionLabels,
   alarmPointCategory,
-  alarmSeverityLabels,
   buildAlarmItemPayload,
   compatibleAlarmPoints,
   conditionKindsFor,
@@ -430,7 +524,8 @@ import {
   sortAlarmLevels,
   type AlarmItemDraft,
   type AlarmPointSelection,
-} from '@/models/alarm-policy'
+} from '@/models/alarm-item'
+import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
 import { getApiErrorMessage } from '@/utils/request'
 
 const props = withDefaults(
@@ -439,7 +534,6 @@ const props = withDefaults(
     projectId: string
     mode?: AlarmItemMode
     item?: AlarmItem | null
-    groups?: AlarmGroup[]
     channels?: AlarmNotificationChannel[]
     initialPoints?: AlarmPointSelection[]
     saving?: boolean
@@ -447,7 +541,6 @@ const props = withDefaults(
   {
     mode: 'point',
     item: null,
-    groups: () => [],
     channels: () => [],
     initialPoints: () => [],
     saving: false,
@@ -460,19 +553,67 @@ const emit = defineEmits<{
 }>()
 const visible = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value),
+  set: (value) => {
+    if (value) emit('update:modelValue', true)
+    else void requestClose()
+  },
 })
 const draft = ref<AlarmItemDraft>(createAlarmItemDraft(props.mode))
+const initialDraftSnapshot = ref('')
+const isDirty = computed(
+  () => props.modelValue && JSON.stringify(draft.value) !== initialDraftSnapshot.value,
+)
+
+async function requestClose() {
+  if (!isDirty.value) {
+    emit('update:modelValue', false)
+    return
+  }
+  const discard = await ElMessageBox.confirm(
+    '报警配置有未保存修改，确认放弃这些修改？',
+    '关闭报警编辑',
+    { confirmButtonText: '放弃修改', cancelButtonText: '继续编辑', type: 'warning' },
+  )
+    .then(() => true)
+    .catch(() => false)
+  if (discard) emit('update:modelValue', false)
+}
 const pointPickerVisible = ref(false)
 const advancedVisible = ref(false)
 const debugVisible = ref(false)
-const trialValues = ref('')
-const derivedTrialInputs = ref<Record<string, string>>({})
-const trialIntervalMs = ref(1000)
+type TrialQuality = 'good' | 'bad' | 'unknown'
+type TrialRow = {
+  id: string
+  offsetMs: number
+  valueText: string
+  inputsText: string
+  quality: TrialQuality
+  offline: boolean
+  sourceAgeMs: number
+  hasSourceTimestamp: boolean
+}
+const createTrialRow = (offsetMs = 0): TrialRow => ({
+  id: crypto.randomUUID(),
+  offsetMs,
+  valueText: '',
+  inputsText: '{}',
+  quality: 'good',
+  offline: false,
+  sourceAgeMs: 0,
+  hasSourceTimestamp: true,
+})
+const trialRows = ref<TrialRow[]>([createTrialRow(0), createTrialRow(1000)])
+const staleUnit = ref<'seconds' | 'minutes' | 'hours'>('minutes')
 const debugOutput = ref('')
+const trialResult = ref<AlarmTrialResult | null>(null)
 const trialLoading = ref(false)
 const contractLoading = ref(false)
-const severityOptions: AlarmSeverity[] = ['info', 'warning', 'major', 'critical']
+const { definitions: severityDefinitions, loadDefinitions } = useAlarmLevelDefinitions(
+  () => props.projectId,
+)
+const severityOptions = computed(() =>
+  severityDefinitions.value.map((item) => ({ value: item.key, label: item.displayName })),
+)
 const evaluationOptions = [
   { label: '越限报警', value: 'highest_matching' },
   { label: '其他报警类型', value: 'single' },
@@ -483,6 +624,9 @@ const drawerTitle = computed(() =>
     : props.mode === 'derived'
       ? '新建组合报警'
       : '新建报警',
+)
+const saveButtonText = computed(() =>
+  props.saving ? '保存中' : props.item ? '保存修改' : '创建报警',
 )
 const enabledChannels = computed(() => props.channels.filter((channel) => channel.isEnabled))
 const isNumericPoint = computed(
@@ -498,11 +642,6 @@ const isBooleanPoint = computed(
 const stateUsesBooleanOptions = computed(
   () => draft.value.mode === 'derived' || isBooleanPoint.value,
 )
-const needsSampleInterval = computed(() =>
-  draft.value.conditions.some(
-    (condition) => condition.kind === 'rate_of_change' || condition.kind === 'transition',
-  ),
-)
 const showIdentityFields = computed(() => Boolean(props.item) || draft.value.mode === 'derived')
 const availableKinds = computed(() =>
   conditionKindsFor(draft.value.selectedPoints, draft.value.mode, draft.value.evaluationMode),
@@ -516,7 +655,16 @@ const pointPreview = computed(
       .join('、') + (draft.value.selectedPoints.length > 3 ? '…' : ''),
 )
 const selectedPointCount = computed(() => draft.value.selectedPoints.length)
-const canManagePoints = computed(() => !props.item || draft.value.mode === 'derived')
+const isFixedPointCreate = computed(
+  () => !props.item && draft.value.mode === 'point' && props.initialPoints.length === 1,
+)
+const canManagePoints = computed(
+  () => draft.value.mode === 'derived' || (!props.item && !isFixedPointCreate.value),
+)
+const selectedPointPath = computed(() => {
+  if (draft.value.selectedPoints.length !== 1) return `${selectedPointCount.value} 个数据点`
+  return draft.value.selectedPoints[0]?.path || ''
+})
 const conditionHint = computed(() =>
   draft.value.evaluationMode === 'highest_matching'
     ? '当前配置处理一组越限等级；同一数据点还可以另建变化率、离线等报警。'
@@ -527,16 +675,30 @@ watch(
   () => props.modelValue,
   (opened) => {
     if (!opened) return
+    void loadDefinitions()
     const next = props.item ? alarmItemToDraft(props.item) : createAlarmItemDraft(props.mode)
     if (!props.item && props.initialPoints.length)
       next.selectedPoints = props.initialPoints.map((item) => ({ ...item }))
+    if (
+      !props.item &&
+      next.mode === 'point' &&
+      next.selectedPoints.length &&
+      alarmPointCategory(next.selectedPoints[0]?.dataType) !== 'number'
+    ) {
+      next.evaluationMode = 'single'
+      next.conditions = [
+        createAlarmCondition(conditionKindsFor(next.selectedPoints, next.mode, 'single')[0]),
+      ]
+    }
     draft.value = next
     advancedVisible.value = false
     debugVisible.value = false
     debugOutput.value = ''
-    derivedTrialInputs.value = Object.fromEntries(
-      next.selectedPoints.map((point) => [point.inputKey || point.datapointId, '']),
-    )
+    trialResult.value = null
+    trialRows.value = [createTrialRow(0), createTrialRow(1000)]
+    const stale = next.conditions.find((condition) => condition.kind === 'stale')
+    if (stale) staleUnit.value = inferStaleUnit(numberParam(stale, 'maxAgeMs') || 60000)
+    initialDraftSnapshot.value = JSON.stringify(draft.value)
   },
 )
 
@@ -596,6 +758,9 @@ function changeSingleKind(kind: AlarmConditionKind) {
 function setParam(condition: AlarmCondition, key: string, value: unknown) {
   condition.params = { ...condition.params, [key]: value }
 }
+function applyConditionSeverity(condition: AlarmCondition, value: unknown) {
+  condition.severity = String(value)
+}
 function numberParam(condition: AlarmCondition, key: string) {
   const value = condition.params[key]
   return typeof value === 'number' ? value : undefined
@@ -650,7 +815,8 @@ function operatorOptions(kind: AlarmConditionKind) {
     ],
     deviation: [{ label: '大于', value: 'gt' }],
     offline: [{ label: '离线', value: 'is_offline' }],
-    expression: [{ label: '结果为真', value: 'is_true' }],
+    quality: [{ label: '属于', value: 'in' }],
+    stale: [{ label: '超过', value: 'age_gte' }],
   }
   return options[kind]
 }
@@ -735,40 +901,71 @@ async function runTrial() {
   if (message) return ElMessage.warning(message)
   trialLoading.value = true
   try {
-    const values =
-      draft.value.mode === 'derived'
-        ? [
-            Object.fromEntries(
-              draft.value.selectedPoints.map((point) => [
-                point.inputKey || point.datapointId,
-                parseTrialValue(
-                  derivedTrialInputs.value[point.inputKey || point.datapointId] || '',
-                ),
-              ]),
-            ),
-          ]
-        : trialValues.value
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean)
-            .map(parseTrialValue)
-    debugOutput.value = JSON.stringify(
-      await testAlarmItem(
-        props.projectId,
-        {
-          ...buildAlarmItemPayload(draft.value),
-        },
-        values,
-        needsSampleInterval.value ? { sampleIntervalMs: trialIntervalMs.value } : {},
-      ),
-      null,
-      2,
+    const baseTime = Date.now()
+    const samples: AlarmTrialSample[] = [...trialRows.value]
+      .sort((left, right) => left.offsetMs - right.offsetMs)
+      .map((row) => {
+        const observedAt = new Date(baseTime + row.offsetMs)
+        const sample: AlarmTrialSample = {
+          observedAt: observedAt.toISOString(),
+          quality: row.quality,
+          offline: row.offline,
+        }
+        if (row.hasSourceTimestamp)
+          sample.sourceTimestamp = new Date(observedAt.getTime() - row.sourceAgeMs).toISOString()
+        if (draft.value.mode === 'derived') {
+          const inputs = JSON.parse(row.inputsText || '{}') as Record<string, unknown>
+          sample.inputs = inputs
+        } else {
+          sample.value = parseTrialValue(row.valueText)
+        }
+        return sample
+      })
+    trialResult.value = await testAlarmItem(
+      props.projectId,
+      {
+        ...buildAlarmItemPayload(draft.value),
+      },
+      samples,
     )
+    debugOutput.value = ''
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '报警试算失败'))
   } finally {
     trialLoading.value = false
   }
+}
+function addTrialRow() {
+  const lastOffset = trialRows.value.at(-1)?.offsetMs || 0
+  trialRows.value.push(createTrialRow(lastOffset + 1000))
+}
+function removeTrialRow(id: string) {
+  if (trialRows.value.length > 1) trialRows.value = trialRows.value.filter((row) => row.id !== id)
+}
+function conditionSupportsDeadband(kind: AlarmConditionKind) {
+  return ['threshold', 'range', 'rate_of_change', 'deviation'].includes(kind)
+}
+function qualityParams(condition: AlarmCondition) {
+  return Array.isArray(condition.params.qualities)
+    ? condition.params.qualities.filter((value): value is string => typeof value === 'string')
+    : []
+}
+function staleUnitMultiplier() {
+  return staleUnit.value === 'hours' ? 3600000 : staleUnit.value === 'minutes' ? 60000 : 1000
+}
+function staleDisplayValue(condition: AlarmCondition) {
+  return (numberParam(condition, 'maxAgeMs') || 0) / staleUnitMultiplier()
+}
+function setStaleDisplayValue(condition: AlarmCondition, value: number | undefined) {
+  setParam(condition, 'maxAgeMs', typeof value === 'number' ? value * staleUnitMultiplier() : value)
+}
+function refreshStaleDisplay() {
+  // maxAgeMs 是唯一持久化值，切换单位只改变展示换算。
+}
+function inferStaleUnit(value: number): 'seconds' | 'minutes' | 'hours' {
+  if (value % 3600000 === 0) return 'hours'
+  if (value % 60000 === 0) return 'minutes'
+  return 'seconds'
 }
 function parseTrialValue(value: string): string | number | boolean {
   if (value === 'true') return true
@@ -777,18 +974,53 @@ function parseTrialValue(value: string): string | number | boolean {
 }
 async function loadContract() {
   if (!props.item) return
+  const itemId = props.item.id
   contractLoading.value = true
   try {
-    debugOutput.value = JSON.stringify(
-      await getAlarmItemContract(props.projectId, props.item.id),
-      null,
-      2,
-    )
+    trialResult.value = null
+    const result = await getAlarmItemContract(props.projectId, itemId)
+    if (props.item?.id === itemId) debugOutput.value = JSON.stringify(result, null, 2)
   } catch (error) {
+    if (props.item?.id !== itemId) return
     ElMessage.error(getApiErrorMessage(error, '加载报警契约失败'))
   } finally {
-    contractLoading.value = false
+    if (props.item?.id === itemId) contractLoading.value = false
   }
+}
+function formatTrialTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+    hour12: false,
+  }).format(new Date(value))
+}
+function trialEvaluationLabel(value: AlarmTrialResult['steps'][number]['evaluationState']) {
+  return { matched: '匹配', not_matched: '未匹配', paused: '暂停' }[value]
+}
+function trialStateLabel(value: AlarmTrialResult['steps'][number]['state']) {
+  return {
+    normal: '正常',
+    pending_trigger: '等待触发',
+    triggered: '报警中',
+    pending_clear: '等待恢复',
+    paused: '判定暂停',
+  }[value]
+}
+function trialReasonLabel(reason: string, rate?: number | null) {
+  const labels: Record<string, string> = {
+    evaluated: '已判定',
+    quality_paused: '质量非良好，冻结状态',
+    offline_paused: '数据点离线，冻结状态',
+    insufficient_previous_sample: '等待前序样本',
+    insufficient_timestamp: '等待源时间',
+    stale: '数据时间已陈旧',
+    missing_timestamp_stale: '源时间持续缺失',
+    offline: '数据点离线',
+  }
+  const base = labels[reason] || reason
+  return typeof rate === 'number' ? `${base}，变化率 ${rate.toFixed(4)}/s` : base
 }
 </script>
 
@@ -797,16 +1029,26 @@ async function loadContract() {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   color: var(--dc-text);
 }
 .alarm-editor__section {
   display: grid;
   gap: 12px;
 }
-.alarm-editor__section + .alarm-editor__section {
-  padding-top: 16px;
-  border-top: 1px solid var(--dc-border);
+.alarm-editor__section.is-card {
+  padding: 14px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+}
+.alarm-editor__context-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
 }
 .alarm-editor__impact {
   padding: 10px 12px;
@@ -818,12 +1060,15 @@ async function loadContract() {
 }
 .alarm-editor__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px 72px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: end;
 }
-.alarm-editor__grid.is-point-create {
-  grid-template-columns: minmax(0, 1fr) 72px;
+.alarm-editor__context-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 240px 64px;
+  gap: 10px;
+  align-items: start;
 }
 .alarm-editor__field {
   display: grid;
@@ -841,8 +1086,8 @@ async function loadContract() {
   gap: 12px;
 }
 .alarm-editor__section-head h3 {
-  margin: 0;
-  font-size: 14px;
+  margin: 2px 0 0;
+  font-size: 15px;
 }
 .alarm-editor__section-head p {
   margin: 4px 0 0;
@@ -853,7 +1098,7 @@ async function loadContract() {
 .alarm-editor__secondary,
 .alarm-editor__primary,
 .alarm-editor__cancel {
-  height: 32px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -879,47 +1124,63 @@ async function loadContract() {
 .alarm-editor__primary svg {
   width: 15px;
 }
-.alarm-editor__point-summary {
+.alarm-editor__point-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+}
+.alarm-editor__point-compact {
+  min-height: 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 5px 9px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-muted);
+  background: var(--dc-surface-raised);
 }
-.alarm-editor__point-summary div {
+.alarm-editor__point-compact div {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 1px;
 }
-.alarm-editor__point-summary span {
+.alarm-editor__point-compact strong,
+.alarm-editor__point-compact small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dc-text-muted);
+}
+.alarm-editor__point-compact strong {
+  color: var(--dc-text);
   font-size: 12px;
 }
-.alarm-editor__point-summary small {
-  color: var(--dc-text-secondary);
-  font-size: 11px;
-  line-height: 16px;
+.alarm-editor__point-compact small {
+  color: var(--dc-text-muted);
+  font-size: 10px;
 }
-.alarm-editor__point-summary button {
+.alarm-editor__point-compact button {
+  flex: 0 0 auto;
   border: 0;
   background: none;
   color: var(--dc-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
-.alarm-editor__empty {
-  padding: 20px;
+.alarm-editor__choose-point {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   border: 1px dashed var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  text-align: center;
-  color: var(--dc-text-muted);
+  background: var(--dc-surface-raised);
+  color: var(--dc-primary);
+  font: inherit;
   font-size: 12px;
 }
 .alarm-editor__aliases {
@@ -954,17 +1215,34 @@ async function loadContract() {
 }
 .alarm-editor__levels {
   display: grid;
+  gap: 6px;
+}
+.alarm-editor__level-head {
+  display: grid;
+  grid-template-columns: 100px 90px minmax(120px, 1fr) 100px 30px;
   gap: 8px;
+  padding: 0 10px;
+  color: var(--dc-text-muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 .alarm-editor__level {
   display: grid;
   grid-template-columns: 100px 90px minmax(120px, 1fr) 100px 30px;
   gap: 8px;
   align-items: center;
-  padding: 10px;
+  padding: 10px 10px 10px 8px;
   border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-muted);
+  border-left: 3px solid var(--dc-primary);
+  border-radius: 8px;
+  background: var(--dc-surface-raised);
+}
+.alarm-editor__level.is-warning {
+  border-left-color: var(--dc-warning);
+}
+.alarm-editor__level.is-major,
+.alarm-editor__level.is-critical {
+  border-left-color: var(--dc-danger);
 }
 .alarm-editor__level-advanced {
   grid-column: 1/-1;
@@ -1022,6 +1300,11 @@ async function loadContract() {
   font-size: 13px;
   font-weight: 700;
 }
+.alarm-editor__collapse span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .alarm-editor__collapse svg {
   width: 16px;
   transition: transform 0.15s;
@@ -1040,24 +1323,76 @@ async function loadContract() {
 }
 .alarm-editor__debug {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr);
   gap: 8px;
 }
-.alarm-editor__debug-inputs {
+.alarm-editor__trial-table {
   grid-column: 1/-1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
 }
-.alarm-editor__debug-inputs label,
-.alarm-editor__trial-interval {
+.alarm-editor__trial-row {
+  min-width: 760px;
   display: grid;
-  gap: 5px;
+  grid-template-columns: 120px minmax(180px, 1fr) 120px 56px 130px 34px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 9px;
+  border-top: 1px solid var(--dc-border);
+}
+.alarm-editor__trial-row:first-child {
+  border-top: 0;
+}
+.alarm-editor__trial-row.is-head {
+  background: var(--dc-surface-muted);
   color: var(--dc-text-muted);
   font-size: 11px;
+  font-weight: 700;
 }
-.alarm-editor__trial-interval {
-  min-width: 140px;
+.alarm-editor__source-time {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+.alarm-editor__trial-result {
+  grid-column: 1/-1;
+  display: grid;
+  gap: 8px;
+}
+.alarm-editor__trial-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.alarm-editor__trial-result-head span {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+}
+.alarm-editor__result-table {
+  overflow-x: auto;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+}
+.alarm-editor__result-row {
+  min-width: 960px;
+  display: grid;
+  grid-template-columns: 105px 72px 86px 100px 100px 150px minmax(180px, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-top: 1px solid var(--dc-border);
+  font-size: 12px;
+}
+.alarm-editor__result-row:first-child {
+  border-top: 0;
+}
+.alarm-editor__result-row.is-head {
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 .alarm-editor__debug pre {
   grid-column: 1/-1;
@@ -1075,19 +1410,23 @@ async function loadContract() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: auto;
-  padding: 14px 0 2px;
+  margin: 4px -16px -16px;
+  padding: 12px 16px;
   background: var(--dc-surface-raised);
   border-top: 1px solid var(--dc-border);
 }
 @media (max-width: 760px) {
   .alarm-editor__grid,
+  .alarm-editor__context-grid,
   .alarm-editor__aliases {
     grid-template-columns: 1fr;
   }
   .alarm-editor__level,
   .alarm-editor__single-condition {
     grid-template-columns: 1fr 1fr;
+  }
+  .alarm-editor__level-head {
+    display: none;
   }
   .alarm-editor__level-advanced {
     grid-template-columns: 1fr;
@@ -1097,9 +1436,6 @@ async function loadContract() {
   }
   .alarm-editor__debug > * {
     grid-column: 1;
-  }
-  .alarm-editor__debug-inputs {
-    grid-template-columns: 1fr;
   }
 }
 </style>

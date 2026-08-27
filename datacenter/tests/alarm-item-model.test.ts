@@ -8,8 +8,9 @@ import {
   createAlarmCondition,
   createAlarmItemDraft,
   sortAlarmLevels,
-} from '../src/models/alarm-policy'
+} from '../src/models/alarm-item'
 import type { AlarmItem } from '../src/api/schemas/alarm.schema'
+import { AlarmTrialResultSchema, AlarmTrialSampleSchema } from '../src/api/schemas/alarm.schema'
 
 describe('alarm item model', () => {
   it('creates an enabled point alarm with optional display name', () => {
@@ -47,6 +48,49 @@ describe('alarm item model', () => {
     expect(kinds).not.toContain('expression')
     expect(kinds).toContain('threshold')
     expect(createAlarmCondition('transition').params).toEqual({ from: false, to: true })
+  })
+  it('adds metadata alarms while preventing value alarms on structured points', () => {
+    const structured = [{ datapointId: 'dp-1', path: 'a', name: 'A', dataType: 'object' }]
+    expect(conditionKindsFor(structured, 'point', 'single')).toEqual([
+      'quality',
+      'stale',
+      'offline',
+    ])
+    expect(createAlarmCondition('quality').params).toEqual({ qualities: ['bad'] })
+    expect(createAlarmCondition('stale').params).toEqual({ maxAgeMs: 60000 })
+    expect(createAlarmCondition('rate_of_change').params).toMatchObject({
+      direction: 'absolute',
+      windowMs: 60000,
+    })
+  })
+  it('validates timestamped trial samples and tri-state results', () => {
+    const sample = AlarmTrialSampleSchema.parse({
+      observedAt: '2026-08-25T00:00:00Z',
+      sourceTimestamp: '2026-08-25T00:00:00Z',
+      value: 80,
+      quality: 'bad',
+      offline: false,
+    })
+    expect(sample.quality).toBe('bad')
+    const result = AlarmTrialResultSchema.parse({
+      triggered: false,
+      state: 'not_triggered',
+      steps: [
+        {
+          observedAt: sample.observedAt,
+          sourceTimestamp: sample.sourceTimestamp,
+          value: 80,
+          evaluationState: 'paused',
+          reason: 'quality_paused',
+          state: 'paused',
+          candidateElapsedMs: 0,
+          remainingTriggerDelayMs: 0,
+          clearElapsedMs: 0,
+          remainingClearDelayMs: 0,
+        },
+      ],
+    })
+    expect(result.steps[0]?.evaluationState).toBe('paused')
   })
   it('sorts threshold levels from high outward and summarizes one item', () => {
     const high = createAlarmCondition('threshold', '高')

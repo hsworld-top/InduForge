@@ -13,7 +13,7 @@ import (
 
 func TestAlarmImportTemplateContainsStableSheetsAndColumns(t *testing.T) {
 	projectID := "550e8400-e29b-41d4-a716-446655440000"
-	service := NewAlarmItemService(repository.NewAlarmPolicyRepository(nil), repository.NewDataPointRepository(nil))
+	service := NewAlarmItemService(repository.NewAlarmRepository(nil), repository.NewDataPointRepository(nil))
 	workbook, err := service.BuildImportTemplate(context.Background(), &auth.Claims{UserID: "user", ProjectIDs: []string{projectID}}, projectID)
 	if err != nil {
 		t.Fatalf("BuildImportTemplate() error = %v", err)
@@ -34,6 +34,12 @@ func TestAlarmImportTemplateContainsStableSheetsAndColumns(t *testing.T) {
 	}
 	if value, _ := file.GetCellValue(alarmExcelConditionSheet, "F1"); value != "参数JSON" {
 		t.Fatalf("F1 = %q", value)
+	}
+	if index, _ := file.GetSheetIndex(alarmExcelGuideSheet); index < 0 {
+		t.Fatal("missing 填写说明 sheet")
+	}
+	if value, _ := file.GetCellValue(alarmExcelGuideSheet, "A3"); value != "rate_of_change" {
+		t.Fatalf("guide A3 = %q", value)
 	}
 }
 

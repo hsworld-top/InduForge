@@ -16,17 +16,19 @@ import {
   AlarmItemSaveSchema,
   AlarmItemSchema,
   AlarmItemSelectionSchema,
+  AlarmLevelSettingsSaveSchema,
+  AlarmLevelSettingsSchema,
   AlarmNotificationChannelSaveSchema,
   AlarmNotificationChannelSchema,
   AlarmProjectSettingsSaveSchema,
   AlarmProjectSettingsSchema,
+  AlarmPresetConfigurationSaveSchema,
   AlarmTrialResultSchema,
   type AlarmBatchCreate,
   type AlarmBatchResult,
   type AlarmBatchUpdate,
   type AlarmDatapointSummary,
   type AlarmExcelPreview,
-  type AlarmGroup,
   type AlarmGroupSave,
   type AlarmHistorySettings,
   type AlarmHistorySettingsSave,
@@ -34,11 +36,15 @@ import {
   type AlarmItemList,
   type AlarmItemSave,
   type AlarmItemSelection,
+  type AlarmLevelSettings,
+  type AlarmLevelSettingsSave,
   type AlarmNotificationChannel,
   type AlarmNotificationChannelSave,
   type AlarmProjectSettings,
   type AlarmProjectSettingsSave,
+  type AlarmPresetConfigurationSave,
   type AlarmTrialResult,
+  type AlarmTrialSample,
 } from './schemas/alarm.schema'
 
 const unwrap = (value: unknown) =>
@@ -120,15 +126,14 @@ export async function validateAlarmItem(projectId: string, payload: AlarmItemSav
 export async function testAlarmItem(
   projectId: string,
   draft: AlarmItemSave,
-  values: unknown[],
-  context: Record<string, unknown> = {},
+  samples: AlarmTrialSample[],
 ): Promise<AlarmTrialResult> {
   return AlarmTrialResultSchema.parse(
     unwrap(
       await request({
         url: `/data/projects/${projectId}/alarm-items/test-draft`,
         method: 'post',
-        data: { draft: AlarmItemSaveSchema.parse(draft), values, context },
+        data: { draft: AlarmItemSaveSchema.parse(draft), samples },
       }),
     ),
   )
@@ -164,6 +169,34 @@ export async function validateBatchCreateAlarmItems(projectId: string, payload: 
         url: `/data/projects/${projectId}/alarm-items/batch-create/validate`,
         method: 'post',
         data: AlarmBatchCreateSchema.parse(payload),
+      }),
+    ),
+  )
+}
+export async function savePresetAlarmConfiguration(
+  projectId: string,
+  payload: AlarmPresetConfigurationSave,
+): Promise<AlarmBatchResult> {
+  return AlarmBatchResultSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/preset-config`,
+        method: 'put',
+        data: AlarmPresetConfigurationSaveSchema.parse(payload),
+      }),
+    ),
+  )
+}
+export async function validatePresetAlarmConfiguration(
+  projectId: string,
+  payload: AlarmPresetConfigurationSave,
+) {
+  return AlarmDraftValidationSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/preset-config/validate`,
+        method: 'post',
+        data: AlarmPresetConfigurationSaveSchema.parse(payload),
       }),
     ),
   )
@@ -271,11 +304,6 @@ export async function listAlarmGroups(projectId: string, params: Record<string, 
     ),
   )
 }
-export async function listAlarmGroupTree(projectId: string): Promise<AlarmGroup[]> {
-  return AlarmGroupSchema.array().parse(
-    unwrap(await request({ url: `/data/projects/${projectId}/alarm-groups/tree`, method: 'get' })),
-  )
-}
 export async function createAlarmGroup(projectId: string, payload: AlarmGroupSave) {
   return AlarmGroupSchema.parse(
     unwrap(
@@ -317,6 +345,27 @@ export async function saveAlarmSettings(
         url: `/data/projects/${projectId}/alarm-settings`,
         method: 'put',
         data: AlarmProjectSettingsSaveSchema.parse(payload),
+      }),
+    ),
+  )
+}
+export async function getAlarmLevelSettings(projectId: string): Promise<AlarmLevelSettings> {
+  return AlarmLevelSettingsSchema.parse(
+    unwrap(
+      await request({ url: `/data/projects/${projectId}/alarm-level-settings`, method: 'get' }),
+    ),
+  )
+}
+export async function saveAlarmLevelSettings(
+  projectId: string,
+  payload: AlarmLevelSettingsSave,
+): Promise<AlarmLevelSettings> {
+  return AlarmLevelSettingsSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-level-settings`,
+        method: 'put',
+        data: AlarmLevelSettingsSaveSchema.parse(payload),
       }),
     ),
   )
@@ -375,6 +424,16 @@ export async function updateAlarmChannel(
 }
 export async function deleteAlarmChannel(projectId: string, id: string): Promise<void> {
   await request({ url: `/data/projects/${projectId}/alarm-channels/${id}`, method: 'delete' })
+}
+export async function testAlarmChannel(projectId: string, id: string) {
+  return AlarmNotificationChannelSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-channels/${id}/test`,
+        method: 'post',
+      }),
+    ),
+  )
 }
 export async function getDatapointAlarmSummary(
   projectId: string,

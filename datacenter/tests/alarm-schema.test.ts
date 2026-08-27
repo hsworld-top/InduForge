@@ -5,7 +5,10 @@ import {
   AlarmExcelPreviewSchema,
   AlarmItemSaveSchema,
   AlarmItemSchema,
+  AlarmLevelSettingsSchema,
+  AlarmNotificationChannelSchema,
 } from '../src/api/schemas/alarm.schema'
+import { defaultAlarmSeverityDefinitions } from '../src/models/alarm-item'
 
 const condition = {
   id: 'condition-1',
@@ -78,7 +81,7 @@ describe('alarm item schemas', () => {
           { id: '', datapointId: 'b', inputKey: 'b' },
         ],
         derivedExpression: 'a && b',
-        conditions: [{ ...condition, kind: 'expression', operator: 'is_true' }],
+        conditions: [{ ...condition, kind: 'state', operator: 'eq', params: { expected: true } }],
         notification: { mode: 'inherit' },
         isEnabled: false,
         revision: 0,
@@ -112,5 +115,47 @@ describe('alarm item schemas', () => {
         warningKeys: [],
       }).createCount,
     ).toBe(2)
+  })
+  it('parses the built-in notification channel canonical test status', () => {
+    const parsed = AlarmNotificationChannelSchema.parse({
+      id: 'runtime_inapp',
+      projectId: 'project-1',
+      name: '运行端站内通知',
+      channelType: 'runtime_inapp',
+      config: {},
+      secretStatus: {},
+      isEnabled: true,
+      lastTestStatus: 'not_tested',
+    })
+    expect(parsed.lastTestStatus).toBe('not_tested')
+  })
+  it('parses project custom severities and escalation rules', () => {
+    const parsed = AlarmLevelSettingsSchema.parse({
+      projectId: 'project-1',
+      severityDefinitions: [
+        ...defaultAlarmSeverityDefinitions,
+        {
+          key: 'shutdown',
+          displayName: '停机',
+          color: '#991b1b',
+          sortOrder: 50,
+          isBuiltin: false,
+        },
+      ],
+      escalationRules: [
+        {
+          id: 'rule-1',
+          sourceSeverity: 'critical',
+          targetSeverity: 'shutdown',
+          unacknowledgedSeconds: 300,
+          isEnabled: true,
+        },
+      ],
+      revision: 2,
+    })
+    expect(parsed.severityDefinitions.find((item) => item.key === 'shutdown')?.displayName).toBe(
+      '停机',
+    )
+    expect(parsed.escalationRules[0]?.targetSeverity).toBe('shutdown')
   })
 })
