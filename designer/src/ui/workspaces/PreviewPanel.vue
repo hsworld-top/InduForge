@@ -55,12 +55,14 @@ let dataPreviewSessionId = ''
 let dataHeartbeatTimer: number | null = null
 const viewerSessions = new Map<string, { datapointRefs: Set<string> }>()
 const dataSubscriptions = new Map<string, Set<string>>()
+const pageDataSubscriptions = new Map<string, Set<string>>()
 const dataSocketRequests = new Map<
   string,
   { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: number }
 >()
 
 const PREVIEW_CHANNEL = 'induforge-preview-runtime'
+const PAGE_RUNTIME_CHANNEL = 'induforge-page-runtime'
 
 const currentDevice = computed(
   () => devices.find((device) => device.id === selectedDevice.value) ?? devices[0]!,
@@ -130,6 +132,7 @@ onBeforeUnmount(() => {
   dataHeartbeatTimer = null
   viewerSessions.clear()
   dataSubscriptions.clear()
+  pageDataSubscriptions.clear()
 })
 
 watch(
@@ -192,6 +195,7 @@ async function runOperation(target: PreviewOperation): Promise<void> {
   if (!props.controlUrl || operation.value || processBusy.value) return
   operation.value = target
   processError.value = ''
+  releasePageDatapointSubscriptions()
   try {
     processState.value = await previewControlApi[target](props.controlUrl)
     if (target !== 'stop') frameLoaded.value = false
@@ -217,6 +221,7 @@ function selectDevice(device: DeviceMode): void {
 
 function reloadPreview(): void {
   if (!props.previewUrl || !processRunning.value) return
+  releasePageDatapointSubscriptions()
   frameLoaded.value = false
   frameKey.value += 1
 }
@@ -233,6 +238,22 @@ async function handleRuntimeMessage(event: MessageEvent): Promise<void> {
   if (!frame || event.source !== frame.contentWindow || !props.previewUrl) return
   if (event.origin !== new URL(props.previewUrl).origin) return
   const message = event.data as Record<string, unknown>
+  if (
+    message?.channel === PAGE_RUNTIME_CHANNEL &&
+    message.version === 1 &&
+    message.type === 'RELEASE_ALL'
+  ) {
+    releasePageDatapointSubscriptions()
+    return
+  }
+  if (
+    message?.channel === PAGE_RUNTIME_CHANNEL &&
+    message.version === 1 &&
+    message.type === 'REQUEST'
+  ) {
+    await handlePageRuntimeRequest(message, event.origin)
+    return
+  }
   if (
     message?.channel === PREVIEW_CHANNEL &&
     message.version === 1 &&
@@ -302,7 +323,7 @@ async function dataEnvelope(response: Response): Promise<unknown> {
     data?: unknown
   } | null
   if (!response.ok || !payload || payload.code !== 0) {
-    const error = new Error(payload?.msg || '场景数据操作失败') as Error & { code?: number }
+    const error = new Error(payload?.msg || '预览数据操作失败') as Error & { code?: number }
     if (typeof payload?.code === 'number') error.code = payload.code
     throw error
   }
@@ -327,7 +348,7 @@ async function connectDataSocket(): Promise<Socket> {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meta: { consumer: 'scene-viewer' } }),
+        body: JSON.stringify({ meta: { consumer: 'designer-preview' } }),
       }),
     )) as { id?: string; sessionId?: string }
     dataPreviewSessionId = String(data.sessionId || data.id || '')
@@ -389,7 +410,7 @@ function releaseViewerSession(viewerSessionId: string): void {
     subscribers.delete(viewerSessionId)
     if (subscribers.size) continue
     dataSubscriptions.delete(path)
-    if (dataSocket?.connected) {
+    if (!hasDatapointSubscribers(path) && dataSocket?.connected) {
       void requestDataSocket(dataSocket, 'datapoint:unsubscribe', path).catch(() => {})
     }
   }
@@ -402,6 +423,133 @@ function forwardDatapointValue(payload: { path?: string }): void {
       { channel: PREVIEW_CHANNEL, version: 1, type: 'SCENE_DATA_PUSH', viewerSessionId, path, data: payload },
       props.previewUrl ? new URL(props.previewUrl).origin : '*',
     )
+  }
+  for (const subscriptionId of pageDataSubscriptions.get(path) || []) {
+    previewFrameRef.value?.contentWindow?.postMessage(
+      {
+        channel: PAGE_RUNTIME_CHANNEL,
+        version: 1,
+        type: 'EVENT',
+        subscriptionId,
+        path,
+        data: payload,
+      },
+      props.previewUrl ? new URL(props.previewUrl).origin : '*',
+    )
+  }
+}
+
+function hasDatapointSubscribers(path: string): boolean {
+  return Boolean(dataSubscriptions.get(path)?.size || pageDataSubscriptions.get(path)?.size)
+}
+
+function pageRuntimeResult(code: number, msg: string, data: unknown, reqId?: string) {
+  return { code, msg, data, ...(reqId ? { reqId } : {}) }
+}
+
+async function readPageDatapoint(path: string): Promise<unknown> {
+  const data = (await dataEnvelope(
+    await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/values`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: [path] }),
+    }),
+  )) as { values?: Record<string, unknown> }
+  return data.values?.[path] ?? null
+}
+
+async function writePageDatapoint(path: string, value: unknown): Promise<unknown> {
+  return dataEnvelope(
+    await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/write-by-path`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, value }),
+    }),
+  )
+}
+
+async function subscribePageDatapoint(path: string, subscriptionId: string): Promise<void> {
+  const socket = await ensureDataSocket()
+  const subscriptions = pageDataSubscriptions.get(path) || new Set<string>()
+  if (subscriptions.has(subscriptionId)) return
+  const firstSubscriber = !hasDatapointSubscribers(path)
+  subscriptions.add(subscriptionId)
+  pageDataSubscriptions.set(path, subscriptions)
+  try {
+    if (firstSubscriber) await requestDataSocket(socket, 'datapoint:subscribe', path)
+  } catch (error) {
+    subscriptions.delete(subscriptionId)
+    if (!subscriptions.size) pageDataSubscriptions.delete(path)
+    throw error
+  }
+}
+
+async function unsubscribePageDatapoint(path: string, subscriptionId: string): Promise<void> {
+  const subscriptions = pageDataSubscriptions.get(path)
+  subscriptions?.delete(subscriptionId)
+  if (subscriptions && !subscriptions.size) pageDataSubscriptions.delete(path)
+  if (!hasDatapointSubscribers(path) && dataSocket?.connected) {
+    await requestDataSocket(dataSocket, 'datapoint:unsubscribe', path)
+  }
+}
+
+async function handlePageRuntimeRequest(
+  message: Record<string, unknown>,
+  targetOrigin: string,
+): Promise<void> {
+  const requestId = String(message.requestId || '')
+  const domain = String(message.domain || '')
+  const operation = String(message.operation || '')
+  const path = String(message.path || '').trim()
+  const args = Array.isArray(message.args) ? message.args : []
+  const subscriptionId = String(message.subscriptionId || '')
+  if (!requestId) return
+
+  const respond = (result: ReturnType<typeof pageRuntimeResult>) => {
+    previewFrameRef.value?.contentWindow?.postMessage(
+      { channel: PAGE_RUNTIME_CHANNEL, version: 1, type: 'RESULT', requestId, result },
+      targetOrigin,
+    )
+  }
+
+  if (domain !== 'point') {
+    respond(pageRuntimeResult(50031, `开发态预览尚未提供 ${domain}.${operation}() 能力`, null))
+    return
+  }
+  if (!path) {
+    respond(pageRuntimeResult(26007, '数据点路径不能为空', null))
+    return
+  }
+
+  try {
+    if (['get', 'read', 'peek', 'refresh'].includes(operation)) {
+      respond(pageRuntimeResult(0, 'ok', await readPageDatapoint(path)))
+      return
+    }
+    if (operation === 'set' || operation === 'publish') {
+      respond(pageRuntimeResult(0, 'ok', await writePageDatapoint(path, args[0])))
+      return
+    }
+    if (operation === 'subscribe') {
+      if (!subscriptionId) {
+        respond(pageRuntimeResult(26009, '数据点订阅标识不能为空', null))
+        return
+      }
+      await subscribePageDatapoint(path, subscriptionId)
+      respond(pageRuntimeResult(0, 'ok', { path, subscribed: true }))
+      return
+    }
+    if (operation === 'unsubscribe') {
+      await unsubscribePageDatapoint(path, subscriptionId)
+      respond(pageRuntimeResult(0, 'ok', { path, subscribed: false }))
+      return
+    }
+    respond(pageRuntimeResult(50031, `开发态预览尚未提供 point.${operation}() 能力`, null))
+  } catch (error) {
+    const code = Number((error as { code?: number }).code) || 50031
+    respond(pageRuntimeResult(code, error instanceof Error ? error.message : String(error), null))
   }
 }
 
@@ -447,7 +595,7 @@ async function handleSceneDataRequest(message: Record<string, unknown>, targetOr
         respond({ subscribed: true })
         return
       }
-      const firstSubscriber = subscriptions.size === 0
+      const firstSubscriber = !hasDatapointSubscribers(path)
       subscriptions.add(viewerSessionId)
       dataSubscriptions.set(path, subscriptions)
       try {
@@ -464,7 +612,9 @@ async function handleSceneDataRequest(message: Record<string, unknown>, targetOr
       subscriptions.delete(viewerSessionId)
       if (!subscriptions.size) {
         dataSubscriptions.delete(path)
-        await requestDataSocket(socket, 'datapoint:unsubscribe', path)
+        if (!hasDatapointSubscribers(path)) {
+          await requestDataSocket(socket, 'datapoint:unsubscribe', path)
+        }
       }
       respond({ subscribed: false })
       return
@@ -502,6 +652,21 @@ function handleRevisionBroadcast(event: MessageEvent): void {
 function notifySceneRevision(event: unknown): void {
   postRevisionChanged(event)
   revisionChannel?.postMessage(event)
+}
+
+function handlePreviewFrameLoad(): void {
+  frameLoaded.value = true
+}
+
+function releasePageDatapointSubscriptions(): void {
+  // 页面卸载或预览重启时回收宿主侧订阅，避免后台继续轮询不可达的回调。
+  const paths = [...pageDataSubscriptions.keys()]
+  pageDataSubscriptions.clear()
+  for (const path of paths) {
+    if (!dataSubscriptions.get(path)?.size && dataSocket?.connected) {
+      void requestDataSocket(dataSocket, 'datapoint:unsubscribe', path).catch(() => {})
+    }
+  }
 }
 
 defineExpose({ notifySceneRevision })
@@ -614,7 +779,7 @@ async function enterFullscreen(): Promise<void> {
             :class="{ loaded: frameLoaded }"
             :src="previewUrl"
             title="Vite 实时预览"
-            @load="frameLoaded = true"
+            @load="handlePreviewFrameLoad"
           />
           <div v-if="previewUrl && processRunning && !frameLoaded" class="preview-state subtle">
             <span class="loading-line" />

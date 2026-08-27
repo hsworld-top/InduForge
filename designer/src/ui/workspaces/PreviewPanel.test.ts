@@ -2,10 +2,16 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PreviewPanel from './PreviewPanel.vue'
 
-const { viewerSessionMock } = vi.hoisted(() => ({ viewerSessionMock: vi.fn() }))
+const { viewerSessionMock, ioMock, socketEmitMock, socketHandlers } = vi.hoisted(() => ({
+  viewerSessionMock: vi.fn(),
+  ioMock: vi.fn(),
+  socketEmitMock: vi.fn(),
+  socketHandlers: new Map<string, (...args: unknown[]) => void>(),
+}))
 vi.mock('./scene-contract-api', () => ({
   sceneContractApi: { viewerSession: viewerSessionMock },
 }))
+vi.mock('socket.io-client', () => ({ io: ioMock }))
 
 class ResizeObserverStub {
   observe() {}
@@ -44,6 +50,28 @@ describe('PreviewPanel', () => {
       contract: {},
       expiresAt: '2026-08-18T08:00:00Z',
       url: '/designer/scene-studio/display.html?viewerSessionId=viewer-1',
+    })
+    socketHandlers.clear()
+    socketEmitMock.mockReset()
+    socketEmitMock.mockImplementation((event: string, payload: { requestId?: string; path?: string }) => {
+      if (!event.startsWith('datapoint:')) return
+      queueMicrotask(() => socketHandlers.get('response')?.({
+        requestId: payload.requestId,
+        success: true,
+        result: { path: payload.path },
+      }))
+    })
+    ioMock.mockReset()
+    ioMock.mockReturnValue({
+      connected: true,
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        socketHandlers.set(event, handler)
+      }),
+      once: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (event === 'connect') queueMicrotask(handler)
+      }),
+      emit: socketEmitMock,
+      disconnect: vi.fn(),
     })
   })
 
@@ -247,6 +275,128 @@ describe('PreviewPanel', () => {
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         error: { code: 26001, msg: '场景尚无已提交版本', reqId: 'backend-request-1' },
+      }),
+      'https://preview.workspace.test',
+    )
+  })
+
+  it('通过页面运行时桥接读取数据点当前值', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => runningState })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 0,
+          msg: 'ok',
+          data: {
+            values: {
+              'db.IF关系库.demo.temperature': { value: 26.5, quality: 'good' },
+            },
+          },
+        }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow, postMessage } = installFrameWindow(frame)
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: contentWindow,
+      origin: 'https://preview.workspace.test',
+      data: {
+        channel: 'induforge-page-runtime',
+        version: 1,
+        type: 'REQUEST',
+        requestId: 'runtime-read-1',
+        domain: 'point',
+        operation: 'read',
+        path: 'db.IF关系库.demo.temperature',
+      },
+    }))
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/data/projects/project-1/datapoints/values',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'RESULT',
+        requestId: 'runtime-read-1',
+        result: { code: 0, msg: 'ok', data: { value: 26.5, quality: 'good' } },
+      }),
+      'https://preview.workspace.test',
+    )
+  })
+
+  it('页面订阅复用数据预览 Socket 并转发变化事件', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => runningState })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 0, msg: 'ok', data: { sessionId: 'preview-session-1' } }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow, postMessage } = installFrameWindow(frame)
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: contentWindow,
+      origin: 'https://preview.workspace.test',
+      data: {
+        channel: 'induforge-page-runtime',
+        version: 1,
+        type: 'REQUEST',
+        requestId: 'runtime-sub-1',
+        domain: 'point',
+        operation: 'subscribe',
+        path: 'mqtt.IF消息库.demo_line_events',
+        subscriptionId: 'point-subscription-1',
+      },
+    }))
+    await flushPromises()
+
+    expect(ioMock).toHaveBeenCalledWith(
+      window.location.origin,
+      expect.objectContaining({
+        query: { projectId: 'project-1', previewSessionId: 'preview-session-1' },
+      }),
+    )
+    expect(socketEmitMock).toHaveBeenCalledWith(
+      'datapoint:subscribe',
+      expect.objectContaining({ path: 'mqtt.IF消息库.demo_line_events' }),
+    )
+
+    socketHandlers.get('datapoint:value')?.({
+      path: 'mqtt.IF消息库.demo_line_events',
+      value: { event: 'operator_test' },
+    })
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'EVENT',
+        subscriptionId: 'point-subscription-1',
+        data: expect.objectContaining({ value: { event: 'operator_test' } }),
       }),
       'https://preview.workspace.test',
     )
