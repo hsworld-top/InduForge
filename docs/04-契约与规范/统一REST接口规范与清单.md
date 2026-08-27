@@ -420,28 +420,37 @@
 
 ### 5.3 连接管理 `/api/v1/data/projects/{projectId}/connections`
 
-#### 接入源 `/api/v1/data/projects/{projectId}/access-sources`
+`/connections` 是普通接入源唯一列表与详情读模型；工业采集连接和计算单元继续使用各自领域接口。
 
-| 方法  | 路径                                                                  | 功能概要           |
-| ----- | --------------------------------------------------------------------- | ------------------ |
-| `GET` | `/api/v1/data/projects/{projectId}/access-sources`                    | 获取统一接入源列表 |
-| `GET` | `/api/v1/data/projects/{projectId}/access-sources/{sourceId}`         | 获取接入源详情     |
-| `GET` | `/api/v1/data/projects/{projectId}/access-sources/{sourceId}/records` | 获取接入源最近记录 |
+#### 连接 `/api/v1/data/projects/{projectId}/connections`
 
-#### 原始连接 `/api/v1/data/projects/{projectId}/connections`
+| 方法     | 路径                                                                                        | 功能概要                                                 |
+| -------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/connections`                                             | 获取连接列表                                             |
+| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}`                              | 获取连接详情                                             |
+| `POST`   | `/api/v1/data/projects/{projectId}/connections`                                             | 创建连接                                                 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}`                              | 更新连接                                                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/connections/{connectionId}/secrets/reveal`               | 具备工程写权限的用户主动查看单个已保存密码；响应禁止缓存 |
+| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/delete-impact`                | 获取删除影响与阻断引用                                   |
+| `DELETE` | `/api/v1/data/projects/{projectId}/connections/{connectionId}`                              | 删除连接                                                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/connections/test`                                        | 测试连接                                                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/connections/{connectionId}/test`                         | 测试已保存连接并记录脱敏摘要                             |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoint-source-options`                                | 分页搜索普通连接、工业连接和计算单元                     |
+| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/tables`                       | 获取表列表                                               |
+| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/structure` | 获取表结构                                               |
+| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/data`      | 获取表数据                                               |
+| `POST`   | `/api/v1/data/projects/{projectId}/connections/{connectionId}/execute-sql`                  | 执行 SQL                                                 |
 
-| 方法     | 路径                                                                                        | 功能概要     |
-| -------- | ------------------------------------------------------------------------------------------- | ------------ |
-| `GET`    | `/api/v1/data/projects/{projectId}/connections`                                             | 获取连接列表 |
-| `POST`   | `/api/v1/data/projects/{projectId}/connections`                                             | 创建连接     |
-| `PUT`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}`                              | 更新连接     |
-| `DELETE` | `/api/v1/data/projects/{projectId}/connections/{connectionId}`                              | 删除连接     |
-| `POST`   | `/api/v1/data/projects/{projectId}/connections/test`                                        | 测试连接     |
-| `PATCH`  | `/api/v1/data/projects/{projectId}/connections/{connectionId}/status`                       | 更新连接状态 |
-| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/tables`                       | 获取表列表   |
-| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/structure` | 获取表结构   |
-| `GET`    | `/api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/data`      | 获取表数据   |
-| `POST`   | `/api/v1/data/projects/{projectId}/connections/{connectionId}/execute-sql`                  | 执行 SQL     |
+删除接入源必须先读取 `delete-impact`；存在报警、计算或历史目标引用时 `canDelete=false`，正式删除也会在事务内重新检查并拒绝竞态写入。无阻断时删除来源内配置，已生成数据点保留并标记为 `invalid`。
+
+SQL 工作台和保存查询统一限制为 30 秒、500 行、5 MiB。达到行数或响应字节边界时返回 `truncated=true`、`truncatedBy=rows|bytes` 和 `limits`，调用方不得把截断数据解释为全量结果。
+
+#### 工业采集连接
+
+| 方法     | 路径                                                                                   | 功能概要                         |
+| -------- | -------------------------------------------------------------------------------------- | -------------------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/collector/connections/{connectionId}/delete-impact` | 获取工业连接删除影响与阻断引用   |
+| `DELETE` | `/api/v1/data/projects/{projectId}/collector/connections/{connectionId}`               | 事务删除工业连接并保留失效数据点 |
 
 ### 5.4 查询与数据点
 
@@ -480,20 +489,20 @@
 
 ### 5.5 历史存储 `/api/v1/data/projects/{projectId}/history-storage`
 
-历史存储接口只维护开发态配置，不执行历史写入、建表或历史查询。来源级配置自动作用于后续新增数据点，数据点配置可覆盖来源设置。
+历史存储接口只维护开发态配置，不执行历史写入、建表或历史查询。接入源、工业连接和计算单元配置自动作用于后续新增数据点或计算输出，数据点配置可覆盖来源设置。
 
-| 方法   | 路径                                                                              | 功能概要                         |
-| ------ | --------------------------------------------------------------------------------- | -------------------------------- |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources`                       | 分页查询接入源和工业采集历史状态 |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}` | 获取来源历史设置                 |
-| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}` | 保存来源历史设置                 |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/targets`                       | 获取 IF 时序库和 TDengine 目标   |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`      | 获取单点覆盖及最终生效设置       |
-| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`      | 保存单点覆盖或恢复沿用来源       |
-| `POST` | `/api/v1/data/projects/{projectId}/history-storage/datapoints/batch-configure`    | 按 ID 或筛选条件批量设置数据点   |
+| 方法   | 路径                                                                              | 功能概要                                   |
+| ------ | --------------------------------------------------------------------------------- | ------------------------------------------ |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources`                       | 分页查询接入源、工业采集和计算单元历史状态 |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}` | 获取来源历史设置                           |
+| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}` | 保存来源历史设置                           |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/targets`                       | 获取 IF 时序库和 TDengine 目标             |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`      | 获取单点覆盖及最终生效设置                 |
+| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`      | 保存单点覆盖或恢复沿用来源                 |
+| `POST` | `/api/v1/data/projects/{projectId}/history-storage/datapoints/batch-configure`    | 按 ID 或筛选条件批量设置数据点             |
 
 `GET /sources` 查询参数为 `page`、`pageSize`、`search`、`scopeType` 和 `historyState`。`scopeType` 可取
-`access_source`、`collector_connection`；`historyState` 可取 `enabled`、`disabled`。列表项固定返回
+`access_source`、`collector_connection`、`compute_unit`；`historyState` 可取 `enabled`、`disabled`。列表项固定返回
 `scope`、`datapointCount`、`historyState`、`pointOverrideCount`、写入方式和目标摘要，零数据点来源也必须返回。
 
 来源和数据点保存请求统一使用以下结构：
@@ -586,18 +595,17 @@
 
 #### 协议 Wave 1
 
-| 方法   | 路径                                                                     | 功能概要              |
-| ------ | ------------------------------------------------------------------------ | --------------------- |
-| `POST` | `/api/v1/data/projects/{projectId}/kafka/configs`                        | 创建 Kafka 配置       |
-| `PUT`  | `/api/v1/data/projects/{projectId}/kafka/configs/{connectionId}`         | 更新 Kafka 配置与密钥 |
-| `GET`  | `/api/v1/data/projects/{projectId}/kafka/configs/{connectionId}/preview` | 预览 Kafka Topic      |
-| `POST` | `/api/v1/data/projects/{projectId}/http/configs`                         | 创建 HTTP 配置        |
-| `PUT`  | `/api/v1/data/projects/{projectId}/http/configs/{connectionId}`          | 更新 HTTP 配置        |
-| `POST` | `/api/v1/data/projects/{projectId}/websocket/configs`                    | 创建 WebSocket 配置   |
-| `PUT`  | `/api/v1/data/projects/{projectId}/websocket/configs/{connectionId}`     | 更新 WebSocket 配置   |
-| `POST` | `/api/v1/data/projects/{projectId}/redis/configs`                        | 创建 Redis 配置       |
-| `PUT`  | `/api/v1/data/projects/{projectId}/redis/configs/{connectionId}`         | 更新 Redis 配置与密钥 |
-| `POST` | `/api/v1/data/projects/{projectId}/protocols/{connectionId}/preview`     | 统一短时真实抓样      |
+| 方法   | 路径                                                                 | 功能概要              |
+| ------ | -------------------------------------------------------------------- | --------------------- |
+| `POST` | `/api/v1/data/projects/{projectId}/kafka/configs`                    | 创建 Kafka 配置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/kafka/configs/{connectionId}`     | 更新 Kafka 配置与密钥 |
+| `POST` | `/api/v1/data/projects/{projectId}/http/configs`                     | 创建 HTTP 配置        |
+| `PUT`  | `/api/v1/data/projects/{projectId}/http/configs/{connectionId}`      | 更新 HTTP 配置        |
+| `POST` | `/api/v1/data/projects/{projectId}/websocket/configs`                | 创建 WebSocket 配置   |
+| `PUT`  | `/api/v1/data/projects/{projectId}/websocket/configs/{connectionId}` | 更新 WebSocket 配置   |
+| `POST` | `/api/v1/data/projects/{projectId}/redis/configs`                    | 创建 Redis 配置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/redis/configs/{connectionId}`     | 更新 Redis 配置与密钥 |
+| `POST` | `/api/v1/data/projects/{projectId}/protocols/{connectionId}/preview` | 统一短时真实抓样      |
 
 Kafka 工作台接口：
 
@@ -685,48 +693,56 @@ TDengine 使用结构化 `ws/wss` 配置和独立只读运行时，支持真实�
 | `POST`   | `/api/v1/data/projects/{projectId}/compute-units/{id}/debug`       | 调试计算单元                 |
 | `GET`    | `/api/v1/data/projects/{projectId}/compute-units/capabilities`     | 获取独立沙箱真实能力         |
 | `POST`   | `/api/v1/data/projects/{projectId}/compute-units/schedule-preview` | 校验触发并预览未来五次执行   |
+| `GET`    | `/api/v1/data/projects/{projectId}/compute-units/dependencies`     | 查询工程已安装计算依赖       |
+| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/dependencies`     | 在线安装工程依赖；版本可选   |
+| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/dependencies/import` | 离线导入 npm tgz/Python wheel |
+| `DELETE` | `/api/v1/data/projects/{projectId}/compute-units/dependencies/{id}` | 卸载未被计算单元引用的依赖  |
 
-计算脚本的开发态调试只能通过独立 `compute_sandbox` 执行。后端按 `inputBindings` 预取已声明的数据点和 SQL 查询结果，脚本仅可使用 `ctx.datapoint.get(path)`、`ctx.datapoint.meta(path)` 和 `ctx.sql.query(key)` 读取预取数据；不开放任意 SQL、HTTP、MQTT/Kafka、文件、网络或子进程。沙箱不可用时 capabilities 返回 unavailable，语法检查和试运行禁用，禁止回退到 `data_service` 宿主执行。定时与点变只保存节点运行契约，开发态不自动调度。
+计算脚本的开发态调试只能通过独立 `compute_sandbox` 执行。后端按 `inputBindings` 预取已声明的数据点和 SQL 查询结果，脚本仅可使用 `ctx.datapoint.get(path)`、`ctx.datapoint.meta(path)` 和 `ctx.sql.query(key)` 读取预取数据；不开放任意 SQL、HTTP、MQTT/Kafka、文件、网络或子进程。工程依赖可在线安装或离线导入 npm `.tgz` / Python `.whl`；在线版本留空时获取最新版本，最终始终保存包的实际名称、版本和导入名。保存计算单元时按代码导入语句自动记录引用，执行时仅把当前工程已引用依赖只读挂载到隔离进程。仍被计算单元引用的依赖禁止卸载。沙箱不可用时 capabilities 返回 unavailable，语法检查和试运行禁用，禁止回退到 `data_service` 宿主执行。定时与点变只保存节点运行契约，开发态不自动调度。
 
 #### 报警开发态配置
 
-| 方法     | 路径                                                                  | 功能概要                                         |
-| -------- | --------------------------------------------------------------------- | ------------------------------------------------ |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items`                       | 分页查询独立报警项，支持点位、类型和目录递归筛选 |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items`                       | 创建一条普通或组合报警项                         |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                  | 查询报警项详情                                   |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                  | 原子更新单条报警项                               |
-| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-items/{id}/enabled`          | 切换报警项启用状态                               |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                  | 删除报警项                                       |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/validate-draft`        | 校验名称、指纹和重叠警告                         |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/test-draft`            | 使用模拟值试算单一生效等级                       |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}/contract`         | 预览 `alarm.item.v1` 契约                        |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-create`          | 为明确点位集合原子创建独立报警项                 |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-create/validate` | 逐点预校验整批创建草稿                           |
-| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-items/batch`                 | 按 ID 或筛选结果字段掩码批量修改                 |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-delete`          | 按 ID 或筛选结果批量删除                         |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/export`                | 导出所选普通报警 XLSX                            |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/import-template`       | 下载普通报警导入模板                             |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/preview`        | 校验 XLSX 并预览新增、更新和问题                 |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/error-workbook` | 下载附带逐行错误原因的工作簿                     |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/apply`          | 校验摘要和 revision 后事务导入                   |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-groups`                      | 分页/按父目录查询目录                            |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-groups/tree`                 | 查询目录完整路径                                 |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-groups`                      | 创建目录                                         |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-groups/{id}`                 | 更新目录                                         |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-groups/{id}`                 | 删除空目录                                       |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-settings`                    | 查询工程默认通知                                 |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-settings`                    | 保存工程默认通知                                 |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`            | 查询工程报警历史设置                             |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`            | 保存工程报警历史设置                             |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-channels`                    | 查询站内及外部通知渠道                           |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-channels`                    | 新增外部通知渠道                                 |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`               | 更新外部通知渠道                                 |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`               | 删除未被引用的外部通知渠道                       |
-| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarms`   | 查询数据点的有效报警摘要                         |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-config-sync`                 | 原子接收节点报警配置增量回写                     |
+| 方法     | 路径                                                                   | 功能概要                                                                    |
+| -------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items`                        | 分页查询独立报警项，支持点位、类型和目录递归筛选                            |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items`                        | 创建一条普通或组合报警项                                                    |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                   | 查询报警项详情                                                              |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                   | 原子更新单条报警项                                                          |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-items/{id}/enabled`           | 切换报警项启用状态                                                          |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                   | 删除报警项                                                                  |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/validate-draft`         | 校验名称、指纹和重叠警告                                                    |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/test-draft`             | 使用带时间戳、质量和离线状态的样本序列运行三态试算，返回活动/候选等级与延时 |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}/contract`          | 预览 `alarm.item.v1` 契约                                                   |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-create`           | 为明确点位集合原子创建独立报警项                                            |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-create/validate`  | 逐点预校验整批创建草稿                                                      |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-items/preset-config`          | 原子替换所选点位的默认报警槽位配置                                          |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/preset-config/validate` | 预校验默认报警配置及条件重叠                                                |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-items/batch`                  | 按 ID 或筛选结果字段掩码批量修改                                            |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-delete`           | 按 ID 或筛选结果批量删除                                                    |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/export`                 | 导出所选普通报警 XLSX                                                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/import-template`        | 下载普通报警导入模板                                                        |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/preview`         | 校验 XLSX 并预览新增、更新和问题                                            |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/error-workbook`  | 下载附带逐行错误原因的工作簿                                                |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/apply`           | 校验摘要和 revision 后事务导入                                              |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-groups`                       | 分页/按父目录查询目录                                                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-groups/tree`                  | 查询目录完整路径                                                            |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-groups`                       | 创建目录                                                                    |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-groups/{id}`                  | 更新目录                                                                    |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-groups/{id}`                  | 删除空目录                                                                  |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-settings`                     | 查询工程默认通知                                                            |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-settings`                     | 保存工程默认通知                                                            |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-level-settings`               | 查询工程报警级别与升级规则                                                  |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-level-settings`               | 保存工程报警级别与升级规则                                                  |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`             | 查询工程报警历史设置                                                        |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`             | 保存工程报警历史设置                                                        |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-channels`                     | 查询站内及外部通知渠道                                                      |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-channels`                     | 新增外部通知渠道                                                            |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                | 更新外部通知渠道                                                            |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                | 删除未被引用的外部通知渠道                                                  |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarms`    | 查询数据点的有效报警摘要                                                    |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-config-sync`                  | 原子接收节点报警配置增量回写                                                |
 
-报警模式固定为 `point` 与 `derived`。普通报警项只关联一个数据点，报警项 ID 是稳定运行身份；同一点可拥有多种不同报警，但显示名称和触发指纹分别唯一。多点创建会生成 N 条独立报警项。`single` 必须只有一个条件，数值 `highest_matching` 可配置任意数量的高低限等级且同一时刻只选择最深越限等级。完全重复和同名冲突不可绕过，重叠警告需携带稳定 `ackKey` 确认。Excel 只新增或按 `alarmId + revision` 更新普通报警，不根据缺失行删除，也不执行公式或宏。同步资源为 `alarm_item/group/project_settings/history_settings/channel`；报警历史无显式记录时使用“开启、保留 30 天、保存通知投递记录”的默认值。
+报警模式固定为 `point` 与 `derived`。普通报警项只关联一个数据点，报警项 ID 是稳定运行身份；同一点可拥有多种不同报警，但显示名称和触发指纹分别唯一。多点创建会生成 N 条独立报警项。`single` 必须只有一个条件，数值 `highest_matching` 可配置任意数量的高低限等级且同一时刻只选择最深越限等级。工程内置提示、警告、重要、紧急四个级别，并允许增加自定义级别；级别顺序决定严重程度。升级规则按“未确认持续时间”从源级别提升到更高的目标级别。完全重复和同名冲突不可绕过，重叠警告需携带稳定 `ackKey` 确认。Excel 只新增或按 `alarmId + revision` 更新普通报警，不根据缺失行删除，也不执行公式或宏。同步资源为 `alarm_item/group/project_settings/history_settings/channel`；报警历史无显式记录时使用“开启、保留 30 天、保存通知投递记录”的默认值。
 
 #### 契约检查
 
