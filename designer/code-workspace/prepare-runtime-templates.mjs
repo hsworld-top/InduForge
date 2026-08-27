@@ -18,7 +18,9 @@ for (const directory of ['vite-vue-js', 'vite-vue-ts', 'vite-react-js', 'vite-re
   manifest.dependencies['@induforge/runtime-sdk'] = 'file:.induforge/packages/runtime-sdk.tgz'
   await writeFile(packagePath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   await execFileAsync('pnpm', [
-    'install', '--lockfile-only', '--offline', '--ignore-workspace',
+    // 镜像构建时优先复用前一步写入的 store；元数据缺失时允许查询 registry，
+    // 确保最终工作区仍能凭生成的锁文件和镜像内 store 完全离线初始化。
+    'install', '--lockfile-only', '--prefer-offline', '--ignore-workspace',
     '--config.trust-lockfile=true', '--store-dir', storeDir,
   ], { cwd: root, env: { ...process.env, CI: 'true' } })
 }

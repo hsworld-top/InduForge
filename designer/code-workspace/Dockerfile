@@ -36,7 +36,16 @@ RUN mkdir -p /tmp/induforge-runtime-sdk \
     && node designer/code-workspace/prepare-runtime-templates.mjs \
       /source/contracts/project-templates \
       /tmp/induforge-runtime-sdk/induforge-runtime-sdk-0.2.0.tgz \
-      /opt/induforge/pnpm-store
+      /opt/induforge/pnpm-store \
+    && for template in /source/contracts/project-templates/vite-*; do \
+      pnpm --dir "$template" fetch \
+        --prefer-offline \
+        --ignore-workspace \
+        --store-dir /opt/induforge/pnpm-store; \
+    done \
+    && printf 'templates=%s\n' \
+      "$(sha256sum /source/contracts/project-templates/vite-*/pnpm-lock.yaml | sha256sum | cut -d ' ' -f 1)" \
+      >> /opt/induforge/pnpm-store.version
 
 FROM codercom/code-server:4.131.0
 
