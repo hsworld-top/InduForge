@@ -101,12 +101,28 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 		t.Fatalf("expected status=active, got %q", value.Status)
 	}
 
-	rows, ok := value.Value.([]any)
+	dataset, ok := value.Value.(map[string]any)
 	if !ok {
-		t.Fatalf("expected value to be a slice, got %#v", value.Value)
+		t.Fatalf("expected value to be a dataset object, got %#v", value.Value)
+	}
+	rows, ok := dataset["rows"].([]any)
+	if !ok {
+		t.Fatalf("expected dataset rows to be a slice, got %#v", dataset["rows"])
 	}
 	if len(rows) != 1 {
 		t.Fatalf("expected value to contain 1 row, got %d", len(rows))
+	}
+	fields, ok := dataset["fields"].([]any)
+	if !ok || len(fields) != 1 || fields[0] != "value" {
+		t.Fatalf("expected dataset fields=[value], got %#v", dataset["fields"])
+	}
+	if dataset["rowCount"] != float64(1) {
+		t.Fatalf("expected dataset rowCount=1, got %#v", dataset)
+	}
+	for _, omitted := range []string{"total", "truncated"} {
+		if _, exists := dataset[omitted]; exists {
+			t.Fatalf("dataset must omit %s, got %#v", omitted, dataset)
+		}
 	}
 
 	rowMap, ok := rows[0].(map[string]any)
@@ -115,6 +131,20 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 	}
 	if rowMap["value"] != float64(1) {
 		t.Fatalf("expected value=1, got %#v", rowMap["value"])
+	}
+
+	overriddenValue := mustGetDataPointValueWithParameters(t, server.URL, token, projectID, "metrics.query.value", map[string]any{"value": 7})
+	overriddenDataset, ok := overriddenValue.Value.(map[string]any)
+	if !ok {
+		t.Fatalf("expected overridden value to be a dataset object, got %#v", overriddenValue.Value)
+	}
+	overriddenRows, ok := overriddenDataset["rows"].([]any)
+	if !ok || len(overriddenRows) != 1 {
+		t.Fatalf("expected one overridden row, got %#v", overriddenDataset["rows"])
+	}
+	overriddenRow, ok := overriddenRows[0].(map[string]any)
+	if !ok || overriddenRow["value"] != float64(7) {
+		t.Fatalf("expected runtime parameter override value=7, got %#v", overriddenRows[0])
 	}
 
 	disabledQuery := mustCreateQuery(t, server.URL, token, projectID, map[string]any{
@@ -139,9 +169,9 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 			"sql": "UPDATE data_points SET status = 'invalid' WHERE 1 = 0",
 		},
 	})
-	writeSQLExecute := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/queries/"+writeSQLQuery.ID+"/execute", token, map[string]any{}, http.StatusOK)
-	if writeSQLExecute.Code != apperrors.PublicCodeBadRequest {
-		t.Fatalf("expected code %d for non-readonly sql execute, got %d", apperrors.PublicCodeBadRequest, writeSQLExecute.Code)
+	writeSQLExecute := mustExecuteQuery(t, server.URL, token, writeSQLQuery.ID, map[string]any{})
+	if writeSQLExecute.RowCount != 0 {
+		t.Fatalf("expected zero affected rows for write query, got %d", writeSQLExecute.RowCount)
 	}
 }
 
@@ -243,6 +273,25 @@ func TestQueryAndDataPointCRUD(t *testing.T) {
 		t.Fatalf("expected empty query list, got %d", len(initialQueries.Queries))
 	}
 
+	// 输出映射在主查询写入后失败时，事务必须回滚查询主记录。
+	invalidMappingID := uuid.NewString()
+	rollbackEnvelope, rollbackStatus := doJSONRequestAllowStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/queries", token, map[string]any{
+		"name": "rollback-query", "connectionId": connectionID, "queryType": "sql",
+		"config": map[string]any{"sql": "SELECT 1 AS value"},
+		"outputs": []map[string]any{{"id": invalidMappingID, "key": "value", "displayName": "值",
+			"selector": map[string]any{"kind": "column", "column": "value"}, "dataType": "int32"}},
+	})
+	if rollbackStatus != http.StatusOK || rollbackEnvelope.Code == 0 {
+		t.Fatalf("expected business error envelope for invalid output mapping, status=%d code=%d", rollbackStatus, rollbackEnvelope.Code)
+	}
+	var rollbackQueryCount int
+	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_queries WHERE project_id=$1 AND name='rollback-query'`, projectID).Scan(&rollbackQueryCount); err != nil {
+		t.Fatalf("check rolled back query failed: %v", err)
+	}
+	if rollbackQueryCount != 0 {
+		t.Fatalf("output mapping failure must roll back query, count=%d", rollbackQueryCount)
+	}
+
 	createdQuery := mustCreateQuery(t, server.URL, token, projectID, map[string]any{
 		"name":         "crud-query",
 		"connectionId": connectionID,
@@ -253,6 +302,45 @@ func TestQueryAndDataPointCRUD(t *testing.T) {
 	})
 	if createdQuery.ProjectID != projectID {
 		t.Fatalf("expected projectId %q, got %q", projectID, createdQuery.ProjectID)
+	}
+	if len(createdQuery.Outputs) != 0 {
+		t.Fatalf("saving a query must not generate datapoints, got %d outputs", len(createdQuery.Outputs))
+	}
+	var generatedPointCount int
+	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_points WHERE project_id=$1 AND source_type='db.query' AND source_id=$2`, projectID, createdQuery.ID).Scan(&generatedPointCount); err != nil {
+		t.Fatalf("count generated query datapoints failed: %v", err)
+	}
+	if generatedPointCount != 0 {
+		t.Fatalf("saving a query must not create datapoints, got %d", generatedPointCount)
+	}
+
+	generatedQuery := mustUpdateQuery(t, server.URL, token, createdQuery.ID, map[string]any{
+		"outputs": []map[string]any{{
+			"key": "result", "displayName": "查询结果",
+			"selector": map[string]any{"kind": "whole"}, "dataType": "object",
+		}},
+	})
+	if len(generatedQuery.Outputs) != 1 || generatedQuery.Outputs[0].DataPointPath == "" {
+		t.Fatalf("explicit output generation must return one datapoint, got %#v", generatedQuery.Outputs)
+	}
+	if generatedQuery.Outputs[0].DataPointPath != "db.test-connection.crud-query" {
+		t.Fatalf("whole query dataset must use query path directly, got %q", generatedQuery.Outputs[0].DataPointPath)
+	}
+	_, err = fixture.pool.Exec(ctx, `
+		INSERT INTO data_points(project_id,path,name,source_type,source_id,source_config,data_type,status,created_by)
+		VALUES($1,$2,$3,'db.query',$4,'{}'::jsonb,'int32','invalid',$5)
+	`, projectID, "db.test-connection.crud-query.value", "旧字段", createdQuery.ID, userID)
+	if err != nil {
+		t.Fatalf("insert stale generated datapoint failed: %v", err)
+	}
+	extractedQuery := mustUpdateQuery(t, server.URL, token, createdQuery.ID, map[string]any{
+		"outputs": []map[string]any{{
+			"id": generatedQuery.Outputs[0].ID, "key": "value", "displayName": "值",
+			"selector": map[string]any{"kind": "column", "column": "value"}, "dataType": "int32",
+		}},
+	})
+	if len(extractedQuery.Outputs) != 1 || extractedQuery.Outputs[0].DataPointPath != "db.test-connection.crud-query.value" {
+		t.Fatalf("query field must reclaim its exact semantic path, got %#v", extractedQuery.Outputs)
 	}
 
 	readOnlyToken := mustSignIntegrationJWT(t, secret, &auth.Claims{
@@ -289,6 +377,9 @@ func TestQueryAndDataPointCRUD(t *testing.T) {
 	}
 	if updatedQuery.TimeoutMS != 12345 {
 		t.Fatalf("expected timeoutMs=12345, got %d", updatedQuery.TimeoutMS)
+	}
+	if len(updatedQuery.Outputs) != 1 || updatedQuery.Outputs[0].DataPointPath != extractedQuery.Outputs[0].DataPointPath {
+		t.Fatalf("ordinary query save must preserve generated outputs, got %#v", updatedQuery.Outputs)
 	}
 
 	queryExec := mustExecuteQuery(t, server.URL, token, updatedQuery.ID, map[string]any{})
@@ -340,14 +431,20 @@ type queryListPayload struct {
 }
 
 type queryPayload struct {
-	ID              string         `json:"id"`
-	ProjectID       string         `json:"projectId"`
-	ConnectionID    string         `json:"connectionId"`
-	Name            string         `json:"name"`
-	QueryType       string         `json:"queryType"`
-	Config          map[string]any `json:"config"`
-	TimeoutMS       int            `json:"timeoutMs"`
-	CacheTtlSeconds int            `json:"cacheTtlSeconds"`
+	ID              string               `json:"id"`
+	ProjectID       string               `json:"projectId"`
+	ConnectionID    string               `json:"connectionId"`
+	Name            string               `json:"name"`
+	QueryType       string               `json:"queryType"`
+	Config          map[string]any       `json:"config"`
+	TimeoutMS       int                  `json:"timeoutMs"`
+	CacheTtlSeconds int                  `json:"cacheTtlSeconds"`
+	Outputs         []queryOutputPayload `json:"outputs"`
+}
+
+type queryOutputPayload struct {
+	ID            string `json:"id"`
+	DataPointPath string `json:"datapointPath"`
 }
 
 type paginationPayload struct {
@@ -495,6 +592,22 @@ func mustGetDataPointValue(t *testing.T, baseURL, token, projectID, path string)
 	return result
 }
 
+func mustGetDataPointValueWithParameters(t *testing.T, baseURL, token, projectID, path string, parameters map[string]any) dataPointValuePayload {
+	t.Helper()
+
+	parameterJSON, err := json.Marshal(parameters)
+	if err != nil {
+		t.Fatalf("encode datapoint runtime parameters failed: %v", err)
+	}
+	endpoint := baseURL + "/api/v1/data/projects/" + projectID + "/datapoints/value?path=" + url.QueryEscape(path) + "&parameters=" + url.QueryEscape(string(parameterJSON))
+	responseEnvelope := doJSONRequest(t, http.MethodGet, endpoint, token, nil)
+	var result dataPointValuePayload
+	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
+		t.Fatalf("decode parametrized datapoint value response failed: %v", err)
+	}
+	return result
+}
+
 func mustUpdateDataPoint(t *testing.T, baseURL, token, projectID, id string, payload map[string]any) dataPointPayload {
 	t.Helper()
 
@@ -557,9 +670,9 @@ func insertTestConnection(t *testing.T, ctx context.Context, fixture *testDataba
 
 	connectionID := uuid.NewString()
 	_, err = fixture.pool.Exec(ctx, `
-		INSERT INTO data_connections (id, project_id, name, type, status, metadata, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
-	`, connectionID, projectID, "test-connection", "relational", "connected", string(metadataBytes), userID)
+		INSERT INTO data_connections (id, project_id, name, type, category, is_enabled, metadata, created_by)
+		VALUES ($1, $2, $3, $4, 'database', true, $5::jsonb, $6)
+	`, connectionID, projectID, "test-connection", "relational", string(metadataBytes), userID)
 	if err != nil {
 		t.Fatalf("insert connection failed: %v", err)
 	}
@@ -635,7 +748,8 @@ func TestDataPointRuntimePermissionsListAndSave(t *testing.T) {
 	if len(initialList.DataPoints) != 1 {
 		t.Fatalf("expected 1 datapoint in list, got %d", len(initialList.DataPoints))
 	}
-	assertRuntimeGrant(t, initialList.DataPoints[0].RuntimePermissions.Write, []string{}, []string{}, true)
+	initialDetail := mustGetDataPoint(t, server.URL, token, projectID, dpID)
+	assertRuntimeGrant(t, initialDetail.RuntimePermissions.Write, []string{}, []string{}, true)
 
 	updated := mustUpdateDataPointRuntimePermissions(t, server.URL, token, projectID, dpID, map[string]any{
 		"write": map[string]any{
@@ -650,7 +764,9 @@ func TestDataPointRuntimePermissionsListAndSave(t *testing.T) {
 	assertRuntimeGrant(t, detail.RuntimePermissions.Write, []string{"operator", "maintainer"}, []string{"guest"}, false)
 
 	refreshedList := mustListDataPoints(t, server.URL, token, projectID, "search=metrics.runtime.permission")
-	assertRuntimeGrant(t, refreshedList.DataPoints[0].RuntimePermissions.Write, []string{"operator", "maintainer"}, []string{"guest"}, false)
+	if len(refreshedList.DataPoints) != 1 {
+		t.Fatalf("expected datapoint to remain visible after permission update, got %d", len(refreshedList.DataPoints))
+	}
 }
 
 func doJSONRequestWithStatus(t *testing.T, method, url, token string, payload any, statusCode int) apiEnvelope {

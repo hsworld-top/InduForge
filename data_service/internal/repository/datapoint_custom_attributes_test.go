@@ -28,7 +28,7 @@ func TestProjectSnapshotDataPointAttributeDefaultsRoundTrip(t *testing.T) {
 func TestBuildProjectArtifactV1IncludesDataPointAttributeDefaults(t *testing.T) {
 	artifact := BuildProjectArtifactV1("project-1", &ProjectSnapshot{
 		DataPoints: []DataPointRecord{{
-			ID: "dp-1", Path: "line.speed", Name: "线速", DataType: "number",
+			ID: "dp-1", Path: "line.speed", Name: "线速", DataType: "float64",
 			AttributeDefaults: map[string]string{"asset_code": "PUMP-001"},
 		}},
 	}, time.Now().UTC())

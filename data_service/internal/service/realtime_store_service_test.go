@@ -109,3 +109,117 @@ func TestRealtimeRuntimeKeyFallsBackToConnectionID(t *testing.T) {
 		t.Fatalf("expected fallback runtime key, got %q", got)
 	}
 }
+
+func TestApplyRealtimeValueMetadataRestoresLogicalType(t *testing.T) {
+	value := &RealtimeStoreValue{Type: "string"}
+	record := &repository.RealtimeKeyRecord{RedisType: "hash", ValueType: "object"}
+
+	applyRealtimeValueMetadata(value, record)
+
+	if value.Type != "hash" {
+		t.Fatalf("expected logical type hash, got %q", value.Type)
+	}
+}
+
+func TestNormalizeBuiltinRealtimeValueConvertsHashRowsToObject(t *testing.T) {
+	value, err := normalizeBuiltinRealtimeValue("hash", []any{
+		map[string]any{"key": "status", "value": "ok"},
+	})
+	if err != nil {
+		t.Fatalf("normalize builtin hash failed: %v", err)
+	}
+	object, ok := value.(map[string]string)
+	if !ok {
+		t.Fatalf("expected hash object, got %#v", value)
+	}
+	if object["status"] != "ok" {
+		t.Fatalf("unexpected hash value: %#v", object)
+	}
+}
+
+func TestBuildRealtimeDataPointPathIncludesConnectionAndKeyNamespace(t *testing.T) {
+	tests := []struct {
+		name           string
+		provider       string
+		connectionName string
+		key            string
+		want           string
+	}{
+		{name: "redis", provider: "redis", connectionName: "生产 Redis", key: "device:line1:status", want: "redis.生产_Redis.device.line1.status"},
+		{name: "builtin", provider: "builtin", connectionName: "IF实时库", key: "device/line1/temperature", want: "realtime.IF实时库.device.line1.temperature"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := buildRealtimeDataPointPath(test.provider, test.connectionName, test.key); got != test.want {
+				t.Fatalf("unexpected realtime datapoint path: got %q want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRealtimeKeyDisplayNameUsesLastNamespaceSegment(t *testing.T) {
+	if got := realtimeKeyDisplayName("device:line1:status"); got != "status" {
+		t.Fatalf("unexpected realtime datapoint display name: %q", got)
+	}
+}
+
+func TestInferRealtimeDataPointType(t *testing.T) {
+	tests := []struct {
+		name      string
+		redisType string
+		valueType string
+		value     any
+		want      string
+	}{
+		{name: "plain string", redisType: "string", valueType: "text", value: "online", want: "string"},
+		{name: "json object string", redisType: "string", valueType: "json", value: `{"online":true}`, want: "object"},
+		{name: "json array string", redisType: "string", valueType: "json", value: `[1,2]`, want: "array"},
+		{name: "hash", redisType: "hash", value: map[string]string{"status": "ok"}, want: "object"},
+		{name: "list", redisType: "list", value: []string{"a"}, want: "array"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := inferRealtimeDataPointType("", test.redisType, test.valueType, test.value); got != test.want {
+				t.Fatalf("unexpected inferred type: got %q want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeRealtimeStoredValueTypeKeepsStringEditorMode(t *testing.T) {
+	if got := normalizeRealtimeStoredValueType("string", "json", `{}`); got != "json" {
+		t.Fatalf("expected json editor mode, got %q", got)
+	}
+	if got := normalizeRealtimeStoredValueType("string", "text", "online"); got != "text" {
+		t.Fatalf("expected text editor mode, got %q", got)
+	}
+	if got := normalizeRealtimeStoredValueType("hash", "json", map[string]any{"status": "ok"}); got != "object" {
+		t.Fatalf("expected collection metadata type object, got %q", got)
+	}
+}
+
+func TestBuildRedisKeyValueDecodesJSONStringForObjectDataPoint(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	defer client.Close()
+	ctx := context.Background()
+	if err := client.Set(ctx, "device:status", `{"online":true}`, 0).Err(); err != nil {
+		t.Fatalf("seed redis json string failed: %v", err)
+	}
+
+	svc := &DataPointService{}
+	value, err := svc.buildRedisKeyValue(
+		ctx,
+		&repository.ConnectionRecord{Config: map[string]any{"address": server.Addr()}},
+		"device:status",
+		map[string]any{"valueType": "json"},
+		DataPointValue{},
+	)
+	if err != nil {
+		t.Fatalf("read redis json string failed: %v", err)
+	}
+	object, ok := value.Value.(map[string]any)
+	if !ok || object["online"] != true {
+		t.Fatalf("expected decoded json object, got %#v", value.Value)
+	}
+}

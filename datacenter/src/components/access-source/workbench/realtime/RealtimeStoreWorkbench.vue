@@ -85,6 +85,15 @@
           :image-size="72"
         />
       </div>
+      <button
+        v-if="hasMoreKeys"
+        type="button"
+        class="realtime-store__load-more"
+        :disabled="loadingKeys || keyLimit >= 10000"
+        @click="loadMoreKeys"
+      >
+        {{ keyLimit >= 10000 ? '已显示前 10000 个 Key' : '加载更多 Key' }}
+      </button>
     </aside>
 
     <main class="realtime-store__main">
@@ -133,29 +142,40 @@
             <el-input
               v-model="activeTab.draft.key"
               class="realtime-store__key-input"
-              :disabled="Boolean(activeTab.draft.originalKey)"
+              :readonly="Boolean(activeTab.draft.originalKey)"
               placeholder="device:line1:status"
               @input="markDirty"
             />
+            <el-button
+              v-if="activeTab.draft.originalKey"
+              class="realtime-store__rename"
+              title="重命名 Key"
+              aria-label="重命名 Key"
+              @click="openActiveRenameDialog"
+            >
+              <IconTablerEdit />
+            </el-button>
             <el-select
               v-model="activeTab.draft.type"
               class="realtime-store__type"
+              aria-label="Key 类型"
               :disabled="activeTab.draft.type === 'stream'"
               @change="handleTypeChange"
             >
               <el-option v-for="type in editableTypes" :key="type" :label="type" :value="type" />
               <el-option v-if="activeTab.draft.type === 'stream'" label="stream" value="stream" />
             </el-select>
-            <el-input-number
-              v-model="activeTab.draft.ttlSeconds"
-              class="realtime-store__ttl"
-              :min="-1"
-              :max="86400"
-              controls-position="right"
-              @change="handleTtlChange"
-            >
-              <template #prefix>TTL</template>
-            </el-input-number>
+            <label class="realtime-store__ttl-field">
+              <span>TTL（秒）</span>
+              <el-input-number
+                v-model="activeTab.draft.ttlSeconds"
+                class="realtime-store__ttl"
+                aria-label="TTL 秒数，0 表示不过期"
+                :min="0"
+                controls-position="right"
+                @change="handleTtlChange"
+              />
+            </label>
           </div>
           <div class="realtime-store__actions">
             <el-button title="刷新" :loading="loadingValue" @click="reloadActive">
@@ -399,7 +419,7 @@
 
     <el-dialog v-model="datapointDialog.visible" title="创建数据点" width="420px">
       <p class="realtime-store__dialog-tip">
-        实时库 Key 数据点统一按 object 创建，使用时再解析内部字段。
+        数据点类型会根据 Key 类型和值自动推断；String 的 JSON 内容会识别为对象或数组。
       </p>
       <template #footer>
         <el-button @click="datapointDialog.visible = false">取消</el-button>
@@ -477,7 +497,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
@@ -573,6 +593,20 @@ defineEmits<{
 }>()
 
 const editableTypes = ['string', 'hash', 'list', 'set', 'zset']
+const writableKeyPattern = /^[\p{L}\p{N}_:-]+$/u
+const utf8Length = (value: string) => new TextEncoder().encode(value).length
+const validateWritableKey = (value: string): string => {
+  if (!value) return 'Key 不能为空'
+  if (value !== value.trim()) return 'Key 不能包含首尾空格'
+  if (utf8Length(value) > 256) return 'Key 长度不能超过 256 字节'
+  if (value.startsWith(':') || value.endsWith(':') || value.includes('::')) {
+    return 'Key 的层级分隔符 : 之间不能为空'
+  }
+  if (!writableKeyPattern.test(value)) {
+    return 'Key 只能包含中文、字母、数字、冒号、下划线和短横线'
+  }
+  return ''
+}
 const stringViewModeOptions = [
   { label: 'Text', value: 'text' },
   { label: 'JSON', value: 'json' },
@@ -580,7 +614,18 @@ const stringViewModeOptions = [
 const keyword = ref('')
 const keys = ref<KeySummary[]>([])
 const groups = ref<KeyGroup[]>([])
+const keyLimit = ref(500)
+const hasMoreKeys = ref(false)
 const tabs = ref<KeyTab[]>([])
+const registerDraftChecker =
+  inject<
+    (guard: {
+      isDirty: () => boolean
+      save: () => Promise<boolean>
+      discard: () => void
+    }) => () => void
+  >('registerDraftChecker')
+let unregisterDraftChecker: (() => void) | undefined
 const activeTabKey = ref('')
 const loadingKeys = ref(false)
 const loadingValue = ref(false)
@@ -683,9 +728,11 @@ const loadKeys = async () => {
   try {
     const response = await dataAPI.getRealtimeStoreKeys(props.projectId, props.connection.id, {
       q: keyword.value || undefined,
+      limit: keyLimit.value,
     })
     keys.value = response?.data?.list || []
     groups.value = response?.data?.groups || []
+    hasMoreKeys.value = Boolean(response?.data?.hasMore)
     syncExpandedTreeNodeIds()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载实时库 Key 失败'))
@@ -697,8 +744,14 @@ const loadKeys = async () => {
 const scheduleLoadKeys = () => {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
+    keyLimit.value = 500
     loadKeys()
   }, 300)
+}
+
+const loadMoreKeys = async () => {
+  keyLimit.value = Math.min(10000, keyLimit.value + 500)
+  await loadKeys()
 }
 
 const handleTreeNodeClick = async (node: KeyTreeNode) => {
@@ -777,6 +830,10 @@ const isTreeNodeExpanded = (id: string) => expandedTreeNodeIds.value.has(id)
 
 const syncExpandedTreeNodeIds = () => {
   const folderIds = collectKeyTreeFolderIds(buildKeyTree(keys.value))
+  if (keyword.value.trim()) {
+    expandedTreeNodeIds.value = folderIds
+    return
+  }
   const next = new Set<string>()
   for (const id of expandedTreeNodeIds.value) {
     if (folderIds.has(id)) next.add(id)
@@ -793,7 +850,7 @@ const createDraftKey = async () => {
       originalKey: '',
       key: '',
       type: 'string',
-      ttlSeconds: -1,
+      ttlSeconds: 0,
       valueType: 'json',
       stringValue: '{}',
       rows: [],
@@ -856,19 +913,20 @@ const openOrReplaceKey = async (key: string) => {
 
 const saveActive = async () => {
   const tab = activeTab.value
-  if (!tab) return
-  if (!tab.draft.key.trim()) {
-    ElMessage.warning('Key 不能为空')
-    return
+  if (!tab) return false
+  const keyError = validateWritableKey(tab.draft.key)
+  if (keyError) {
+    ElMessage.warning(keyError)
+    return false
   }
   saving.value = true
   try {
     if (tab.draft.originalKey && tab.draft.key !== tab.draft.originalKey) {
       ElMessage.warning('已存在 Key 请使用重命名操作')
-      return
+      return false
     }
     const payload = {
-      key: tab.draft.key.trim(),
+      key: tab.draft.key,
       type: tab.draft.type,
       ttlSeconds: tab.draft.ttlSeconds,
       valueType: tab.draft.valueType || 'object',
@@ -880,21 +938,47 @@ const saveActive = async () => {
       payload,
     )
     const draft = createDraftFromResponse(response?.data || {})
+    let autoDatapointError = ''
+    if (!draft.dataPointPath) {
+      try {
+        const datapointResponse = await dataAPI.createRealtimeStoreKeyDatapoint(
+          props.projectId,
+          props.connection.id,
+          draft.key,
+          {},
+        )
+        draft.dataPointPath = datapointResponse?.data?.dataPointPath || ''
+      } catch (error) {
+        autoDatapointError = getApiErrorMessage(error, '自动生成数据点失败')
+      }
+    }
     tab.draft = draft
     tab.key = draft.key
     tab.dirty = false
     activeTabKey.value = draft.key
     scrollActiveTabIntoView()
-    if (isBuiltin.value && !draft.dataPointPath) {
-      await createSingleDatapoint(draft.key, { silent: true })
-    }
     await loadKeys()
-    ElMessage.success('Key 已保存')
+    if (autoDatapointError) {
+      ElMessage.warning(`Key 已保存，但${autoDatapointError}`)
+    } else {
+      ElMessage.success(draft.dataPointPath ? 'Key 已保存，数据点已生成' : 'Key 已保存')
+    }
+    return true
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '保存实时库 Key 失败'))
+    return false
   } finally {
     saving.value = false
   }
+}
+
+const saveDirtyTabs = async (): Promise<boolean> => {
+  const dirtyKeys = tabs.value.filter((tab) => tab.dirty).map((tab) => tab.key)
+  for (const key of dirtyKeys) {
+    activeTabKey.value = key
+    if (!(await saveActive())) return false
+  }
+  return true
 }
 
 const closeTab = async (key: string) => {
@@ -922,6 +1006,11 @@ const moveTabToEnd = (tab: KeyTab) => {
 const confirmRename = async () => {
   const key = renameDialog.key || activeTab.value?.draft.originalKey || activeTab.value?.draft.key
   if (!key) return
+  const keyError = validateWritableKey(renameDialog.newKey)
+  if (keyError) {
+    ElMessage.warning(keyError)
+    return
+  }
   saving.value = true
   try {
     const response = await dataAPI.renameRealtimeStoreKey(
@@ -950,6 +1039,14 @@ const confirmRename = async () => {
   }
 }
 
+const openActiveRenameDialog = () => {
+  const key = activeTab.value?.draft.originalKey || activeTab.value?.draft.key
+  if (!key) return
+  renameDialog.key = key
+  renameDialog.newKey = key
+  renameDialog.visible = true
+}
+
 const confirmCreateDatapoint = async () => {
   const tab = activeTab.value
   if (!tab?.draft.key) return
@@ -963,11 +1060,11 @@ const createSingleDatapoint = async (key: string, options: { silent?: boolean } 
       props.projectId,
       props.connection.id,
       key,
-      { dataType: 'object' },
+      {},
     )
     const tab = activeTab.value
     if (tab && (tab.draft.originalKey === key || tab.draft.key === key)) {
-      tab.draft.dataPointPath = response?.data?.path || ''
+      tab.draft.dataPointPath = response?.data?.dataPointPath || ''
     }
     datapointDialog.visible = false
     await loadKeys()
@@ -992,7 +1089,6 @@ const batchCreateDatapoints = async (targetKeys: string[], label: string) => {
       props.connection.id,
       {
         keys: dedupedKeys,
-        dataType: 'object',
       },
     )
     const data = response?.data || {}
@@ -1005,12 +1101,6 @@ const batchCreateDatapoints = async (targetKeys: string[], label: string) => {
   } finally {
     saving.value = false
   }
-}
-
-const deleteActive = async () => {
-  const tab = activeTab.value
-  if (!tab?.draft.key) return
-  await deleteKey(tab.draft.originalKey || tab.draft.key, tab.key)
 }
 
 const deleteKey = async (key: string, tabKey?: string) => {
@@ -1081,8 +1171,6 @@ const handleTypeChange = () => {
 }
 
 const handleTtlChange = () => {
-  const draft = activeTab.value?.draft
-  if (draft && Number(draft.ttlSeconds) === 0) draft.ttlSeconds = -1
   markDirty()
 }
 
@@ -1248,7 +1336,7 @@ const formatTTL = (ttl: number) => {
 
 const normalizeRealtimeTTL = (ttl: unknown) => {
   const value = Number(ttl ?? -1)
-  return value <= 0 ? -1 : value
+  return value <= 0 ? 0 : value
 }
 
 const buildKeyTree = (items: KeySummary[]) => {
@@ -1376,6 +1464,11 @@ const collectLeafKeys = (nodes: KeyTreeNode[]) => {
 
 onMounted(() => {
   loadKeys()
+  unregisterDraftChecker = registerDraftChecker?.({
+    isDirty: () => tabs.value.some((tab) => tab.dirty),
+    save: saveDirtyTabs,
+    discard: () => tabs.value.forEach((tab) => (tab.dirty = false)),
+  })
   window.addEventListener('click', closeKeyContextMenu)
   window.addEventListener('scroll', closeKeyContextMenu, true)
 })
@@ -1385,6 +1478,7 @@ watch(keyword, () => {
 })
 
 onBeforeUnmount(() => {
+  unregisterDraftChecker?.()
   if (searchTimer) clearTimeout(searchTimer)
   window.removeEventListener('click', closeKeyContextMenu)
   window.removeEventListener('scroll', closeKeyContextMenu, true)
@@ -1431,6 +1525,25 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: auto;
   padding: 8px 6px;
+}
+
+.realtime-store__load-more {
+  height: 36px;
+  flex: 0 0 36px;
+  border: 0;
+  border-top: 1px solid #e5ebf3;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.realtime-store__load-more:hover:not(:disabled) {
+  background: #f7faff;
+}
+
+.realtime-store__load-more:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .realtime-store__tree-node {
@@ -1638,7 +1751,16 @@ onBeforeUnmount(() => {
 }
 
 .realtime-store__key-input {
+  min-width: 160px;
   max-width: 520px;
+  flex: 1 1 280px;
+}
+
+.realtime-store__rename {
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
 }
 
 .realtime-store__type-badge {
@@ -1658,20 +1780,22 @@ onBeforeUnmount(() => {
 }
 
 .realtime-store__type {
-  width: 112px;
+  width: 120px;
+  flex: 0 0 120px;
+}
+
+.realtime-store__ttl-field {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: #697589;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .realtime-store__ttl {
-  width: 156px;
-}
-
-.realtime-store__ttl :deep(.el-input__prefix) {
-  width: 46px;
-  justify-content: center;
-  margin-right: 8px;
-  border-right: 1px solid #d8e0eb;
-  color: #7a8698;
-  font-size: 12px;
+  width: 128px;
 }
 
 .realtime-store__actions {
@@ -1875,6 +1999,19 @@ onBeforeUnmount(() => {
 
   .realtime-store__actions {
     align-self: flex-start;
+  }
+
+  .realtime-store__key-input,
+  .realtime-store__type,
+  .realtime-store__ttl-field {
+    width: 100%;
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .realtime-store__ttl {
+    flex: 1;
+    width: auto;
   }
 }
 </style>

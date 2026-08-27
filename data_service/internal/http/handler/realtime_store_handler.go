@@ -51,7 +51,8 @@ func (h *RealtimeStoreHandler) GetKey(w http.ResponseWriter, r *http.Request) er
 }
 
 func (h *RealtimeStoreHandler) SaveKey(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
+	claims, err := requireClaims(r)
+	if err != nil {
 		return err
 	}
 	var request service.SaveRealtimeStoreKeyInput
@@ -61,7 +62,7 @@ func (h *RealtimeStoreHandler) SaveKey(w http.ResponseWriter, r *http.Request) e
 	if request.Key == "" {
 		request.Key = realtimeKeyFromRequest(r)
 	}
-	result, err := h.service.SaveKey(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request)
+	result, err := h.service.SaveKey(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

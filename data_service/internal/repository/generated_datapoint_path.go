@@ -84,6 +84,8 @@ func generatedDataPointSourceConfigKey(sourceType string) string {
 		return "topicMappingId"
 	case "realtime.key":
 		return "keyId"
+	case "mqtt.tag":
+		return "tagId"
 	default:
 		return ""
 	}

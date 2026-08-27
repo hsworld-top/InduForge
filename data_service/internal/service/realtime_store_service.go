@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/redis/go-redis/v9"
 
@@ -15,18 +17,23 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
-const defaultRealtimeStoreLimit = 500
+const (
+	defaultRealtimeStoreLimit   = 500
+	maxRealtimeStoreLimit       = 10000
+	maxWritableRealtimeKeyBytes = 256
+)
 
 type RealtimeStoreKeySummary struct {
-	ID            string `json:"id,omitempty"`
-	Key           string `json:"key"`
-	Type          string `json:"type"`
-	TTL           int64  `json:"ttl"`
-	Size          int64  `json:"size"`
-	Provider      string `json:"provider"`
-	ValueType     string `json:"valueType"`
-	DataPointID   string `json:"dataPointId,omitempty"`
-	DataPointPath string `json:"dataPointPath,omitempty"`
+	ID            string         `json:"id,omitempty"`
+	Key           string         `json:"key"`
+	Type          string         `json:"type"`
+	TTL           int64          `json:"ttl"`
+	Size          int64          `json:"size"`
+	Provider      string         `json:"provider"`
+	ValueType     string         `json:"valueType"`
+	DataPointID   string         `json:"dataPointId,omitempty"`
+	DataPointPath string         `json:"dataPointPath,omitempty"`
+	Outputs       []SourceOutput `json:"outputs"`
 }
 
 type RealtimeStoreGroup struct {
@@ -35,21 +42,24 @@ type RealtimeStoreGroup struct {
 }
 
 type RealtimeStoreKeyList struct {
-	List   []RealtimeStoreKeySummary `json:"list"`
-	Groups []RealtimeStoreGroup      `json:"groups"`
+	List    []RealtimeStoreKeySummary `json:"list"`
+	Groups  []RealtimeStoreGroup      `json:"groups"`
+	HasMore bool                      `json:"hasMore"`
+	Limit   int                       `json:"limit"`
 }
 
 type RealtimeStoreValue struct {
-	ID            string `json:"id,omitempty"`
-	Key           string `json:"key"`
-	Type          string `json:"type"`
-	TTL           int64  `json:"ttl"`
-	Value         any    `json:"value"`
-	Size          int64  `json:"size"`
-	Provider      string `json:"provider"`
-	ValueType     string `json:"valueType"`
-	DataPointID   string `json:"dataPointId,omitempty"`
-	DataPointPath string `json:"dataPointPath,omitempty"`
+	ID            string         `json:"id,omitempty"`
+	Key           string         `json:"key"`
+	Type          string         `json:"type"`
+	TTL           int64          `json:"ttl"`
+	Value         any            `json:"value"`
+	Size          int64          `json:"size"`
+	Provider      string         `json:"provider"`
+	ValueType     string         `json:"valueType"`
+	DataPointID   string         `json:"dataPointId,omitempty"`
+	DataPointPath string         `json:"dataPointPath,omitempty"`
+	Outputs       []SourceOutput `json:"outputs"`
 }
 
 type SaveRealtimeStoreKeyInput struct {
@@ -66,20 +76,23 @@ type RenameRealtimeStoreKeyInput struct {
 }
 
 type CreateRealtimeKeyDataPointInput struct {
-	DataType string `json:"dataType"`
+	DataType string              `json:"dataType"`
+	Outputs  []SourceOutputInput `json:"outputs"`
 }
 
 type BatchCreateRealtimeKeyDataPointInput struct {
-	Keys     []string `json:"keys"`
-	DataType string   `json:"dataType"`
+	Keys     []string            `json:"keys"`
+	DataType string              `json:"dataType"`
+	Outputs  []SourceOutputInput `json:"outputs"`
 }
 
 type BatchRealtimeKeyDataPointResult struct {
-	Key           string `json:"key"`
-	Status        string `json:"status"`
-	Message       string `json:"message,omitempty"`
-	DataPointID   string `json:"dataPointId,omitempty"`
-	DataPointPath string `json:"dataPointPath,omitempty"`
+	Key           string         `json:"key"`
+	Status        string         `json:"status"`
+	Message       string         `json:"message,omitempty"`
+	DataPointID   string         `json:"dataPointId,omitempty"`
+	DataPointPath string         `json:"dataPointPath,omitempty"`
+	Outputs       []SourceOutput `json:"outputs,omitempty"`
 }
 
 type BatchRealtimeKeyDataPointResponse struct {
@@ -104,19 +117,25 @@ func (s *RealtimeStoreService) ListKeys(ctx context.Context, projectID, connecti
 	if err != nil {
 		return nil, err
 	}
-	if limit <= 0 || limit > 2000 {
+	if limit <= 0 {
 		limit = defaultRealtimeStoreLimit
+	} else if limit > maxRealtimeStoreLimit {
+		limit = maxRealtimeStoreLimit
 	}
-	var items []RealtimeStoreKeySummary
-	if provider == "redis" {
-		items, err = s.listRedisKeys(ctx, connection, q, limit)
-	} else {
-		items, err = s.listBuiltinKeys(ctx, connection, q)
-	}
+	metadataByKey, err := s.metadataByKey(ctx, projectID, connectionID, provider)
 	if err != nil {
 		return nil, err
 	}
-	metadataByKey, err := s.metadataByKey(ctx, projectID, connectionID, provider)
+	var items []RealtimeStoreKeySummary
+	if provider == "redis" {
+		metadataKeys := make([]string, 0, len(metadataByKey))
+		for key := range metadataByKey {
+			metadataKeys = append(metadataKeys, key)
+		}
+		items, err = s.listRedisKeys(ctx, connection, q, limit+1, metadataKeys)
+	} else {
+		items, err = s.listBuiltinKeys(ctx, connection, q)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +146,12 @@ func (s *RealtimeStoreService) ListKeys(ctx context.Context, projectID, connecti
 	}
 	searchedItems := filterRealtimeKeys(items, q, "")
 	groups := buildRealtimeGroups(searchedItems)
-	return &RealtimeStoreKeyList{List: filterRealtimeKeys(searchedItems, "", group), Groups: groups}, nil
+	filteredItems := filterRealtimeKeys(searchedItems, "", group)
+	hasMore := len(filteredItems) > limit
+	if hasMore {
+		filteredItems = filteredItems[:limit]
+	}
+	return &RealtimeStoreKeyList{List: filteredItems, Groups: groups, HasMore: hasMore, Limit: limit}, nil
 }
 
 func (s *RealtimeStoreService) GetKey(ctx context.Context, projectID, connectionID, key string) (*RealtimeStoreValue, error) {
@@ -154,7 +178,7 @@ func (s *RealtimeStoreService) GetKey(ctx context.Context, projectID, connection
 	return value, nil
 }
 
-func (s *RealtimeStoreService) SaveKey(ctx context.Context, projectID, connectionID string, input SaveRealtimeStoreKeyInput) (*RealtimeStoreValue, error) {
+func (s *RealtimeStoreService) SaveKey(ctx context.Context, projectID, connectionID, userID string, input SaveRealtimeStoreKeyInput) (*RealtimeStoreValue, error) {
 	connection, provider, err := s.loadConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
@@ -167,7 +191,7 @@ func (s *RealtimeStoreService) SaveKey(ctx context.Context, projectID, connectio
 		if err := s.saveRedisKey(ctx, connection, key, redisType, input.Value, ttlSeconds); err != nil {
 			return nil, err
 		}
-	} else if err := s.saveBuiltinKey(ctx, connection, key, input.Value, ttlSeconds); err != nil {
+	} else if err := s.saveBuiltinKey(ctx, connection, key, redisType, input.Value, ttlSeconds); err != nil {
 		return nil, err
 	}
 	if _, err := s.repository.Upsert(ctx, repository.UpsertRealtimeKeyParams{
@@ -182,6 +206,16 @@ func (s *RealtimeStoreService) SaveKey(ctx context.Context, projectID, connectio
 	}); err != nil {
 		return nil, err
 	}
+	// Redis 与内置实时库都遵循“保存即生成数据点”；已有输出配置时保留用户配置。
+	record, recordErr := s.repository.GetByKey(ctx, projectID, connectionID, provider, key)
+	if recordErr != nil {
+		return nil, recordErr
+	}
+	if len(record.Outputs) == 0 {
+		if _, createErr := s.CreateDataPoint(ctx, projectID, connectionID, key, userID, CreateRealtimeKeyDataPointInput{}); createErr != nil {
+			return nil, createErr
+		}
+	}
 	return s.GetKey(ctx, projectID, connectionID, key)
 }
 
@@ -194,7 +228,7 @@ func (s *RealtimeStoreService) RenameKey(ctx context.Context, projectID, connect
 	if err != nil {
 		return nil, err
 	}
-	newKey, err := normalizeRealtimeKey(input.NewKey)
+	newKey, err := normalizeWritableRealtimeKey(input.NewKey)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +265,11 @@ func (s *RealtimeStoreService) RenameKey(ctx context.Context, projectID, connect
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "目标 key 已存在")
 		}
 	}
-	if _, err := s.repository.Rename(ctx, projectID, connectionID, provider, oldKey, newKey); err != nil {
+	if _, err := s.repository.Rename(
+		ctx, projectID, connectionID, provider, oldKey, newKey,
+		buildRealtimeDataPointPath(provider, connection.Name, newKey),
+		realtimeKeyDisplayName(oldKey), realtimeKeyDisplayName(newKey),
+	); err != nil {
 		_, upsertErr := s.repository.Upsert(ctx, repository.UpsertRealtimeKeyParams{
 			ProjectID:         projectID,
 			ConnectionID:      connectionID,
@@ -282,7 +320,7 @@ func (s *RealtimeStoreService) DeleteKey(ctx context.Context, projectID, connect
 	return map[string]bool{"deleted": true}, nil
 }
 
-func (s *RealtimeStoreService) CreateDataPoint(ctx context.Context, projectID, connectionID, key, userID string, input CreateRealtimeKeyDataPointInput) (*repository.DataPointRecord, error) {
+func (s *RealtimeStoreService) CreateDataPoint(ctx context.Context, projectID, connectionID, key, userID string, input CreateRealtimeKeyDataPointInput) (*BatchRealtimeKeyDataPointResult, error) {
 	connection, provider, err := s.loadConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
@@ -295,25 +333,12 @@ func (s *RealtimeStoreService) CreateDataPoint(ctx context.Context, projectID, c
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.repository.Upsert(ctx, repository.UpsertRealtimeKeyParams{
-		ProjectID:         projectID,
-		ConnectionID:      connectionID,
-		Provider:          provider,
-		KeyPath:           key,
-		RedisType:         value.Type,
-		ValueType:         normalizeRealtimeValueType(input.DataType),
-		DefaultTtlSeconds: int(value.TTL),
-		Description:       "",
-	})
-	if err != nil {
-		return nil, err
-	}
 	config := map[string]any{
 		"provider":     provider,
 		"connectionId": connectionID,
-		"keyId":        record.ID,
 		"key":          key,
 		"redisType":    value.Type,
+		"valueType":    value.ValueType,
 	}
 	if provider == "redis" {
 		config["db"] = intFromAny(connection.Config["database"], intFromAny(connection.Config["db"], 0))
@@ -324,17 +349,34 @@ func (s *RealtimeStoreService) CreateDataPoint(ctx context.Context, projectID, c
 	if strings.TrimSpace(userID) != "" {
 		userPtr = &userID
 	}
-	return s.repository.CreateDataPoint(ctx, repository.CreateRealtimeKeyDataPointParams{
-		ProjectID:    projectID,
-		ConnectionID: connectionID,
-		KeyID:        record.ID,
-		KeyPath:      key,
-		Provider:     provider,
-		RedisType:    value.Type,
-		DataType:     normalizeRealtimeValueType(input.DataType),
-		SourceConfig: config,
-		UserID:       userPtr,
-	})
+	defaultType := inferRealtimeDataPointType(input.DataType, value.Type, value.ValueType, value.Value)
+	displayName := realtimeKeyDisplayName(key)
+	pathPrefix := buildRealtimeDataPointPath(provider, connection.Name, key)
+	outputs, err := normalizeSourceOutputs(input.Outputs, SourceOutputInput{Key: "value", DisplayName: displayName, Selector: SourceOutputSelector{Kind: "whole"}, DataType: defaultType})
+	if err != nil {
+		return nil, err
+	}
+	if err := attachRealtimeOutputValues(value.Value, outputs); err != nil {
+		return nil, err
+	}
+	created, err := s.repository.BatchCreateDataPoints(ctx, []repository.BatchRealtimeKeyDataPointParams{{
+		Metadata: repository.UpsertRealtimeKeyParams{ProjectID: projectID, ConnectionID: connectionID,
+			Provider: provider, KeyPath: key, RedisType: value.Type, ValueType: defaultType,
+			DefaultTtlSeconds: int(value.TTL), Description: ""},
+		DataPoint: repository.CreateRealtimeKeyDataPointParams{ProjectID: projectID, ConnectionID: connectionID,
+			KeyPath: key, PathPrefix: pathPrefix, DisplayName: displayName, Provider: provider, RedisType: value.Type, DataType: defaultType,
+			SourceConfig: config, UserID: userPtr, Outputs: outputs},
+	}})
+	if err != nil {
+		return nil, err
+	}
+	records := created[0]
+	result := &BatchRealtimeKeyDataPointResult{Key: key, Status: "created", Outputs: sourceOutputsFromRecords(records)}
+	if len(records) > 0 {
+		result.DataPointID = records[0].DataPointID
+		result.DataPointPath = records[0].DataPointPath
+	}
+	return result, nil
 }
 
 func (s *RealtimeStoreService) BatchCreateDataPoints(ctx context.Context, projectID, connectionID, userID string, input BatchCreateRealtimeKeyDataPointInput) (*BatchRealtimeKeyDataPointResponse, error) {
@@ -345,7 +387,7 @@ func (s *RealtimeStoreService) BatchCreateDataPoints(ctx context.Context, projec
 	if len(keys) > 500 {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "单次最多创建 500 个实时库 key 数据点")
 	}
-	_, provider, err := s.loadConnection(ctx, projectID, connectionID)
+	connection, provider, err := s.loadConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
 	}
@@ -354,33 +396,73 @@ func (s *RealtimeStoreService) BatchCreateDataPoints(ctx context.Context, projec
 		return nil, err
 	}
 
-	result := &BatchRealtimeKeyDataPointResponse{
-		List: make([]BatchRealtimeKeyDataPointResult, 0, len(keys)),
+	result := &BatchRealtimeKeyDataPointResponse{List: make([]BatchRealtimeKeyDataPointResult, len(keys))}
+	pending := make([]repository.BatchRealtimeKeyDataPointParams, 0, len(keys))
+	pendingIndexes := make([]int, 0, len(keys))
+	var userPtr *string
+	if strings.TrimSpace(userID) != "" {
+		userPtr = &userID
 	}
 	for _, key := range keys {
+		index := len(pendingIndexes) + result.Exists
 		if record, ok := metadataByKey[key]; ok && record.DataPointID != nil {
 			result.Exists += 1
-			result.List = append(result.List, BatchRealtimeKeyDataPointResult{
+			result.List[index] = BatchRealtimeKeyDataPointResult{
 				Key:           key,
 				Status:        "exists",
 				DataPointID:   derefString(record.DataPointID),
 				DataPointPath: derefString(record.DataPointPath),
-			})
+			}
 			continue
 		}
-		record, err := s.CreateDataPoint(ctx, projectID, connectionID, key, userID, CreateRealtimeKeyDataPointInput{DataType: input.DataType})
-		item := BatchRealtimeKeyDataPointResult{Key: key}
+		value, err := s.GetKey(ctx, projectID, connectionID, key)
 		if err != nil {
-			item.Status = "failed"
-			item.Message = err.Error()
-			result.Failed += 1
-		} else {
-			item.Status = "created"
-			item.DataPointID = record.ID
-			item.DataPointPath = record.Path
-			result.Created += 1
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "批量建点预校验失败: "+key, err)
 		}
-		result.List = append(result.List, item)
+		dataType := inferRealtimeDataPointType(input.DataType, value.Type, value.ValueType, value.Value)
+		displayName := realtimeKeyDisplayName(key)
+		pathPrefix := buildRealtimeDataPointPath(provider, connection.Name, key)
+		outputs, normalizeErr := normalizeSourceOutputs(input.Outputs, SourceOutputInput{Key: "value", DisplayName: displayName, Selector: SourceOutputSelector{Kind: "whole"}, DataType: dataType})
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		if valueErr := attachRealtimeOutputValues(value.Value, outputs); valueErr != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "批量建点字段校验失败: "+key, valueErr)
+		}
+		config := map[string]any{
+			"provider": provider, "connectionId": connectionID, "key": key,
+			"redisType": value.Type, "valueType": value.ValueType,
+		}
+		if provider == "redis" {
+			config["db"] = intFromAny(connection.Config["database"], intFromAny(connection.Config["db"], 0))
+		} else {
+			config["runtimeKey"] = s.runtimeKey(connection)
+		}
+		pendingIndexes = append(pendingIndexes, index)
+		pending = append(pending, repository.BatchRealtimeKeyDataPointParams{
+			Metadata: repository.UpsertRealtimeKeyParams{
+				ProjectID: projectID, ConnectionID: connectionID, Provider: provider, KeyPath: key,
+				RedisType: value.Type, ValueType: dataType, DefaultTtlSeconds: int(value.TTL), Description: "",
+			},
+			DataPoint: repository.CreateRealtimeKeyDataPointParams{
+				ProjectID: projectID, ConnectionID: connectionID, KeyPath: key, PathPrefix: pathPrefix, DisplayName: displayName, Provider: provider,
+				RedisType: value.Type, DataType: dataType, SourceConfig: config, UserID: userPtr, Outputs: outputs,
+			},
+		})
+	}
+	created, err := s.repository.BatchCreateDataPoints(ctx, pending)
+	if err != nil {
+		return nil, err
+	}
+	for index, records := range created {
+		listIndex := pendingIndexes[index]
+		item := BatchRealtimeKeyDataPointResult{Key: keys[listIndex], Status: "created", Outputs: sourceOutputsFromRecords(records)}
+		if len(records) > 0 {
+			item.DataPointID = records[0].DataPointID
+			item.DataPointPath = records[0].DataPointPath
+		}
+		result.List[listIndex] = item
+		result.Created++
 	}
 	return result, nil
 }
@@ -406,6 +488,37 @@ func (s *RealtimeStoreService) loadConnection(ctx context.Context, projectID, co
 	}
 }
 
+func attachRealtimeOutputValues(root any, outputs []repository.SourceOutputMappingParam) error {
+	for index := range outputs {
+		value := root
+		switch outputs[index].Selector.Kind {
+		case "whole":
+		case "path":
+			selected, ok := extractValueBySegments(root, outputs[index].Selector.Segments)
+			if !ok {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "实时 Key 中不存在输出字段: "+outputs[index].DisplayName)
+			}
+			value = selected
+		case "column":
+			if outputs[index].Selector.Column == nil {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "实时 Key 字段选择器无效")
+			}
+			object, ok := root.(map[string]any)
+			if !ok {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "实时 Key 不是对象，不能选择字段")
+			}
+			selected, exists := object[*outputs[index].Selector.Column]
+			if !exists {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "实时 Key 中不存在输出字段: "+outputs[index].DisplayName)
+			}
+			value = selected
+		}
+		encoded := stringifyJSONValue(value)
+		outputs[index].DefaultValue = &encoded
+	}
+	return nil
+}
+
 func (s *RealtimeStoreService) metadataByKey(ctx context.Context, projectID, connectionID, provider string) (map[string]repository.RealtimeKeyRecord, error) {
 	records, err := s.repository.List(ctx, projectID, connectionID, provider)
 	if err != nil {
@@ -418,7 +531,7 @@ func (s *RealtimeStoreService) metadataByKey(ctx context.Context, projectID, con
 	return result, nil
 }
 
-func (s *RealtimeStoreService) listRedisKeys(ctx context.Context, connection *repository.ConnectionRecord, q string, limit int) ([]RealtimeStoreKeySummary, error) {
+func (s *RealtimeStoreService) listRedisKeys(ctx context.Context, connection *repository.ConnectionRecord, q string, limit int, metadataKeys []string) ([]RealtimeStoreKeySummary, error) {
 	var result []RealtimeStoreKeySummary
 	err := s.withRedisClient(ctx, connection, func(client redis.UniversalClient) error {
 		pattern := strings.TrimSpace(q)
@@ -436,22 +549,39 @@ func (s *RealtimeStoreService) listRedisKeys(ctx context.Context, connection *re
 		if err != nil {
 			return err
 		}
-		result = make([]RealtimeStoreKeySummary, 0, len(keys))
+		result = make([]RealtimeStoreKeySummary, 0, len(keys)+len(metadataKeys))
+		seen := make(map[string]struct{}, len(keys)+len(metadataKeys))
 		for _, key := range keys {
-			keyType, _ := client.Type(ctx, key).Result()
-			ttl, _ := client.TTL(ctx, key).Result()
-			result = append(result, RealtimeStoreKeySummary{
-				Key:       key,
-				Type:      normalizeRedisType(keyType),
-				TTL:       int64(ttl.Seconds()),
-				Size:      redisWorkbenchSize(ctx, client, key, keyType),
-				Provider:  "redis",
-				ValueType: "object",
-			})
+			seen[key] = struct{}{}
+			result = append(result, redisKeySummary(ctx, client, key))
+		}
+		query := strings.ToLower(strings.TrimSpace(q))
+		for _, key := range metadataKeys {
+			if _, ok := seen[key]; ok || (query != "" && !strings.Contains(strings.ToLower(key), query)) {
+				continue
+			}
+			exists, existsErr := client.Exists(ctx, key).Result()
+			if existsErr != nil {
+				return existsErr
+			}
+			if exists == 0 {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, redisKeySummary(ctx, client, key))
 		}
 		return nil
 	})
 	return result, err
+}
+
+func redisKeySummary(ctx context.Context, client redis.UniversalClient, key string) RealtimeStoreKeySummary {
+	keyType, _ := client.Type(ctx, key).Result()
+	ttl, _ := client.TTL(ctx, key).Result()
+	return RealtimeStoreKeySummary{
+		Key: key, Type: normalizeRedisType(keyType), TTL: int64(ttl.Seconds()),
+		Size: redisWorkbenchSize(ctx, client, key, keyType), Provider: "redis", ValueType: "object",
+	}
 }
 
 func (s *RealtimeStoreService) listBuiltinKeys(ctx context.Context, connection *repository.ConnectionRecord, q string) ([]RealtimeStoreKeySummary, error) {
@@ -560,12 +690,16 @@ func (s *RealtimeStoreService) saveRedisKey(ctx context.Context, connection *rep
 	})
 }
 
-func (s *RealtimeStoreService) saveBuiltinKey(ctx context.Context, connection *repository.ConnectionRecord, key string, value any, ttlSeconds int) error {
+func (s *RealtimeStoreService) saveBuiltinKey(ctx context.Context, connection *repository.ConnectionRecord, key, redisType string, value any, ttlSeconds int) error {
 	fullKey, err := s.builtinFullKey(connection.ProjectID, connection, key)
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(value)
+	normalizedValue, err := normalizeBuiltinRealtimeValue(redisType, value)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(normalizedValue)
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "IF 实时库 value 必须可序列化为 JSON", err)
 	}
@@ -710,7 +844,7 @@ func ttlDuration(ttlSeconds int) time.Duration {
 }
 
 func normalizeSaveRealtimeKeyInput(input SaveRealtimeStoreKeyInput) (string, string, string, int, error) {
-	key, err := normalizeRealtimeKey(input.Key)
+	key, err := normalizeWritableRealtimeKey(input.Key)
 	if err != nil {
 		return "", "", "", 0, err
 	}
@@ -726,7 +860,27 @@ func normalizeSaveRealtimeKeyInput(input SaveRealtimeStoreKeyInput) (string, str
 	if input.TTLSeconds < -1 {
 		return "", "", "", 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TTL 不能小于 -1")
 	}
-	return key, redisType, normalizeRealtimeValueType(input.ValueType), input.TTLSeconds, nil
+	return key, redisType, normalizeRealtimeStoredValueType(redisType, input.ValueType, input.Value), input.TTLSeconds, nil
+}
+
+func normalizeRealtimeStoredValueType(redisType, valueType string, value any) string {
+	if normalizeRedisType(redisType) != "string" {
+		return "object"
+	}
+	mode := strings.ToLower(strings.TrimSpace(valueType))
+	if mode == "json" || mode == "text" {
+		return mode
+	}
+	if text, ok := value.(string); ok {
+		var decoded any
+		if json.Unmarshal([]byte(strings.TrimSpace(text)), &decoded) == nil {
+			switch decoded.(type) {
+			case map[string]any, []any:
+				return "json"
+			}
+		}
+	}
+	return "text"
 }
 
 func normalizeRealtimeKey(key string) (string, error) {
@@ -738,6 +892,72 @@ func normalizeRealtimeKey(key string) (string, error) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "key 不合法")
 	}
 	return key, nil
+}
+
+// normalizeWritableRealtimeKey 约束工作台新建和重命名的 Key。
+// 外部 Redis 中既有的特殊 Key 仍可读取；这里只限制平台主动写入的名称，避免树结构和数据点路径产生歧义。
+func normalizeWritableRealtimeKey(key string) (string, error) {
+	trimmed := strings.TrimSpace(key)
+	if _, err := normalizeRealtimeKey(trimmed); err != nil {
+		return "", err
+	}
+	if key != trimmed {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Key 不能包含首尾空格")
+	}
+	if len([]byte(trimmed)) > maxWritableRealtimeKeyBytes {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Key 长度不能超过 256 字节")
+	}
+	if strings.HasPrefix(trimmed, ":") || strings.HasSuffix(trimmed, ":") || strings.Contains(trimmed, "::") {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Key 的层级分隔符 : 之间不能为空")
+	}
+	for _, char := range trimmed {
+		if unicode.IsLetter(char) || unicode.IsDigit(char) {
+			continue
+		}
+		switch char {
+		case ':', '_', '-':
+			continue
+		default:
+			return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Key 只能包含中文、字母、数字、冒号、下划线和短横线")
+		}
+	}
+	return trimmed, nil
+}
+
+// buildRealtimeDataPointPath 将接入源和 Key 命名空间组合为稳定、可读的数据点路径。
+// Redis 常见的冒号分层和用户输入的路径分隔符都转换为数据点层级。
+func buildRealtimeDataPointPath(provider, connectionName, key string) string {
+	prefix := "realtime"
+	if strings.EqualFold(strings.TrimSpace(provider), "redis") {
+		prefix = "redis"
+	}
+	segments := []string{prefix, normalizeDatapointSegment(connectionName)}
+	for _, segment := range realtimeKeySegments(key) {
+		segments = append(segments, normalizeDatapointSegment(segment))
+	}
+	if len(segments) == 2 {
+		segments = append(segments, "unnamed")
+	}
+	return strings.Join(segments, ".")
+}
+
+func realtimeKeyDisplayName(key string) string {
+	segments := realtimeKeySegments(key)
+	if len(segments) == 0 {
+		return strings.TrimSpace(key)
+	}
+	return strings.TrimSpace(segments[len(segments)-1])
+}
+
+func realtimeKeySegments(key string) []string {
+	return strings.FieldsFunc(strings.TrimSpace(key), func(char rune) bool {
+		switch char {
+		case ':', '.', '/', '\\':
+			return true
+		default:
+			return false
+		}
+	})
 }
 
 func normalizeRealtimeBatchKeys(keys []string) []string {
@@ -763,9 +983,59 @@ func normalizeRedisType(value string) string {
 }
 
 func normalizeRealtimeValueType(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "string", "number", "boolean", "object", "array":
-		return strings.ToLower(strings.TrimSpace(value))
+	if normalized, ok := externalDataPointType(value); ok {
+		return normalized
+	}
+	return "object"
+}
+
+// inferRealtimeDataPointType 在未显式指定类型时，根据 Key 类型和值推断数据点契约。
+// Redis String 的 JSON 编辑模式会继续解析内容，避免对象或数组被错误标记为 string。
+func inferRealtimeDataPointType(requested, redisType, valueType string, value any) string {
+	if strings.TrimSpace(requested) != "" {
+		return normalizeRealtimeValueType(requested)
+	}
+	switch normalizeRedisType(redisType) {
+	case "hash":
+		return "object"
+	case "list", "set", "zset", "stream":
+		return "array"
+	case "string":
+		if strings.EqualFold(strings.TrimSpace(valueType), "json") {
+			if text, ok := value.(string); ok {
+				var decoded any
+				if json.Unmarshal([]byte(text), &decoded) == nil {
+					value = decoded
+				}
+			}
+		}
+		return inferRealtimeValueDataType(value)
+	default:
+		return inferRealtimeValueDataType(value)
+	}
+}
+
+func inferRealtimeValueDataType(value any) string {
+	switch typed := value.(type) {
+	case bool:
+		return "bool"
+	case string:
+		return "string"
+	case float32:
+		return "float32"
+	case float64:
+		if math.Trunc(typed) == typed {
+			return "int64"
+		}
+		return "float64"
+	case int, int8, int16, int32, int64:
+		return "int64"
+	case uint, uint8, uint16, uint32, uint64:
+		return "uint64"
+	case []any, []string:
+		return "array"
+	case map[string]any, map[string]string:
+		return "object"
 	default:
 		return "object"
 	}
@@ -822,6 +1092,7 @@ func applyRealtimeMetadata(item *RealtimeStoreKeySummary, record repository.Real
 	item.ValueType = record.ValueType
 	item.DataPointID = derefString(record.DataPointID)
 	item.DataPointPath = derefString(record.DataPointPath)
+	item.Outputs = sourceOutputsFromRecords(record.Outputs)
 	if record.RedisType != "" {
 		item.Type = record.RedisType
 	}
@@ -829,9 +1100,26 @@ func applyRealtimeMetadata(item *RealtimeStoreKeySummary, record repository.Real
 
 func applyRealtimeValueMetadata(value *RealtimeStoreValue, record *repository.RealtimeKeyRecord) {
 	value.ID = record.ID
+	if record.RedisType != "" {
+		value.Type = record.RedisType
+	}
 	value.ValueType = record.ValueType
 	value.DataPointID = derefString(record.DataPointID)
 	value.DataPointPath = derefString(record.DataPointPath)
+	value.Outputs = sourceOutputsFromRecords(record.Outputs)
+}
+
+// normalizeBuiltinRealtimeValue 保持 IF 实时库的逻辑类型与 Redis 工作台一致。
+// 内置运行库物理上使用 String 保存 JSON，因此 Hash 必须在落库前转换为字段对象，
+// 避免再次读取时退化为无法编辑的行数组。
+func normalizeBuiltinRealtimeValue(redisType string, value any) (any, error) {
+	if err := validateRealtimeRedisValue(redisType, value); err != nil {
+		return nil, err
+	}
+	if normalizeRedisType(redisType) == "hash" {
+		return stringMapFromAny(value), nil
+	}
+	return value, nil
 }
 
 func stringMapFromAny(value any) map[string]string {

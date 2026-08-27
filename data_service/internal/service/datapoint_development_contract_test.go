@@ -15,7 +15,7 @@ func TestBuildDataPointDevelopmentContract_OnlyExposesPublicContract(t *testing.
 		Path:        "workshop.temperature",
 		Name:        "温度",
 		Description: &description,
-		DataType:    "number",
+		DataType:    "float64",
 		Status:      "active",
 		AttributeDefaults: map[string]string{
 			"asset_code": "PUMP-001",

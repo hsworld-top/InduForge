@@ -75,6 +75,38 @@
           </dl>
         </section>
 
+        <section class="dpd__section">
+          <h4 class="dpd__section-title">开发态当前值</h4>
+          <dl class="dpd__grid">
+            <div class="dpd__grid-full">
+              <dt>值</dt>
+              <dd class="dpd__mono">{{ formatCurrentValue(datapoint?.currentValue?.value) }}</dd>
+            </div>
+            <div>
+              <dt>质量</dt>
+              <dd>{{ datapoint?.currentValue?.quality || 'unknown' }}</dd>
+            </div>
+            <div>
+              <dt>值来源</dt>
+              <dd>{{ datapoint?.currentValue?.originLabel || '不可用' }}</dd>
+            </div>
+            <div>
+              <dt>观测时间</dt>
+              <dd class="dpd__mono">
+                {{
+                  formatTime(
+                    datapoint?.currentValue?.observedAt || datapoint?.currentValue?.timestamp,
+                  )
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt>源时间</dt>
+              <dd class="dpd__mono">{{ formatTime(datapoint?.currentValue?.sourceTimestamp) }}</dd>
+            </div>
+          </dl>
+        </section>
+
         <!-- 区块 2：标签 -->
         <section class="dpd__section">
           <div class="dpd__section-header">
@@ -82,6 +114,8 @@
             <button
               type="button"
               class="dpd__edit-btn"
+              :disabled="isInvalid"
+              :title="isInvalid ? invalidUsageHint : '编辑标签'"
               aria-label="编辑标签"
               @click="openTagDialog"
             >
@@ -154,6 +188,8 @@
             <button
               type="button"
               class="dpd__edit-btn"
+              :disabled="isInvalid"
+              :title="isInvalid ? invalidUsageHint : '编辑历史存储'"
               aria-label="编辑历史存储"
               @click="openHistoryStorage"
             >
@@ -223,6 +259,8 @@
             <button
               type="button"
               class="dpd__edit-btn"
+              :disabled="isInvalid"
+              :title="isInvalid ? invalidUsageHint : '编辑运行态权限'"
               aria-label="编辑运行态权限"
               @click="openPermissionDialog"
             >
@@ -234,8 +272,16 @@
             <span class="dpd__perm-value">{{ writeSummary }}</span>
           </div>
           <div class="dpd__perm-badges">
-            <StatusBadge tone="success" text="可读" />
-            <StatusBadge tone="success" text="可订阅" />
+            <el-tooltip
+              v-for="item in capabilityBadges"
+              :key="item.key"
+              :content="item.reason || item.text"
+              placement="top"
+            >
+              <span
+                ><StatusBadge :tone="item.enabled ? 'success' : 'muted'" :text="item.text"
+              /></span>
+            </el-tooltip>
           </div>
         </section>
       </div>
@@ -330,6 +376,16 @@ interface DataPointExtended {
   runtimeGrant?: Record<string, unknown>
   sourceConfig?: Record<string, unknown>
   invalidReason?: string | null
+  capabilities?: Record<'get' | 'sub' | 'set', { enabled: boolean; reason?: string }>
+  currentValue?: {
+    value?: unknown
+    quality?: string
+    timestamp?: string
+    observedAt?: string
+    sourceTimestamp?: string
+    valueOrigin?: string
+    originLabel?: string
+  } | null
   /** 报警策略与计算单元引用列表 */
   usages?: UsageItem[]
 }
@@ -385,6 +441,7 @@ const historyStorageDrawerVisible = ref(false)
 const historyStorageLoading = ref(false)
 const historyStorageSaving = ref(false)
 const alarmSummary = ref<AlarmDatapointSummary | null>(null)
+let detailRequestSeq = 0
 
 const visible = computed({
   get: () => props.modelValue,
@@ -393,11 +450,14 @@ const visible = computed({
     if (!val) emit('close')
   },
 })
+const isInvalid = computed(() => props.datapoint?.status === 'invalid')
+const invalidUsageHint = '该数据点已失效，仅可查看或清理'
 
 // 折叠重置（切换数据点时）
 watch(
   () => [props.datapoint?.id, props.modelValue] as const,
   ([id, isVisible]) => {
+    detailRequestSeq += 1
     configExpanded.value = false
     historyStorageDetail.value = null
     if (id && isVisible) {
@@ -479,6 +539,42 @@ const writeSummary = computed(() => {
   )
   return summarizeRuntimeGrant(grant)
 })
+
+const capabilityBadges = computed(() => {
+  const capabilities = props.datapoint?.capabilities
+  return [
+    {
+      key: 'get',
+      text: '可读',
+      enabled: capabilities?.get?.enabled === true,
+      reason: capabilities?.get?.reason,
+    },
+    {
+      key: 'sub',
+      text: '可订阅',
+      enabled: capabilities?.sub?.enabled === true,
+      reason: capabilities?.sub?.reason,
+    },
+    {
+      key: 'set',
+      text: '可写',
+      enabled: capabilities?.set?.enabled === true,
+      reason: capabilities?.set?.reason,
+    },
+  ]
+})
+
+function formatCurrentValue(value: unknown): string {
+  if (value === undefined || value === null) return '-'
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
 
 // ── 格式化工具 ────────────────────────────────────────────────────────────
 
@@ -574,17 +670,20 @@ async function copyPath() {
 }
 
 async function loadHistoryStorage(datapointId: string) {
+  const seq = detailRequestSeq
   historyStorageLoading.value = true
   try {
-    historyStorageDetail.value = await getDatapointHistoryStorage(props.projectId, datapointId)
+    const result = await getDatapointHistoryStorage(props.projectId, datapointId)
+    if (seq === detailRequestSeq) historyStorageDetail.value = result
   } catch {
-    historyStorageDetail.value = null
+    if (seq === detailRequestSeq) historyStorageDetail.value = null
   } finally {
-    historyStorageLoading.value = false
+    if (seq === detailRequestSeq) historyStorageLoading.value = false
   }
 }
 
 async function openHistoryStorage() {
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint)
   const datapointId = props.datapoint?.id
   if (!datapointId) return
   try {
@@ -623,10 +722,12 @@ async function saveHistoryStorage(payload: HistoryStorageSavePayload) {
 }
 
 async function loadAlarmSummary(datapointId: string) {
+  const seq = detailRequestSeq
   try {
-    alarmSummary.value = await getDatapointAlarmSummary(props.projectId, datapointId)
+    const result = await getDatapointAlarmSummary(props.projectId, datapointId)
+    if (seq === detailRequestSeq) alarmSummary.value = result
   } catch {
-    alarmSummary.value = null
+    if (seq === detailRequestSeq) alarmSummary.value = null
   }
 }
 
@@ -637,6 +738,7 @@ function openAlarmWorkspace() {
 // ── 标签 dialog ────────────────────────────────────────────────────────────
 
 function openTagDialog() {
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint)
   if (!props.datapoint) return
   tagDialogDatapoint.value = props.datapoint
   tagDialogVisible.value = true
@@ -660,6 +762,7 @@ async function handleTagSubmit(tags: string[]) {
 // ── 权限 dialog ────────────────────────────────────────────────────────────
 
 function openPermissionDialog() {
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint)
   if (!props.datapoint) return
   permDialogDatapoint.value = props.datapoint
   permDialogVisible.value = true

@@ -42,13 +42,12 @@ type DataPoint struct {
 	DefaultValue       *string                                `json:"defaultValue"`
 	MinValue           *float64                               `json:"minValue"`
 	MaxValue           *float64                               `json:"maxValue"`
-	AlarmLow           *float64                               `json:"alarmLow"`
-	AlarmHigh          *float64                               `json:"alarmHigh"`
 	Tags               []any                                  `json:"tags"`
 	AttributeDefaults  map[string]string                      `json:"attributeDefaults"`
 	RefreshMode        string                                 `json:"refreshMode"`
 	RefreshIntervalMS  *int                                   `json:"refreshIntervalMs"`
 	Status             string                                 `json:"status"`
+	Capabilities       DataPointCapabilitySummary             `json:"capabilities"`
 	LastValue          any                                    `json:"lastValue,omitempty"`
 	Quality            string                                 `json:"quality"`
 	LastUpdatedAt      *time.Time                             `json:"lastUpdatedAt,omitempty"`
@@ -82,9 +81,14 @@ type DataPointListItem struct {
 
 // DataPointCapabilitySummary 描述场景编辑器可以使用的稳定读写能力，不暴露底层数据源细节。
 type DataPointCapabilitySummary struct {
-	Get bool `json:"get"`
-	Sub bool `json:"sub"`
-	Set bool `json:"set"`
+	Get DataPointCapability `json:"get"`
+	Sub DataPointCapability `json:"sub"`
+	Set DataPointCapability `json:"set"`
+}
+
+type DataPointCapability struct {
+	Enabled bool   `json:"enabled"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 // DataPointPagination 表示数据点列表分页信息。
@@ -103,11 +107,15 @@ type DataPointListResult struct {
 
 // DataPointValue 表示数据点值读取结果。
 type DataPointValue struct {
-	Path      string    `json:"path"`
-	Value     any       `json:"value"`
-	Quality   string    `json:"quality"`
-	Timestamp time.Time `json:"timestamp"`
-	Status    string    `json:"status"`
+	Path            string     `json:"path"`
+	Value           any        `json:"value"`
+	Quality         string     `json:"quality"`
+	Timestamp       time.Time  `json:"timestamp"`
+	ObservedAt      *time.Time `json:"observedAt,omitempty"`
+	SourceTimestamp *time.Time `json:"sourceTimestamp,omitempty"`
+	ValueOrigin     string     `json:"valueOrigin"`
+	OriginLabel     string     `json:"originLabel"`
+	Status          string     `json:"status"`
 }
 
 // CreateDataPointInput 预留给后续扩展的创建入参。
@@ -127,8 +135,6 @@ type UpdateDataPointInput struct {
 	DefaultValue      *string
 	MinValue          *float64
 	MaxValue          *float64
-	AlarmLow          *float64
-	AlarmHigh         *float64
 	Tags              []any
 	HasTags           bool
 	RefreshMode       *string
@@ -213,9 +219,6 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 	if err != nil {
 		return nil, err
 	}
-	if err := s.refreshDataPointValidity(ctx, projectID, records); err != nil {
-		return nil, err
-	}
 	recordIDs := make([]string, 0, len(records))
 	for _, record := range records {
 		recordIDs = append(recordIDs, record.ID)
@@ -271,6 +274,12 @@ func (s *DataPointService) GetDataPoint(ctx context.Context, projectID, id strin
 
 // GetDataPointValue 按路径读取数据点值，若来源为 db.query 则回放查询执行结果。
 func (s *DataPointService) GetDataPointValue(ctx context.Context, projectID, path string) (*DataPointValue, error) {
+	return s.GetDataPointValueWithParameters(ctx, projectID, path, nil)
+}
+
+// GetDataPointValueWithParameters 读取数据点并用本次请求参数覆盖查询参数默认值。
+// 写入型 SQL 数据点由调用方显式 GET 触发一次执行，参数不会持久化到查询定义。
+func (s *DataPointService) GetDataPointValueWithParameters(ctx context.Context, projectID, path string, parameters map[string]any) (*DataPointValue, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -284,7 +293,7 @@ func (s *DataPointService) GetDataPointValue(ctx context.Context, projectID, pat
 	if err != nil {
 		return nil, err
 	}
-	return s.buildValueFromRecord(ctx, projectID, *record)
+	return s.buildValueFromRecordWithParameters(ctx, projectID, *record, parameters)
 }
 
 // UpdateDataPoint 更新单个数据点。
@@ -307,6 +316,12 @@ func (s *DataPointService) UpdateDataPoint(ctx context.Context, projectID, id, u
 	current, err := s.repository.GetByProjectAndID(ctx, projectID, id)
 	if err != nil {
 		return nil, err
+	}
+	if input.SourceType != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点来源类型只能在所属工作台中修改")
+	}
+	if isGeneratedDataPoint(current.SourceType) && (input.DataType != nil || input.SourceID != nil || input.HasSourceConfig) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "生成数据点的来源身份和数据类型只能在所属工作台中修改")
 	}
 
 	nextName := current.Name
@@ -379,16 +394,6 @@ func (s *DataPointService) UpdateDataPoint(ctx context.Context, projectID, id, u
 		nextMaxValue = cloneOptionalFloat64(input.MaxValue)
 	}
 
-	nextAlarmLow := cloneOptionalFloat64(current.AlarmLow)
-	if input.AlarmLow != nil {
-		nextAlarmLow = cloneOptionalFloat64(input.AlarmLow)
-	}
-
-	nextAlarmHigh := cloneOptionalFloat64(current.AlarmHigh)
-	if input.AlarmHigh != nil {
-		nextAlarmHigh = cloneOptionalFloat64(input.AlarmHigh)
-	}
-
 	nextTags := cloneJSONArray(current.Tags)
 	if input.HasTags {
 		nextTags = cloneJSONArray(input.Tags)
@@ -430,8 +435,6 @@ func (s *DataPointService) UpdateDataPoint(ctx context.Context, projectID, id, u
 		DefaultValue:      nextDefaultValue,
 		MinValue:          nextMinValue,
 		MaxValue:          nextMaxValue,
-		AlarmLow:          nextAlarmLow,
-		AlarmHigh:         nextAlarmHigh,
 		Tags:              nextTags,
 		RefreshMode:       nextRefreshMode,
 		RefreshIntervalMS: nextRefreshIntervalMS,
@@ -491,7 +494,14 @@ func (s *DataPointService) DeleteDataPoint(ctx context.Context, projectID, id st
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅允许删除无效数据点")
 	}
 
-	return s.repository.Delete(ctx, projectID, id)
+	deleted, err := s.repository.DeleteInvalidBatch(ctx, projectID, []string{id})
+	if err != nil {
+		return err
+	}
+	if deleted != 1 {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "数据点不存在")
+	}
+	return nil
 }
 
 // DeleteDataPointsBatch 批量删除 invalid 状态的数据点。
@@ -682,13 +692,12 @@ func toDataPoint(record repository.DataPointRecord) DataPoint {
 		DefaultValue:       cloneOptionalString(record.DefaultValue),
 		MinValue:           cloneOptionalFloat64(record.MinValue),
 		MaxValue:           cloneOptionalFloat64(record.MaxValue),
-		AlarmLow:           cloneOptionalFloat64(record.AlarmLow),
-		AlarmHigh:          cloneOptionalFloat64(record.AlarmHigh),
 		Tags:               cloneJSONArray(record.Tags),
 		AttributeDefaults:  cloneStringMap(record.AttributeDefaults),
 		RefreshMode:        record.RefreshMode,
 		RefreshIntervalMS:  cloneOptionalInt(record.RefreshIntervalMS),
 		Status:             record.Status,
+		Capabilities:       dataPointCapabilities(record),
 		Quality:            "unknown",
 		SourceStatus:       deriveDataPointSourceStatus(record),
 		ConsumeMode:        deriveDataPointConsumeMode(record),
@@ -711,12 +720,31 @@ func (s *DataPointService) toDataPointListItem(ctx context.Context, projectID st
 		DataType:         record.DataType,
 		Tags:             cloneJSONArray(record.Tags),
 		Status:           record.Status,
-		Capabilities: DataPointCapabilitySummary{
-			Get: record.Status == "active", Sub: record.Status == "active", Set: record.Status == "active",
-		},
-		CreatedAt: record.CreatedAt,
-		UpdatedAt: record.UpdatedAt,
+		Capabilities:     dataPointCapabilities(record),
+		CreatedAt:        record.CreatedAt,
+		UpdatedAt:        record.UpdatedAt,
 	}
+}
+
+func dataPointCapabilities(record repository.DataPointRecord) DataPointCapabilitySummary {
+	if record.Status != "active" {
+		reason := "数据点未启用或来源已失效"
+		return DataPointCapabilitySummary{Get: DataPointCapability{Reason: reason}, Sub: DataPointCapability{Reason: reason}, Set: DataPointCapability{Reason: reason}}
+	}
+	result := DataPointCapabilitySummary{Get: DataPointCapability{Enabled: true}}
+	switch record.SourceType {
+	case "mqtt.tag", "mqtt.subscription", "kafka.field", "websocket.session":
+		result.Sub = DataPointCapability{Enabled: true}
+	default:
+		result.Sub = DataPointCapability{Reason: "当前来源不提供订阅能力"}
+	}
+	switch record.SourceType {
+	case "manual", "default":
+		result.Set = DataPointCapability{Enabled: true}
+	default:
+		result.Set = DataPointCapability{Reason: "生成点和只读采集点不能在数据中心直接写入"}
+	}
+	return result
 }
 
 func (s *DataPointService) refreshDataPointValidity(ctx context.Context, projectID string, records []repository.DataPointRecord) error {
@@ -799,10 +827,13 @@ func (s *DataPointService) isComputeOutputDataPointValid(ctx context.Context, pr
 	}
 	outputName := strings.TrimSpace(firstString(record.SourceConfig, "outputName"))
 	if outputName == "" {
+		outputName = strings.TrimSpace(firstString(record.SourceConfig, "outputKey"))
+	}
+	if outputName == "" {
 		outputName = datapointOutputNameFromPath(record.Path)
 	}
-	for _, output := range extractComputeOutputBindings(*unit) {
-		if output.Name == outputName && record.Name == unit.Name && isGeneratedPathMatch(record.Path, output.Path, unit.ID) {
+	for _, output := range unit.Outputs {
+		if output.OutputKey == outputName && record.Name == output.Name && isGeneratedPathMatch(record.Path, output.Path, unit.ID) {
 			return true, nil
 		}
 	}
@@ -994,13 +1025,13 @@ func (s *DataPointService) isRealtimeKeyDataPointValid(ctx context.Context, proj
 	if err != nil {
 		return false, err
 	}
-	basePath := "realtime." + realtimeDataPointPathSegment(key.KeyPath)
-	if provider == "redis" {
-		basePath = "redis." + realtimeDataPointPathSegment(key.KeyPath)
+	for _, output := range key.Outputs {
+		if output.DataPointID != record.ID {
+			continue
+		}
+		return key.ID == keyID && output.DataPointPath == record.Path, nil
 	}
-	return key.ID == keyID &&
-		record.Name == key.KeyPath &&
-		isGeneratedPathMatch(record.Path, basePath, key.ID), nil
+	return false, nil
 }
 
 func isNotFoundError(err error) bool {
@@ -1024,19 +1055,6 @@ func isGeneratedPathMatch(actualPath, basePath, sourceID string) bool {
 		return true
 	}
 	return strings.HasPrefix(actualPath, basePath+"_")
-}
-
-func realtimeDataPointPathSegment(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "unnamed"
-	}
-	replacer := strings.NewReplacer(":", ".", "/", ".", "\\", ".", " ", "_")
-	value = strings.Trim(replacer.Replace(value), ".")
-	if value == "" {
-		return "unnamed"
-	}
-	return value
 }
 
 func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID string, record repository.DataPointRecord, target *DataPoint) {
@@ -1262,14 +1280,14 @@ func normalizeDataPointSourceType(sourceType string) (string, error) {
 }
 
 func normalizeDataPointDataType(dataType string) (string, error) {
-	dataType = strings.TrimSpace(dataType)
-	if dataType == "" {
+	normalized, ok := canonicalDataPointType(dataType)
+	if strings.TrimSpace(dataType) == "" {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "dataType 不能为空")
 	}
-	if len([]rune(dataType)) > 20 {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "dataType 长度不能超过 20 个字符")
+	if !ok {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "dataType 不属于规范数据点类型")
 	}
-	return dataType, nil
+	return normalized, nil
 }
 
 func normalizeRefreshMode(refreshMode string) (string, error) {
@@ -1304,12 +1322,30 @@ func dataPointQueryParameters(sourceConfig map[string]any) (map[string]any, erro
 		return map[string]any{}, nil
 	}
 
-	parameters, ok := rawParameters.(map[string]any)
+	if parameters, ok := rawParameters.(map[string]any); ok {
+		return cloneMap(parameters), nil
+	}
+
+	// 查询输出生成点保存的是参数定义数组；GET 回放时只使用其中明确配置的默认值。
+	definitions, ok := rawParameters.([]any)
 	if !ok {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点 source_config.parameters 格式无效")
 	}
-
-	return cloneMap(parameters), nil
+	parameters := make(map[string]any, len(definitions))
+	for _, rawDefinition := range definitions {
+		definition, definitionOK := rawDefinition.(map[string]any)
+		if !definitionOK {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点 source_config.parameters 参数定义无效")
+		}
+		name := strings.TrimSpace(firstString(definition, "name"))
+		if name == "" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点 source_config.parameters 参数名称无效")
+		}
+		if defaultValue, exists := definition["default"]; exists {
+			parameters[name] = defaultValue
+		}
+	}
+	return parameters, nil
 }
 
 func hasDataPointUpdateChanges(input UpdateDataPointInput) bool {
@@ -1324,8 +1360,6 @@ func hasDataPointUpdateChanges(input UpdateDataPointInput) bool {
 		input.DefaultValue != nil ||
 		input.MinValue != nil ||
 		input.MaxValue != nil ||
-		input.AlarmLow != nil ||
-		input.AlarmHigh != nil ||
 		input.HasTags ||
 		input.RefreshMode != nil ||
 		input.RefreshIntervalMS != nil ||

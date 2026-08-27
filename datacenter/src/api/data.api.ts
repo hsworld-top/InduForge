@@ -1,4 +1,3 @@
-// @ts-nocheck
 import request from '@/utils/request'
 import {
   HttpRequestGroupListSchema,
@@ -25,6 +24,8 @@ import {
   KafkaTopicMappingListSchema,
   KafkaTopicMappingSchema,
 } from './schemas/kafka-workbench.schema'
+import { SavedQueryListSchema, SavedQuerySchema } from './schemas/sql-workbench.schema'
+import { SourceDeleteImpactSchema } from './schemas/source-delete-impact.schema'
 
 // ===========================================
 // 数据连接相关API
@@ -49,6 +50,35 @@ export const getConnection = (projectId, connectionId) => {
     method: 'get',
   })
 }
+
+export const revealConnectionSecret = (projectId, connectionId, key = 'password') =>
+  request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/secrets/reveal`,
+    method: 'post',
+    data: { key },
+  })
+
+export const getDataPointSourceOptions = (projectId, params = {}) =>
+  request({
+    url: `/data/projects/${projectId}/datapoint-source-options`,
+    method: 'get',
+    params,
+  })
+
+export const getConnectionDeleteImpact = async (projectId, connectionId) => {
+  const response = await request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/delete-impact`,
+    method: 'get',
+  })
+  return SourceDeleteImpactSchema.parse(response?.data ?? response)
+}
+
+export const updateConnectionOrder = (projectId, connectionIds) =>
+  request({
+    url: `/data/projects/${projectId}/connections/order`,
+    method: 'patch',
+    data: { connectionIds },
+  })
 
 /**
  * 创建数据连接
@@ -745,20 +775,6 @@ export const deleteConnection = (projectId, connectionId) => {
   })
 }
 
-/**
- * 更新连接状态
- * @param {string} projectId - 工程ID
- * @param {string} connectionId - 连接ID
- * @param {string} status - 状态 (connected, disconnected, error, unknown)
- */
-export const updateConnectionStatus = (projectId, connectionId, status) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/status`,
-    method: 'patch',
-    data: { status },
-  })
-}
-
 // ===========================================
 // 数据查询相关API
 // ===========================================
@@ -768,12 +784,18 @@ export const updateConnectionStatus = (projectId, connectionId, status) => {
  * @param {string} projectId - 工程ID
  * @param {object} params - 查询参数
  */
-export const getQueries = (projectId, params = {}) => {
-  return request({
+export const getQueries = async (projectId, params = {}) => {
+  const result = await request({
     url: `/data/projects/${projectId}/queries`,
     method: 'get',
     params,
   })
+  const payload = result?.data ?? result
+  const parsed = SavedQueryListSchema.parse({
+    list: payload?.queries || payload?.list || [],
+    pagination: payload?.pagination,
+  })
+  return { data: { queries: parsed.list, pagination: parsed.pagination } }
 }
 
 /**
@@ -781,12 +803,13 @@ export const getQueries = (projectId, params = {}) => {
  * @param {string} projectId - 工程ID
  * @param {object} data - 查询数据
  */
-export const createQuery = (projectId, data) => {
-  return request({
+export const createQuery = async (projectId, data) => {
+  const result = await request({
     url: `/data/projects/${projectId}/queries`,
     method: 'post',
     data,
   })
+  return { data: SavedQuerySchema.parse(result?.data ?? result) }
 }
 
 /**
@@ -794,12 +817,13 @@ export const createQuery = (projectId, data) => {
  * @param {string} id - 查询ID
  * @param {object} data - 更新数据
  */
-export const updateQuery = (id, data) => {
-  return request({
+export const updateQuery = async (id, data) => {
+  const result = await request({
     url: `/data/queries/${id}`,
     method: 'put',
     data,
   })
+  return { data: SavedQuerySchema.parse(result?.data ?? result) }
 }
 
 /**
@@ -877,6 +901,16 @@ export const getDataPoint = (projectId, datapointId) => {
     method: 'get',
   })
 }
+
+export const getDataPointValue = (projectId, path, parameters = {}) =>
+  request({
+    url: `/data/projects/${projectId}/datapoints/value`,
+    method: 'get',
+    params: {
+      path,
+      ...(Object.keys(parameters).length > 0 ? { parameters: JSON.stringify(parameters) } : {}),
+    },
+  })
 
 export const getDataPointUsages = (projectId, datapointId) => {
   return request({
@@ -1392,54 +1426,10 @@ export const getMqttTagValues = (projectId, tagIds, options = {}) => {
   })
 }
 
-// ===========================================
-// Compute 鐩稿叧 API
-// ===========================================
-
-/**
- * 鍒涘缓璁＄畻鍗曞厓
- * @param {string} projectId - 宸ョ▼ID
- * @param {object} data - 璁＄畻鍗曞厓鏁版嵁
- */
-export const createComputeUnit = (projectId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/compute-units`,
-    method: 'post',
-    data,
-  })
-}
-
-/**
- * 鎵ц璁＄畻鍗曞厓
- * @param {string} projectId - 宸ョ▼ID
- * @param {string} id - 璁＄畻鍗曞厓ID
- * @param {object} input - 杈撳叆鍙傛暟
- */
-export const runComputeUnit = (projectId, id, input = {}) => {
-  return request({
-    url: `/data/projects/${projectId}/compute-units/${id}/run`,
-    method: 'post',
-    data: { input },
-  })
-}
-
-/**
- * 璋冭瘯璁＄畻鍗曞厓
- * @param {string} projectId - 宸ョ▼ID
- * @param {string} id - 璁＄畻鍗曞厓ID
- * @param {object} input - 杈撳叆鍙傛暟
- */
-export const debugComputeUnit = (projectId, id, input = {}) => {
-  return request({
-    url: `/data/projects/${projectId}/compute-units/${id}/debug`,
-    method: 'post',
-    data: { input },
-  })
-}
-
 export default {
   getConnections,
   getConnection,
+  revealConnectionSecret,
   createConnection,
   createMqttConnection,
   updateMqttConnection,
@@ -1525,7 +1515,6 @@ export default {
   publishMqttMessage,
   updateConnection,
   deleteConnection,
-  updateConnectionStatus,
   getQueries,
   createQuery,
   updateQuery,
@@ -1536,6 +1525,7 @@ export default {
   // 数据点相关
   getDataPoints,
   getDataPoint,
+  getDataPointValue,
   getDataPointUsages,
   getDataPointTags,
   removeDataPointTag,
@@ -1574,7 +1564,4 @@ export default {
   updateMqttTagsOrder,
   getMqttTagValue,
   getMqttTagValues,
-  createComputeUnit,
-  runComputeUnit,
-  debugComputeUnit,
 }

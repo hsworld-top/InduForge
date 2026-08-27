@@ -64,7 +64,13 @@ func (h *DataPointHandler) GetValue(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 
-	result, err := h.service.GetDataPointValue(r.Context(), r.PathValue("projectId"), r.URL.Query().Get("path"))
+	parameters := map[string]any{}
+	if rawParameters := strings.TrimSpace(r.URL.Query().Get("parameters")); rawParameters != "" {
+		if err := json.Unmarshal([]byte(rawParameters), &parameters); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "parameters 必须是 JSON 对象", err)
+		}
+	}
+	result, err := h.service.GetDataPointValueWithParameters(r.Context(), r.PathValue("projectId"), r.URL.Query().Get("path"), parameters)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -327,8 +333,6 @@ func validateDataPointUpdatePayloadKeys(raw map[string]json.RawMessage) error {
 		"defaultValue":      {},
 		"minValue":          {},
 		"maxValue":          {},
-		"alarmLow":          {},
-		"alarmHigh":         {},
 		"tags":              {},
 		"refreshMode":       {},
 		"refreshIntervalMs": {},
@@ -424,20 +428,6 @@ func parseDataPointUpdateInput(raw map[string]json.RawMessage) (service.UpdateDa
 			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "maxValue 字段格式无效", err)
 		}
 		input.MaxValue = &next
-	}
-	if value, ok := raw["alarmLow"]; ok {
-		var next float64
-		if err := json.Unmarshal(value, &next); err != nil {
-			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "alarmLow 字段格式无效", err)
-		}
-		input.AlarmLow = &next
-	}
-	if value, ok := raw["alarmHigh"]; ok {
-		var next float64
-		if err := json.Unmarshal(value, &next); err != nil {
-			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "alarmHigh 字段格式无效", err)
-		}
-		input.AlarmHigh = &next
 	}
 	if value, ok := raw["tags"]; ok {
 		var next []any

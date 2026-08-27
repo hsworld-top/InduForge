@@ -13,7 +13,7 @@ import (
 var dataPointAttributeKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
 
 var reservedDataPointAttributeKeys = map[string]struct{}{
-	"alarm": {}, "alarm_high": {}, "alarm_low": {}, "attribute_defaults": {}, "attributes": {},
+	"alarm": {}, "attribute_defaults": {}, "attributes": {},
 	"data_type": {}, "default_value": {}, "description": {}, "history": {}, "id": {},
 	"max": {}, "max_value": {}, "min": {}, "min_value": {}, "name": {}, "path": {},
 	"permissions": {}, "precision": {}, "precision_num": {}, "project_id": {}, "quality": {},

@@ -217,8 +217,6 @@ func (s *DataPointService) writeDataPointRecord(ctx context.Context, record repo
 		DefaultValue:      &defaultValue,
 		MinValue:          cloneOptionalFloat64(record.MinValue),
 		MaxValue:          cloneOptionalFloat64(record.MaxValue),
-		AlarmLow:          cloneOptionalFloat64(record.AlarmLow),
-		AlarmHigh:         cloneOptionalFloat64(record.AlarmHigh),
 		Tags:              cloneJSONArray(record.Tags),
 		RefreshMode:       record.RefreshMode,
 		RefreshIntervalMS: cloneOptionalInt(record.RefreshIntervalMS),
@@ -257,21 +255,21 @@ func normalizeRuntimeWriteValue(record repository.DataPointRecord, value any) (a
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写入值与数据点类型不匹配")
 	}
 	switch dataType {
-	case "bool", "boolean":
+	case "bool":
 		if _, ok := value.(bool); !ok {
 			return badType()
 		}
-	case "string", "text":
+	case "string", "bytes", "datetime":
 		if _, ok := value.(string); !ok {
 			return badType()
 		}
-	case "int", "integer", "long", "int32", "int64":
+	case "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64":
 		number, ok := runtimeNumber(value)
-		if !ok || math.Trunc(number) != number {
+		if !ok || math.Trunc(number) != number || (strings.HasPrefix(dataType, "uint") && number < 0) {
 			return badType()
 		}
 		value = number
-	case "number", "float", "double", "float32", "float64", "decimal":
+	case "float32", "float64", "decimal":
 		number, ok := runtimeNumber(value)
 		if !ok {
 			return badType()
@@ -285,8 +283,6 @@ func normalizeRuntimeWriteValue(record repository.DataPointRecord, value any) (a
 		if _, ok := value.([]any); !ok {
 			return badType()
 		}
-	case "json":
-		// 任意 JSON 标量、对象或数组均可直接持久化。
 	default:
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点类型不支持场景写入")
 	}
@@ -345,6 +341,26 @@ func (s *DataPointService) GetDataPointUsages(ctx context.Context, projectID, id
 	return result, nil
 }
 
+func (s *DataPointService) ListDataPointSourceOptions(ctx context.Context, projectID, search string, page, pageSize int) (map[string]any, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	items, total, err := s.repository.ListSourceOptions(ctx, projectID, search, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	page, pageSize = normalizePageAndSize(page, pageSize, 1, 100)
+	list := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		list = append(list, map[string]any{"scopeType": item.ScopeType, "id": item.ID, "name": item.Name, "sourceType": item.SourceType})
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	return map[string]any{"list": list, "pagination": map[string]int{"page": page, "pageSize": pageSize, "total": total, "totalPages": totalPages}}, nil
+}
+
 // ListDataPointTags 返回工程级标签摘要，GET 不修改任何数据。
 func (s *DataPointService) ListDataPointTags(ctx context.Context, projectID string) ([]map[string]any, error) {
 	if err := validateProjectID(projectID); err != nil {
@@ -377,19 +393,33 @@ func (s *DataPointService) RemoveDataPointTag(ctx context.Context, projectID, us
 }
 
 func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID string, record repository.DataPointRecord) (*DataPointValue, error) {
+	return s.buildValueFromRecordWithParameters(ctx, projectID, record, nil)
+}
+
+func (s *DataPointService) buildValueFromRecordWithParameters(ctx context.Context, projectID string, record repository.DataPointRecord, runtimeParameters map[string]any) (*DataPointValue, error) {
 	now := time.Now().UTC()
 	value := DataPointValue{
-		Path:      record.Path,
-		Value:     defaultValueOrNil(record.DefaultValue),
-		Quality:   "unknown",
-		Timestamp: now,
-		Status:    record.Status,
+		Path:        record.Path,
+		Value:       defaultValueOrNil(record.DefaultValue),
+		Quality:     "unknown",
+		Timestamp:   now,
+		ValueOrigin: "unavailable",
+		OriginLabel: "当前值不可用",
+		Status:      record.Status,
+	}
+	if value.Value != nil {
+		value.Quality = "good"
+		value.ValueOrigin = "default_value"
+		value.OriginLabel = "开发态默认值"
 	}
 
 	if record.SourceType == "db.query" && record.SourceID != nil && strings.TrimSpace(*record.SourceID) != "" {
 		parameters, err := dataPointQueryParameters(record.SourceConfig)
 		if err != nil {
 			return nil, err
+		}
+		for name, runtimeValue := range runtimeParameters {
+			parameters[name] = runtimeValue
 		}
 		result, err := s.queries.ExecuteQueryForProject(ctx, projectID, *record.SourceID, ExecuteQueryInput{
 			Parameters: parameters,
@@ -398,8 +428,22 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 			return nil, err
 		}
 
-		value.Value = result.Data
+		var mapped any
+		selector, _ := record.SourceConfig["selector"].(map[string]any)
+		selectorKind := strings.TrimSpace(firstString(selector, "kind"))
+		if selectorKind == "" || selectorKind == "whole" {
+			mapped = queryDatasetValue(result)
+		} else {
+			mapped, err = selectDataPointOutputValue(result.Data, record.SourceConfig, true)
+			if err != nil {
+				return nil, err
+			}
+		}
+		value.Value = mapped
 		value.Quality = "good"
+		value.ObservedAt = &now
+		value.ValueOrigin = "realtime_query"
+		value.OriginLabel = "实时查询"
 		return &value, nil
 	}
 
@@ -424,6 +468,10 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 				value.Value = snapshot.Value
 				value.Quality = snapshot.Quality
 				value.Timestamp = snapshot.Timestamp
+				value.ObservedAt = &snapshot.Timestamp
+				value.SourceTimestamp = &snapshot.Timestamp
+				value.ValueOrigin = "realtime_read"
+				value.OriginLabel = "MQTT 最近消息"
 				return &value, nil
 			}
 		case "mqtt.subscription":
@@ -436,6 +484,10 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 				value.Value = snapshot.Value
 				value.Quality = snapshot.Quality
 				value.Timestamp = snapshot.Timestamp
+				value.ObservedAt = &snapshot.Timestamp
+				value.SourceTimestamp = &snapshot.Timestamp
+				value.ValueOrigin = "realtime_read"
+				value.OriginLabel = "MQTT 最近消息"
 				return &value, nil
 			}
 		}
@@ -459,6 +511,91 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 	return &value, nil
 }
 
+// queryDatasetValue 为完整查询结果提供最小稳定对象契约。
+// rowCount 只表示本次返回行数，不推断 LIMIT/OFFSET 之前的数据库总量。
+func queryDatasetValue(result *QueryExecutionResult) map[string]any {
+	if result == nil {
+		return map[string]any{
+			"fields":   []string{},
+			"rows":     []map[string]any{},
+			"rowCount": 0,
+		}
+	}
+	return map[string]any{
+		"fields":   append([]string{}, result.Columns...),
+		"rows":     result.Data,
+		"rowCount": result.RowCount,
+	}
+}
+
+// selectDataPointOutputValue 将工作台原始结果按稳定映射选择为数据点值。
+// SQL 的 column/path 标量映射必须恰好一行，避免同一数据点在不同执行中返回数组或不确定行。
+func selectDataPointOutputValue(root any, sourceConfig map[string]any, strictSingleRow bool) (any, error) {
+	selector, _ := sourceConfig["selector"].(map[string]any)
+	kind := strings.TrimSpace(firstString(selector, "kind"))
+	if kind == "" || kind == "whole" {
+		return root, nil
+	}
+	if strictSingleRow {
+		rows, ok := root.([]map[string]any)
+		if !ok {
+			if genericRows, genericOK := root.([]any); genericOK {
+				rows = make([]map[string]any, 0, len(genericRows))
+				for _, row := range genericRows {
+					object, objectOK := row.(map[string]any)
+					if !objectOK {
+						return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段映射要求查询返回对象行")
+					}
+					rows = append(rows, object)
+				}
+			} else {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段映射要求查询返回对象行")
+			}
+		}
+		if len(rows) != 1 {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标量或字段映射要求查询恰好返回一行")
+		}
+		root = rows[0]
+	}
+	switch kind {
+	case "column":
+		column := strings.TrimSpace(firstString(selector, "column"))
+		object, ok := root.(map[string]any)
+		if !ok || column == "" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询字段映射配置无效")
+		}
+		value, exists := object[column]
+		if !exists {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询结果缺少映射字段: "+column)
+		}
+		return value, nil
+	case "path":
+		segments, err := sourceConfigSelectorSegments(selector)
+		if err != nil {
+			return nil, err
+		}
+		value, ok := extractValueBySegments(root, segments)
+		if !ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "结果中不存在已配置的字段路径")
+		}
+		return value, nil
+	default:
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点输出选择器无效")
+	}
+}
+
+func sourceConfigSelectorSegments(selector map[string]any) ([]any, error) {
+	raw, ok := selector["segments"]
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段路径配置缺失")
+	}
+	segments, ok := raw.([]any)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段路径配置无效")
+	}
+	return normalizeValuePathSegments(segments, false)
+}
+
 func (s *DataPointService) buildHTTPRequestValue(ctx context.Context, projectID string, record repository.DataPointRecord, value DataPointValue) (*DataPointValue, error) {
 	requestID := strings.TrimSpace(firstString(record.SourceConfig, "requestId"))
 	if s.httpWorkbench != nil && requestID != "" {
@@ -471,6 +608,7 @@ func (s *DataPointService) buildHTTPRequestValue(ctx context.Context, projectID 
 		}
 		if request.LastSentAt != nil {
 			value.Timestamp = *request.LastSentAt
+			value.ObservedAt = request.LastSentAt
 		}
 		if request.Quality == "bad" {
 			// 旧版本会写入 LastResponse 作为数据点 value；新版不再持久化响应，
@@ -482,6 +620,8 @@ func (s *DataPointService) buildHTTPRequestValue(ctx context.Context, projectID 
 	value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
 	if value.Value != nil {
 		value.Quality = "good"
+		value.ValueOrigin = "recent_preview"
+		value.OriginLabel = "HTTP 最近预览"
 	}
 	return &value, nil
 }
@@ -498,6 +638,7 @@ func (s *DataPointService) buildWebSocketSessionValue(ctx context.Context, proje
 		}
 		if session.LastMessageAt != nil {
 			value.Timestamp = *session.LastMessageAt
+			value.ObservedAt = session.LastMessageAt
 		}
 		if session.Quality == "bad" {
 			value.Value = map[string]any{
@@ -510,6 +651,8 @@ func (s *DataPointService) buildWebSocketSessionValue(ctx context.Context, proje
 	value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
 	if value.Value != nil {
 		value.Quality = "good"
+		value.ValueOrigin = "recent_preview"
+		value.OriginLabel = "WebSocket 最近预览"
 	}
 	return &value, nil
 }
@@ -527,7 +670,11 @@ func (s *DataPointService) buildKafkaFieldValue(ctx context.Context, projectID s
 	value.Quality = fallbackTrimmed(field.Quality, "unknown")
 	if field.LastUpdatedAt != nil {
 		value.Timestamp = *field.LastUpdatedAt
+		value.ObservedAt = field.LastUpdatedAt
+		value.SourceTimestamp = field.LastUpdatedAt
 	}
+	value.ValueOrigin = "recent_preview"
+	value.OriginLabel = "Kafka 最近预览"
 	return &value, nil
 }
 
@@ -545,15 +692,29 @@ func (s *DataPointService) buildRealtimeKeyValue(ctx context.Context, projectID 
 		key = record.Name
 	}
 	if connection.Type == "redis" {
-		return s.buildRedisKeyValue(ctx, connection, key, value)
+		resolved, err := s.buildRedisKeyValue(ctx, connection, key, record.SourceConfig, value)
+		return selectRealtimeDataPointOutput(resolved, record.SourceConfig, err)
 	}
 	if connection.Type == "builtin.realtime" {
-		return s.buildBuiltinRealtimeKeyValue(ctx, projectID, connection, key, value)
+		resolved, err := s.buildBuiltinRealtimeKeyValue(ctx, projectID, connection, key, value)
+		return selectRealtimeDataPointOutput(resolved, record.SourceConfig, err)
 	}
 	return &value, nil
 }
 
-func (s *DataPointService) buildRedisKeyValue(ctx context.Context, connection *repository.ConnectionRecord, key string, value DataPointValue) (*DataPointValue, error) {
+func selectRealtimeDataPointOutput(value *DataPointValue, sourceConfig map[string]any, readErr error) (*DataPointValue, error) {
+	if readErr != nil || value == nil || value.Value == nil {
+		return value, readErr
+	}
+	selected, err := selectDataPointOutputValue(value.Value, sourceConfig, false)
+	if err != nil {
+		return nil, err
+	}
+	value.Value = selected
+	return value, nil
+}
+
+func (s *DataPointService) buildRedisKeyValue(ctx context.Context, connection *repository.ConnectionRecord, key string, sourceConfig map[string]any, value DataPointValue) (*DataPointValue, error) {
 	client, err := newRedisPreviewClient(connection.Config, mapFromAny(connection.Config["options"]))
 	if err != nil {
 		return nil, err
@@ -571,8 +732,21 @@ func (s *DataPointService) buildRedisKeyValue(ctx context.Context, connection *r
 	if err != nil {
 		return nil, err
 	}
+	if normalizeRedisType(keyType) == "string" && strings.EqualFold(firstString(sourceConfig, "valueType"), "json") {
+		if text, ok := current.(string); ok {
+			var decoded any
+			if json.Unmarshal([]byte(text), &decoded) == nil {
+				current = decoded
+			}
+		}
+	}
 	value.Value = current
 	value.Quality = "good"
+	now := time.Now().UTC()
+	value.Timestamp = now
+	value.ObservedAt = &now
+	value.ValueOrigin = "realtime_read"
+	value.OriginLabel = "Redis 实时读取"
 	return &value, nil
 }
 
@@ -598,6 +772,11 @@ func (s *DataPointService) buildBuiltinRealtimeKeyValue(ctx context.Context, pro
 	}
 	value.Value = decoded
 	value.Quality = "good"
+	now := time.Now().UTC()
+	value.Timestamp = now
+	value.ObservedAt = &now
+	value.ValueOrigin = "realtime_read"
+	value.OriginLabel = "IF 实时库读取"
 	return &value, nil
 }
 

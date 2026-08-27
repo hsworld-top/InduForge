@@ -126,8 +126,34 @@ func (h *DataPointHandler) Usages(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
-		"usages": usages,
+		"coverage":  "data_center",
+		"providers": []string{"alarm", "compute", "history"},
+		"usages":    usages,
 	})
+	return nil
+}
+
+// ListSourceOptions 返回服务端分页的数据点来源选择项。
+func (h *DataPointHandler) ListSourceOptions(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	page, err := parseOptionalInt(r.URL.Query().Get("page"), 1, "page")
+	if err != nil {
+		return err
+	}
+	pageSize, err := parseOptionalInt(r.URL.Query().Get("pageSize"), 20, "pageSize")
+	if err != nil {
+		return err
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	result, err := h.service.ListDataPointSourceOptions(r.Context(), r.PathValue("projectId"), r.URL.Query().Get("search"), page, pageSize)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 

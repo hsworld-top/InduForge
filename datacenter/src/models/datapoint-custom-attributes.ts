@@ -8,8 +8,6 @@ const attributeKeyPattern = /^[a-z][a-z0-9_.-]{0,63}$/
 
 const reservedAttributeKeys = new Set([
   'alarm',
-  'alarm_high',
-  'alarm_low',
   'attribute_defaults',
   'attributes',
   'data_type',

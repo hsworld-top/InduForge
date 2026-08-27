@@ -22,7 +22,7 @@ func TestRuntimeWritePermissionDenyWins(t *testing.T) {
 }
 
 func TestNormalizeRuntimeWriteValueChecksTypeAndRange(t *testing.T) {
-	record := repository.DataPointRecord{DataType: "number", MinValue: float64Pointer(0), MaxValue: float64Pointer(100)}
+	record := repository.DataPointRecord{DataType: "float64", MinValue: float64Pointer(0), MaxValue: float64Pointer(100)}
 	value, err := normalizeRuntimeWriteValue(record, float64(42))
 	if err != nil || value != float64(42) {
 		t.Fatalf("合法数值被拒绝: value=%v err=%v", value, err)
@@ -32,7 +32,7 @@ func TestNormalizeRuntimeWriteValueChecksTypeAndRange(t *testing.T) {
 	if !errors.As(err, &appErr) {
 		t.Fatalf("越界应返回业务错误: %v", err)
 	}
-	record.DataType = "boolean"
+	record.DataType = "bool"
 	if _, err := normalizeRuntimeWriteValue(record, "true"); err == nil {
 		t.Fatal("布尔数据点不应接受字符串")
 	}

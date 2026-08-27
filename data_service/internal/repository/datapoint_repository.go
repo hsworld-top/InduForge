@@ -34,8 +34,6 @@ type DataPointRecord struct {
 	DefaultValue              *string
 	MinValue                  *float64
 	MaxValue                  *float64
-	AlarmLow                  *float64
-	AlarmHigh                 *float64
 	Tags                      []any
 	AttributeDefaults         map[string]string
 	RuntimePermissions        DataPointRuntimePermissions
@@ -51,7 +49,7 @@ type DataPointRecord struct {
 }
 
 const dataPointSelectColumns = `id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, attribute_defaults, runtime_permissions,
+       unit, precision_num, default_value, min_value, max_value, tags, attribute_defaults, runtime_permissions,
        refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by, created_at, updated_at`
 
 // DataPointListFilter 表示数据点列表的过滤条件。
@@ -80,6 +78,45 @@ type DataPointUsageRecord struct {
 type DataPointTagSummary struct {
 	Tag   string
 	Count int
+}
+
+type DataPointSourceOptionRecord struct {
+	ScopeType  string
+	ID         string
+	Name       string
+	SourceType string
+}
+
+// ListSourceOptions 统一分页普通连接、工业连接和计算单元，供数据点筛选器远程搜索。
+func (r *DataPointRepository) ListSourceOptions(ctx context.Context, projectID, search string, page, pageSize int) ([]DataPointSourceOptionRecord, int, error) {
+	page, pageSize = normalizePageAndSize(page, pageSize, 20, 100)
+	search = strings.TrimSpace(search)
+	var total int
+	if err := r.pool.QueryRow(ctx, `WITH sources AS (
+		SELECT 'connection'::text scope_type,id,name,type source_type FROM data_connections WHERE project_id=$1
+		UNION ALL SELECT 'collector_connection',id,name,protocol_family FROM data_collector_connections WHERE project_id=$1
+		UNION ALL SELECT 'compute_unit',id,name,'compute' FROM data_compute_units WHERE project_id=$1
+	) SELECT COUNT(*) FROM sources WHERE $2='' OR name ILIKE '%'||$2||'%'`, projectID, search).Scan(&total); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计数据点来源选项失败", err)
+	}
+	rows, err := r.pool.Query(ctx, `WITH sources AS (
+		SELECT 'connection'::text scope_type,id,name,type source_type FROM data_connections WHERE project_id=$1
+		UNION ALL SELECT 'collector_connection',id,name,protocol_family FROM data_collector_connections WHERE project_id=$1
+		UNION ALL SELECT 'compute_unit',id,name,'compute' FROM data_compute_units WHERE project_id=$1
+	) SELECT scope_type,id,name,source_type FROM sources WHERE $2='' OR name ILIKE '%'||$2||'%' ORDER BY name,id LIMIT $3 OFFSET $4`, projectID, search, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询数据点来源选项失败", err)
+	}
+	defer rows.Close()
+	result := make([]DataPointSourceOptionRecord, 0, pageSize)
+	for rows.Next() {
+		var item DataPointSourceOptionRecord
+		if err := rows.Scan(&item.ScopeType, &item.ID, &item.Name, &item.SourceType); err != nil {
+			return nil, 0, err
+		}
+		result = append(result, item)
+	}
+	return result, total, rows.Err()
 }
 
 // DataPointRepository 封装 data_points 的参数化 SQL 访问。
@@ -158,16 +195,13 @@ func (r *DataPointRepository) ListUsageCounts(ctx context.Context, projectID str
 			JOIN data_alarm_items item ON item.id = input.alarm_item_id
 			WHERE item.project_id = $1 AND input.datapoint_id = ANY($2::uuid[])
 			UNION
-			SELECT datapoint.id, 'compute:' || unit.id::text AS usage_key
-			FROM data_compute_units unit
-			JOIN LATERAL jsonb_array_elements(
-				CASE WHEN jsonb_typeof(unit.input_bindings->'datapointVariables') = 'array'
-					THEN unit.input_bindings->'datapointVariables' ELSE '[]'::jsonb END
-			) variable ON true
-			JOIN data_points datapoint
-			  ON datapoint.project_id = unit.project_id
-			 AND datapoint.path = COALESCE(variable->>'path', variable->>'datapointPath')
-			WHERE unit.project_id = $1 AND datapoint.id = ANY($2::uuid[])
+			SELECT ref.datapoint_id, 'compute:' || ref.compute_unit_id::text AS usage_key
+			FROM data_compute_unit_datapoint_refs ref
+			WHERE ref.project_id = $1 AND ref.datapoint_id = ANY($2::uuid[])
+			UNION
+			SELECT history.datapoint_id, 'history:' || history.id::text AS usage_key
+			FROM data_history_storage_configs history
+			WHERE history.project_id = $1 AND history.datapoint_id = ANY($2::uuid[])
 		)
 		SELECT datapoint_id, COUNT(*) FROM usages GROUP BY datapoint_id
 	`, projectID, ids)
@@ -200,15 +234,13 @@ func (r *DataPointRepository) ListUsages(ctx context.Context, projectID, datapoi
 			WHERE item.project_id = $1 AND input.datapoint_id = $2
 			UNION
 			SELECT 'compute'::text AS module, unit.id::text AS object_id, unit.name AS label
-			FROM data_compute_units unit
-			JOIN LATERAL jsonb_array_elements(
-				CASE WHEN jsonb_typeof(unit.input_bindings->'datapointVariables') = 'array'
-					THEN unit.input_bindings->'datapointVariables' ELSE '[]'::jsonb END
-			) variable ON true
-			JOIN data_points datapoint
-			  ON datapoint.project_id = unit.project_id
-			 AND datapoint.path = COALESCE(variable->>'path', variable->>'datapointPath')
-			WHERE unit.project_id = $1 AND datapoint.id = $2
+			FROM data_compute_unit_datapoint_refs ref
+			JOIN data_compute_units unit ON unit.id = ref.compute_unit_id
+			WHERE ref.project_id = $1 AND ref.datapoint_id = $2
+			UNION
+			SELECT 'history'::text AS module, history.id::text AS object_id, '历史存储单点配置'::text AS label
+			FROM data_history_storage_configs history
+			WHERE history.project_id = $1 AND history.datapoint_id = $2
 		) usages
 		ORDER BY module, label, object_id
 	`, projectID, datapointID)
@@ -403,17 +435,15 @@ func (r *DataPointRepository) Update(ctx context.Context, params UpdateDataPoint
             default_value = $11,
             min_value = $12,
             max_value = $13,
-            alarm_low = $14,
-            alarm_high = $15,
-            tags = $16::jsonb,
-            refresh_mode = $17,
-            refresh_interval_ms = $18,
-            status = $19,
-            updated_by = $20,
+            tags = $14::jsonb,
+            refresh_mode = $15,
+            refresh_interval_ms = $16,
+            status = $17,
+            updated_by = $18,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
         RETURNING `+dataPointSelectColumns+`
-    `, params.ProjectID, params.ID, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+    `, params.ProjectID, params.ID, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
 
 	record, err := scanDataPointRecord(row)
 	if err != nil {
@@ -495,12 +525,43 @@ func (r *DataPointRepository) DeleteInvalidBatch(ctx context.Context, projectID 
 		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "删除列表不能为空")
 	}
 
-	commandTag, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开始批量删除数据点事务失败", err)
+	}
+	defer rollbackDataPointTxQuietly(ctx, tx)
+	if err := lockSourceProject(ctx, tx, projectID); err != nil {
+		return 0, err
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM data_points WHERE project_id=$1 AND id=ANY($2::uuid[]) AND status='invalid' FOR UPDATE`, projectID, ids)
+	if err != nil {
+		return 0, err
+	}
+	lockedIDs := make([]string, 0, len(ids))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		lockedIDs = append(lockedIDs, id)
+	}
+	rows.Close()
+	if len(lockedIDs) != len(ids) {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "部分数据点不存在或不是无效状态")
+	}
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, lockedIDs); err != nil {
+		return 0, err
+	}
+	commandTag, err := tx.Exec(ctx, `
         DELETE FROM data_points
         WHERE project_id = $1 AND id = ANY($2::uuid[]) AND status = 'invalid'
-	`, projectID, ids)
+	`, projectID, lockedIDs)
 	if err != nil {
 		return 0, translateDataPointDeleteError("批量删除数据点失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交批量删除数据点事务失败", err)
 	}
 	return int(commandTag.RowsAffected()), nil
 }
@@ -519,6 +580,26 @@ func (r *DataPointRepository) DeleteInvalidByFilter(ctx context.Context, project
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开始批量删除数据点事务失败", err)
 	}
 	defer rollbackDataPointTxQuietly(ctx, tx)
+	if err := lockSourceProject(ctx, tx, projectID); err != nil {
+		return 0, err
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM data_points WHERE `+whereSQL+` FOR UPDATE`, args...)
+	if err != nil {
+		return 0, err
+	}
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, ids); err != nil {
+		return 0, err
+	}
 
 	commandTag, err := tx.Exec(ctx, `DELETE FROM data_points WHERE `+whereSQL, args...)
 	if err != nil {
@@ -528,6 +609,30 @@ func (r *DataPointRepository) DeleteInvalidByFilter(ctx context.Context, project
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交批量删除数据点事务失败", err)
 	}
 	return int(commandTag.RowsAffected()), nil
+}
+
+func ensureNoDatapointBlockingUsagesTx(ctx context.Context, tx pgx.Tx, projectID string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT item.id FROM data_alarm_items item WHERE item.project_id=$1 AND item.datapoint_id=ANY($2::uuid[])
+			UNION ALL
+			SELECT input.alarm_item_id FROM data_alarm_item_inputs input JOIN data_alarm_items item ON item.id=input.alarm_item_id WHERE item.project_id=$1 AND input.datapoint_id=ANY($2::uuid[])
+			UNION ALL
+			SELECT ref.compute_unit_id FROM data_compute_unit_datapoint_refs ref WHERE ref.project_id=$1 AND ref.datapoint_id=ANY($2::uuid[])
+			UNION ALL
+			SELECT history.id FROM data_history_storage_configs history WHERE history.project_id=$1 AND history.datapoint_id=ANY($2::uuid[])
+		) usages
+	`, projectID, ids).Scan(&count); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "检查数据点引用失败", err)
+	}
+	if count > 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, fmt.Sprintf("所选数据点存在 %d 项报警、计算或历史配置引用，请先解除引用", count))
+	}
+	return nil
 }
 
 func translateDataPointDeleteError(message string, err error) error {
@@ -597,8 +702,6 @@ type UpdateDataPointParams struct {
 	DefaultValue      *string
 	MinValue          *float64
 	MaxValue          *float64
-	AlarmLow          *float64
-	AlarmHigh         *float64
 	Tags              []any
 	RefreshMode       string
 	RefreshIntervalMS *int
@@ -635,8 +738,6 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		defaultValue            sql.NullString
 		minValue                sql.NullFloat64
 		maxValue                sql.NullFloat64
-		alarmLow                sql.NullFloat64
-		alarmHigh               sql.NullFloat64
 		refreshIntervalMS       sql.NullInt32
 		createdBy               pgtype.UUID
 		updatedBy               pgtype.UUID
@@ -661,8 +762,6 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		&defaultValue,
 		&minValue,
 		&maxValue,
-		&alarmLow,
-		&alarmHigh,
 		&tagsBytes,
 		&attributeDefaultsBytes,
 		&runtimePermissionsBytes,
@@ -688,8 +787,6 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 	record.DefaultValue = nullStringToPtr(defaultValue)
 	record.MinValue = nullFloat64ToPtr(minValue)
 	record.MaxValue = nullFloat64ToPtr(maxValue)
-	record.AlarmLow = nullFloat64ToPtr(alarmLow)
-	record.AlarmHigh = nullFloat64ToPtr(alarmHigh)
 	record.RefreshIntervalMS = nullInt32ToPtr(refreshIntervalMS)
 	record.CreatedBy = uuidToPtr(createdBy)
 	record.UpdatedBy = uuidToPtr(updatedBy)

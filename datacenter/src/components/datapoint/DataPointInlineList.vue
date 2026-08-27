@@ -92,7 +92,7 @@ const copyPath = async (path) => {
   try {
     await navigator.clipboard.writeText(path)
     ElMessage.success('已复制数据点路径')
-  } catch (error) {
+  } catch {
     ElMessage.error('复制失败，请手动复制')
   }
 }

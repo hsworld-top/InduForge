@@ -81,7 +81,7 @@ func TestBuildProjectArtifactV1IncludesDataPointRuntimePermissions(t *testing.T)
 				SourceConfig: map[string]any{
 					"static": true,
 				},
-				DataType:    "number",
+				DataType:    "float64",
 				RefreshMode: "auto",
 				Status:      "active",
 				RuntimePermissions: DataPointRuntimePermissions{

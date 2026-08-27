@@ -26,8 +26,6 @@ type CreateDataPointParams struct {
 	DefaultValue      *string
 	MinValue          *float64
 	MaxValue          *float64
-	AlarmLow          *float64
-	AlarmHigh         *float64
 	Tags              []any
 	RefreshMode       string
 	RefreshIntervalMS *int
@@ -148,15 +146,15 @@ func (r *DataPointRepository) Create(ctx context.Context, params CreateDataPoint
 	row := r.pool.QueryRow(ctx, `
         INSERT INTO data_points (
             project_id, path, name, description, source_type, source_id, source_config, data_type,
-            unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+            unit, precision_num, default_value, min_value, max_value, tags, runtime_permissions,
             refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by
         )
         VALUES (
-            $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15,
-            $16::jsonb, $17::jsonb, $18, $19, $20, $21, $22, $22
+            $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13,
+            $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20, $20
         )
         RETURNING `+dataPointSelectColumns+`
-    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, displayOrder, params.UserID)
+    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, string(tagsBytes), string(runtimePermissionsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, displayOrder, params.UserID)
 
 	record, err := scanDataPointRecord(row)
 	if err != nil {
@@ -193,20 +191,18 @@ func (r *DataPointRepository) UpsertBySource(ctx context.Context, params CreateD
             default_value = $11,
             min_value = $12,
             max_value = $13,
-            alarm_low = $14,
-            alarm_high = $15,
-            tags = $16::jsonb,
-            refresh_mode = $17,
-            refresh_interval_ms = $18,
-            status = $19,
-            display_order = COALESCE($21, display_order),
-            updated_by = COALESCE($20, updated_by),
+            tags = $14::jsonb,
+            refresh_mode = $15,
+            refresh_interval_ms = $16,
+            status = $17,
+            display_order = COALESCE($19, display_order),
+            updated_by = COALESCE($18, updated_by),
             updated_at = now()
         WHERE project_id = $1
           AND source_type = $2
           AND source_id = $3
         RETURNING `+dataPointSelectColumns+`
-    `, params.ProjectID, params.SourceType, *params.SourceID, params.Path, params.Name, params.Description, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
+    `, params.ProjectID, params.SourceType, *params.SourceID, params.Path, params.Name, params.Description, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
 
 	record, err := scanDataPointRecord(row)
 	if err == nil {
@@ -244,19 +240,17 @@ func (r *DataPointRepository) UpsertByPath(ctx context.Context, params CreateDat
             default_value = $11,
             min_value = $12,
             max_value = $13,
-            alarm_low = $14,
-            alarm_high = $15,
-            tags = $16::jsonb,
-            refresh_mode = $17,
-            refresh_interval_ms = $18,
-            status = $19,
-            display_order = COALESCE($21, display_order),
-            updated_by = COALESCE($20, updated_by),
+            tags = $14::jsonb,
+            refresh_mode = $15,
+            refresh_interval_ms = $16,
+            status = $17,
+            display_order = COALESCE($19, display_order),
+            updated_by = COALESCE($18, updated_by),
             updated_at = now()
         WHERE project_id = $1
           AND path = $2
         RETURNING `+dataPointSelectColumns+`
-    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
+    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
 
 	record, err := scanDataPointRecord(row)
 	if err == nil {
@@ -295,19 +289,17 @@ func (r *DataPointRepository) UpdateGeneratedOutput(ctx context.Context, id stri
             default_value = $12,
             min_value = $13,
             max_value = $14,
-            alarm_low = $15,
-            alarm_high = $16,
-            tags = $17::jsonb,
-            refresh_mode = $18,
-            refresh_interval_ms = $19,
-            status = $20,
-            display_order = COALESCE($22, display_order),
-            updated_by = COALESCE($21, updated_by),
+            tags = $15::jsonb,
+            refresh_mode = $16,
+            refresh_interval_ms = $17,
+            status = $18,
+            display_order = COALESCE($20, display_order),
+            updated_by = COALESCE($19, updated_by),
             updated_at = now()
         WHERE project_id = $1
           AND id = $2
         RETURNING `+dataPointSelectColumns+`
-    `, params.ProjectID, id, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
+    `, params.ProjectID, id, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
 
 	record, err := scanDataPointRecord(row)
 	if err != nil {
