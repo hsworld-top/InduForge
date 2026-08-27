@@ -160,6 +160,11 @@ type DataPointService struct {
 	connections    *repository.ConnectionRepository
 	collectors     *repository.CollectorRepository
 	builtinRuntime *BuiltinRuntimeService
+	mqttPublisher  mqttDataPointPublisher
+}
+
+type mqttDataPointPublisher interface {
+	PublishSubscriptionMessage(ctx context.Context, projectID, subscriptionID string, payload any) (*MqttPublishResult, error)
 }
 
 // NewDataPointService 创建数据点服务。
@@ -171,6 +176,11 @@ func NewDataPointService(repo *repository.DataPointRepository, queryService *Que
 		mqtt:       mqttRepository,
 		computes:   computeRepository,
 	}
+}
+
+// SetMqttPublisher 注入 MQTT 发布能力，使订阅型数据点的 publish/set 走真实消息通道。
+func (s *DataPointService) SetMqttPublisher(publisher mqttDataPointPublisher) {
+	s.mqttPublisher = publisher
 }
 
 // SetGeneratedSourceRepositories 注入各协议工作台仓储，用于统一校验自动生成数据点的源对象是否仍然有效。

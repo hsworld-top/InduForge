@@ -201,6 +201,22 @@ func (s *DataPointService) writeDataPointRecord(ctx context.Context, record repo
 	if err != nil {
 		return nil, err
 	}
+	if record.SourceType == "mqtt.subscription" && record.SourceID != nil && s.mqttPublisher != nil {
+		if _, err := s.mqttPublisher.PublishSubscriptionMessage(
+			ctx,
+			record.ProjectID,
+			strings.TrimSpace(*record.SourceID),
+			normalizedValue,
+		); err != nil {
+			return nil, err
+		}
+		return &WriteDataPointResult{
+			ID:        record.ID,
+			Path:      record.Path,
+			Value:     normalizedValue,
+			Timestamp: time.Now().UTC(),
+		}, nil
+	}
 	defaultValue := stringifyDataPointValue(normalizedValue)
 	updated, err := s.repository.Update(ctx, repository.UpdateDataPointParams{
 		ID:                record.ID,
@@ -818,6 +834,10 @@ func stringifyDataPointValue(value any) string {
 	case fmt.Stringer:
 		return typed.String()
 	default:
+		encoded, err := json.Marshal(typed)
+		if err == nil {
+			return string(encoded)
+		}
 		return fmt.Sprintf("%v", typed)
 	}
 }

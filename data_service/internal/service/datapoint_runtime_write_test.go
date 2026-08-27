@@ -1,7 +1,9 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -44,6 +46,57 @@ func TestNormalizeRuntimeWriteValueChecksStructuredTypes(t *testing.T) {
 	}
 	if _, err := normalizeRuntimeWriteValue(repository.DataPointRecord{DataType: "array"}, map[string]any{"invalid": true}); err == nil {
 		t.Fatal("array 数据点必须拒绝对象")
+	}
+}
+
+type fakeMqttDataPointPublisher struct {
+	projectID      string
+	subscriptionID string
+	payload        any
+}
+
+func (f *fakeMqttDataPointPublisher) PublishSubscriptionMessage(_ context.Context, projectID, subscriptionID string, payload any) (*MqttPublishResult, error) {
+	f.projectID = projectID
+	f.subscriptionID = subscriptionID
+	f.payload = payload
+	return &MqttPublishResult{Topic: "demo/line/events", QOS: 1}, nil
+}
+
+func TestWriteMqttSubscriptionDataPointPublishesMessage(t *testing.T) {
+	publisher := &fakeMqttDataPointPublisher{}
+	service := &DataPointService{mqttPublisher: publisher}
+	sourceID := "subscription-1"
+	payload := map[string]any{"event": "operator_test", "running": true}
+	result, err := service.writeDataPointRecord(context.Background(), repository.DataPointRecord{
+		ID:         "point-1",
+		ProjectID:  "project-1",
+		Path:       "mqtt.IF消息库.demo_line_events",
+		Status:     "active",
+		SourceType: "mqtt.subscription",
+		SourceID:   &sourceID,
+		DataType:   "object",
+		RuntimePermissions: repository.DataPointRuntimePermissions{
+			Write: repository.RuntimePermissionGrant{Inherit: true},
+		},
+	}, "user-1", "operator", payload)
+	if err != nil {
+		t.Fatalf("writeDataPointRecord() error = %v", err)
+	}
+	if result.Path != "mqtt.IF消息库.demo_line_events" {
+		t.Fatalf("unexpected result path %q", result.Path)
+	}
+	if publisher.projectID != "project-1" || publisher.subscriptionID != sourceID {
+		t.Fatalf("unexpected publish target project=%q subscription=%q", publisher.projectID, publisher.subscriptionID)
+	}
+	if !reflect.DeepEqual(publisher.payload, payload) {
+		t.Fatalf("unexpected publish payload %#v", publisher.payload)
+	}
+}
+
+func TestStringifyDataPointValueUsesJSONForStructuredValues(t *testing.T) {
+	actual := stringifyDataPointValue(map[string]any{"running": true, "value": float64(42)})
+	if actual != `{"running":true,"value":42}` {
+		t.Fatalf("stringifyDataPointValue() = %q", actual)
 	}
 }
 

@@ -142,11 +142,16 @@ func BuildMqttTagSnapshotUpdateFromMessage(tag repository.MqttTagRecord, message
 
 // BuildMqttSubscriptionSnapshot 使用最近一条消息构建订阅快照。
 func BuildMqttSubscriptionSnapshot(message repository.MqttMessageRecord) MqttSubscriptionSnapshot {
+	value := any(message.Payload)
+	var decoded any
+	if json.Unmarshal([]byte(message.Payload), &decoded) == nil {
+		value = decoded
+	}
 	return MqttSubscriptionSnapshot{
 		SubscriptionID: message.SubscriptionID,
 		Topic:          message.Topic,
 		Payload:        message.Payload,
-		Value:          message.Payload,
+		Value:          value,
 		Quality:        "good",
 		Timestamp:      message.ReceivedAt.UTC(),
 		ReceivedAt:     message.ReceivedAt.UTC(),

@@ -401,6 +401,20 @@ func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionI
 	return result, nil
 }
 
+// PublishSubscriptionMessage 按订阅既有连接、主题和 QOS 发布数据点消息。
+func (s *MqttService) PublishSubscriptionMessage(ctx context.Context, projectID, subscriptionID string, payload any) (*MqttPublishResult, error) {
+	subscription, err := s.GetSubscription(ctx, projectID, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	qos := subscription.QOS
+	return s.PublishMessage(ctx, projectID, subscription.ConnectionID, MqttPublishInput{
+		Topic:   subscription.Topic,
+		Payload: payload,
+		QOS:     &qos,
+	})
+}
+
 func (s *MqttService) applyBuiltinMessagePublishConnection(connection *repository.MqttPublishConnectionRecord) error {
 	if connection == nil {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "IF消息库连接不存在")

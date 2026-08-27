@@ -131,6 +131,19 @@ func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsNonArrayPath(t *testing
 	}
 }
 
+func TestBuildMqttSubscriptionSnapshotDecodesJSONPayload(t *testing.T) {
+	snapshot := BuildMqttSubscriptionSnapshot(repository.MqttMessageRecord{
+		SubscriptionID: "sub-1",
+		Topic:          "demo/line/events",
+		Payload:        `{"event":"operator_test","running":true}`,
+		ReceivedAt:     testTime(),
+	})
+	expected := map[string]any{"event": "operator_test", "running": true}
+	if !reflect.DeepEqual(snapshot.Value, expected) {
+		t.Fatalf("snapshot.Value = %#v, want %#v", snapshot.Value, expected)
+	}
+}
+
 func TestExtractMqttBatchJSONPathValueNestedArray(t *testing.T) {
 	tag := repository.MqttTagRecord{
 		DataType:  "string",
