@@ -47,6 +47,11 @@ Symbol/Component 编辑会话从当前代次建立工作副本。保存文件只
 Provider 版本不兼容或资源代次不存在的工程。Release Manifest 记录 Provider、引擎版本、sceneId、
 revision、资源 ID、内部代次、挂载路径和根摘要。
 
+工程页面通过 `induforge-scene-2d` 和 `induforge-scene-3d` Web Components 加载场景，只传稳定
+`sceneId`。开发态组件向 Designer 受控预览宿主申请 Redis 短期 Viewer 会话，会话固定当前已提交
+revision，文件请求只读取 `scene_revision_files`。公开交互只包含结构化参数、事件和命令，运行时按
+JSON Schema Draft 2020-12 严格校验；开发态数据点实时桥已由受控宿主实现，Release Loader 独立实施。
+
 ## 5. HT 功能收口与 OEM
 
 正式编辑器左侧只提供资源库和只读高级依赖诊断；固定场景入口由平台在后台加载，不展示作品树、
@@ -61,3 +66,20 @@ revision、资源 ID、内部代次、挂载路径和根摘要。
 可见标题、favicon、帮助、支持信息和控制台横幅统一使用 InduForge。构建阶段移除第三方源码注释、
 厂商网址、旧全局变量和可识别文件名；普通场景、资源、revision 和 Release 响应只返回公开产品标识，
 不返回内部 Provider 名称或引擎版本。原始授权与版权材料保留在非公开源码和交付归档中。
+
+## 6. 管道、交互与数据联动
+
+管道使用可编辑 Shape 中心线，平台属性 `induforge.pipe.*` 统一映射静止、连续、分段和颗粒/箭头模式。
+连续与颗粒模式使用 `path-flow`，分段模式使用 `dash-flow`；自动绕障只在编辑态调用
+`route-planning`，结果保存为普通 Shape 点集，Viewer 不执行路由计算。
+
+对象的数据联动和交互分别保存在显式 `induforge.bindings` 与 `induforge.interactions` 属性中。
+Provider 保存入口 JSON 时在同一事务中更新只读 `provider_contract` 与 `datapoint_refs`；提交时把用户
+契约和 Provider 契约合并，同名 Schema 不一致则拒绝。提交形成 revision 前还会向数据服务校验每个
+显式绑定的数据点是否存在且为 `active`，并核对数据类型与 `get/sub/set` 能力；任一项不满足均拒绝提交。
+运行态数据桥仅允许访问 revision 声明的数据点，
+查询、订阅和按稳定 path 写入均由受控宿主代理，Viewer 和工程预览 iframe 不接收长期 Token。
+
+图形模板保存时剥离数据联动与公开交互，业务组件允许保留工程内绑定。两类资源均支持上传，也支持
+从当前画布选择直接保存。保存所选时后端从场景草稿解析依赖闭包，将引用改写为资源内部路径，并直接
+复用已有内容对象，不经浏览器下载再上传；外部 URL、HTML/WebView、私有数据源配置和不受控脚本不得进入资源代次。

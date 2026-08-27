@@ -54,23 +54,28 @@ Designer 在预览激活时每 3 秒轮询，状态变化时每秒轮询，切�
 
 ### 2.3 新标签调试
 
-“新窗口”使用 `services.preview.url` 打开同一 Preview 页面。开发环境直接打开本机映射地址；生产与
-离线环境打开 Traefik 返回的受控 HTTPS 地址，并复用当前工作空间的 HttpOnly 会话。用户在新标签中
-使用浏览器原生开发者工具进行 Console、Elements、Network 和存储调试。
+“新窗口”打开 Designer 自有的 `/designer/preview?projectId=...` 宿主页。宿主按当前
+登录身份重新查询受控 Preview URL，不接收页面传入的任意 URL，并复用当前工作空间的
+HttpOnly 会话。用户在新标签中使用浏览器原生开发者工具进行 Console、Elements、
+Network 和存储调试。
 
 Designer 不再注入 Eruda、调试桥或跨 iframe 控制台消息。平台 Vite Runner 只负责加载工程 Vite
-配置并固定监听地址和端口；终端、Problems 和 Output 使用 code-server 原生能力。
+配置并固定监听地址和端口；终端、Problems 和 Output 使用 code-server 原生能力。原始 Vite
+地址直接打开时不承诺 2D/3D Viewer 会话解析能力。
 
 ## 3. 2D/3D 产物视图
 
-- 2D 和 3D 使用独立视图，按 `kind` 过滤公开场景契约并以卡片展示名称、场景 ID、页面路由、
-  嵌入方式、公开能力数、数据点引用数和契约版本。
-- 空列表展示明确的未创建状态；用户先创建场景记录，再由短期编辑会话打开对应 Provider 编辑器。
-- 卡片提供打开、公开契约编辑、预览和删除；编辑器入口只传场景 ID 与 `2d | 3d` 类型。
+- 2D 和 3D 使用独立视图，按 `kind` 过滤公开场景契约并以卡片展示名称、说明、已提交
+  revision；仅在存在数据点引用时展示关联数量。
+- 空列表展示明确的未创建状态；用户只填写工程内唯一的场景名称，平台生成不可见的稳定场景 ID，再由短期编辑会话打开对应 Provider 编辑器。
+- 卡片提供打开编辑器、场景设置和删除；场景设置维护名称、说明、页面参数、场景事件和
+  页面可调用命令，并只读展示 Provider 在 commit 时提取的数据点引用。对象和数组通过递归类型
+  编辑器生成 JSON Schema Draft 2020-12，不暴露原始 JSON 编辑框。
 - 工程级图片、字体、模型、材质、Symbol 和 Component 资源库只在 HT 内管理，不在 Designer 建设独立资源页。
 - 资源替换后既有场景继续固定旧内部代次；用户在当前场景执行“一键更新”后草稿版本递增，再次 commit 才进入新 revision。
-- 当前公开场景契约未声明 Viewer URL 或缩略图 URL，Designer 不根据场景 ID、路由或文件目录
-  猜测预览地址。后续补齐运行 Viewer/缩略图契约后，卡片预览区再加载真实产物画面。
+- 工程页面通过 `<induforge-scene-2d>` 和 `<induforge-scene-3d>` 加载已提交 revision，只传
+  平台生成的稳定 `sceneId`。组件支持 `setParams()`、`scene-event` 和 `invoke()`，不暴露 Provider URL、
+  逻辑路径或引擎名称。草稿预览仍在 Provider 编辑器内完成，不进入页面 Viewer。
 
 ## 4. 编辑器视图
 

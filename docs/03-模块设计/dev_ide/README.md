@@ -85,6 +85,7 @@ Service Worker、剪贴板、下载和多层 iframe。`dev_ide` 不对这些运�
 - iframe 消息必须校验 `origin`、消息类型、工程 ID、实例 ID 和会话状态。
 - 顶层刷新时由 `dev_ide` 根据已授权标签状态恢复，不依赖敏感查询参数。
 - 工作空间票据过期后重新授权，不把长期 token、refresh token 或模型密钥写入 iframe URL。
+- 浏览器会话由 IDE 宿主统一续租；首次 `401` 触发单次刷新并重试原请求，Wujie 子应用复用同一刷新任务，失败后才统一退出登录。
 
 ## 7. 与 Designer 的边界
 

@@ -55,6 +55,8 @@ POST /api/v1/auth/refresh
 Content-Type: application/json
 ```
 
+IDE 宿主负责刷新请求去重：首次收到 `401` 时发起一次续租，并在成功后重试原请求。Wujie 子应用通过宿主上下文复用同一个刷新任务，避免并发轮换同一 Refresh Token；只有续租失败才统一清理登录态并返回登录页。
+
 ### 4. 用户登出
 
 ```javascript
