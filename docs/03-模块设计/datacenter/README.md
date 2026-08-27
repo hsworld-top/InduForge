@@ -87,6 +87,7 @@
 - [查询说明](./queries.md)
 - [MQTT 自动发现](./mqtt-auto-discovery.md)
 - [数据点设计](./datapoint-design.md)
+- [数据点与报警开发上下文 SDK 设计](./数据点与报警开发上下文SDK设计.md)
 - [数据中心 UI 初版设计（已归档）](../../归档/旧入口/datacenter-ui-initial-design-旧入口.md)
 - [IF 内置运行库设计](./IF内置运行库设计.md)
 - [Compute/Alarm 设计](./compute-alarm-design.md)
