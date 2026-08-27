@@ -2,6 +2,8 @@
 
 本教程面向两类用户：在数据中心编写计算脚本的工程师，以及在 AI 开发中心编写 Vue + JavaScript 页面的开发者。两处使用同一数据点语义，方法返回格式也相同。
 
+全新环境默认提供“数据点与报警 Demo”工程。该工程已创建 IF 关系库当前值、IF 时序库历史样本、IF 实时库可写设定值、温度换算计算单元和温度越限报警。首次进入 AI 开发中心时会自动装载 Vue + JavaScript 看板，可直接对照代码和页面学习。它是普通工程，用户可以编辑、复制或删除；删除后不会在服务重启时重新出现。
+
 ## 1. 先认识返回结果
 
 SDK 方法不会直接把失败伪装成空值：
@@ -68,10 +70,10 @@ temperature === ctx.points.temperature
 
 假设变量面板绑定了：
 
-| 变量名 | 数据点 |
-| --- | --- |
+| 变量名        | 数据点   |
+| ------------- | -------- |
 | `temperature` | 设备温度 |
-| `pressure` | 设备压力 |
+| `pressure`    | 设备压力 |
 
 ```js
 const temperatureResult = temperature.read()
@@ -197,25 +199,28 @@ const subscription = await alarms.changes.subscribe((event) => {
 - 计算单元调用。
 - 加载中、空数据和错误状态。
 
-复制模板后只需替换 `POINT_PATHS` 和 `COMPUTE_REF`：
+内置 Demo 工程使用的 `POINT_PATHS` 和 `COMPUTE_REF` 如下：
 
 ```js
 const POINT_PATHS = {
-  temperature: 'factory.line1.temperature',
-  pressure: 'factory.line1.pressure',
-  setpoint: 'factory.line1.setpoint',
+  temperature: 'db.IF关系库.demo_line_current.temperature',
+  pressure: 'db.IF关系库.demo_line_current.pressure',
+  history: 'db.IF时序库.demo_temperature_history',
+  setpoint: 'realtime.IF实时库.demo.line1.setpoint',
 }
 const COMPUTE_REF = 'temperatureConvert'
 ```
 
+在其他工程中使用模板时，再将这些引用替换为工程自己的数据点路径与计算单元名称。
+
 ## 5. 开发与发布的差异
 
-| 场景 | 开发态 | 发布到节点后 |
-| --- | --- | --- |
-| `read/get/peek` | 当前值、默认值或模拟值 | 节点存储或真实来源 |
+| 场景                      | 开发态                                     | 发布到节点后       |
+| ------------------------- | ------------------------------------------ | ------------------ |
+| `read/get/peek`           | 当前值、默认值或模拟值                     | 节点存储或真实来源 |
 | `set/publish/execute/run` | 计算沙箱记录副作用；页面由预览宿主策略决定 | 节点鉴权后真实执行 |
-| 数据点订阅 | 计算脚本不支持；页面由预览宿主提供 | 节点事件总线 |
-| 当前/历史报警 | 宿主未提供时明确返回不支持 | 节点报警存储 |
+| 数据点订阅                | 计算脚本不支持；页面由预览宿主提供         | 节点事件总线       |
+| 当前/历史报警             | 宿主未提供时明确返回不支持                 | 节点报警存储       |
 
 上线前至少验证成功、无数据、质量异常、能力不支持、超时和权限拒绝六条路径。
 

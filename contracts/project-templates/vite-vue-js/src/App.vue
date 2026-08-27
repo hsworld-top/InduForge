@@ -2,16 +2,19 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { alarms, computes, points } from '@induforge/runtime-sdk'
 
-// 在 AI 开发中心选择工程真实数据点后替换这些路径。
+// 内置 Demo 工程会同步创建下列 IF 内置库数据点。
 const POINT_PATHS = {
-  temperature: 'factory.line1.temperature',
-  pressure: 'factory.line1.pressure',
-  setpoint: 'factory.line1.setpoint',
+  temperature: 'db.IF关系库.demo_line_current.temperature',
+  pressure: 'db.IF关系库.demo_line_current.pressure',
+  // 查询只有一个完整结果输出时，数据点路径不再追加 output key。
+  history: 'db.IF时序库.demo_temperature_history',
+  setpoint: 'realtime.IF实时库.demo.line1.setpoint',
 }
 const COMPUTE_REF = 'temperatureConvert'
 
 const temperaturePoint = points.byPath(POINT_PATHS.temperature)
 const pressurePoint = points.byPath(POINT_PATHS.pressure)
+const historyPoint = points.byPath(POINT_PATHS.history)
 const setpointPoint = points.byPath(POINT_PATHS.setpoint)
 
 const loading = ref(false)
@@ -37,6 +40,7 @@ function resultItems(data) {
   if (Array.isArray(data)) return data
   if (Array.isArray(data?.items)) return data.items
   if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.rows)) return data.rows
   return []
 }
 
@@ -56,8 +60,10 @@ async function loadCurrentValues() {
 }
 
 async function loadHistory() {
-  const result = await temperaturePoint.history({ from: '-1h', limit: 12, order: 'desc' })
-  if (!showFailure(result, '读取历史失败')) historyRows.value = resultItems(result.data)
+  const result = await historyPoint.read()
+  if (!showFailure(result, '读取历史失败')) {
+    historyRows.value = resultItems(result.data?.value ?? result.data)
+  }
 }
 
 async function loadCurrentAlarms() {
@@ -199,9 +205,9 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in historyRows" :key="row.timestamp || index">
-                <td>{{ formatTime(row.observedAt || row.timestamp) }}</td>
-                <td>{{ formatValue(row) }} ℃</td>
+              <tr v-for="(row, index) in historyRows" :key="row.observed_at || index">
+                <td>{{ formatTime(row.observed_at || row.observedAt || row.timestamp) }}</td>
+                <td>{{ formatValue({ value: row.temperature }) }} ℃</td>
                 <td>
                   <span class="status-tag">{{ row.quality || 'unknown' }}</span>
                 </td>
