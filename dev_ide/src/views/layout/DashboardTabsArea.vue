@@ -67,6 +67,8 @@
             :tab-key="tab.key"
             @open-tab="$emit('open-tab', $event)"
             @open-workspace="$emit('open-workspace', { tab, request: $event })"
+            @close-workspace="$emit('close-workspace', { tab, request: $event })"
+            @scene-committed="$emit('scene-committed', { tab, event: $event })"
             v-bind="tab.props"
           />
         </div>
@@ -138,6 +140,8 @@ const emit = defineEmits([
   'restore-tab',
   'open-tab',
   'open-workspace',
+  'close-workspace',
+  'scene-committed',
 ])
 
 const appStore = useAppStore()

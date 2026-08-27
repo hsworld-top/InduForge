@@ -45,6 +45,8 @@ type ExtendedRequestConfig = InternalAxiosRequestConfig & {
   forcePermissionToast?: boolean
   skipPermissionToast?: boolean
   skipAuthRedirect?: boolean
+  skipAuthRefresh?: boolean
+  _authRetried?: boolean
 }
 
 type ApiErrorMeta = {
@@ -160,6 +162,36 @@ const clearAuthAndRedirectToLogin = () => {
   window.location.href = '/login'
 }
 
+let refreshPromise: Promise<boolean> | null = null
+
+/**
+ * 刷新 HttpOnly Cookie 会话。所有宿主请求和 Wujie 子应用共用这一 Promise，
+ * 避免多个 401 同时轮换同一个 Refresh Token。
+ */
+export const refreshSession = (): Promise<boolean> => {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = fetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  }).then(async (response) => {
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    return response.ok && toNumericCode(payload?.code) === 0
+  })
+  refreshPromise = refreshPromise
+    .catch(() => false)
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
+
+const isRefreshRequest = (config?: ExtendedRequestConfig): boolean =>
+  String(config?.url || '').includes('/auth/refresh')
+
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
@@ -205,7 +237,7 @@ request.interceptors.response.use(
     }
     return responseData
   },
-  (error: AxiosError<ErrorResponseData>) => {
+  async (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
     const config = error.config as ExtendedRequestConfig | undefined
 
@@ -214,6 +246,18 @@ request.interceptors.response.use(
 
       switch (status) {
         case 401: {
+          if (
+            config &&
+            !config.skipAuthRefresh &&
+            !config._authRetried &&
+            !isRefreshRequest(config)
+          ) {
+            const refreshed = await refreshSession()
+            if (refreshed) {
+              config._authRetried = true
+              return request.request(config)
+            }
+          }
           if (!config?.skipAuthRedirect) {
             clearAuthAndRedirectToLogin()
           }

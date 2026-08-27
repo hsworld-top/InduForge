@@ -12,6 +12,7 @@ interface MicroAppProps {
 interface WorkspaceToolProps {
   target: '2d' | '3d'
   sceneId: string
+  sceneName: string
   project: Record<string, any> & { id: unknown; projectId?: unknown }
 }
 
@@ -129,7 +130,9 @@ const normalizeWorkspaceToolProps = (props: unknown): WorkspaceToolProps | null 
     !isPlainObject(props) ||
     !['2d', '3d'].includes(String(props.target)) ||
     typeof props.sceneId !== 'string' ||
-    !props.sceneId.trim()
+    !props.sceneId.trim() ||
+    typeof props.sceneName !== 'string' ||
+    !props.sceneName.trim()
   )
     return null
   const project = isPlainObject(props.project) ? { ...props.project } : null
@@ -139,6 +142,7 @@ const normalizeWorkspaceToolProps = (props: unknown): WorkspaceToolProps | null 
   return {
     target: props.target as WorkspaceToolProps['target'],
     sceneId: props.sceneId.trim(),
+    sceneName: props.sceneName.trim(),
     project: project as WorkspaceToolProps['project'],
   }
 }

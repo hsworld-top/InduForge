@@ -1,6 +1,6 @@
 <template>
   <section class="workspace-tool-frame">
-    <iframe v-if="frameUrl" :src="frameUrl" :title="frameTitle" />
+    <iframe ref="frameRef" v-if="frameUrl" :src="frameUrl" :title="frameTitle" />
     <div v-else class="workspace-tool-state">
       <strong>{{ loading ? '正在创建编辑会话' : '编辑器暂不可用' }}</strong>
       <p v-if="error">{{ error }}</p>
@@ -10,30 +10,60 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import request, { getApiErrorMessage } from '@/utils/request'
 import type { ApiResponse } from '@/types/api'
-import type { WorkspaceToolProject, WorkspaceToolTarget } from '@/types/workspace-tool'
+import type {
+  WorkspaceSceneCommittedEvent,
+  WorkspaceToolProject,
+  WorkspaceToolTarget,
+} from '@/types/workspace-tool'
 
 const props = defineProps<{
   target: WorkspaceToolTarget
   project: WorkspaceToolProject
   sceneId: string
+  sceneName: string
+}>()
+
+const emit = defineEmits<{
+  sceneCommitted: [event: WorkspaceSceneCommittedEvent]
 }>()
 
 interface EditorSessionResponse {
   sessionId: string
   url: string
   expiresAt: string
+  sceneName: string
 }
 
 const frameUrl = ref('')
+const frameRef = ref<HTMLIFrameElement | null>(null)
 const loading = ref(false)
 const error = ref('')
 const frameTitle = computed(() => {
-  const projectName = props.project.name || '工程'
-  return props.target === '2d' ? `${projectName} 2D 编辑器` : `${projectName} 3D 编辑器`
+  return props.target === '2d' ? `${props.sceneName} 2D 编辑器` : `${props.sceneName} 3D 编辑器`
 })
+
+function handleEditorMessage(event: MessageEvent): void {
+  if (event.origin !== window.location.origin || event.source !== frameRef.value?.contentWindow)
+    return
+  const payload = event.data as Record<string, unknown> | null
+  if (
+    !payload ||
+    payload.source !== 'induforge-scene' ||
+    payload.type !== 'committed' ||
+    typeof payload.revision !== 'number'
+  ) {
+    return
+  }
+  emit('sceneCommitted', {
+    projectId: String(props.project.id),
+    target: props.target,
+    sceneId: props.sceneId,
+    revision: payload.revision,
+  })
+}
 
 async function loadSession(): Promise<void> {
   loading.value = true
@@ -54,7 +84,12 @@ async function loadSession(): Promise<void> {
   }
 }
 
-watch(() => [props.project.id, props.target, props.sceneId], loadSession, { immediate: true })
+watch(() => [props.project.id, props.target, props.sceneId, props.sceneName], loadSession, {
+  immediate: true,
+})
+
+onMounted(() => window.addEventListener('message', handleEditorMessage))
+onBeforeUnmount(() => window.removeEventListener('message', handleEditorMessage))
 </script>
 
 <style scoped>

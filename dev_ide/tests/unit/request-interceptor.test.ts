@@ -3,14 +3,16 @@ import type { InternalAxiosRequestConfig } from 'axios'
 import { Storage } from '@/utils/storage'
 import { ElMessage } from 'element-plus'
 
-const { createMock, requestUseMock, responseUseMock } = vi.hoisted(() => ({
+const { createMock, requestMock, requestUseMock, responseUseMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
+  requestMock: vi.fn(),
   requestUseMock: vi.fn(),
   responseUseMock: vi.fn(),
 }))
 
 vi.mock('axios', () => {
   createMock.mockImplementation(() => ({
+    request: requestMock,
     interceptors: {
       request: { use: requestUseMock },
       response: { use: responseUseMock },
@@ -42,9 +44,18 @@ describe('request interceptor', () => {
     createMock.mockClear()
     requestUseMock.mockClear()
     responseUseMock.mockClear()
+    requestMock.mockReset()
+    requestMock.mockResolvedValue({ retried: true })
     vi.resetModules()
     vi.mocked(Storage.remove).mockClear()
     vi.mocked(ElMessage.error).mockClear()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: vi.fn().mockResolvedValue({ code: 10002, msg: '刷新失败' }),
+      }),
+    )
   })
 
   it('FormData 请求应删除 Content-Type 头', async () => {
@@ -94,6 +105,54 @@ describe('request interceptor', () => {
 
     expect(Storage.remove).toHaveBeenCalled()
     expect(Storage.remove).toHaveBeenCalledTimes(2)
+  })
+
+  it('401 时刷新成功应重试原请求且不退出登录', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ code: 0, msg: 'ok', data: {} }),
+    } as unknown as Response)
+    await import('@/utils/request')
+
+    const responseRejected = responseUseMock.mock.calls[0]?.[1] as
+      | ((error: unknown) => Promise<unknown>)
+      | undefined
+    const config = { url: '/users', headers: {} }
+    const result = await responseRejected!({ response: { status: 401, data: {} }, config })
+
+    expect(result).toEqual({ retried: true })
+    expect(config).toMatchObject({ _authRetried: true })
+    expect(requestMock).toHaveBeenCalledWith(config)
+    expect(Storage.remove).not.toHaveBeenCalled()
+  })
+
+  it('并发 401 应共用一次刷新请求', async () => {
+    let resolveRefresh!: (value: Response) => void
+    vi.mocked(fetch).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolveRefresh = resolve
+      }),
+    )
+    await import('@/utils/request')
+    const responseRejected = responseUseMock.mock.calls[0]?.[1] as (
+      error: unknown,
+    ) => Promise<unknown>
+    const first = responseRejected({
+      response: { status: 401, data: {} },
+      config: { url: '/users', headers: {} },
+    })
+    const second = responseRejected({
+      response: { status: 401, data: {} },
+      config: { url: '/projects', headers: {} },
+    })
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    resolveRefresh({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ code: 0, msg: 'ok', data: {} }),
+    } as unknown as Response)
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2)
+    expect(requestMock).toHaveBeenCalledTimes(2)
   })
 
   it('2xx 且业务 code!=0 时应抛出 ApiBusinessError', async () => {

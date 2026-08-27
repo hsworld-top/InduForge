@@ -29,6 +29,8 @@
         @restore-tab="restoreTab"
         @open-tab="openTab"
         @open-workspace="handleWorkspaceOpenRequest"
+        @close-workspace="handleWorkspaceCloseRequest"
+        @scene-committed="handleWorkspaceSceneCommitted"
       />
     </div>
 
@@ -65,6 +67,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { Storage } from '@/utils/storage'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import WujieVue from 'wujie-vue3'
 import { resolveDashboardTabTitle } from '@/utils/dashboardTabTitle'
 import { restoreDashboardTabState, serializeDashboardTabState } from '@/utils/dashboardTabState'
 import { resolveTenantBrandLogo } from '@/utils/tenantBrand'
@@ -73,6 +76,7 @@ import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
 import request from '@/utils/request'
 import {
+  isWorkspaceCloseRequest,
   isWorkspaceOpenRequest,
   matchesWorkspaceRequestProject,
   workspaceToolTabKey,
@@ -356,11 +360,12 @@ export default {
 
       openTab({
         key: workspaceToolTabKey(projectId, request.target, request.sceneId),
-        title: `${project.name || projectId} · ${workspaceToolTitle(request.target)}`,
+        title: workspaceToolTitle(request.target, request.sceneName),
         component: WorkspaceToolFrame,
         props: {
           target: request.target,
           sceneId: request.sceneId,
+          sceneName: request.sceneName,
           project: {
             id: projectId,
             name: project.name,
@@ -637,6 +642,33 @@ export default {
       }
     }
 
+    /**
+     * 场景删除成功后，只关闭同工程、同类型、同场景的工具标签。
+     */
+    const handleWorkspaceCloseRequest = ({ tab, request }) => {
+      if (!isWorkspaceCloseRequest(request) || tab?.props?.appType !== 'designer') return
+      const projectId = String(tab.props.project?.id || '')
+      if (!matchesWorkspaceRequestProject(request, projectId)) return
+      closeTab(workspaceToolTabKey(projectId, request.target, request.sceneId))
+    }
+
+    /**
+     * HT revision 提交成功后通知同工程 Designer 刷新场景摘要。
+     */
+    const handleWorkspaceSceneCommitted = ({ tab, event }) => {
+      if (tab?.component !== WorkspaceToolFrame || !event) return
+      const projectId = String(tab.props?.project?.id || '')
+      if (
+        !projectId ||
+        event.projectId !== projectId ||
+        event.target !== tab.props?.target ||
+        event.sceneId !== tab.props?.sceneId
+      ) {
+        return
+      }
+      WujieVue.bus.$emit(`micro-app:designer-${projectId}:scene-committed`, event)
+    }
+
     // 点击外部关闭菜单
     const handleClickOutside = (event) => {
       const userMenu = event.target.closest('.user-menu')
@@ -840,6 +872,8 @@ export default {
       handleLogout,
       openTab,
       handleWorkspaceOpenRequest,
+      handleWorkspaceCloseRequest,
+      handleWorkspaceSceneCommitted,
       closeTab,
       maximizeTab,
       restoreTab,

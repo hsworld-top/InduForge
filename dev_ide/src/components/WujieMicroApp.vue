@@ -16,10 +16,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowReactive, watch } from 'vue'
 import WujieVue from 'wujie-vue3'
-import { useAppStore } from '@/store'
+import { useAppStore, useAuthStore } from '@/store'
+import { refreshSession } from '@/utils/request'
 import { Storage } from '@/utils/storage'
 import type { MicroAppType, MicroAppProjectContext } from '@/types/micro-app'
-import type { WorkspaceOpenRequest } from '@/types/workspace-tool'
+import type { WorkspaceCloseRequest, WorkspaceOpenRequest } from '@/types/workspace-tool'
 
 const props = defineProps<{
   appType: MicroAppType
@@ -29,14 +30,21 @@ const props = defineProps<{
 const emit = defineEmits<{
   stateChange: [payload: { instanceName: string; title?: string; dirty?: boolean }]
   openWorkspace: [request: WorkspaceOpenRequest]
+  closeWorkspace: [request: WorkspaceCloseRequest]
 }>()
 
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const instanceName = computed(() => `${props.appType}-${props.project.id}`)
 const appUrl = computed(() => `/${props.appType}/`)
 const contextEventName = computed(() => `micro-app:${instanceName.value}:context`)
 const contextReadyEventName = computed(() => `micro-app:${instanceName.value}:context-ready`)
+
+const handleAuthExpired = () => {
+  authStore.clearAuthData()
+  if (window.location.pathname !== '/login') window.location.assign('/login')
+}
 
 const buildContext = () => ({
   appType: props.appType,
@@ -47,10 +55,13 @@ const buildContext = () => ({
   tenantId: props.project.tenantId ? String(props.project.tenantId) : Storage.getTenantId(),
   theme: appStore.theme === 'dark' ? 'dark' : 'light',
   locale: appStore.language === 'en' ? 'en' : 'zh',
+  onRefreshAuth: refreshSession,
+  onAuthExpired: handleAuthExpired,
   onStateChange: (payload: { title?: string; dirty?: boolean } = {}) => {
     emit('stateChange', { instanceName: instanceName.value, ...payload })
   },
   onOpenWorkspace: (request: WorkspaceOpenRequest) => emit('openWorkspace', request),
+  onCloseWorkspace: (request: WorkspaceCloseRequest) => emit('closeWorkspace', request),
 })
 
 const contextProps = shallowReactive(buildContext())
