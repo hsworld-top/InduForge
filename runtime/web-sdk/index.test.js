@@ -200,6 +200,80 @@ test('默认配置从 window.__INDUFORGE_RUNTIME__ 读取', async () => {
   }
 })
 
+test('预览 iframe 默认通过宿主桥接读取并订阅数据点', async () => {
+  const listeners = new Map()
+  const requests = []
+  const parent = {
+    postMessage(message, origin) {
+      requests.push({ message, origin })
+      if (message.type !== 'REQUEST') return
+      queueMicrotask(() => {
+        listeners.get('message')?.({
+          source: parent,
+          data: {
+            channel: 'induforge-page-runtime',
+            version: 1,
+            type: 'RESULT',
+            requestId: message.requestId,
+            result: {
+              code: 0,
+              msg: 'ok',
+              data: message.operation === 'read'
+                ? { value: 26.5, quality: 'good' }
+                : { path: message.path, subscribed: message.operation === 'subscribe' },
+            },
+          },
+        })
+      })
+    },
+  }
+  globalThis.window = {
+    parent,
+    document: { referrer: 'https://designer.test/workspace' },
+    addEventListener(type, handler) {
+      listeners.set(type, handler)
+    },
+    removeEventListener(type) {
+      listeners.delete(type)
+    },
+  }
+
+  try {
+    const moduleUrl = new URL(`./index.js?preview-bridge=${Date.now()}`, import.meta.url)
+    const browserSdk = await import(moduleUrl.href)
+    const point = browserSdk.points.byPath('db.IF关系库.demo.temperature')
+
+    assert.deepEqual(await point.read(), {
+      code: 0,
+      msg: 'ok',
+      data: { value: 26.5, quality: 'good' },
+    })
+    assert.equal(requests[0].origin, 'https://designer.test')
+    assert.equal(requests[0].message.operation, 'read')
+
+    let pushedValue = null
+    const subscription = await point.subscribe((value) => { pushedValue = value })
+    const subscribeRequest = requests.find(({ message }) => message.operation === 'subscribe')
+    listeners.get('message')({
+      source: parent,
+      data: {
+        channel: 'induforge-page-runtime',
+        version: 1,
+        type: 'EVENT',
+        subscriptionId: subscribeRequest.message.subscriptionId,
+        data: { path: 'db.IF关系库.demo.temperature', value: 27.1 },
+      },
+    })
+
+    assert.deepEqual(pushedValue, { path: 'db.IF关系库.demo.temperature', value: 27.1 })
+    assert.equal(typeof subscription.data, 'function')
+    subscription.data()
+    assert.equal(requests.at(-1).message.operation, 'unsubscribe')
+  } finally {
+    delete globalThis.window
+  }
+})
+
 test('配置入口拒绝无效参数', () => {
   assert.throws(() => configureRuntime(null), /runtime 必须是对象/)
   assert.throws(() => createRuntimeClient([]), /runtime 必须是对象/)

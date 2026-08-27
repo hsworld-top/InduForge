@@ -1,3 +1,5 @@
+import { createPreviewBridgeRuntime } from './preview-bridge.js'
+
 const POINT_OPERATIONS = new Set([
   'get', 'read', 'peek', 'set', 'subscribe', 'history', 'refresh', 'run', 'execute', 'publish', 'sub', 'pub',
 ])
@@ -10,7 +12,7 @@ let configuredRuntime = null
 
 function readBrowserRuntime() {
   if (typeof window === 'undefined') return {}
-  return window.__INDUFORGE_RUNTIME__ ?? {}
+  return window.__INDUFORGE_RUNTIME__ ?? createPreviewBridgeRuntime() ?? {}
 }
 
 function resolveRuntime(runtime) {
