@@ -56,8 +56,10 @@ function previewQueryExecution() {
 }
 
 function previewComputeRun() {
+  const current = temperature.get()
+  if (failure(current)) return current
   return computePoint.run({
-    temperature: temperature.get().data,
+    temperature: current.data.value,
     requestedBy: 'compute-demo',
   })
 }

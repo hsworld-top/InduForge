@@ -48,7 +48,10 @@ def main(argv, dp, ctx):
     if scenario == "execute":
         return queryPoint.execute({"deviceId": ctx.args.get("deviceId", "A01"), "limit": ctx.args.get("limit", 20)})
     if scenario == "run":
-        return computePoint.run({"temperature": temperature.get().data, "requestedBy": "compute-demo"})
+        current = temperature.get()
+        if current.code != 0:
+            return current
+        return computePoint.run({"temperature": current.data["value"], "requestedBy": "compute-demo"})
     if scenario == "publish":
         return eventPoint.publish({"type": "process_snapshot", "payload": read_process_snapshot()})
     if scenario == "unsupported":

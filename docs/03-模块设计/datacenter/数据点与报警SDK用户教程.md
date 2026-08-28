@@ -21,7 +21,7 @@ console.log(result.data)
 
 常用读取方法：
 
-- `get()`：获取业务值，按需数据点可能执行一次来源。
+- `get()`：获取业务值样本，按需数据点可能执行一次来源。
 - `read()`：获取 `value/quality/timestamp` 完整样本。
 - `peek()`：只看已存储当前值，不主动执行来源。
 
@@ -65,6 +65,20 @@ temperature === ctx.points.temperature
 ```
 
 通常直接使用变量名最清楚。
+
+试运行面板使用结构化模拟快照，不会修改真实数据点：
+
+```json
+{
+  "temperature": {
+    "value": 25.5,
+    "quality": "good",
+    "timestamp": null,
+    "observedAt": null,
+    "sourceTimestamp": null
+  }
+}
+```
 
 ### 2.2 读取数值并计算
 
@@ -129,7 +143,7 @@ async function loadData() {
     errorMessage.value = result.msg
     return
   }
-  temperature.value = result.data
+  temperature.value = result.data.value
 }
 
 onMounted(loadData)
@@ -240,7 +254,7 @@ return temperature * 1.8 + 32
 ```js
 const result = temperature.get()
 if (result.code !== 0) return result
-return result.data * 1.8 + 32
+return result.data.value * 1.8 + 32
 ```
 
 ### 忽略 code
