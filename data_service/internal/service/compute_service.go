@@ -1063,6 +1063,9 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 	if err != nil {
 		return nil, err
 	}
+	if dryRun {
+		applyComputeDebugDatapointValues(&sdkContext, input.Input)
+	}
 
 	startedAt := time.Now().UTC()
 	request := enginecompute.ExecuteRequest{

@@ -50,6 +50,31 @@ func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repo
 	return sdk, nil
 }
 
+// applyComputeDebugDatapointValues 只在开发态试运行时用用户填写的模拟值覆盖预取快照。
+// 正式运行仍读取节点当前值，避免调试数据进入真实计算链路。
+func applyComputeDebugDatapointValues(sdk *enginecompute.SDKContext, runtimeInput map[string]any) {
+	if sdk == nil || runtimeInput == nil {
+		return
+	}
+	rawValues, ok := runtimeInput["datapoints"].(map[string]any)
+	if !ok {
+		return
+	}
+	for alias, value := range rawValues {
+		path, declared := sdk.PointBindings[alias]
+		if !declared {
+			continue
+		}
+		snapshot, prefetched := sdk.Datapoints[path]
+		if !prefetched {
+			continue
+		}
+		snapshot.Value = value
+		sdk.Datapoints[path] = snapshot
+		sdk.Variables[alias] = value
+	}
+}
+
 type computeSQLBinding struct {
 	Key        string
 	QueryID    string

@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	enginecompute "github.com/indu-forge/data_service/internal/engine/compute"
+)
 
 func TestSafeComputeVariableAliasUsesCommonJavaScriptAndPythonSubset(t *testing.T) {
 	valid := []string{"temperature", "line_1_speed", "_internalValue"}
@@ -32,5 +36,32 @@ func TestExtractComputeDatapointVariableBindingsDropsInvalidAndDuplicateItems(t 
 	}
 	if bindings[0].Alias != "temperature" || bindings[1].Alias != "speed" {
 		t.Fatalf("unexpected bindings: %+v", bindings)
+	}
+}
+
+func TestApplyComputeDebugDatapointValuesOverridesDeclaredBindingsOnly(t *testing.T) {
+	sdk := enginecompute.SDKContext{
+		Datapoints: map[string]enginecompute.SDKDataPointValue{
+			"factory.temperature": {Path: "factory.temperature", Value: 12.5},
+		},
+		PointBindings: map[string]string{"temperature": "factory.temperature"},
+		Variables:     map[string]any{"temperature": 12.5},
+	}
+
+	applyComputeDebugDatapointValues(&sdk, map[string]any{
+		"datapoints": map[string]any{
+			"temperature": 30.0,
+			"undeclared":  99.0,
+		},
+	})
+
+	if got := sdk.Datapoints["factory.temperature"].Value; got != 30.0 {
+		t.Fatalf("snapshot value = %v, want 30", got)
+	}
+	if got := sdk.Variables["temperature"]; got != 30.0 {
+		t.Fatalf("variable value = %v, want 30", got)
+	}
+	if _, exists := sdk.Variables["undeclared"]; exists {
+		t.Fatal("undeclared debug value must not enter SDK variables")
 	}
 }
