@@ -487,14 +487,16 @@
                 class="compute-editor__variable-row"
                 :class="{ 'is-unused': !isDatapointVariableReferenced(row.alias) }"
               >
-                <button
-                  type="button"
+                <input
                   class="compute-editor__variable-alias"
-                  :title="`插入变量：${row.alias}`"
-                  @click="insertVariableAlias(row.alias)"
-                >
-                  {{ row.alias }}
-                </button>
+                  :value="row.alias"
+                  :aria-label="`变量名：${row.alias}`"
+                  title="修改脚本变量名"
+                  spellcheck="false"
+                  @focus="($event.target as HTMLInputElement).select()"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                  @blur="renameDatapointVariable(row, $event)"
+                />
                 <span class="compute-editor__variable-path" :title="row.path">
                   {{ row.path }}
                 </span>
@@ -1283,7 +1285,11 @@ import DatapointPickerDialog, {
 } from '@/components/shared/DatapointPickerDialog.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
-import type { ComputeDraft, ComputeEditorTab } from './computeEditorModel'
+import type {
+  ComputeDatapointVariableRow,
+  ComputeDraft,
+  ComputeEditorTab,
+} from './computeEditorModel'
 
 type MonacoEditorExpose = InstanceType<typeof MonacoEditor> & {
   insertText?: (text: string) => void
@@ -1823,6 +1829,7 @@ watch(sandboxAvailable, (available, wasAvailable) => {
 
 function markDirty() {
   if (activeDraft.value) {
+    activeDraft.value.dirty = true
     emit('mark-dirty', activeDraft.value.id)
   }
 }
@@ -1949,6 +1956,7 @@ function revealDiagnostic(item: ComputeSyntaxDiagnostic) {
 
 async function saveAfterSyntaxCheck() {
   if (!activeDraft.value) return
+  if (!validateDatapointVariableAliases()) return
   // 沙箱离线只影响开发态语法检查和试运行，不能阻断配置本身的保存。
   if (!sandboxAvailable.value) {
     emit('save', activeDraft.value.id)
@@ -2043,13 +2051,74 @@ function addDatapointVariable(point: DatapointPickerSelection, alias: string) {
     datapointId: point.id,
     dataType: point.dataType,
   })
+  syncDebugDatapointAlias('', alias, point.dataType)
   markDirty()
 }
 
 function removeDatapointVariable(index: number) {
   if (!activeDraft.value) return
+  const removed = activeDraft.value.datapointVariableRows[index]
   activeDraft.value.datapointVariableRows.splice(index, 1)
+  if (removed) syncDebugDatapointAlias(removed.alias, '', removed.dataType)
   markDirty()
+}
+
+function renameDatapointVariable(row: ComputeDatapointVariableRow, event: Event) {
+  if (!activeDraft.value) return
+  const input = event.target as HTMLInputElement
+  const previous = row.alias
+  const next = input.value.trim()
+  if (next === previous) return
+  if (!isValidVariableName(next, activeDraft.value.lang)) {
+    input.value = previous
+    ElMessage.warning('变量名必须是当前脚本语言的合法且非保留名称')
+    return
+  }
+  if (isDatapointAliasUsed(next, row.uid)) {
+    input.value = previous
+    ElMessage.warning('当前计算单元中已存在同名变量')
+    return
+  }
+  row.alias = next
+  replaceVariableReferences(previous, next)
+  syncDebugDatapointAlias(previous, next, row.dataType)
+  markDirty()
+}
+
+function replaceVariableReferences(previous: string, next: string) {
+  if (!activeDraft.value || !previous || previous === next) return
+  const pattern = variableReferencePattern(previous)
+  activeDraft.value.code = activeDraft.value.code.replace(pattern, next)
+  if (typeof activeDraft.value.triggerConfig.expression === 'string') {
+    activeDraft.value.triggerConfig.expression = activeDraft.value.triggerConfig.expression.replace(
+      pattern,
+      next,
+    )
+  }
+}
+
+function syncDebugDatapointAlias(previous: string, next: string, dataType?: string) {
+  if (!activeDraft.value) return
+  const parsed = parseJsonForHint(debugDatapointText.value, {})
+  if (!parsed.valid || !isPlainRecord(parsed.value)) return
+  const values = { ...parsed.value }
+  const preserved = previous && previous in values ? values[previous] : undefined
+  if (previous) delete values[previous]
+  if (next && !(next in values)) {
+    values[next] = preserved ?? defaultValueByType(dataType || 'string', '')
+  }
+  const synchronized = Object.fromEntries(
+    activeDraft.value.datapointVariableRows
+      .filter((row) => row.alias.trim())
+      .map((row) => {
+        const alias = row.alias.trim()
+        return [
+          alias,
+          alias in values ? values[alias] : defaultValueByType(row.dataType || 'string', ''),
+        ]
+      }),
+  )
+  debugDatapointText.value = JSON.stringify(synchronized, null, 2)
 }
 
 function removeUnusedDatapointVariables() {
@@ -2063,6 +2132,7 @@ function removeUnusedDatapointVariables() {
     activeDraft.value.datapointVariableRows.length,
     ...nextRows,
   )
+  syncDebugDatapointAlias('', '')
   markDirty()
   ElMessage.success('已清理未引用变量')
 }
@@ -2137,13 +2207,24 @@ function confirmSelectedDatapoint(points: DatapointPickerSelection[]) {
     datapointPickerVisible.value = false
     return
   }
-  const alias = uniqueDatapointAlias(target.name || target.path.split('.').pop() || 'tag')
+  if (
+    activeDraft.value?.datapointVariableRows.some(
+      (row) => row.datapointId === target.id || row.path === target.path,
+    )
+  ) {
+    ElMessage.warning('当前计算单元已经添加该数据点')
+    return
+  }
+  const pathName = target.path.split('.').pop() || 'tag'
+  const preferredName = target.name || pathName
+  const normalizedName = normalizeVariableName(preferredName, activeDraft.value.lang)
+  const alias = uniqueDatapointAlias(/^_+$/.test(normalizedName) ? pathName : preferredName)
   if (!isValidVariableName(alias, activeDraft.value.lang)) {
     ElMessage.warning('变量名必须是当前脚本语言的合法变量名')
     return
   }
   if (isDatapointAliasUsed(alias)) {
-    ElMessage.warning('变量名已存在')
+    ElMessage.warning('当前计算单元中已存在同名变量')
     return
   }
   datapointPickerVisible.value = false
@@ -2166,6 +2247,7 @@ async function executeDebug() {
     return
   }
   if (!activeDraft.value) return
+  if (!validateDatapointVariableAliases()) return
   if (activeDraft.value.dirty) {
     ElMessage.warning('请先保存后再试运行')
     return
@@ -2425,22 +2507,24 @@ function buildDefaultDebugDatapoints() {
 }
 
 function defaultValueByType(type: string, defaultValue: string) {
+  const normalizedType = type.toLowerCase()
   if (defaultValue !== '') {
-    if (type === 'number') return Number(defaultValue)
-    if (type === 'boolean') return defaultValue === 'true'
-    if (type === 'object' || type === 'array') {
+    if (normalizedType === 'number' || numericDatapointTypes.has(normalizedType))
+      return Number(defaultValue)
+    if (normalizedType === 'boolean' || normalizedType === 'bool') return defaultValue === 'true'
+    if (normalizedType === 'object' || normalizedType === 'array') {
       try {
         return JSON.parse(defaultValue)
       } catch {
-        return type === 'array' ? [] : {}
+        return normalizedType === 'array' ? [] : {}
       }
     }
     return defaultValue
   }
-  if (type === 'number') return 0
-  if (type === 'boolean') return false
-  if (type === 'object') return {}
-  if (type === 'array') return []
+  if (normalizedType === 'number' || numericDatapointTypes.has(normalizedType)) return 0
+  if (normalizedType === 'boolean' || normalizedType === 'bool') return false
+  if (normalizedType === 'object') return {}
+  if (normalizedType === 'array') return []
   return ''
 }
 
@@ -2581,8 +2665,34 @@ function isValidVariableName(name: string, lang?: ComputeLang | string) {
   )
 }
 
-function isDatapointAliasUsed(name: string) {
-  return Boolean(activeDraft.value?.datapointVariableRows.some((row) => row.alias === name))
+function isDatapointAliasUsed(name: string, excludeUid = '') {
+  return Boolean(
+    activeDraft.value?.datapointVariableRows.some(
+      (row) => row.uid !== excludeUid && row.alias === name,
+    ),
+  )
+}
+
+function validateDatapointVariableAliases() {
+  if (!activeDraft.value) return false
+  const seen = new Set<string>()
+  for (const row of activeDraft.value.datapointVariableRows) {
+    const alias = row.alias.trim()
+    if (!isValidVariableName(alias, activeDraft.value.lang)) {
+      activePanel.value = 'variables'
+      panelCollapsed.value = false
+      ElMessage.warning(`数据点变量“${alias || row.path}”名称无效`)
+      return false
+    }
+    if (seen.has(alias)) {
+      activePanel.value = 'variables'
+      panelCollapsed.value = false
+      ElMessage.warning(`当前计算单元中存在重复变量名“${alias}”`)
+      return false
+    }
+    seen.add(alias)
+  }
+  return true
 }
 
 function isDatapointVariableReferenced(alias: string) {
@@ -2598,6 +2708,10 @@ function isDatapointVariableReferenced(alias: string) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function variableReferencePattern(alias: string) {
+  return new RegExp(`(?<![\\p{ID_Continue}$])${escapeRegExp(alias)}(?![\\p{ID_Continue}$])`, 'gu')
 }
 
 function insertActiveTemplate() {
@@ -3998,7 +4112,9 @@ const statusTone = (status?: string) => {
 
 .compute-editor__variable-alias {
   min-width: 0;
+  width: 100%;
   height: 26px;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
@@ -4012,6 +4128,11 @@ const statusTone = (status?: string) => {
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.compute-editor__variable-alias:focus {
+  border-color: var(--dc-primary);
+  outline: 2px solid rgba(29, 78, 216, 0.12);
 }
 
 .compute-editor__variable-path {
