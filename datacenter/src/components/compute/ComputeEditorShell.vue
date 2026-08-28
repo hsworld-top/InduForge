@@ -452,16 +452,6 @@
               >
                 <IconTablerDatabaseImport class="compute-editor__action-icon" />
               </button>
-              <button
-                v-if="unusedDatapointVariableCount"
-                type="button"
-                class="compute-editor__tool-btn"
-                title="清理未引用变量"
-                aria-label="清理未引用变量"
-                @click="removeUnusedDatapointVariables"
-              >
-                <IconTablerTrash class="compute-editor__action-icon" />
-              </button>
             </div>
             <div
               v-if="!activeDraft.datapointVariableRows.length"
@@ -485,7 +475,6 @@
                 v-for="(row, index) in activeDraft.datapointVariableRows"
                 :key="row.uid"
                 class="compute-editor__variable-row"
-                :class="{ 'is-unused': !isDatapointVariableReferenced(row.alias) }"
               >
                 <input
                   class="compute-editor__variable-alias"
@@ -501,12 +490,7 @@
                   {{ row.path }}
                 </span>
                 <em>{{ row.dataType || '-' }}</em>
-                <span
-                  class="compute-editor__variable-state"
-                  :class="{ 'is-unused': !isDatapointVariableReferenced(row.alias) }"
-                >
-                  {{ isDatapointVariableReferenced(row.alias) ? '已引用' : '未引用' }}
-                </span>
+                <span class="compute-editor__variable-state">已引用</span>
                 <button
                   type="button"
                   class="compute-editor__row-icon"
@@ -1635,12 +1619,6 @@ const pointChangeDeadbandAvailable = computed(() => {
   if (!config || !numericDatapointTypes.has(String(config.dataType || ''))) return false
   return ['value_change', 'increase', 'decrease'].includes(String(config.mode || ''))
 })
-const unusedDatapointVariableCount = computed(
-  () =>
-    activeDraft.value?.datapointVariableRows.filter(
-      (row) => !isDatapointVariableReferenced(row.alias),
-    ).length || 0,
-)
 const dependencyCount = computed(() => activeDraft.value?.dependencies.length || 0)
 const triggerText = computed(() => {
   const triggerType = activeDraft.value?.triggerType || 'manual'
@@ -2119,22 +2097,6 @@ function syncDebugDatapointAlias(previous: string, next: string, dataType?: stri
       }),
   )
   debugDatapointText.value = JSON.stringify(synchronized, null, 2)
-}
-
-function removeUnusedDatapointVariables() {
-  if (!activeDraft.value) return
-  const nextRows = activeDraft.value.datapointVariableRows.filter((row) =>
-    isDatapointVariableReferenced(row.alias),
-  )
-  if (nextRows.length === activeDraft.value.datapointVariableRows.length) return
-  activeDraft.value.datapointVariableRows.splice(
-    0,
-    activeDraft.value.datapointVariableRows.length,
-    ...nextRows,
-  )
-  syncDebugDatapointAlias('', '')
-  markDirty()
-  ElMessage.success('已清理未引用变量')
 }
 
 function removeInput(index: number) {
@@ -2693,17 +2655,6 @@ function validateDatapointVariableAliases() {
     seen.add(alias)
   }
   return true
-}
-
-function isDatapointVariableReferenced(alias: string) {
-  if (!activeDraft.value) return false
-  const name = alias.trim()
-  if (!name) return false
-  const pattern = new RegExp(
-    `(?<![\\p{ID_Continue}$])${escapeRegExp(name)}(?![\\p{ID_Continue}$])`,
-    'u',
-  )
-  return pattern.test(activeDraft.value.code || '')
 }
 
 function escapeRegExp(value: string) {
@@ -4105,11 +4056,6 @@ const statusTone = (status?: string) => {
   background: var(--dc-surface);
 }
 
-.compute-editor__variable-row.is-unused {
-  border-color: var(--dc-border);
-  background: var(--dc-surface-muted);
-}
-
 .compute-editor__variable-alias {
   min-width: 0;
   width: 100%;
@@ -4164,11 +4110,6 @@ const statusTone = (status?: string) => {
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
-}
-
-.compute-editor__variable-state.is-unused {
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--dc-warning);
 }
 
 .compute-editor__dependency-chips {
