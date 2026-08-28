@@ -80,6 +80,7 @@ func TestNodeRuntimeInjectsDataPointObjects(t *testing.T) {
 		"script": `
 const sample = temperature.read();
 const businessValue = temperature.get();
+console.log(temperature);
 const write = manualPoint.set(1200);
 return {
   sameObject: temperature === dp.temperature && temperature === ctx.points.temperature,
@@ -110,6 +111,7 @@ func TestPythonRuntimeInjectsDataPointObjects(t *testing.T) {
 		"script": `def main(argv, dp, ctx):
     sample = temperature.read()
     business_value = temperature.get()
+    print(temperature)
     write = manualPoint.set(1200)
     return {
         "sameObject": temperature is dp["temperature"] and temperature is ctx.points.temperature,
@@ -164,6 +166,7 @@ func assertRuntimeSDKOutput(t *testing.T, output []byte) {
 			DataType      string         `json:"dataType"`
 		} `json:"output"`
 		SideEffects []map[string]any `json:"sideEffects"`
+		Logs        []string         `json:"logs"`
 	}
 	if err := json.Unmarshal(output, &payload); err != nil {
 		t.Fatal(err)
@@ -180,6 +183,10 @@ func assertRuntimeSDKOutput(t *testing.T, output []byte) {
 	}
 	if payload.Output.Write["code"] != float64(0) || len(payload.SideEffects) != 1 || payload.SideEffects[0]["operation"] != "set" {
 		t.Fatalf("unexpected side effects: write=%+v sideEffects=%+v", payload.Output.Write, payload.SideEffects)
+	}
+	joinedLogs := strings.Join(payload.Logs, "\n")
+	if strings.Contains(joinedLogs, "[object Object]") || !strings.Contains(joinedLogs, "factory.temperature") || !strings.Contains(joinedLogs, "capabilities") {
+		t.Fatalf("datapoint log must be structured: %q", joinedLogs)
 	}
 }
 

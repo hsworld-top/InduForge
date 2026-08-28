@@ -12,11 +12,40 @@ const dependencies = Array.isArray(envelope.dependencies) ? envelope.dependencie
 const argv = Array.isArray(input.argv) ? input.argv : [];
 const logs = [];
 const sideEffects = [];
+
+function formatLogValue(value) {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return value.stack || value.message || String(value);
+  if (value === null || value === undefined || typeof value !== "object") return String(value);
+  const seen = new WeakSet();
+  try {
+    return JSON.stringify(
+      value,
+      (_key, item) => {
+        if (typeof item === "bigint") return String(item);
+        if (typeof item === "function") return undefined;
+        if (item && typeof item === "object") {
+          if (seen.has(item)) return "[Circular]";
+          seen.add(item);
+        }
+        return item;
+      },
+      2,
+    );
+  } catch {
+    return String(value);
+  }
+}
+
+function appendLog(values) {
+  logs.push(values.map(formatLogValue).join(" "));
+}
+
 const safeConsole = Object.freeze({
-  log: (...values) => logs.push(values.map(String).join(" ")),
-  info: (...values) => logs.push(values.map(String).join(" ")),
-  warn: (...values) => logs.push(values.map(String).join(" ")),
-  error: (...values) => logs.push(values.map(String).join(" ")),
+  log: (...values) => appendLog(values),
+  info: (...values) => appendLog(values),
+  warn: (...values) => appendLog(values),
+  error: (...values) => appendLog(values),
 });
 
 const allowedDependencies = new Map();

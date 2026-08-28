@@ -14,6 +14,22 @@ user_script = str(envelope.get("script") or "")
 dependencies = envelope.get("dependencies") if isinstance(envelope.get("dependencies"), list) else []
 argv = input_data.get("argv") if isinstance(input_data.get("argv"), list) else []
 side_effects = []
+native_print = print
+
+def format_log_value(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, DataPoint):
+        value = value.to_log_dict()
+    if isinstance(value, (dict, list, tuple, bool, int, float)) or value is None:
+        try:
+            return json.dumps(value, ensure_ascii=False, indent=2, default=str)
+        except (TypeError, ValueError):
+            pass
+    return str(value)
+
+def safe_print(*values, sep=" ", end="\n"):
+    native_print(sep.join(format_log_value(value) for value in values), end=end)
 
 class SDKResult(dict):
     def __init__(self, code, msg, data):
@@ -64,6 +80,26 @@ class DataPoint:
         self.capabilities = {
             operation: source_capabilities.get(operation) is True
             for operation in ("get", "read", "peek", "set", "subscribe", "history", "refresh", "run", "execute", "publish")
+        }
+
+    def to_log_dict(self):
+        return {
+            "id": self.id,
+            "ref": self.ref,
+            "path": self.path,
+            "name": self.name,
+            "displayName": self.displayName,
+            "dataType": self.dataType,
+            "source": self.source,
+            "status": self.status,
+            "unit": self.unit,
+            "precision": self.precision,
+            "min": self.min,
+            "max": self.max,
+            "defaultValue": self.defaultValue,
+            "tags": self.tags,
+            "attributes": self.attributes,
+            "capabilities": self.capabilities,
         }
 
     def _read_snapshot(self, operation, data):
@@ -125,7 +161,7 @@ for alias, point in dp.items():
 
 class LoggerSDK:
     def log(self, *values):
-        print(*values)
+        safe_print(*values)
 
     info = log
     warn = log
@@ -190,7 +226,7 @@ safe_builtins = {
     "abs": abs, "all": all, "any": any, "bool": bool, "dict": dict, "enumerate": enumerate,
     "float": float, "int": int, "isinstance": isinstance, "len": len, "list": list, "map": map,
     "max": max, "min": min, "next": next, "range": range, "reversed": reversed, "round": round,
-    "set": set, "sorted": sorted, "str": str, "sum": sum, "tuple": tuple, "zip": zip,
+    "set": set, "sorted": sorted, "str": str, "sum": sum, "tuple": tuple, "zip": zip, "print": safe_print,
     "Exception": Exception, "RuntimeError": RuntimeError, "TypeError": TypeError, "ValueError": ValueError,
 	"__import__": safe_import,
 }
