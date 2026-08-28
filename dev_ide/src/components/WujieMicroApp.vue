@@ -62,6 +62,13 @@ const buildContext = () => ({
   },
   onOpenWorkspace: (request: WorkspaceOpenRequest) => emit('openWorkspace', request),
   onCloseWorkspace: (request: WorkspaceCloseRequest) => emit('closeWorkspace', request),
+  onRegisterWindowMessageListener: (listener: (event: MessageEvent) => void) => {
+    window.addEventListener('message', listener)
+    return () => window.removeEventListener('message', listener)
+  },
+  onPostWindowMessage: (target: Window, data: unknown, targetOrigin: string) => {
+    target.postMessage(data, targetOrigin)
+  },
 })
 
 const contextProps = shallowReactive(buildContext())

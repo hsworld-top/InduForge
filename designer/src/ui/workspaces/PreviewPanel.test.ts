@@ -39,6 +39,7 @@ function installFrameWindow(frame: HTMLIFrameElement) {
 
 describe('PreviewPanel', () => {
   beforeEach(() => {
+    delete window.$wujie
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => runningState }))
     viewerSessionMock.mockReset()
@@ -400,5 +401,63 @@ describe('PreviewPanel', () => {
       }),
       'https://preview.workspace.test',
     )
+  })
+
+  it('Wujie 嵌入态由 IDE 主窗口监听并原路回包', async () => {
+    let hostListener: ((event: MessageEvent) => void) | null = null
+    const unregister = vi.fn()
+    const hostPostMessage = vi.fn()
+    window.$wujie = {
+      props: {
+        onRegisterWindowMessageListener: (listener: (event: MessageEvent) => void) => {
+          hostListener = listener
+          return unregister
+        },
+        onPostWindowMessage: hostPostMessage,
+      },
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => runningState })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 0, msg: 'ok', data: { values: { 'point.path': 42 } } }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow } = installFrameWindow(frame)
+
+    const dispatchHostMessage = hostListener as unknown as (event: MessageEvent) => void
+    dispatchHostMessage(new MessageEvent('message', {
+      source: contentWindow,
+      origin: 'https://preview.workspace.test',
+      data: {
+        channel: 'induforge-page-runtime',
+        version: 1,
+        type: 'REQUEST',
+        requestId: 'runtime-wujie-read-1',
+        domain: 'point',
+        operation: 'read',
+        path: 'point.path',
+      },
+    }))
+    await flushPromises()
+
+    expect(hostPostMessage).toHaveBeenCalledWith(
+      contentWindow,
+      expect.objectContaining({ type: 'RESULT', requestId: 'runtime-wujie-read-1' }),
+      'https://preview.workspace.test',
+    )
+    wrapper.unmount()
+    expect(unregister).toHaveBeenCalledOnce()
   })
 })

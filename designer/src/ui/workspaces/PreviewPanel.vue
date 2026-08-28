@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import IconLucideCheck from '~icons/lucide/check'
 import IconLucideExternalLink from '~icons/lucide/external-link'
@@ -20,6 +20,11 @@ interface DevicePreset {
   label: string
   width: number | null
   height: number | null
+}
+
+interface PreviewHostBridge {
+  onRegisterWindowMessageListener?: (listener: (event: MessageEvent) => void) => () => void
+  onPostWindowMessage?: (target: Window, data: unknown, targetOrigin: string) => void
 }
 
 const props = defineProps<{
@@ -49,6 +54,7 @@ const operation = ref<PreviewOperation | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let resizeObserver: ResizeObserver | null = null
 let revisionChannel: BroadcastChannel | null = null
+let unregisterHostMessageListener: (() => void) | null = null
 let dataSocket: Socket | null = null
 let dataSocketPromise: Promise<Socket> | null = null
 let dataPreviewSessionId = ''
@@ -103,11 +109,16 @@ const deviceStageStyle = computed(() => {
   }
 })
 
+onBeforeMount(() => {
+  window.addEventListener('message', handleRuntimeMessage)
+  unregisterHostMessageListener =
+    getPreviewHostBridge()?.onRegisterWindowMessageListener?.(handleRuntimeMessage) || null
+})
+
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => updateScale())
   if (canvasRef.value) resizeObserver.observe(canvasRef.value)
   void refreshProcessState()
-  window.addEventListener('message', handleRuntimeMessage)
   if (props.projectId && typeof BroadcastChannel !== 'undefined') {
     revisionChannel = new BroadcastChannel(`induforge-scene-revisions:${props.projectId}`)
     revisionChannel.addEventListener('message', handleRevisionBroadcast)
@@ -118,6 +129,8 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   clearPoll()
   window.removeEventListener('message', handleRuntimeMessage)
+  unregisterHostMessageListener?.()
+  unregisterHostMessageListener = null
   revisionChannel?.close()
   revisionChannel = null
   dataSocket?.disconnect()
@@ -251,7 +264,7 @@ async function handleRuntimeMessage(event: MessageEvent): Promise<void> {
     message.version === 1 &&
     message.type === 'REQUEST'
   ) {
-    await handlePageRuntimeRequest(message, event.origin)
+    await handlePageRuntimeRequest(message, event.origin, event.source as Window)
     return
   }
   if (
@@ -424,7 +437,7 @@ function releaseViewerSession(viewerSessionId: string): void {
   }
 }
 
-function forwardDatapointValue(payload: { path?: string }): void {
+function forwardDatapointValue(payload: { path?: string; [key: string]: unknown }): void {
   const path = String(payload.path || '')
   for (const viewerSessionId of dataSubscriptions.get(path) || []) {
     previewFrameRef.value?.contentWindow?.postMessage(
@@ -433,7 +446,7 @@ function forwardDatapointValue(payload: { path?: string }): void {
     )
   }
   for (const subscriptionId of pageDataSubscriptions.get(path) || []) {
-    previewFrameRef.value?.contentWindow?.postMessage(
+    postPageRuntimeMessage(
       {
         channel: PAGE_RUNTIME_CHANNEL,
         version: 1,
@@ -445,6 +458,22 @@ function forwardDatapointValue(payload: { path?: string }): void {
       props.previewUrl ? new URL(props.previewUrl).origin : '*',
     )
   }
+}
+
+function postPageRuntimeMessage(data: unknown, targetOrigin: string, targetWindow?: Window): void {
+  const target = targetWindow || previewFrameRef.value?.contentWindow
+  if (!target) return
+  const hostPostMessage = getPreviewHostBridge()?.onPostWindowMessage
+  if (hostPostMessage) {
+    hostPostMessage(target, data, targetOrigin)
+    return
+  }
+  target.postMessage(data, targetOrigin)
+}
+
+function getPreviewHostBridge(): PreviewHostBridge | null {
+  const bridge = window.$wujie?.props
+  return bridge && typeof bridge === 'object' ? (bridge as PreviewHostBridge) : null
 }
 
 function hasDatapointSubscribers(path: string): boolean {
@@ -506,6 +535,7 @@ async function unsubscribePageDatapoint(path: string, subscriptionId: string): P
 async function handlePageRuntimeRequest(
   message: Record<string, unknown>,
   targetOrigin: string,
+  targetWindow: Window,
 ): Promise<void> {
   const requestId = String(message.requestId || '')
   const domain = String(message.domain || '')
@@ -516,9 +546,10 @@ async function handlePageRuntimeRequest(
   if (!requestId) return
 
   const respond = (result: ReturnType<typeof pageRuntimeResult>) => {
-    previewFrameRef.value?.contentWindow?.postMessage(
+    postPageRuntimeMessage(
       { channel: PAGE_RUNTIME_CHANNEL, version: 1, type: 'RESULT', requestId, result },
       targetOrigin,
+      targetWindow,
     )
   }
 
@@ -533,11 +564,15 @@ async function handlePageRuntimeRequest(
 
   try {
     if (['get', 'read', 'peek', 'refresh'].includes(operation)) {
-      respond(pageRuntimeResult(0, 'ok', await readPageDatapoint(path)))
+      const value = await readPageDatapoint(path)
+      respond(pageRuntimeResult(0, 'ok', value))
       return
     }
     if (operation === 'set' || operation === 'publish') {
-      respond(pageRuntimeResult(0, 'ok', await writePageDatapoint(path, args[0])))
+      const result = await writePageDatapoint(path, args[0])
+      // 开发态页面自身写入后立即回推给同页订阅者；节点运行态由数据总线负责广播。
+      forwardDatapointValue({ path, data: args[0], value: args[0] })
+      respond(pageRuntimeResult(0, 'ok', result))
       return
     }
     if (operation === 'subscribe') {
