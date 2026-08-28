@@ -94,7 +94,7 @@ function createPoint(snapshot) {
     tags: Object.freeze(Array.isArray(snapshot.tags) ? [...snapshot.tags] : []),
     attributes: Object.freeze({ ...(snapshot.attributes || {}) }),
     capabilities,
-    get: () => readSnapshot("get", snapshot.value ?? null),
+    get: () => readSnapshot("get", buildSample(snapshot)),
     read: () => readSnapshot("read", buildSample(snapshot)),
     peek: () => readSnapshot("peek", buildSample(snapshot)),
     set: (value) => effect("set", value),

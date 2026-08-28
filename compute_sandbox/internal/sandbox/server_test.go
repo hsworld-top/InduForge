@@ -79,10 +79,12 @@ func TestNodeRuntimeInjectsDataPointObjects(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{
 		"script": `
 const sample = temperature.read();
+const businessValue = temperature.get();
 const write = manualPoint.set(1200);
 return {
   sameObject: temperature === dp.temperature && temperature === ctx.points.temperature,
   sample,
+  businessValue,
   write,
   unsupported: temperature.history({ limit: 1 }),
   dataType: temperature.dataType,
@@ -107,10 +109,12 @@ func TestPythonRuntimeInjectsDataPointObjects(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{
 		"script": `def main(argv, dp, ctx):
     sample = temperature.read()
+    business_value = temperature.get()
     write = manualPoint.set(1200)
     return {
         "sameObject": temperature is dp["temperature"] and temperature is ctx.points.temperature,
         "sample": sample,
+        "businessValue": business_value,
         "write": write,
         "unsupported": temperature.history({"limit": 1}),
         "dataType": temperature.dataType,
@@ -152,11 +156,12 @@ func assertRuntimeSDKOutput(t *testing.T, output []byte) {
 	t.Helper()
 	var payload struct {
 		Output struct {
-			SameObject  bool           `json:"sameObject"`
-			Sample      map[string]any `json:"sample"`
-			Write       map[string]any `json:"write"`
-			Unsupported map[string]any `json:"unsupported"`
-			DataType    string         `json:"dataType"`
+			SameObject    bool           `json:"sameObject"`
+			Sample        map[string]any `json:"sample"`
+			BusinessValue map[string]any `json:"businessValue"`
+			Write         map[string]any `json:"write"`
+			Unsupported   map[string]any `json:"unsupported"`
+			DataType      string         `json:"dataType"`
 		} `json:"output"`
 		SideEffects []map[string]any `json:"sideEffects"`
 	}
@@ -168,6 +173,10 @@ func assertRuntimeSDKOutput(t *testing.T, output []byte) {
 	}
 	if payload.Output.Sample["code"] != float64(0) || payload.Output.Unsupported["code"] != float64(40031) {
 		t.Fatalf("unexpected SDK results: sample=%+v unsupported=%+v", payload.Output.Sample, payload.Output.Unsupported)
+	}
+	businessData, ok := payload.Output.BusinessValue["data"].(map[string]any)
+	if !ok || businessData["value"] != 26.5 {
+		t.Fatalf("get result must return a sample envelope: %+v", payload.Output.BusinessValue)
 	}
 	if payload.Output.Write["code"] != float64(0) || len(payload.SideEffects) != 1 || payload.SideEffects[0]["operation"] != "set" {
 		t.Fatalf("unexpected side effects: write=%+v sideEffects=%+v", payload.Output.Write, payload.SideEffects)

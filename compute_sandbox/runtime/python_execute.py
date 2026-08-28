@@ -79,7 +79,7 @@ class DataPoint:
         return sdk_result(0, "开发态副作用已记录", item)
 
     def get(self, _options=None):
-        return self._read_snapshot("get", self._snapshot.get("value"))
+        return self._read_snapshot("get", build_sample(self._snapshot))
 
     def read(self, _options=None):
         return self._read_snapshot("read", build_sample(self._snapshot))

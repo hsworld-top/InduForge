@@ -52,15 +52,15 @@ func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repo
 
 // applyComputeDebugDatapointValues 只在开发态试运行时用用户填写的模拟值覆盖预取快照。
 // 正式运行仍读取节点当前值，避免调试数据进入真实计算链路。
-func applyComputeDebugDatapointValues(sdk *enginecompute.SDKContext, runtimeInput map[string]any) {
+func applyComputeDebugDatapointValues(sdk *enginecompute.SDKContext, runtimeInput map[string]any) error {
 	if sdk == nil || runtimeInput == nil {
-		return
+		return nil
 	}
 	rawValues, ok := runtimeInput["datapoints"].(map[string]any)
 	if !ok {
-		return
+		return nil
 	}
-	for alias, value := range rawValues {
+	for alias, rawSnapshot := range rawValues {
 		path, declared := sdk.PointBindings[alias]
 		if !declared {
 			continue
@@ -69,10 +69,47 @@ func applyComputeDebugDatapointValues(sdk *enginecompute.SDKContext, runtimeInpu
 		if !prefetched {
 			continue
 		}
-		snapshot.Value = value
+		debugSnapshot, ok := rawSnapshot.(map[string]any)
+		if !ok {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点模拟快照 "+alias+" 必须是对象")
+		}
+		if _, exists := debugSnapshot["value"]; !exists {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点模拟快照 "+alias+" 缺少 value")
+		}
+		if value, exists := debugSnapshot["value"]; exists {
+			snapshot.Value = value
+		}
+		if quality, ok := debugSnapshot["quality"].(string); ok && strings.TrimSpace(quality) != "" {
+			snapshot.Quality = strings.TrimSpace(quality)
+		}
+		if timestamp, exists := debugSnapshot["timestamp"]; exists {
+			snapshot.Timestamp = computeDebugTimestamp(timestamp)
+		}
+		if observedAt, exists := debugSnapshot["observedAt"]; exists {
+			snapshot.ObservedAt = computeDebugOptionalTimestamp(observedAt)
+		}
+		if sourceTimestamp, exists := debugSnapshot["sourceTimestamp"]; exists {
+			snapshot.SourceTimestamp = computeDebugOptionalTimestamp(sourceTimestamp)
+		}
 		sdk.Datapoints[path] = snapshot
-		sdk.Variables[alias] = value
+		sdk.Variables[alias] = snapshot.Value
 	}
+	return nil
+}
+
+func computeDebugTimestamp(value any) string {
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
+func computeDebugOptionalTimestamp(value any) *string {
+	text := computeDebugTimestamp(value)
+	if text == "" {
+		return nil
+	}
+	return &text
 }
 
 type computeSQLBinding struct {
