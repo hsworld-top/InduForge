@@ -184,6 +184,8 @@
             v-model="activeDraft.code"
             class="compute-editor__monaco"
             :language="monacoLanguage"
+            :type-definitions="computeTypeDefinitions"
+            :member-completions="computeMemberCompletions"
             height="100%"
             @change="markDirty"
             @cursor-change="updateCursorInfo"
@@ -1087,7 +1089,7 @@
                 </label>
                 <label class="compute-editor__debug-input">
                   <div class="compute-editor__debug-input-head">
-                    <span>变量模拟值 JSON</span>
+                    <span>数据点模拟快照 JSON</span>
                     <button
                       type="button"
                       title="按数据点变量重新生成"
@@ -1204,6 +1206,7 @@
             :key="template.id"
             type="button"
             :class="{ 'is-active': template.id === activeTemplateId }"
+            :disabled="template.disabled"
             @click="activeTemplateId = template.id"
           >
             <strong>{{ template.name }}</strong>
@@ -1219,6 +1222,7 @@
           <button
             type="button"
             class="compute-editor__picker-confirm"
+            :disabled="activeTemplate?.disabled"
             @click="insertActiveTemplate"
           >
             插入到光标
@@ -1389,9 +1393,118 @@ const sandboxUnavailableReason = computed(
 
 const codeTemplates = computed(() => {
   const lang = activeDraft.value?.lang === 'python' ? 'python' : 'javascript'
-  const templates = lang === 'python' ? pythonTemplates : javascriptTemplates
+  const pointAlias = activeDraft.value?.datapointVariableRows[0]?.alias.trim() || ''
+  const templates =
+    lang === 'python' ? pythonTemplates(pointAlias) : javascriptTemplates(pointAlias)
   return templates
 })
+
+const computeTypeDefinitions = computed(() => {
+  if (activeDraft.value?.lang === 'python') return ''
+  const declarations = (activeDraft.value?.datapointVariableRows || [])
+    .filter((row) => row.alias.trim())
+    .map(
+      (row) =>
+        `declare const ${row.alias.trim()}: InduForgeDataPoint<${monacoTypeForDatapoint(row.dataType)}>;`,
+    )
+    .join('\n')
+  return `
+type InduForgeSDKResult<T> = Readonly<{ code: number; msg: string; data: T | null }>;
+type InduForgeDataPointSample<T> = Readonly<{
+  path: string;
+  value: T;
+  quality: string;
+  timestamp: string | null;
+  observedAt: string | null;
+  sourceTimestamp: string | null;
+  status: string | null;
+}>;
+type InduForgeDataPointCapabilities = Readonly<{
+  get: boolean; read: boolean; peek: boolean; set: boolean; subscribe: boolean;
+  history: boolean; refresh: boolean; run: boolean; execute: boolean; publish: boolean;
+}>;
+interface InduForgeDataPoint<T = unknown> {
+  readonly id: string | null;
+  readonly ref: string;
+  readonly path: string;
+  readonly name: string | null;
+  readonly displayName: string | null;
+  readonly dataType: string | null;
+  readonly schema: unknown;
+  readonly source: Readonly<{ type: string | null; id: string | null }>;
+  readonly status: string | null;
+  readonly unit: string | null;
+  readonly precision: number | null;
+  readonly min: number | null;
+  readonly max: number | null;
+  readonly defaultValue: T | null;
+  readonly tags: readonly unknown[];
+  readonly attributes: Readonly<Record<string, string>>;
+  readonly capabilities: InduForgeDataPointCapabilities;
+  get(options?: unknown): Promise<InduForgeSDKResult<InduForgeDataPointSample<T>>>;
+  read(options?: unknown): Promise<InduForgeSDKResult<InduForgeDataPointSample<T>>>;
+  peek(): Promise<InduForgeSDKResult<InduForgeDataPointSample<T>>>;
+  set(value: T, options?: unknown): Promise<InduForgeSDKResult<unknown>>;
+  subscribe(handler: (sample: InduForgeDataPointSample<T>) => void, options?: unknown): Promise<InduForgeSDKResult<unknown>>;
+  history(query?: unknown): Promise<InduForgeSDKResult<unknown>>;
+  refresh(options?: unknown): Promise<InduForgeSDKResult<unknown>>;
+  run(input?: unknown): Promise<InduForgeSDKResult<unknown>>;
+  execute(input?: unknown): Promise<InduForgeSDKResult<unknown>>;
+  publish(payload?: unknown, options?: unknown): Promise<InduForgeSDKResult<unknown>>;
+}
+${declarations}
+`
+})
+
+const computeMemberCompletions = computed(() => {
+  if (activeDraft.value?.lang !== 'python') return {}
+  return Object.fromEntries(
+    (activeDraft.value?.datapointVariableRows || [])
+      .filter((row) => row.alias.trim())
+      .map((row) => [row.alias.trim(), datapointMemberCompletions]),
+  )
+})
+
+function monacoTypeForDatapoint(dataType?: string) {
+  const type = String(dataType || '').toLowerCase()
+  if (numericDatapointTypes.has(type) || type === 'number') return 'number'
+  if (type === 'bool' || type === 'boolean') return 'boolean'
+  if (type === 'array') return 'unknown[]'
+  if (type === 'object') return 'Record<string, unknown>'
+  return 'string'
+}
+
+const datapointMemberCompletions = [
+  { label: 'get', insertText: 'get()', kind: 'method', detail: '获取业务值快照' },
+  { label: 'read', insertText: 'read()', kind: 'method', detail: '读取完整当前样本' },
+  { label: 'peek', insertText: 'peek()', kind: 'method', detail: '读取已物化当前样本' },
+  { label: 'set', insertText: 'set(value)', kind: 'method', detail: '写入数据点' },
+  { label: 'subscribe', insertText: 'subscribe(handler)', kind: 'method', detail: '订阅数据变化' },
+  { label: 'history', insertText: 'history(query)', kind: 'method', detail: '查询历史样本' },
+  { label: 'refresh', insertText: 'refresh()', kind: 'method', detail: '主动刷新来源' },
+  { label: 'run', insertText: 'run()', kind: 'method', detail: '运行计算数据点' },
+  { label: 'execute', insertText: 'execute()', kind: 'method', detail: '执行按需数据点' },
+  { label: 'publish', insertText: 'publish(payload)', kind: 'method', detail: '发布消息' },
+  ...[
+    'id',
+    'ref',
+    'path',
+    'name',
+    'displayName',
+    'dataType',
+    'schema',
+    'source',
+    'status',
+    'unit',
+    'precision',
+    'min',
+    'max',
+    'defaultValue',
+    'tags',
+    'attributes',
+    'capabilities',
+  ].map((label) => ({ label, insertText: label, kind: 'property', detail: '数据点属性' })),
+]
 
 const allTriggerTypes = [
   { id: 'manual', label: '手动' },
@@ -1437,85 +1550,135 @@ type CodeTemplate = {
   name: string
   description: string
   code: string
+  disabled?: boolean
 }
 
-const javascriptTemplates: CodeTemplate[] = [
-  {
-    id: 'argv',
-    name: '获取脚本参数',
-    description: '读取调用方传入的 argv 参数。',
-    code: 'const firstArg = argv[0];\nconst secondArg = argv[1];\n',
-  },
-  {
-    id: 'function',
-    name: '定义函数',
-    description: '封装一段可复用计算逻辑。',
-    code: 'function calculate(value) {\n  return value;\n}\n',
-  },
-  {
-    id: 'class',
-    name: '定义类',
-    description: '组织复杂对象或业务模型。',
-    code: 'class Model {\n  constructor(value) {\n    this.value = value;\n  }\n}\n',
-  },
-  {
-    id: 'datapoint',
-    name: '读取数据点变量',
-    description: '变量名对应数据点对象；read 返回值、质量和时间戳。',
-    code: 'const sample = tag1.read();\nif (sample.code !== 0) return sample;\nreturn sample.data.value;\n',
-  },
-  {
-    id: 'output',
-    name: '输出结果',
-    description: '把脚本结果返回给调用方和输出数据点。',
-    code: 'return {\n  value: null,\n  updatedAt: new Date().toISOString()\n};\n',
-  },
-  {
-    id: 'try-catch',
-    name: '错误处理',
-    description: '捕获异常并返回明确错误。',
-    code: 'try {\n  return null;\n} catch (error) {\n  return { error: String(error && error.message ? error.message : error) };\n}\n',
-  },
-]
+function javascriptTemplates(pointAlias: string): CodeTemplate[] {
+  const disabled = !pointAlias
+  const point = pointAlias || 'point'
+  return [
+    {
+      id: 'argv',
+      name: '获取脚本参数',
+      description: '读取调用方传入的 argv 参数。',
+      code: 'const firstArg = argv[0];\nconst secondArg = argv[1];\n',
+    },
+    {
+      id: 'datapoint-read',
+      name: '读取数据点样本',
+      description: disabled ? '请先在变量面板添加数据点。' : `读取 ${point} 的值、质量和时间。`,
+      code: `const result = await ${point}.read();
+if (result.code !== 0) return result;
+if (result.data.quality !== 'good') {
+  return { error: '数据质量不可用', sample: result.data };
+}
+return result.data.value;
+`,
+      disabled,
+    },
+    {
+      id: 'datapoint-get',
+      name: '获取数据点业务值',
+      description: disabled ? '请先在变量面板添加数据点。' : `调用 ${point}.get() 获取业务值。`,
+      code: `const result = await ${point}.get();
+if (result.code !== 0) return result;
+return result.data.value;
+`,
+      disabled,
+    },
+    {
+      id: 'datapoint-set',
+      name: '写入数据点',
+      description: disabled ? '请先在变量面板添加数据点。' : `检查能力后写入 ${point}。`,
+      code: `if (!${point}.capabilities.set) {
+  return { error: '数据点不支持写入' };
+}
+const result = await ${point}.set(argv[0]);
+if (result.code !== 0) return result;
+return result.data;
+`,
+      disabled,
+    },
+    {
+      id: 'output',
+      name: '输出结果',
+      description: '把脚本结果返回给调用方和输出数据点。',
+      code: 'return {\n  value: null,\n  updatedAt: new Date().toISOString()\n};\n',
+    },
+    {
+      id: 'try-catch',
+      name: '错误处理',
+      description: '捕获异常并返回明确错误。',
+      code: 'try {\n  return null;\n} catch (error) {\n  return { error: String(error && error.message ? error.message : error) };\n}\n',
+    },
+  ]
+}
 
-const pythonTemplates: CodeTemplate[] = [
-  {
-    id: 'argv',
-    name: '获取脚本参数',
-    description: '读取调用方传入的 argv 参数。',
-    code: 'def main(argv, dp, ctx):\n    first_arg = argv[0] if len(argv) > 0 else None\n    second_arg = argv[1] if len(argv) > 1 else None\n    return first_arg\n',
-  },
-  {
-    id: 'function',
-    name: '定义函数',
-    description: '封装一段可复用计算逻辑。',
-    code: 'def calculate(value):\n    return value\n\ndef main(argv, dp, ctx):\n    return calculate(argv[0] if len(argv) > 0 else None)\n',
-  },
-  {
-    id: 'class',
-    name: '定义类',
-    description: '组织复杂对象或业务模型。',
-    code: 'class Model:\n    def __init__(self, value):\n        self.value = value\n',
-  },
-  {
-    id: 'datapoint',
-    name: '读取数据点变量',
-    description: '变量名对应数据点对象；read 返回值、质量和时间戳。',
-    code: 'def main(argv, dp, ctx):\n    sample = tag1.read()\n    if sample.code != 0:\n        return sample\n    return sample.data["value"]\n',
-  },
-  {
-    id: 'output',
-    name: '输出结果',
-    description: '把脚本结果返回给调用方和输出数据点。',
-    code: 'def main(argv, dp, ctx):\n    return {\n        "value": None\n    }\n',
-  },
-  {
-    id: 'try-catch',
-    name: '错误处理',
-    description: '捕获异常并返回明确错误。',
-    code: 'def main(argv, dp, ctx):\n    try:\n        return None\n    except Exception as error:\n        return {"error": str(error)}\n',
-  },
-]
+function pythonTemplates(pointAlias: string): CodeTemplate[] {
+  const disabled = !pointAlias
+  const point = pointAlias || 'point'
+  return [
+    {
+      id: 'argv',
+      name: '获取脚本参数',
+      description: '读取调用方传入的 argv 参数。',
+      code: 'def main(argv, dp, ctx):\n    first_arg = argv[0] if len(argv) > 0 else None\n    second_arg = argv[1] if len(argv) > 1 else None\n    return first_arg\n',
+    },
+    {
+      id: 'datapoint-read',
+      name: '读取数据点样本',
+      description: disabled ? '请先在变量面板添加数据点。' : `读取 ${point} 的值、质量和时间。`,
+      code: `def main(argv, dp, ctx):
+    result = ${point}.read()
+    if result.code != 0:
+        return result
+    if result.data["quality"] != "good":
+        return {"error": "数据质量不可用", "sample": result.data}
+    return result.data["value"]
+`,
+      disabled,
+    },
+    {
+      id: 'datapoint-get',
+      name: '获取数据点业务值',
+      description: disabled ? '请先在变量面板添加数据点。' : `调用 ${point}.get() 获取业务值。`,
+      code: `def main(argv, dp, ctx):
+    result = ${point}.get()
+    if result.code != 0:
+        return result
+    return result.data["value"]
+`,
+      disabled,
+    },
+    {
+      id: 'datapoint-set',
+      name: '写入数据点',
+      description: disabled ? '请先在变量面板添加数据点。' : `检查能力后写入 ${point}。`,
+      code: `def main(argv, dp, ctx):
+    if not ${point}.capabilities["set"]:
+        return {"error": "数据点不支持写入"}
+    value = argv[0] if len(argv) > 0 else None
+    result = ${point}.set(value)
+    if result.code != 0:
+        return result
+    return result.data
+`,
+      disabled,
+    },
+    {
+      id: 'output',
+      name: '输出结果',
+      description: '把脚本结果返回给调用方和输出数据点。',
+      code: 'def main(argv, dp, ctx):\n    return {\n        "value": None\n    }\n',
+    },
+    {
+      id: 'try-catch',
+      name: '错误处理',
+      description: '捕获异常并返回明确错误。',
+      code: 'def main(argv, dp, ctx):\n    try:\n        return None\n    except Exception as error:\n        return {"error": str(error)}\n',
+    },
+  ]
+}
 
 const monacoLanguage = computed(() => {
   if (activeDraft.value?.lang === 'python') return 'python'
@@ -1732,12 +1895,14 @@ const debugDatapointHint = computed(() => {
     .map((row) => row.alias.trim())
     .filter(Boolean)
   if (!parsed.valid) return 'JSON 格式无效，试运行前需要修正。'
-  if (!isPlainRecord(parsed.value)) return '变量模拟值 JSON 必须是对象。'
+  if (!isPlainRecord(parsed.value)) return '数据点模拟快照 JSON 必须是对象。'
   const keys = Object.keys(parsed.value)
+  const invalidKey = keys.find((key) => !isDebugDatapointSnapshot(parsed.value[key]))
+  if (invalidKey) return `“${invalidKey}”必须使用包含 value 的快照对象。`
   const missingCount = expectedAliases.filter((alias) => !(alias in parsed.value)).length
   const extraCount = keys.filter((key) => !expectedAliases.includes(key)).length
-  if (!missingCount && !extraCount) return `本次试运行模拟 ${keys.length} 个变量。`
-  return `本次试运行变量和定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`
+  if (!missingCount && !extraCount) return `本次试运行模拟 ${keys.length} 个数据点快照。`
+  return `本次试运行快照和变量定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`
 })
 
 const syntaxStatusTone = computed(() => {
@@ -2083,7 +2248,7 @@ function syncDebugDatapointAlias(previous: string, next: string, dataType?: stri
   const preserved = previous && previous in values ? values[previous] : undefined
   if (previous) delete values[previous]
   if (next && !(next in values)) {
-    values[next] = preserved ?? defaultValueByType(dataType || 'string', '')
+    values[next] = preserved ?? defaultDebugDatapointSnapshot(dataType)
   }
   const synchronized = Object.fromEntries(
     activeDraft.value.datapointVariableRows
@@ -2092,7 +2257,7 @@ function syncDebugDatapointAlias(previous: string, next: string, dataType?: stri
         const alias = row.alias.trim()
         return [
           alias,
-          alias in values ? values[alias] : defaultValueByType(row.dataType || 'string', ''),
+          alias in values ? values[alias] : defaultDebugDatapointSnapshot(row.dataType),
         ]
       }),
   )
@@ -2419,7 +2584,12 @@ function parseDebugInput(): Record<string, unknown> {
     throw new Error('argv JSON 必须是数组')
   }
   if (!datapoints || typeof datapoints !== 'object' || Array.isArray(datapoints)) {
-    throw new Error('数据点变量模拟 JSON 必须是对象')
+    throw new Error('数据点模拟快照 JSON 必须是对象')
+  }
+  for (const [alias, snapshot] of Object.entries(datapoints)) {
+    if (!isDebugDatapointSnapshot(snapshot)) {
+      throw new Error(`数据点“${alias}”必须使用包含 value 的快照对象`)
+    }
   }
   return { argv, datapoints }
 }
@@ -2440,6 +2610,10 @@ function parseJsonForHint(text: string, fallback: unknown) {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isDebugDatapointSnapshot(value: unknown) {
+  return isPlainRecord(value) && Object.prototype.hasOwnProperty.call(value, 'value')
 }
 
 function resetDebugArgvFromDefinition(showMessage = true) {
@@ -2463,9 +2637,19 @@ function buildDefaultDebugDatapoints() {
   const values = Object.fromEntries(
     (activeDraft.value?.datapointVariableRows || [])
       .filter((row) => row.alias.trim())
-      .map((row) => [row.alias.trim(), defaultValueByType(row.dataType || 'string', '')]),
+      .map((row) => [row.alias.trim(), defaultDebugDatapointSnapshot(row.dataType)]),
   )
   return JSON.stringify(values, null, 2)
+}
+
+function defaultDebugDatapointSnapshot(dataType?: string) {
+  return {
+    value: defaultValueByType(dataType || 'string', ''),
+    quality: 'good',
+    timestamp: null,
+    observedAt: null,
+    sourceTimestamp: null,
+  }
 }
 
 function defaultValueByType(type: string, defaultValue: string) {
@@ -2666,7 +2850,7 @@ function variableReferencePattern(alias: string) {
 }
 
 function insertActiveTemplate() {
-  if (!activeTemplate.value) return
+  if (!activeTemplate.value || activeTemplate.value.disabled) return
   monacoEditorRef.value?.insertText?.(activeTemplate.value.code)
   templateDialogVisible.value = false
   markDirty()
@@ -4454,6 +4638,11 @@ const statusTone = (status?: string) => {
   border-color: rgba(29, 78, 216, 0.28);
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
+}
+
+.compute-editor__template-list button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .compute-editor__template-list strong,

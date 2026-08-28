@@ -51,6 +51,14 @@ type CursorChangePayload = {
   spaces: number
 }
 
+type MemberCompletion = {
+  label: string
+  insertText?: string
+  kind?: 'method' | 'property'
+  detail?: string
+  documentation?: string
+}
+
 // 配置 Monaco 官方 worker，恢复 JSON 等语言服务的格式化、校验能力。
 if (typeof window !== 'undefined' && !window.MonacoEnvironment) {
   window.MonacoEnvironment = {
@@ -91,6 +99,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  typeDefinitions: {
+    type: String,
+    default: '',
+  },
+  memberCompletions: {
+    type: Object as () => Record<string, MemberCompletion[]>,
+    default: () => ({}),
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'change', 'cursor-change', 'save'])
@@ -98,6 +114,9 @@ const emit = defineEmits(['update:modelValue', 'change', 'cursor-change', 'save'
 const editorContainerRef = ref(null)
 let editorInstance = null
 let isInternalUpdate = false
+let typeDefinitionsDisposable: monaco.IDisposable | null = null
+let completionProviderDisposable: monaco.IDisposable | null = null
+const typeDefinitionsPath = `file:///induforge/editor-${crypto.randomUUID()}.d.ts`
 const selectedText = ref('')
 const editorContextMenu = ref({
   visible: false,
@@ -271,6 +290,7 @@ const initEditor = () => {
     // 创建编辑器实例
     const options = getEditorOptions()
     editorInstance = monaco.editor.create(editorContainerRef.value, options)
+    updateLanguageServices()
 
     // 在编辑器聚焦时接管保存快捷键，避免浏览器触发“保存网页”。
     editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -339,7 +359,56 @@ const updateTheme = () => {
 const updateLanguage = () => {
   if (editorInstance) {
     monaco.editor.setModelLanguage(editorInstance.getModel(), props.language)
+    updateLanguageServices()
   }
+}
+
+const completionKind = (kind?: MemberCompletion['kind']) =>
+  kind === 'property'
+    ? monaco.languages.CompletionItemKind.Property
+    : monaco.languages.CompletionItemKind.Method
+
+const updateLanguageServices = () => {
+  typeDefinitionsDisposable?.dispose()
+  typeDefinitionsDisposable = null
+  completionProviderDisposable?.dispose()
+  completionProviderDisposable = null
+
+  if (props.typeDefinitions.trim()) {
+    const defaults =
+      props.language === 'typescript'
+        ? monaco.languages.typescript.typescriptDefaults
+        : monaco.languages.typescript.javascriptDefaults
+    typeDefinitionsDisposable = defaults.addExtraLib(props.typeDefinitions, typeDefinitionsPath)
+  }
+
+  if (!Object.keys(props.memberCompletions).length) return
+  completionProviderDisposable = monaco.languages.registerCompletionItemProvider(props.language, {
+    triggerCharacters: ['.'],
+    provideCompletionItems(model, position) {
+      if (model !== editorInstance?.getModel()) return { suggestions: [] }
+      const prefix = model.getLineContent(position.lineNumber).slice(0, position.column - 1)
+      const receiver = prefix.match(/([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z0-9_]*$/)?.[1]
+      const items = receiver ? props.memberCompletions[receiver] || [] : []
+      const word = model.getWordUntilPosition(position)
+      const range = new monaco.Range(
+        position.lineNumber,
+        word.startColumn,
+        position.lineNumber,
+        word.endColumn,
+      )
+      return {
+        suggestions: items.map((item) => ({
+          label: item.label,
+          insertText: item.insertText || item.label,
+          kind: completionKind(item.kind),
+          detail: item.detail,
+          documentation: item.documentation,
+          range,
+        })),
+      }
+    },
+  })
 }
 
 // 格式化代码
@@ -433,6 +502,8 @@ defineExpose({
   format: formatCode,
   focus: () => editorInstance?.focus(),
   dispose: () => {
+    typeDefinitionsDisposable?.dispose()
+    completionProviderDisposable?.dispose()
     if (editorInstance) {
       editorInstance.dispose()
       editorInstance = null
@@ -480,6 +551,17 @@ watch(
       editorInstance.updateOptions({ readOnly })
     }
   },
+)
+
+watch(
+  () => props.typeDefinitions,
+  () => updateLanguageServices(),
+)
+
+watch(
+  () => props.memberCompletions,
+  () => updateLanguageServices(),
+  { deep: true },
 )
 
 // 组件挂载时初始化
@@ -540,6 +622,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousedown', closeEditorContextMenu)
   window.removeEventListener('blur', closeEditorContextMenu)
 
+  typeDefinitionsDisposable?.dispose()
+  completionProviderDisposable?.dispose()
   if (editorInstance) {
     editorInstance.dispose()
     editorInstance = null
