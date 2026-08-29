@@ -238,6 +238,21 @@ describe('request interceptor', () => {
     expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
+  it('skipErrorToast=true 时由业务层处理 HTTP 错误，拦截器不重复提示', async () => {
+    await import('@/utils/request')
+
+    const responseRejected = responseUseMock.mock.calls[0]?.[1] as
+      | ((error: unknown) => Promise<unknown>)
+      | undefined
+    const error = {
+      response: { status: 409, data: { msg: '工程已存在部署记录' } },
+      config: { url: '/ops/project-deployments', skipErrorToast: true },
+    }
+
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
   it('错误提取函数应读取 code/msg/reqId', async () => {
     const { getApiErrorCode, getApiErrorMessage, getApiErrorReqId } =
       await import('@/utils/request')

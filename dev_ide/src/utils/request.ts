@@ -22,6 +22,18 @@ type RequestInstance = AxiosInstance & {
   patch<T = unknown, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig<D>): Promise<T>
 }
 
+/** 调用方可选择自行呈现错误，认证刷新和登录跳转仍由统一层处理。 */
+export type RequestConfig = AxiosRequestConfig & {
+  skipErrorToast?: boolean
+}
+
+/**
+ * 需要读取下载响应头的请求配置。仍使用统一 request 实例，只跳过包络解包。
+ */
+export type RawResponseConfig = RequestConfig & {
+  returnRawResponse?: boolean
+}
+
 // 创建 axios 实例
 const request = axios.create({
   baseURL: '/api/v1',
@@ -46,7 +58,11 @@ type ExtendedRequestConfig = InternalAxiosRequestConfig & {
   skipPermissionToast?: boolean
   skipAuthRedirect?: boolean
   skipAuthRefresh?: boolean
+  /** 业务页面会统一处理错误时，避免与全局拦截器重复提示。 */
+  skipErrorToast?: boolean
   _authRetried?: boolean
+  /** 下载等场景需要读取响应头时，保留 Axios 原始响应。 */
+  returnRawResponse?: boolean
 }
 
 type ApiErrorMeta = {
@@ -220,6 +236,9 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
+    if ((response.config as ExtendedRequestConfig | undefined)?.returnRawResponse) {
+      return response
+    }
     const responseData = response.data
     if (isApiResponsePayload(responseData)) {
       const normalizedCode = toNumericCode(responseData.code) ?? 30000
@@ -240,6 +259,11 @@ request.interceptors.response.use(
   async (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
     const config = error.config as ExtendedRequestConfig | undefined
+
+    // 登录会话仍需由统一层续租或跳转；其余运维请求交给业务层展示一次明确错误。
+    if (config?.skipErrorToast && (!response || response.status !== 401)) {
+      return Promise.reject(error)
+    }
 
     if (response) {
       const { status, data } = response

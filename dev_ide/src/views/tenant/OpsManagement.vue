@@ -1,1620 +1,1787 @@
 <template>
-  <div class="ops-management ck-workbench-page">
-    <!-- 一体化操作栏 (Cockpit-style) -->
-    <div class="ck-workbench-toolbar">
-      <!-- 左侧：标题、总数与搜索筛选 -->
-      <div class="ck-toolbar-left">
-        <span class="ck-toolbar-count">
-          {{ t('opsManagement.totalNodes') }}: {{ nodePagination.total }}
-        </span>
-
-        <!-- 圆角搜索框 -->
-        <el-input
-          v-model="nodeSearch.keyword"
-          size="small"
-          :placeholder="t('opsManagement.searchPlaceholder')"
-          clearable
-          class="ck-toolbar-search rounded-full-input"
-          prefix-icon="Search"
-        />
-
-        <!-- 筛选栏 -->
-        <div class="ck-toolbar-filters">
-          <el-popover placement="bottom-start" :width="180" trigger="click">
-            <template #reference>
-              <button type="button" class="ck-toolbar-pill-btn">
-                <el-icon><FolderOpened /></el-icon>
-                {{ selectedProjectFilterLabel }}
-              </button>
-            </template>
-            <div class="sort-popover-menu">
-              <button
-                type="button"
-                class="sort-popover-item"
-                :class="{ 'is-active': !nodeSearch.projectName }"
-                @click="setNodeProjectFilter('')"
-              >
-                {{ t('projectManagement.allProjects') }}
-              </button>
-              <button
-                v-for="item in projectOptions"
-                :key="item.id"
-                type="button"
-                class="sort-popover-item"
-                :class="{ 'is-active': nodeSearch.projectName === item.name }"
-                @click="setNodeProjectFilter(item.name)"
-              >
-                {{ item.name }}
-              </button>
-            </div>
-          </el-popover>
-
-          <el-popover placement="bottom-start" :width="160" trigger="click">
-            <template #reference>
-              <button type="button" class="ck-toolbar-pill-btn">
-                <el-icon><Connection /></el-icon>
-                {{ selectedNodeStatusLabel }}
-              </button>
-            </template>
-            <div class="sort-popover-menu">
-              <button
-                v-for="option in nodeStatusFilterOptions"
-                :key="option.value || 'all'"
-                type="button"
-                class="sort-popover-item"
-                :class="{ 'is-active': nodeSearch.status === option.value }"
-                @click="setNodeStatusFilter(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </el-popover>
-        </div>
+  <section class="ops-page" data-testid="ops-management-page">
+    <header class="ops-page__header">
+      <div>
+        <p class="eyebrow">平台运维</p>
+        <h1>运行管理</h1>
+        <p class="subtitle">接入节点、查看运行资源，并管理工程的计算、报警、采集演示服务。</p>
       </div>
-
-      <!-- 右侧：视图切换与全局操作 -->
-      <div class="ck-toolbar-right">
-        <!-- 视图切换 -->
-        <div class="ck-view-toggle">
-          <button
-            @click="activeView = 'dashboard'"
-            :class="['ck-view-toggle__button', activeView === 'dashboard' ? 'is-active' : '']"
-          >
-            <el-icon><Grid /></el-icon>
-          </button>
-          <button
-            @click="activeView = 'list'"
-            :class="['ck-view-toggle__button', activeView === 'list' ? 'is-active' : '']"
-          >
-            <svg
-              class="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <line x1="8" y1="6" x2="21" y2="6"></line>
-              <line x1="8" y1="12" x2="21" y2="12"></line>
-              <line x1="8" y1="18" x2="21" y2="18"></line>
-              <line x1="3" y1="6" x2="3.01" y2="6"></line>
-              <line x1="3" y1="12" x2="3.01" y2="12"></line>
-              <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-
-        <el-badge
-          v-if="canApproveNode"
-          :value="pendingCount"
-          :hidden="pendingCount === 0"
-          class="cursor-pointer"
-          @click="showPendingDialog = true"
+      <div class="header-actions">
+        <el-button :loading="loading" @click="reloadAll"
+          ><el-icon><Refresh /></el-icon>刷新状态</el-button
         >
-          <button :class="['ck-icon-button', pendingCount > 0 ? 'ck-icon-button--warning' : '']">
-            <el-icon><Bell /></el-icon>
-          </button>
-        </el-badge>
-
-        <el-tooltip :content="t('common.refresh')" placement="top">
-          <button class="ck-icon-button" @click="fetchNodes">
-            <el-icon><RefreshRight /></el-icon>
-          </button>
-        </el-tooltip>
-      </div>
-    </div>
-
-    <div v-if="nodeLoadError">
-      <el-alert :title="nodeLoadError" type="error" show-icon :closable="false">
-        <template #default>
-          <el-button text type="primary" @click="fetchNodes">{{
-            t('opsManagement.reload')
-          }}</el-button>
-        </template>
-      </el-alert>
-    </div>
-
-    <div class="ck-stat-grid">
-      <div class="ck-stat-card">
-        <div class="ck-stat-card__label">{{ t('opsManagement.running') }}</div>
-        <div class="ck-stat-card__value text-status-success">
-          {{ deployStatusSummary.running }}
-        </div>
-      </div>
-      <div class="ck-stat-card">
-        <div class="ck-stat-card__label">
-          {{ t('opsManagement.deploying') }}
-        </div>
-        <div class="ck-stat-card__value text-status-warning">
-          {{ deployStatusSummary.deploying }}
-        </div>
-      </div>
-      <div class="ck-stat-card">
-        <div class="ck-stat-card__label">{{ t('opsManagement.stopped') }}</div>
-        <div class="ck-stat-card__value text-gray-700 dark:text-gray-300">
-          {{ deployStatusSummary.stopped }}
-        </div>
-      </div>
-      <div class="ck-stat-card">
-        <div class="ck-stat-card__label">{{ t('opsManagement.abnormal') }}</div>
-        <div class="ck-stat-card__value text-status-danger">
-          {{ deployStatusSummary.failed }}
-        </div>
-      </div>
-    </div>
-
-    <div class="ck-content-area">
-      <!-- 视图：节点大盘 -->
-      <div v-if="activeView === 'dashboard'" class="ck-content-scroll">
-        <div
-          v-loading="nodeLoading"
-          :class="['grid grid-cols-1 md:grid-cols-2 gap-6', cardGridClass]"
+        <el-button type="primary" @click="openEnrollment()"
+          ><el-icon><Plus /></el-icon>接入节点</el-button
         >
-          <el-card
-            v-for="node in filteredNodeList"
-            :key="node.id"
-            shadow="hover"
-            class="node-card border-none rounded-2xl ring-1 ring-gray-200 dark:ring-gray-700 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300"
-            :body-style="{ padding: '0px' }"
-          >
-            <!-- 卡片头部：状态与基本信息 -->
-            <div
-              class="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
-            >
-              <div class="flex justify-between items-start mb-2">
-                <div class="flex items-center">
-                  <div
-                    class="w-3 h-3 rounded-full mr-2"
-                    :class="
-                      node.status === 'online'
-                        ? 'bg-green-500 animate-pulse'
-                        : node.status === 'offline'
-                          ? 'bg-gray-400'
-                          : 'bg-red-500'
-                    "
-                  ></div>
-                  <h3 class="font-bold text-gray-800 dark:text-gray-200 truncate">
-                    {{ node.name }}
-                  </h3>
-                </div>
-                <el-dropdown trigger="click">
-                  <el-button link
-                    ><el-icon><MoreFilled /></el-icon
-                  ></el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item @click="deleteNode(node)" type="danger">{{
-                        t('opsManagement.deleteRegistration')
-                      }}</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-              <div class="text-xs text-gray-500 flex justify-between">
-                <span>IP: {{ node.ipAddress || '-' }}</span>
-                <span>Port: {{ node.port }}</span>
-              </div>
-            </div>
-
-            <!-- 卡片中部：资源概览 -->
-            <div class="p-4 space-y-4">
-              <div class="grid grid-cols-2 gap-4">
-                <!-- CPU & Memory Gauges -->
-                <div class="text-center">
-                  <div class="text-[10px] text-gray-400 uppercase mb-1">
-                    {{ t('opsManagement.cpuUsage') }}
-                  </div>
-                  <el-progress
-                    type="dashboard"
-                    :percentage="getMetricValue(node, 'cpu')"
-                    :width="60"
-                    :stroke-width="4"
-                    :color="getProgressColor"
-                  />
-                </div>
-                <div class="text-center">
-                  <div class="text-[10px] text-gray-400 uppercase mb-1">
-                    {{ t('opsManagement.memoryUsage') }}
-                  </div>
-                  <el-progress
-                    type="dashboard"
-                    :percentage="getMetricValue(node, 'memory')"
-                    :width="60"
-                    :stroke-width="4"
-                    :color="getProgressColor"
-                  />
-                </div>
-              </div>
-
-              <!-- Disk Bars -->
-              <div class="text-xs space-y-2">
-                <div class="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                  <span>{{ t('opsManagement.diskUsage') }} ({{ getDiskLabel(node) }})</span>
-                  <span class="font-mono">{{ getMetricValue(node, 'disk') }}%</span>
-                </div>
-                <el-progress
-                  :percentage="getMetricValue(node, 'disk')"
-                  :show-text="false"
-                  :stroke-width="6"
-                  class="mb-3"
-                />
-              </div>
-            </div>
-
-            <!-- 卡片尾部：运行中工程列表 -->
-            <div
-              class="bg-gray-50/30 dark:bg-gray-900/20 p-2 border-t border-gray-100 dark:border-gray-700"
-            >
-              <div
-                class="text-[10px] font-bold text-gray-400 uppercase px-2 py-1 mb-1 flex justify-between"
-              >
-                <span
-                  >{{ t('opsManagement.runningProjects') }} ({{
-                    getVisibleDeployments(node).length
-                  }})</span
-                >
-                <el-button
-                  link
-                  size="small"
-                  type="primary"
-                  class="text-[10px]"
-                  @click="openProjectManagement"
-                >
-                  {{ t('projectManagement.publishAndDeploy') }}
-                </el-button>
-              </div>
-
-              <div v-if="getVisibleDeployments(node).length > 0" class="space-y-1">
-                <div
-                  v-for="deploy in getVisibleDeployments(node)"
-                  :key="deploy.id"
-                  class="bg-white dark:bg-gray-800 rounded p-2 text-xs ring-1 ring-gray-100 dark:ring-gray-700 flex justify-between items-center"
-                >
-                  <div class="flex flex-col">
-                    <span class="font-semibold text-gray-700 dark:text-gray-300 truncate w-32">
-                      {{ deploy.project?.name }}
-                    </span>
-                    <div class="flex items-center space-x-2 text-[10px] text-gray-500">
-                      <span class="flex items-center"
-                        ><el-icon class="mr-0.5"><User /></el-icon>
-                        {{ deploy.runtimeMetrics?.onlineUsers || 0 }}</span
-                      >
-                      <span class="flex items-center"
-                        ><el-icon class="mr-0.5"><Clock /></el-icon>
-                        {{ deploy.runtimeMetrics?.concurrentUsers || 0 }}</span
-                      >
-                    </div>
-                  </div>
-                  <div class="flex items-center space-x-1">
-                    <el-tag size="small" :type="getDeployStatusType(deploy.status)">
-                      {{ getDeployDisplayLabel(deploy) }}
-                    </el-tag>
-                    <el-tag size="small" :type="deploy.mode === 'DEV' ? 'warning' : 'success'">
-                      {{ getDeployModeLabel(deploy.mode) }}
-                    </el-tag>
-                    <el-dropdown trigger="hover">
-                      <el-button link
-                        ><el-icon size="small"><Tools /></el-icon
-                      ></el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item @click="handleStartProject(deploy)">
-                            <el-icon class="mr-1"><VideoPlay /></el-icon
-                            >{{ t('opsManagement.start') }}
-                          </el-dropdown-item>
-                          <el-dropdown-item @click="handleStopProject(deploy)">
-                            <el-icon class="mr-1"><VideoPause /></el-icon
-                            >{{ t('opsManagement.stop') }}
-                          </el-dropdown-item>
-                          <el-dropdown-item @click="handleRestartProject(deploy)">
-                            <el-icon class="mr-1"><RefreshRight /></el-icon
-                            >{{ t('opsManagement.restart') }}
-                          </el-dropdown-item>
-                          <el-dropdown-item
-                            @click="handleRollback(deploy)"
-                            :disabled="deploy.mode === 'DEV'"
-                          >
-                            <el-icon class="mr-1"><RefreshLeft /></el-icon
-                            >{{ t('opsManagement.rollback') }}
-                          </el-dropdown-item>
-                          <el-dropdown-item @click="handleViewLog(deploy)">
-                            <el-icon class="mr-1"><Document /></el-icon
-                            >{{ t('opsManagement.viewLog') }}
-                          </el-dropdown-item>
-                          <el-dropdown-item
-                            v-if="isFailedDeploy(deploy)"
-                            @click="openFailureDetail(deploy)"
-                          >
-                            <el-icon class="mr-1"><Warning /></el-icon
-                            >{{ t('opsManagement.failureDetail') }}
-                          </el-dropdown-item>
-                          <el-dropdown-item divided @click="handleUndeploy(deploy)" type="danger">
-                            <el-icon class="mr-1"><Remove /></el-icon
-                            >{{ t('opsManagement.undeploy') }}
-                          </el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="text-center py-4 text-xs text-gray-400">
-                {{ t('opsManagement.noProjectsRunning') }}
-              </div>
-            </div>
-          </el-card>
-        </div>
-
-        <!-- 无数据 -->
-        <el-empty
-          v-if="!nodeLoading && filteredNodeList.length === 0"
-          :description="t('opsManagement.noNodesOnline')"
-        />
       </div>
+    </header>
 
-      <!-- 视图：详细列表 -->
-      <div v-else-if="activeView === 'list'" class="ck-content-scroll">
-        <div class="ck-table-shell">
-          <el-table
-            :data="filteredNodeList"
-            style="width: 100%"
-            row-key="id"
-            :expand-row-keys="expandedNodeRowKeys"
-            @expand-change="handleExpandChange"
-          >
-            <el-table-column type="expand">
-              <template #default="props">
-                <div class="p-4 bg-gray-50/50 dark:bg-gray-900/50">
-                  <h4 class="text-sm font-bold mb-3">
-                    {{ t('opsManagement.runningProjects') }}
-                  </h4>
-                  <el-table :data="getVisibleDeployments(props.row)" size="small" border>
-                    <el-table-column :label="t('opsManagement.projectName')" prop="project.name" />
-                    <el-table-column
-                      :label="t('opsManagement.runtimeVersion')"
-                      prop="version"
-                      width="100"
-                    />
-                    <el-table-column :label="t('opsManagement.runtimeStatus')" width="100">
-                      <template #default="scope">
-                        <el-tag size="small" :type="getDeployStatusType(scope.row.status)">{{
-                          getDeployDisplayLabel(scope.row)
-                        }}</el-tag>
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('opsManagement.onlineUsers')" width="100">
-                      <template #default="scope">
-                        {{ scope.row.runtimeMetrics?.onlineUsers || 0 }}
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('opsManagement.concurrentPeak')" width="100">
-                      <template #default="scope">
-                        {{ scope.row.runtimeMetrics?.concurrentUsers || 0 }}
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('opsManagement.actions')" width="420">
-                      <template #default="scope">
-                        <div class="flex flex-wrap gap-1">
-                          <el-button
-                            link
-                            type="success"
-                            size="small"
-                            @click="handleStartProject(scope.row)"
-                          >
-                            {{ t('opsManagement.start') }}
-                          </el-button>
-                          <el-button
-                            link
-                            type="warning"
-                            size="small"
-                            @click="handleStopProject(scope.row)"
-                          >
-                            {{ t('opsManagement.stop') }}
-                          </el-button>
-                          <el-button
-                            link
-                            type="primary"
-                            size="small"
-                            @click="handleRestartProject(scope.row)"
-                          >
-                            {{ t('opsManagement.restart') }}
-                          </el-button>
-                          <el-button
-                            link
-                            type="primary"
-                            size="small"
-                            :disabled="scope.row.mode === 'DEV'"
-                            @click="handleRollback(scope.row)"
-                          >
-                            {{ t('opsManagement.rollback') }}
-                          </el-button>
-                          <el-button
-                            link
-                            type="primary"
-                            size="small"
-                            @click="handleViewLog(scope.row)"
-                          >
-                            {{ t('opsManagement.viewLog') }}
-                          </el-button>
-                          <el-button
-                            v-if="isFailedDeploy(scope.row)"
-                            link
-                            type="danger"
-                            size="small"
-                            @click="openFailureDetail(scope.row)"
-                          >
-                            {{ t('opsManagement.failureDetail') }}
-                          </el-button>
-                          <el-button
-                            link
-                            type="danger"
-                            size="small"
-                            @click="handleUndeploy(scope.row)"
-                          >
-                            {{ t('opsManagement.undeploy') }}
-                          </el-button>
-                        </div>
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('opsManagement.nodeName')" prop="name" />
-            <el-table-column :label="t('opsManagement.ipAddress')" prop="ipAddress" />
-            <el-table-column :label="t('opsManagement.status')" width="120">
-              <template #default="scope">
-                <el-tag :type="getNodeStatusType(scope.row.status)">{{
-                  getNodeStatusLabel(scope.row.status)
-                }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="CPU" width="100">
-              <template #default="scope">{{ getMetricValue(scope.row, 'cpu') }}%</template>
-            </el-table-column>
-            <el-table-column :label="t('opsManagement.memory')" width="100">
-              <template #default="scope">{{ getMetricValue(scope.row, 'memory') }}%</template>
-            </el-table-column>
-            <el-table-column :label="t('opsManagement.disk')" width="100">
-              <template #default="scope">{{ getMetricValue(scope.row, 'disk') }}%</template>
-            </el-table-column>
-            <el-table-column :label="t('opsManagement.projectCount')" width="100">
-              <template #default="scope">{{ getVisibleDeployments(scope.row).length }}</template>
-            </el-table-column>
-            <el-table-column :label="t('opsManagement.lastHeartbeat')" prop="lastHeartbeatAt">
-              <template #default="scope">{{ formatTime(scope.row.lastHeartbeatAt) }}</template>
-            </el-table-column>
-          </el-table>
-        </div>
-        <el-empty
-          v-if="!nodeLoading && filteredNodeList.length === 0"
-          :description="t('opsManagement.noNodes')"
-          class="mt-6"
-        />
-      </div>
-
-      <!-- 固定分页区 -->
-      <div class="ck-pagination-bar ops-pagination-bar">
-        <WorkbenchPagination
-          :page="nodePagination.page"
-          :limit="nodePagination.pageSize"
-          :total="nodePagination.total"
-          :total-pages="nodePaginationTotalPages"
-          :summary="nodePaginationSummary"
-          :page-size-label="t('projectManagement.pageSizeLabel')"
-          :page-indicator="nodePaginationPageIndicator"
-          :limit-options="[12, 24, 48]"
-          @change="handleNodePaginationChange"
-        />
-      </div>
-    </div>
-
-    <!-- 弹窗：待审核申请列表 -->
-    <el-dialog
-      v-model="showPendingDialog"
-      :title="t('opsManagement.pendingRequests')"
-      width="900px"
-    >
-      <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden">
-        <el-table v-loading="nodeLoading" :data="pendingList" style="width: 100%">
-          <el-table-column :label="t('opsManagement.requestedNodeName')" min-width="180">
-            <template #default="scope">
-              <div class="flex flex-col">
-                <span class="font-bold text-gray-800 dark:text-gray-200">{{ scope.row.name }}</span>
-                <span class="text-xs text-gray-500">{{
-                  scope.row.description || t('opsManagement.noDescription')
-                }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.applicantInfo')" width="180">
-            <template #default="scope">
-              <div class="flex flex-col text-xs">
-                <span class="font-semibold text-gray-700 dark:text-gray-300">
-                  {{ scope.row.registrant?.username || '-' }}
-                </span>
-                <el-tag size="small" :type="getRoleTagType(scope.row.registrant?.role)">
-                  {{ getRoleLabel(scope.row.registrant?.role) }}
-                </el-tag>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.nodeMode')" width="100">
-            <template #default="scope">
-              <el-tag size="small" :type="scope.row.mode === 'online' ? 'success' : 'info'">
-                {{
-                  scope.row.mode === 'online'
-                    ? t('opsManagement.online')
-                    : t('opsManagement.offline')
-                }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.nodeNetworkAddress')" width="180">
-            <template #default="scope">
-              <div class="flex flex-col text-xs">
-                <span>IP: {{ scope.row.ipAddress }}</span>
-                <span>Port: {{ scope.row.port }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('opsManagement.agentVersion')"
-            prop="agentVersion"
-            width="100"
-          />
-          <el-table-column :label="t('opsManagement.requestTime')" width="160">
-            <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.approveAction')" width="220" fixed="right">
-            <template #default="scope">
-              <div v-if="canApproveNode" class="flex space-x-2">
-                <el-button type="success" size="small" @click="handleApprove(scope.row)">
-                  <el-icon class="mr-1"><Check /></el-icon>
-                  {{ t('opsManagement.approve') }}
-                </el-button>
-                <el-button type="danger" size="small" plain @click="handleReject(scope.row)">
-                  <el-icon class="mr-1"><Close /></el-icon>
-                  {{ t('opsManagement.reject') }}
-                </el-button>
-              </div>
-              <div v-else class="text-xs text-gray-500">
-                {{ t('opsManagement.approvePermissionHint') }}
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <template #footer>
-        <el-button @click="showPendingDialog = false">{{ t('opsManagement.close') }}</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 弹窗：详细日志 -->
-    <el-dialog
-      v-model="showLogDialog"
-      :title="
-        t('opsManagement.runtimeLogTitle', {
-          name: currentDeployment?.project?.name || '',
-        })
-      "
-      width="700px"
-    >
-      <div class="bg-black text-green-500 p-4 rounded-lg h-80 overflow-y-auto font-mono text-xs">
-        <div v-for="(log, idx) in logContent" :key="idx" class="mb-1">
-          <span class="text-gray-500">[{{ log.time }}]</span>
-          <span class="ml-2">{{ log.message }}</span>
-        </div>
-        <div v-if="logContent.length === 0" class="text-gray-500 text-center mt-20">
-          {{ t('opsManagement.noRealtimeLog') }}
-        </div>
-      </div>
-      <div class="mt-4">
-        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          {{ t('opsManagement.commandTimeline') }}
-        </div>
-        <el-table :data="commandTimeline" size="small" border max-height="220">
-          <el-table-column prop="type" :label="t('opsManagement.commandType')" width="120" />
-          <el-table-column :label="t('opsManagement.status')" width="140">
-            <template #default="scope">
-              <el-tag size="small" :type="getCommandStatusType(scope.row.status)">
-                {{ getCommandStatusLabel(scope.row.status) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="attempts" :label="t('opsManagement.retryCount')" width="100" />
-          <el-table-column :label="t('opsManagement.lastUpdated')" min-width="180">
-            <template #default="scope">
-              {{
-                formatTime(
-                  scope.row.updatedAt ||
-                    scope.row.completedAt ||
-                    scope.row.issuedAt ||
-                    scope.row.requestedAt,
-                )
-              }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="lastError"
-            :label="t('opsManagement.failureReason')"
-            min-width="220"
-          />
-        </el-table>
-      </div>
-    </el-dialog>
-
-    <el-dialog
-      v-model="showRollbackDialog"
-      :title="
-        t('opsManagement.rollbackSelectTitle', {
-          name: rollbackSourceDeploy?.project?.name || '-',
-        })
-      "
-      width="640px"
-      append-to-body
-    >
-      <el-alert
-        type="warning"
-        :closable="false"
-        show-icon
-        class="mb-3"
-        :title="
-          t('opsManagement.rollbackCurrentVersion', {
-            version: rollbackSourceDeploy?.version || '-',
-          })
-        "
-      />
-      <el-select
-        v-model="rollbackTargetDeploymentId"
-        filterable
-        class="w-full"
-        :loading="rollbackDialogLoading"
-        :placeholder="t('opsManagement.rollbackSelectPlaceholder')"
+    <nav class="ops-nav" aria-label="运行管理模块">
+      <button
+        v-for="item in navItems"
+        :key="item.id"
+        type="button"
+        :class="{ active: activeTab === item.id }"
+        @click="activeTab = item.id"
       >
-        <el-option
-          v-for="item in rollbackCandidateVersions"
-          :key="item.id"
-          :label="`v${item.version} · ${formatTime(item.createdAt)}`"
-          :value="item.id"
-        />
-      </el-select>
-      <div class="text-xs text-gray-500 mt-2">
-        {{ t('opsManagement.rollbackHint') }}
-      </div>
+        <el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span
+        ><small>{{ item.count }}</small>
+      </button>
+    </nav>
+    <el-alert v-if="loadError" type="warning" :title="loadError" :closable="false" show-icon
+      ><template #default
+        ><el-button link type="primary" @click="reloadAll">重新尝试</el-button></template
+      ></el-alert
+    >
 
-      <template #footer>
-        <el-button @click="showRollbackDialog = false">{{ t('opsManagement.cancel') }}</el-button>
+    <section
+      v-if="!loading && clusters.length === 0"
+      class="onboarding"
+      data-testid="ops-first-enrollment"
+    >
+      <el-icon class="onboarding-icon"><Connection /></el-icon>
+      <div>
+        <p class="eyebrow">首次接入</p>
+        <h2>先创建运行集群并接入第一台节点</h2>
+        <p>
+          创建一次性接入任务，下载节点包后在目标主机安装。接入后，平台会持续显示健康、资源和服务状态。
+        </p>
+        <el-button type="primary" size="large" @click="openEnrollment()">开始首次接入</el-button>
+      </div>
+      <ol>
+        <li><b>1</b>选择节点用途</li>
+        <li><b>2</b>下载安装包</li>
+        <li><b>3</b>输入接入码</li>
+        <li><b>4</b>等待注册完成</li>
+      </ol>
+    </section>
+
+    <section v-show="activeTab === 'overview'" class="content">
+      <div class="stats">
+        <article>
+          <span>运行集群</span><b>{{ clusters.length }}</b
+          ><small>{{ healthyClusterCount }} 个健康</small>
+        </article>
+        <article>
+          <span>已接入节点</span><b>{{ nodes.length }}</b
+          ><small>{{ healthyNodeCount }} 个正常上报</small>
+        </article>
+        <article>
+          <span>工程部署</span><b>{{ deployments.length }}</b
+          ><small>{{ runningDeploymentCount }} 个运行中</small>
+        </article>
+        <article class="attention">
+          <span>需要关注</span><b>{{ attentionCount }}</b
+          ><small>节点或工程服务异常</small>
+        </article>
+      </div>
+      <div class="overview-grid">
+        <article class="panel">
+          <header>
+            <div>
+              <h2>运行集群</h2>
+              <p>工程服务的运行目标</p>
+            </div>
+            <el-button link type="primary" @click="activeTab = 'clusters'">查看全部</el-button>
+          </header>
+          <div v-if="clusters.length" class="mini-list">
+            <button
+              v-for="cluster in clusters.slice(0, 4)"
+              :key="cluster.id"
+              type="button"
+              @click="activeTab = 'clusters'"
+            >
+              <i :class="healthClass(cluster.health)" /><b>{{ cluster.name }}</b
+              ><small
+                >{{ healthPresentation(cluster.health).label }} ·
+                {{ cluster.nodeCount || 0 }} 个节点</small
+              >
+            </button>
+          </div>
+          <el-empty v-else description="尚未创建运行集群" :image-size="72" />
+        </article>
+        <article class="panel">
+          <header>
+            <div>
+              <h2>最近接入</h2>
+              <p>等待安装、注册或确认的节点</p>
+            </div>
+            <el-button link type="primary" @click="openEnrollment()">新建任务</el-button>
+          </header>
+          <div v-if="enrollments.length" class="enrollment-list">
+            <div v-for="task in enrollments.slice(0, 4)" :key="task.id">
+              <span>{{ nodeRoleLabel[task.role] }}</span
+              ><b>{{ enrollmentStatusPresentation(task.status) }}</b
+              ><small>
+                {{ task.reportedHostName || task.ipAddress || '等待主机注册' }} ·
+                {{ formatTime(task.updatedAt || task.createdAt) }}
+              </small>
+              <template v-if="task.status === 'claimed'">
+                <code>指纹：{{ task.machineFingerprint || '等待上报' }}</code>
+                <div class="enrollment-actions">
+                  <el-button size="small" type="primary" @click="approveEnrollment(task)"
+                    >确认接入</el-button
+                  >
+                  <el-button size="small" @click="rejectEnrollment(task)">拒绝</el-button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <el-empty v-else description="没有进行中的接入任务" :image-size="72" />
+        </article>
+      </div>
+    </section>
+
+    <section v-show="activeTab === 'clusters'" class="content">
+      <header class="section-heading">
+        <div>
+          <h2>运行集群</h2>
+          <p>以工程运行目标的方式管理承载服务的资源。</p>
+        </div>
+        <el-button type="primary" @click="clusterDialog = true"
+          ><el-icon><Plus /></el-icon>新建运行集群</el-button
+        >
+      </header>
+      <div v-loading="loading" class="resource-grid">
+        <article v-for="cluster in clusters" :key="cluster.id" class="resource-card">
+          <header>
+            <div>
+              <i :class="healthClass(cluster.health)" />
+              <h3>{{ cluster.name }}</h3>
+            </div>
+            <el-tag :type="healthPresentation(cluster.health).type" effect="plain">{{
+              healthPresentation(cluster.health).label
+            }}</el-tag>
+          </header>
+          <p>{{ cluster.description || '用于承载工程的计算、报警等服务。' }}</p>
+          <dl>
+            <div>
+              <dt>控制器状态</dt>
+              <dd>{{ lifecyclePresentation(cluster.controllerStatus) }}</dd>
+            </div>
+            <div>
+              <dt>已接入节点</dt>
+              <dd>{{ cluster.onlineNodeCount || 0 }} / {{ cluster.nodeCount || 0 }}</dd>
+            </div>
+            <div>
+              <dt>运行版本</dt>
+              <dd>{{ cluster.version || '初始化中' }}</dd>
+            </div>
+          </dl>
+          <footer>
+            <small>最近更新 {{ formatTime(cluster.updatedAt || cluster.createdAt) }}</small
+            ><el-button link type="primary" @click="openEnrollment(cluster.id)">添加节点</el-button>
+          </footer>
+        </article>
+        <button type="button" class="create-card" @click="clusterDialog = true">
+          <el-icon><Plus /></el-icon><b>新建运行集群</b><span>为工程服务准备运行目标</span>
+        </button>
+      </div>
+      <el-pagination
+        v-if="clusterPager.total > clusterPager.pageSize"
+        v-model:current-page="clusterPager.page"
+        :page-size="clusterPager.pageSize"
+        :total="clusterPager.total"
+        layout="prev, pager, next"
+        @current-change="reloadAll"
+      />
+    </section>
+
+    <section v-show="activeTab === 'nodes'" class="content">
+      <header class="section-heading">
+        <div>
+          <h2>节点</h2>
+          <p>节点主动上报资源、Agent 与服务健康状态。</p>
+        </div>
+        <el-button type="primary" @click="openEnrollment()"
+          ><el-icon><Plus /></el-icon>接入节点</el-button
+        >
+      </header>
+      <div class="table-wrap" v-loading="loading">
+        <el-table :data="nodes" :empty-text="'暂无节点，可通过接入任务添加'"
+          ><el-table-column label="节点" min-width="210"
+            ><template #default="{ row }"
+              ><div class="node-name">
+                <i :class="healthClass(row.health)" />
+                <div>
+                  <b>{{ row.name }}</b
+                  ><small
+                    >{{ nodeRoleLabel[row.role] }} · {{ row.ipAddress || row.os || '-' }}</small
+                  >
+                </div>
+              </div></template
+            ></el-table-column
+          ><el-table-column label="健康" width="100"
+            ><template #default="{ row }"
+              ><el-tag size="small" :type="healthPresentation(row.health).type">{{
+                healthPresentation(row.health).label
+              }}</el-tag></template
+            ></el-table-column
+          ><el-table-column label="最后心跳" min-width="145"
+            ><template #default="{ row }">{{
+              relativeTime(row.lastHeartbeatAt)
+            }}</template></el-table-column
+          ><el-table-column label="资源使用" min-width="205"
+            ><template #default="{ row }"
+              ><span class="metrics"
+                >CPU {{ metric(row.metrics?.cpuPercent) }} / 内存
+                {{ metric(row.metrics?.memoryPercent) }} / 磁盘
+                {{ metric(row.metrics?.diskPercent) }}</span
+              ></template
+            ></el-table-column
+          ><el-table-column label="Agent 状态" min-width="190"
+            ><template #default="{ row }"
+              ><div class="service-tags">
+                <el-tag size="small" effect="plain"
+                  >Agent {{ row.agentVersion || '等待注册' }}</el-tag
+                ><el-tag size="small" effect="plain" :type="healthPresentation(row.health).type">{{
+                  row.health === 'healthy' ? '正常上报' : '等待状态'
+                }}</el-tag>
+              </div></template
+            ></el-table-column
+          ></el-table
+        >
+      </div>
+      <el-pagination
+        v-if="nodePager.total > nodePager.pageSize"
+        v-model:current-page="nodePager.page"
+        :page-size="nodePager.pageSize"
+        :total="nodePager.total"
+        layout="prev, pager, next"
+        @current-change="reloadAll"
+      />
+    </section>
+
+    <section v-show="activeTab === 'deployments'" class="content">
+      <header class="section-heading">
+        <div>
+          <h2>工程部署</h2>
+          <p>工程版本在目标运行集群中启动，并由平台跟踪发布进度。</p>
+        </div>
         <el-button
           type="primary"
-          :loading="rollbackSubmitLoading"
-          :disabled="!rollbackTargetDeploymentId"
-          @click="confirmRollback"
+          :disabled="deployableRuntimeClusters.length === 0"
+          @click="deploymentDialog = true"
+          ><el-icon><UploadFilled /></el-icon>发布工程</el-button
         >
-          {{ t('opsManagement.rollbackExecute') }}
-        </el-button>
-      </template>
-    </el-dialog>
+      </header>
+      <div class="table-wrap" v-loading="loading">
+        <el-table :data="deployments" :empty-text="'暂无工程部署'"
+          ><el-table-column label="工程" prop="projectName" min-width="175" /><el-table-column
+            label="部署模式"
+            min-width="105"
+            ><template #default="{ row }"
+              ><el-tag size="small" effect="plain">{{
+                row.mode === 'production' ? '生产运行' : '开发验证'
+              }}</el-tag></template
+            ></el-table-column
+          ><el-table-column label="运行集群" min-width="145"
+            ><template #default="{ row }">{{
+              row.runtimeClusterName || '未分配'
+            }}</template></el-table-column
+          ><el-table-column label="当前版本" min-width="120"
+            ><template #default="{ row }">{{ row.version || '-' }}</template></el-table-column
+          ><el-table-column label="状态" min-width="105"
+            ><template #default="{ row }"
+              ><el-tag size="small" :type="healthPresentation(row.health).type">{{
+                lifecyclePresentation(row.observedStatus)
+              }}</el-tag></template
+            ></el-table-column
+          ><el-table-column label="发布进度" min-width="150"
+            ><template #default="{ row }"
+              ><el-progress
+                :percentage="progress(row.progress)"
+                :stroke-width="8" /></template></el-table-column
+          ><el-table-column label="更新时间" min-width="145"
+            ><template #default="{ row }">{{
+              formatTime(row.updatedAt)
+            }}</template></el-table-column
+          ><el-table-column label="操作" width="80" fixed="right"
+            ><template #default="{ row }"
+              ><el-button link type="primary" @click="openDeploymentDetail(row)"
+                >查看</el-button
+              ></template
+            ></el-table-column
+          ></el-table
+        >
+      </div>
+      <el-pagination
+        v-if="deploymentPager.total > deploymentPager.pageSize"
+        v-model:current-page="deploymentPager.page"
+        :page-size="deploymentPager.pageSize"
+        :total="deploymentPager.total"
+        layout="prev, pager, next"
+        @current-change="reloadAll"
+      />
+    </section>
 
-    <el-drawer
-      v-model="showFailureDrawer"
-      :title="
-        t('opsManagement.failureDrawerTitle', {
-          name: failedDeployment?.project?.name || '-',
-        })
-      "
-      size="520px"
+    <el-dialog v-model="clusterDialog" title="新建运行集群" width="min(520px, calc(100vw - 32px))"
+      ><el-form label-position="top"
+        ><el-form-item label="集群名称"
+          ><el-input v-model="clusterForm.name" placeholder="例如：生产运行集群" /></el-form-item
+        ><el-form-item label="集群编码"
+          ><el-input
+            v-model="clusterForm.code"
+            placeholder="例如：production-runtime" /></el-form-item
+        ><el-form-item label="运行形态"
+          ><el-radio-group v-model="clusterForm.topology"
+            ><el-radio-button value="single_node">单节点</el-radio-button
+            ><el-radio-button value="high_availability" disabled
+              >高可用（规划中）</el-radio-button
+            ></el-radio-group
+          ></el-form-item
+        ><el-form-item label="说明"
+          ><el-input
+            v-model="clusterForm.description"
+            type="textarea"
+            placeholder="描述该集群承载的工程范围" /></el-form-item></el-form
+      ><template #footer
+        ><el-button @click="clusterDialog = false">取消</el-button
+        ><el-button type="primary" :loading="submitting" @click="createCluster"
+          >创建并继续接入节点</el-button
+        ></template
+      ></el-dialog
     >
-      <el-descriptions :column="1" border>
-        <el-descriptions-item :label="t('opsManagement.nodeName')">
-          {{ failedDeployment?.node?.name || failedDeployment?.nodeName || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item :label="t('opsManagement.runtimeVersion')">
-          {{ failedDeployment?.version || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item :label="t('opsManagement.status')">
-          <el-tag :type="getDeployStatusType(failedDeployment?.status)">
-            {{ getDeployDisplayLabel(failedDeployment) }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item :label="t('opsManagement.failureReason')">
-          {{ getDeployFailureReason(failedDeployment) }}
-        </el-descriptions-item>
-        <el-descriptions-item :label="t('opsManagement.lastUpdated')">
-          {{ formatTime(failedDeployment?.updatedAt || failedDeployment?.lastHeartbeatAt) }}
-        </el-descriptions-item>
-      </el-descriptions>
 
-      <div class="mt-4">
-        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-          {{ t('opsManagement.recentLogs') }}
+    <el-dialog
+      v-model="wizardDialog"
+      title="接入节点"
+      width="min(760px, calc(100vw - 32px))"
+      :close-on-click-modal="false"
+      ><el-steps :active="wizardStep" finish-status="success" simple
+        ><el-step title="选择用途" /><el-step title="创建接入任务" /><el-step title="安装并确认"
+      /></el-steps>
+      <div v-if="wizardStep === 0" class="wizard">
+        <h3>这台主机将承担什么工作？</h3>
+        <p>根据用途选择节点包；接入后可在节点页面查看状态。</p>
+        <div class="role-grid">
+          <button
+            v-for="role in roles"
+            :key="role.value"
+            type="button"
+            :class="{ selected: enrollmentForm.role === role.value }"
+            @click="enrollmentForm.role = role.value"
+          >
+            <el-icon><component :is="role.icon" /></el-icon><b>{{ role.label }}</b
+            ><span>{{ role.description }}</span>
+          </button>
         </div>
-        <div class="bg-black text-green-400 rounded p-3 h-56 overflow-y-auto text-xs font-mono">
-          <template v-if="failedDeployLogs.length > 0">
-            <div v-for="(line, idx) in failedDeployLogs" :key="idx" class="mb-1">
-              [{{ line.time || '-' }}] {{ line.message || line }}
-            </div>
-          </template>
-          <div v-else class="text-gray-500 text-center mt-20">
-            {{ t('opsManagement.noFailureLogs') }}
+        <el-form label-position="top" class="wizard-form"
+          ><el-form-item label="节点显示名称"
+            ><el-input
+              v-model="enrollmentForm.displayName"
+              placeholder="例如：产线边缘节点 01" /></el-form-item
+          ><el-form-item v-if="enrollmentForm.role === 'runtime_linux'" label="加入运行集群"
+            ><el-select
+              v-model="enrollmentForm.runtimeClusterId"
+              placeholder="选择运行集群"
+              class="w-full"
+              ><el-option
+                v-for="cluster in clusters"
+                :key="cluster.id"
+                :label="cluster.name"
+                :value="cluster.id" /></el-select
+            ><small>没有运行集群？先创建一个运行集群。</small></el-form-item
+          ><el-form-item label="节点安装包"
+            ><el-select
+              v-model="enrollmentForm.packageId"
+              placeholder="选择对应安装包"
+              class="w-full"
+              ><el-option
+                v-for="item in availablePackages"
+                :key="item.id"
+                :label="`${item.name}${item.version ? ` · ${item.version}` : ''}${item.size ? ` · ${formatPackageSize(item.size)}` : ''}`"
+                :value="item.id" /></el-select></el-form-item
+          ><el-alert
+            v-if="availablePackages.length === 0"
+            type="warning"
+            :closable="false"
+            title="当前节点类型尚未构建可用安装包，请先联系平台管理员发布节点包。" />
+          ><el-form-item label="接入码有效期"
+            ><el-select v-model="enrollmentForm.ttlMinutes" class="w-full"
+              ><el-option label="30 分钟" :value="30" /><el-option
+                label="1 小时"
+                :value="60" /><el-option label="4 小时" :value="240" /></el-select></el-form-item
+        ></el-form>
+        <footer>
+          <el-button @click="wizardDialog = false">取消</el-button
+          ><el-button
+            v-if="enrollmentForm.role === 'runtime_linux' && !clusters.length"
+            type="primary"
+            @click="clusterDialog = true"
+            >新建运行集群</el-button
+          ><el-button v-else type="primary" :loading="submitting" @click="createEnrollment"
+            >创建接入任务</el-button
+          >
+        </footer>
+      </div>
+      <div v-else class="wizard success">
+        <el-result
+          icon="success"
+          title="接入任务已创建"
+          sub-title="在目标主机下载安装包并输入接入码。页面会自动刷新注册状态。"
+        />
+        <div class="enrollment-result">
+          <div>
+            <span>节点包</span
+            ><b>{{ activeEnrollment?.packageName || chosenPackage?.name || '节点安装包' }}</b>
+          </div>
+          <div>
+            <span>一次性接入码</span
+            ><code>{{ activeEnrollment?.enrollmentCode || '创建结果未返回接入码' }}</code
+            ><small>仅在创建后本次页面展示，请立即复制保存。</small>
+          </div>
+          <div>
+            <span>到期时间</span><b>{{ formatTime(activeEnrollment?.expiresAt) }}</b>
+          </div>
+          <div>
+            <span>当前状态</span
+            ><el-tag :type="enrollmentTagType(activeEnrollment?.status)">{{
+              enrollmentStatusPresentation(activeEnrollment?.status)
+            }}</el-tag>
           </div>
         </div>
-      </div>
-    </el-drawer>
-  </div>
+        <div class="download-actions">
+          <el-button
+            type="primary"
+            :disabled="!activeEnrollment?.packageId"
+            @click="downloadPackage(activeEnrollment?.packageId)"
+            ><el-icon><Download /></el-icon>下载安装包</el-button
+          ><el-button :disabled="!activeEnrollment?.enrollmentCode" @click="copyCode"
+            >复制接入码</el-button
+          >
+        </div>
+        <p class="install-hint">
+          下载并解压后，请按包内 README 使用中心地址和上方一次性接入码执行安装。
+        </p>
+        <footer>
+          <el-button @click="wizardDialog = false">完成</el-button
+          ><el-button type="primary" plain @click="refreshEnrollment">刷新注册状态</el-button>
+        </footer>
+      </div></el-dialog
+    >
+
+    <el-dialog v-model="deploymentDialog" title="发布工程" width="min(560px, calc(100vw - 32px))"
+      ><el-form label-position="top"
+        ><el-form-item label="工程"
+          ><el-select
+            v-model="deploymentForm.projectId"
+            class="w-full"
+            filterable
+            remote
+            :remote-method="loadProjectOptions"
+            :loading="projectOptionsLoading"
+            placeholder="搜索并选择可访问工程"
+            @visible-change="loadProjectOptionsOnVisible"
+            ><el-option
+              v-for="project in projectOptions"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id" /></el-select></el-form-item
+        ><el-form-item label="部署模式"
+          ><el-radio-group v-model="deploymentForm.deploymentMode"
+            ><el-radio-button value="development">开发验证</el-radio-button
+            ><el-radio-button value="production">生产运行</el-radio-button></el-radio-group
+          ></el-form-item
+        ><el-form-item label="运行集群"
+          ><el-select
+            v-model="deploymentForm.runtimeClusterId"
+            class="w-full"
+            :disabled="deployableRuntimeClusters.length === 0"
+            ><el-option
+              v-for="cluster in deployableRuntimeClusters"
+              :key="cluster.id"
+              :label="cluster.name"
+              :value="cluster.id"
+          /></el-select>
+          <p v-if="deployableRuntimeClusters.length === 0" class="form-field-hint is-warning">
+            暂无可发布的运行集群。请使用已就绪的单节点集群。
+          </p></el-form-item
+        ><el-form-item label="采集节点（采集服务需要）"
+          ><el-select
+            v-model="deploymentForm.hostNodeId"
+            clearable
+            class="w-full"
+            :disabled="collectorNodes.length === 0"
+            ><el-option
+              v-for="node in collectorNodes"
+              :key="node.id"
+              :label="node.name"
+              :value="node.id"
+          /></el-select>
+          <p v-if="collectorNodes.length === 0" class="form-field-hint is-warning">
+            暂无可用采集节点。请完成节点审批，并确认 Agent 已启用且正在上报心跳。
+          </p></el-form-item
+        ></el-form
+      ><template #footer
+        ><el-button @click="deploymentDialog = false">取消</el-button
+        ><el-button
+          type="primary"
+          :loading="submitting"
+          :disabled="deployableRuntimeClusters.length === 0"
+          @click="createDeployment"
+          >开始发布</el-button
+        ></template
+      ></el-dialog
+    >
+
+    <el-drawer
+      v-model="deploymentDetailDialog"
+      :title="selectedDeployment?.projectName || '工程部署详情'"
+      size="min(620px, 100vw)"
+      ><template v-if="selectedDeployment"
+        ><div class="deployment-summary">
+          <i :class="healthClass(selectedDeployment.health)" />
+          <div>
+            <b>{{ lifecyclePresentation(selectedDeployment.observedStatus) }}</b
+            ><small
+              >{{ selectedDeployment.runtimeClusterName || '未分配运行集群' }} ·
+              {{ selectedDeployment.version || '等待版本' }}</small
+            >
+          </div>
+        </div>
+        <h3>运行服务</h3>
+        <p class="drawer-hint">首版以计算、报警、采集演示服务表示工程运行态。</p>
+        <div class="workload-list">
+          <article v-for="workload in workloadRows" :key="workload.role">
+            <div>
+              <b>{{ workloadRoleLabel[workload.role] }}</b
+              ><span>{{ workload.lastMessage || 'Demo 工作负载' }}</span>
+            </div>
+            <el-tag size="small" :type="lifecycleTagType(workload.observedStatus)">{{
+              lifecyclePresentation(workload.observedStatus)
+            }}</el-tag>
+            <footer>
+              <el-button
+                size="small"
+                :loading="workloadActionKey === `${workload.role}:start`"
+                :disabled="workloadActionDisabled(workload, 'start')"
+                @click="operateWorkload(workload.role, 'start')"
+                ><el-icon><VideoPlay /></el-icon>启动</el-button
+              ><el-button
+                size="small"
+                :loading="workloadActionKey === `${workload.role}:stop`"
+                :disabled="workloadActionDisabled(workload, 'stop')"
+                @click="operateWorkload(workload.role, 'stop')"
+                ><el-icon><VideoPause /></el-icon>停止</el-button
+              ><el-button
+                size="small"
+                :loading="workloadActionKey === `${workload.role}:restart`"
+                :disabled="workloadActionDisabled(workload, 'restart')"
+                @click="operateWorkload(workload.role, 'restart')"
+                ><el-icon><RefreshRight /></el-icon>重启</el-button
+              >
+            </footer>
+          </article>
+        </div>
+        <section class="timeline">
+          <header class="timeline__header">
+            <div>
+              <h3>异步任务时间线</h3>
+              <p v-if="deploymentRunPollingState === 'timed_out'" class="timeline__pending">
+                任务仍在执行或状态暂不可确认，已暂停自动刷新。
+              </p>
+            </div>
+            <div class="timeline__actions">
+              <el-button link :loading="refreshingDeployment" @click="refreshDeploymentDetail"
+                >刷新详情</el-button
+              >
+              <el-button
+                v-if="activeDeploymentRunId"
+                link
+                type="primary"
+                :loading="refreshingRun"
+                @click="refreshDeploymentRun"
+                >刷新任务</el-button
+              >
+            </div>
+          </header>
+          <el-timeline v-if="runEvents.length"
+            ><el-timeline-item
+              v-for="event in runEvents"
+              :key="event.id || `${event.createdAt}-${event.stage}`"
+              :timestamp="formatTime(event.updatedAt || event.createdAt)"
+              :type="timelineType(event.status || event.stage)"
+              ><b>{{ runEventStagePresentation(event.stage) }}</b>
+              <p>{{ runEventMessagePresentation(event.message) }}</p></el-timeline-item
+            ></el-timeline
+          ><el-empty v-else description="尚未产生异步任务" :image-size="72" /></section></template
+    ></el-drawer>
+  </section>
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
-import { ref, reactive, onMounted, computed, onBeforeUnmount, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Grid,
-  List,
-  Refresh,
-  Search,
-  MoreFilled,
-  User,
-  Clock,
-  Tools,
-  Check,
-  Close,
-  Bell,
-  Warning,
-  FolderOpened,
   Connection,
+  Cpu,
+  DataAnalysis,
+  Download,
+  FolderOpened,
+  Monitor,
+  Plus,
+  Refresh,
+  RefreshRight,
+  UploadFilled,
+  VideoPause,
+  VideoPlay,
 } from '@element-plus/icons-vue'
-import request, { getApiErrorMessage } from '@/utils/request'
-import dayjs from 'dayjs'
-import { initSocket, getSocket } from '@/utils/socket'
-import { Storage } from '@/utils/storage'
-import { canApproveNodes } from '@/permissions'
-import { useAuthStore } from '@/store'
-import { RoleEnum, ENUM_LABELS } from '@/enums'
-import WorkbenchPagination from '@/components/WorkbenchPagination.vue'
 import {
-  getNodeStatusType,
-  getNodeStatusLabel,
-  getDeployStatusType,
-  getDeployLabel as getDeployLabelByStatus,
-  isFailedDeploy,
-  getDeployFailureReason,
-  buildDeployStatusSummary,
-  getProgressColor,
-} from './utils/ops-status'
+  opsAPI,
+  type DeploymentRunEvent,
+  type DeploymentWorkload,
+  type HostNode,
+  type NodeEnrollment,
+  type OpsNodeRole,
+  type OpsWorkloadAction,
+  type OpsWorkloadRole,
+  type ProjectDeployment,
+  type RuntimeCluster,
+} from '@/api/ops.api'
+import { getApiErrorMessage } from '@/utils/request'
+import { projectAPI } from '@/api/project.api'
+import {
+  enrollmentStatusPresentation,
+  healthPresentation,
+  isDeployableRuntimeCluster,
+  isDeploymentPending,
+  isDeploymentRunActive,
+  isSchedulableCollectorNode,
+  lifecyclePresentation,
+  lifecycleTagType,
+  nodeRoleLabel,
+  runEventMessagePresentation,
+  runEventStagePresentation,
+  sortRunEvents,
+  workloadRoleLabel,
+} from './utils/ops-presentation'
 
-const emit = defineEmits(['open-tab'])
-const authStore = useAuthStore()
-const { t } = useI18n()
-const currentUserRole = computed(
-  () => authStore.userInfo?.role || Storage.getUserInfo()?.role || '',
-)
-const OPS_VIEW_MODE_STORAGE_KEY = 'ops_management_view_mode'
-
-// 计算是否有审批权限
-const canApproveNode = computed(() => {
-  return canApproveNodes(currentUserRole.value)
+type Tab = 'overview' | 'clusters' | 'nodes' | 'deployments'
+const activeTab = ref<Tab>('overview')
+const loading = ref(false)
+const submitting = ref(false)
+const workloadActionKey = ref('')
+const loadError = ref('')
+const clusters = ref<RuntimeCluster[]>([])
+const nodes = ref<HostNode[]>([])
+const enrollments = ref<NodeEnrollment[]>([])
+const packages = ref<Awaited<ReturnType<typeof opsAPI.listNodePackages>>['items']>([])
+const deployments = ref<ProjectDeployment[]>([])
+const clusterDialog = ref(false)
+const wizardDialog = ref(false)
+const wizardStep = ref(0)
+const activeEnrollment = ref<NodeEnrollment | null>(null)
+const deploymentDialog = ref(false)
+const deploymentDetailDialog = ref(false)
+const selectedDeployment = ref<ProjectDeployment | null>(null)
+const runEvents = ref<DeploymentRunEvent[]>([])
+const activeDeploymentRunId = ref('')
+const deploymentRunPollingState = ref<'idle' | 'polling' | 'timed_out'>('idle')
+const refreshingDeployment = ref(false)
+const refreshingRun = ref(false)
+const projectOptions = ref<Array<{ id: string; name: string }>>([])
+const projectOptionsLoading = ref(false)
+const clusterPager = reactive({ page: 1, pageSize: 20, total: 0 })
+const nodePager = reactive({ page: 1, pageSize: 20, total: 0 })
+const deploymentPager = reactive({ page: 1, pageSize: 20, total: 0 })
+let enrollmentTimer: ReturnType<typeof setInterval> | undefined
+let deploymentRunTimer: ReturnType<typeof setInterval> | undefined
+const clusterForm = reactive({
+  name: '',
+  code: '',
+  topology: 'single_node' as 'single_node' | 'high_availability',
+  description: '',
 })
-
-// 状态与视图控制
-const activeView = ref('dashboard')
-const nodeLoading = ref(false)
-const nodeLoadError = ref('')
-const nodeList = ref([])
-const approvedCount = ref(0)
-const pendingCount = ref(0)
-
-// 节点查询
-const nodeSearch = reactive({
-  projectName: '',
-  status: '',
-  keyword: '',
-})
-const nodePagination = reactive({
-  page: 1,
-  pageSize: 12,
-  total: 0,
-})
-const searchDebounceTimer = ref(null)
-const expandedNodeRowKeys = ref([])
-
-// 待审核申请弹窗
-const showPendingDialog = ref(false)
-const pendingList = ref([])
-
-// 日志弹窗
-const showLogDialog = ref(false)
-const currentDeployment = ref(null)
-const logContent = ref([])
-const commandTimeline = ref([])
-const showFailureDrawer = ref(false)
-const failedDeployment = ref(null)
-const failedDeployLogs = ref([])
-const showRollbackDialog = ref(false)
-const rollbackDialogLoading = ref(false)
-const rollbackSubmitLoading = ref(false)
-const rollbackSourceDeploy = ref(null)
-const rollbackTargetDeploymentId = ref('')
-const rollbackCandidateVersions = ref([])
-
-const deployStatusSummary = computed(() => {
-  return buildDeployStatusSummary(filteredNodeList.value)
-})
-
-const projectOptions = computed(() => {
-  const projectMap = new Map()
-  nodeList.value.forEach((node) => {
-    ;(node.deployments || []).forEach((deploy) => {
-      if (!deploy?.projectId) return
-      if (!projectMap.has(deploy.projectId)) {
-        projectMap.set(deploy.projectId, {
-          id: deploy.projectId,
-          name: deploy.project?.name || deploy.projectId,
-        })
-      }
-    })
-  })
-  return Array.from(projectMap.values())
-})
-
-const nodeStatusFilterOptions = computed(() => [
-  { label: t('opsManagement.allStatus'), value: '' },
-  { label: t('opsManagement.online'), value: 'online' },
-  { label: t('opsManagement.offline'), value: 'offline' },
-  { label: t('opsManagement.abnormal'), value: 'error' },
+const enrollmentForm = reactive<{
+  role: OpsNodeRole
+  displayName: string
+  ttlMinutes: number
+  runtimeClusterId: string
+  packageId: string
+}>({ role: 'runtime_linux', displayName: '', ttlMinutes: 60, runtimeClusterId: '', packageId: '' })
+const deploymentForm = reactive<{
+  projectId: string
+  deploymentMode: 'development' | 'production'
+  runtimeClusterId: string
+  hostNodeId: string
+}>({ projectId: '', deploymentMode: 'development', runtimeClusterId: '', hostNodeId: '' })
+const navItems = computed(() => [
+  { id: 'overview' as const, label: '运维总览', count: clusters.value.length, icon: DataAnalysis },
+  { id: 'clusters' as const, label: '运行集群', count: clusters.value.length, icon: Connection },
+  { id: 'nodes' as const, label: '节点', count: nodes.value.length, icon: Monitor },
+  {
+    id: 'deployments' as const,
+    label: '工程部署',
+    count: deployments.value.length,
+    icon: FolderOpened,
+  },
 ])
-
-const selectedProjectFilterLabel = computed(() => {
-  return nodeSearch.projectName || t('projectManagement.allProjects')
-})
-
-const selectedNodeStatusLabel = computed(() => {
-  return (
-    nodeStatusFilterOptions.value.find((option) => option.value === nodeSearch.status)?.label ||
-    t('opsManagement.allStatus')
-  )
-})
-
-const setNodeProjectFilter = (value) => {
-  nodeSearch.projectName = value
-  nodePagination.page = 1
-}
-
-const setNodeStatusFilter = (value) => {
-  nodeSearch.status = value
-}
-
-const getVisibleDeployments = (node) => {
-  const deployments = Array.isArray(node?.deployments) ? node.deployments : []
-  if (!nodeSearch.projectName) {
-    return deployments
-  }
-  return deployments.filter(
-    (deploy) => (deploy.project?.name || deploy.projectId) === nodeSearch.projectName,
-  )
-}
-
-const filteredNodeList = computed(() => {
-  if (!nodeSearch.projectName) {
-    return nodeList.value
-  }
-  return nodeList.value.filter((node) => getVisibleDeployments(node).length > 0)
-})
-
-const cardGridClass = computed(() => {
-  if (filteredNodeList.value.length > 0 && filteredNodeList.value.length < 4) {
-    return 'lg:grid-cols-2 xl:grid-cols-2'
-  }
-  return 'lg:grid-cols-3 xl:grid-cols-4'
-})
-
-const nodePaginationTotalPages = computed(() => {
-  if (nodePagination.total <= 0) {
-    return 0
-  }
-  return Math.ceil(nodePagination.total / nodePagination.pageSize)
-})
-
-const nodePaginationSummary = computed(() => {
-  if (nodePagination.total <= 0) {
-    return `${t('opsManagement.totalNodes')}: 0`
-  }
-  const start = (nodePagination.page - 1) * nodePagination.pageSize + 1
-  const end = Math.min(nodePagination.page * nodePagination.pageSize, nodePagination.total)
-  return `${start}-${end} / ${t('opsManagement.totalNodes')}: ${nodePagination.total}`
-})
-
-const nodePaginationPageIndicator = computed(() =>
-  t('projectManagement.pageIndicator', {
-    page: nodePaginationTotalPages.value > 0 ? nodePagination.page : 0,
-    totalPages: nodePaginationTotalPages.value,
-  }),
+const roles = [
+  {
+    value: 'runtime_linux' as const,
+    label: 'Linux 运行节点',
+    description: '承载工程的计算和报警服务',
+    icon: Cpu,
+  },
+  {
+    value: 'collector_linux' as const,
+    label: 'Linux 采集节点',
+    description: '运行 Linux 原生采集服务',
+    icon: Connection,
+  },
+  {
+    value: 'collector_windows' as const,
+    label: 'Windows 采集节点',
+    description: '运行 Windows 原生采集服务',
+    icon: Monitor,
+  },
+]
+const availablePackages = computed(() =>
+  packages.value.filter((item) => item.role === enrollmentForm.role && item.available === true),
 )
-
-const handleNodePaginationChange = ({ page, limit }) => {
-  nodePagination.page = page
-  nodePagination.pageSize = limit
-  fetchNodes()
-}
-
-// 获取节点数据
-const fetchNodes = async () => {
-  nodeLoading.value = true
-  nodeLoadError.value = ''
-  try {
-    const res = await request.get('/nodes', {
-      params: {
-        page: nodePagination.page,
-        pageSize: nodePagination.pageSize,
-        status: nodeSearch.status || undefined,
-        search: nodeSearch.keyword || undefined,
-        approvalStatus: 'approved',
+const chosenPackage = computed(() =>
+  packages.value.find((item) => item.id === enrollmentForm.packageId),
+)
+const collectorNodes = computed(() =>
+  nodes.value.filter((node) => isSchedulableCollectorNode(node)),
+)
+const deployableRuntimeClusters = computed(() =>
+  clusters.value.filter((cluster) => isDeployableRuntimeCluster(cluster)),
+)
+const healthyClusterCount = computed(
+  () => clusters.value.filter((item) => item.health === 'healthy').length,
+)
+const healthyNodeCount = computed(
+  () => nodes.value.filter((item) => item.health === 'healthy').length,
+)
+const runningDeploymentCount = computed(
+  () => deployments.value.filter((item) => item.observedStatus === 'running').length,
+)
+const attentionCount = computed(
+  () =>
+    [...nodes.value, ...deployments.value].filter(
+      (item) => item.health === 'degraded' || item.health === 'unavailable',
+    ).length,
+)
+const workloadRows = computed<DeploymentWorkload[]>(() => {
+  const existing = selectedDeployment.value?.workloads || []
+  return (['compute', 'alert', 'collector'] as OpsWorkloadRole[]).map(
+    (role) =>
+      existing.find((item) => item.role === role) || {
+        role,
+        observedStatus: 'stopped',
+        health: 'unknown',
+        version: 'demo',
       },
-    })
-    const nodeItems = Array.isArray(res?.data?.items) ? res.data.items : []
-    nodeList.value = nodeItems
-    nodePagination.total = res?.data?.total || 0
-    approvedCount.value = res?.data?.total || 0
-    // 详细列表视图默认全展开；其他视图保持原展开态过滤。
-    const currentNodeIds = nodeItems.map((item) => item.id)
-    if (activeView.value === 'list') {
-      expandedNodeRowKeys.value = currentNodeIds
-    } else {
-      const currentNodeIdSet = new Set(currentNodeIds)
-      expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) => currentNodeIdSet.has(id))
-    }
-  } catch (error) {
-    console.error('获取节点失败:', error)
-    nodeLoadError.value = getApiErrorMessage(error, t('opsManagement.fetchNodesFailed'))
-    ElMessage.error(t('opsManagement.fetchNodesFailed'))
-  } finally {
-    nodeLoading.value = false
-  }
+  )
+})
+const metric = (value?: number) =>
+  typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)}%` : '--'
+const formatPackageSize = (bytes?: number) => {
+  if (!bytes || bytes < 1024) return bytes ? `${bytes} B` : ''
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
-
-const handleExpandChange = (row, expandedRows) => {
-  expandedNodeRowKeys.value = expandedRows.map((item) => item.id)
+const progress = (value?: number) => Math.min(100, Math.max(0, value || 0))
+const healthClass = (value?: string) => `health-dot ${value || 'unknown'}`
+const formatTime = (value?: string) =>
+  value
+    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(
+        new Date(value),
+      )
+    : '-'
+function relativeTime(value?: string) {
+  if (!value) return '尚未上报'
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
+  return minutes < 1 ? '刚刚' : minutes < 60 ? `${minutes} 分钟前` : formatTime(value)
 }
-
-// 获取待审核申请列表
-const fetchPendingList = async () => {
-  if (!canApproveNode.value) {
-    pendingList.value = []
-    pendingCount.value = 0
-    return
-  }
-  try {
-    const res = await request.get('/nodes', {
-      params: {
-        page: 1,
-        pageSize: 100, // 获取最多100条待审核记录
-        approvalStatus: 'pending',
-      },
-    })
-    pendingList.value = res?.data?.items || []
-    pendingCount.value = res?.data?.total || 0
-  } catch (error) {
-    console.error('获取待审核申请失败:', error)
-  }
-}
-
-const handleApprove = async (node) => {
-  try {
-    await request.put(`/nodes/${node.id}/approve`)
-    ElMessage.success(t('opsManagement.approvePassed'))
-    showPendingDialog.value = false
-    fetchNodes()
-    fetchPendingList() // 刷新待审核列表
-    updateCounts() // 异步刷新统计
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, t('opsManagement.approveFailed')))
-  }
-}
-
-const handleReject = (node) => {
-  ElMessageBox.confirm(t('opsManagement.rejectConfirm'), t('opsManagement.rejectConfirmTitle'), {
-    confirmButtonText: t('opsManagement.rejectConfirmBtn'),
-    cancelButtonText: t('opsManagement.cancel'),
-    type: 'warning',
-  }).then(async () => {
-    try {
-      await request.put(`/nodes/${node.id}/reject`)
-      ElMessage.warning(t('opsManagement.rejectedTip'))
-      showPendingDialog.value = false
-      fetchNodes()
-      fetchPendingList()
-      updateCounts()
-    } catch (error) {
-      ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailed')))
-    }
-  })
-}
-
-const updateCounts = async () => {
-  if (!canApproveNode.value) {
-    pendingCount.value = 0
-    return
-  }
-  try {
-    const [resApproved, resPending] = await Promise.all([
-      request.get('/nodes', {
-        params: { pageSize: 1, approvalStatus: 'approved' },
-      }),
-      request.get('/nodes', {
-        params: { pageSize: 1, approvalStatus: 'pending' },
-      }),
-    ])
-    approvedCount.value = resApproved.data.total
-    pendingCount.value = resPending.data.total
-  } catch (error) {
-    console.error('更新节点统计失败:', error)
-  }
-}
-
-// 指标获取辅助函数
-const getMetricValue = (node, type) => {
-  if (!node.metrics) return 0
-  switch (type) {
-    case 'cpu':
-      return Math.round((node.metrics.cpu || 0) * 100)
-    case 'memory':
-      return Math.round((node.metrics.memory || 0) * 100)
-    case 'disk':
-      return Math.round((node.metrics.disk || 0) * 100)
-    default:
-      return 0
-  }
-}
-
-const getDiskLabel = (node) => {
-  if (!node.metrics?.disk_label) return t('opsManagement.systemDisk')
-  return node.metrics.disk_label
-}
-
-const formatTime = (time) => (time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-')
-
-// 角色标签映射
-const getRoleTagType = (role) => {
-  const map = {
-    [RoleEnum.SUPER_ADMIN]: 'danger',
-    [RoleEnum.SYSTEM_ADMIN]: 'danger',
-    [RoleEnum.OPS_ADMIN]: 'warning',
-    [RoleEnum.PROJECT_ADMIN]: 'primary',
-    [RoleEnum.USER_ADMIN]: 'info',
-  }
-  return map[role] || 'info'
-}
-
-const getRoleLabel = (role) => {
-  return ENUM_LABELS[role] || role
-}
-
-// 运维操作
-const restartNode = (node) =>
-  ElMessage.info(t('opsManagement.restartingAgent', { name: node.name }))
-const viewNodeDetail = (node) => {
-  ElMessageBox.alert(
-    t('opsManagement.nodeDetailBody', {
-      name: node?.name || '-',
-      ip: node?.ipAddress || '-',
-      port: node?.port || '-',
-      status: getNodeStatusLabel(node?.status),
+const enrollmentTagType = (status?: string) =>
+  status === 'approved'
+    ? 'success'
+    : ['failed', 'rejected', 'expired'].includes(status || '')
+      ? 'danger'
+      : 'warning'
+const timelineType = (status?: string) =>
+  status === 'failed'
+    ? 'danger'
+    : ['running', 'completed', 'observed'].includes(status || '')
+      ? 'success'
+      : 'primary'
+async function reloadAll() {
+  loading.value = true
+  loadError.value = ''
+  const results = await Promise.allSettled([
+    opsAPI.listRuntimeClusters({ page: clusterPager.page, pageSize: clusterPager.pageSize }),
+    opsAPI.listHostNodes({ page: nodePager.page, pageSize: nodePager.pageSize }),
+    opsAPI.listEnrollments({ page: 1, pageSize: 20 }),
+    opsAPI.listNodePackages({ pageSize: 100 }),
+    opsAPI.listProjectDeployments({
+      page: deploymentPager.page,
+      pageSize: deploymentPager.pageSize,
     }),
-    t('opsManagement.nodeDetailTitle'),
-    { confirmButtonText: t('opsManagement.close') },
-  )
+  ])
+  const [a, b, c, d, e] = results
+  if (a.status === 'fulfilled') {
+    clusters.value = a.value.items
+    clusterPager.total = a.value.total
+  }
+  if (b.status === 'fulfilled') {
+    nodes.value = b.value.items
+    nodePager.total = b.value.total
+  }
+  if (c.status === 'fulfilled') enrollments.value = c.value.items
+  if (d.status === 'fulfilled') packages.value = d.value.items
+  if (e.status === 'fulfilled') {
+    deployments.value = e.value.items
+    deploymentPager.total = e.value.total
+  }
+  const failed = results.find((result) => result.status === 'rejected')
+  if (failed?.status === 'rejected')
+    loadError.value = getApiErrorMessage(failed.reason, '部分运行状态暂时无法加载')
+  loading.value = false
 }
-const deleteNode = async (node) => {
+function openEnrollment(clusterId = '') {
+  wizardStep.value = 0
+  activeEnrollment.value = null
+  enrollmentForm.role = 'runtime_linux'
+  enrollmentForm.displayName = ''
+  enrollmentForm.runtimeClusterId = clusterId || clusters.value[0]?.id || ''
+  enrollmentForm.packageId = packages.value.find((item) => item.role === 'runtime_linux')?.id || ''
+  wizardDialog.value = true
+}
+async function createCluster() {
+  if (!clusterForm.name.trim() || !clusterForm.code.trim())
+    return ElMessage.warning('请填写运行集群名称和编码')
+  submitting.value = true
   try {
-    await ElMessageBox.confirm(
-      t('opsManagement.nodeDeleteConfirm', { name: node.name }),
-      t('opsManagement.warning'),
-      { type: 'warning' },
-    )
-    await request.delete(`/nodes/${node.id}`, { skipPermissionToast: true })
-    ElMessage.success(t('opsManagement.nodeDeleted'))
-    fetchNodes()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, t('opsManagement.nodeDeleteFailed')))
-    }
-  }
-}
-
-const openProjectManagement = () => {
-  emit('open-tab', 'project-management')
-}
-
-/**
- * 打开待审核申请弹窗并刷新数据。
- */
-const openPendingRequestsDialog = async () => {
-  if (!canApproveNode.value) return
-  await fetchPendingList()
-  showPendingDialog.value = true
-}
-
-const toTimestamp = (value) => {
-  if (!value) return 0
-  const ts = new Date(value).getTime()
-  return Number.isNaN(ts) ? 0 : ts
-}
-
-const sortCommandTimeline = (commands = []) => {
-  return [...commands].sort((a, b) => {
-    const aTs = toTimestamp(a.requestedAt || a.issuedAt || a.createdAt || a.updatedAt)
-    const bTs = toTimestamp(b.requestedAt || b.issuedAt || b.createdAt || b.updatedAt)
-    return bTs - aTs
-  })
-}
-
-const getInFlightCommandType = (deploy) => {
-  const commands = Array.isArray(deploy?.commands) ? deploy.commands : []
-  const activeCommands = commands.filter((item) =>
-    ['pending', 'issued', 'acknowledged'].includes(item?.status),
-  )
-  if (activeCommands.length === 0) return ''
-  const latest = sortCommandTimeline(activeCommands)[0]
-  return latest?.type || ''
-}
-
-const getDeployDisplayLabel = (deploy) => {
-  const status = deploy?.status
-  const activeType = getInFlightCommandType(deploy)
-  if (activeType === 'stop') return t('opsManagement.stopping')
-  if (activeType === 'restart') return t('opsManagement.restarting')
-  if (activeType === 'start') return t('opsManagement.starting')
-  if (status === 'deploying') {
-    return t('opsManagement.deploying')
-  }
-  return getDeployLabelByStatus(status)
-}
-
-// 新增：启动工程
-const handleStartProject = async (deploy) => {
-  try {
-    await request.post(`/deployments/node-deployment/${deploy.id}/start`)
-    ElMessage.success(t('opsManagement.startIssued'))
-    fetchNodes()
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, t('opsManagement.startFailed')))
-  }
-}
-
-// 新增：停止工程
-const handleStopProject = async (deploy) => {
-  try {
-    await ElMessageBox.confirm(
-      t('opsManagement.stopConfirm', { name: deploy.project?.name }),
-      t('opsManagement.stopConfirmTitle'),
-      { type: 'warning' },
-    )
-    await request.post(`/deployments/node-deployment/${deploy.id}/stop`)
-    ElMessage.success(t('opsManagement.stopIssued'))
-    fetchNodes()
-  } catch (error) {
-    if (error !== 'cancel')
-      ElMessage.error(getApiErrorMessage(error, t('opsManagement.stopFailed')))
-  }
-}
-
-// 新增：查看日志
-const handleViewLog = (deploy) => {
-  currentDeployment.value = deploy
-  logContent.value = deploy.deployLog || []
-  commandTimeline.value = sortCommandTimeline(Array.isArray(deploy.commands) ? deploy.commands : [])
-  showLogDialog.value = true
-}
-
-const getCommandStatusType = (status) => {
-  if (status === 'completed') return 'success'
-  if (status === 'failed' || status === 'dead_letter') return 'danger'
-  if (status === 'pending' || status === 'issued' || status === 'acknowledged') return 'warning'
-  return 'info'
-}
-
-const getCommandStatusLabel = (status) => {
-  const map = {
-    pending: t('opsManagement.commandPending'),
-    issued: t('opsManagement.commandIssued'),
-    acknowledged: t('opsManagement.commandAck'),
-    completed: t('opsManagement.commandCompleted'),
-    failed: t('opsManagement.commandFailed'),
-    dead_letter: t('opsManagement.commandDeadLetter'),
-  }
-  return map[status] || status
-}
-
-const openFailureDetail = (deploy) => {
-  failedDeployment.value = deploy
-  failedDeployLogs.value = Array.isArray(deploy?.deployLog) ? deploy.deployLog.slice(-50) : []
-  showFailureDrawer.value = true
-}
-
-const isRuntimeActiveDeploy = (status) => {
-  return ['pending', 'deploying', 'running'].includes(status)
-}
-
-const getDeployModeLabel = (mode) => {
-  if (mode === 'DEV') return t('projectManagement.modeDisplayDev')
-  if (mode === 'RELEASE') return t('projectManagement.modeDisplayRelease')
-  return mode || '-'
-}
-
-// 新增：重启工程
-const handleRestartProject = async (deploy) => {
-  try {
-    await ElMessageBox.confirm(
-      t('opsManagement.restartConfirm', { name: deploy.project?.name }),
-      t('opsManagement.restartConfirmTitle'),
-      { type: 'warning' },
-    )
-    await request.post(`/deployments/node-deployment/${deploy.id}/restart`)
-    ElMessage.success(t('opsManagement.restartIssued'))
-    fetchNodes()
-  } catch (error) {
-    if (error !== 'cancel')
-      ElMessage.error(getApiErrorMessage(error, t('opsManagement.restartFailed')))
-  }
-}
-
-/**
- * 打开回滚弹窗并加载可回滚版本。
- * @param {object} deploy - 当前部署对象
- * @returns {Promise<void>}
- */
-const handleRollback = async (deploy) => {
-  if (deploy.mode === 'DEV') {
-    return ElMessage.warning(t('opsManagement.rollbackUnsupported'))
-  }
-
-  try {
-    rollbackSourceDeploy.value = deploy
-    rollbackTargetDeploymentId.value = ''
-    rollbackCandidateVersions.value = []
-    showRollbackDialog.value = true
-    rollbackDialogLoading.value = true
-
-    const projectId = deploy?.projectId || deploy?.project?.id
-    if (!projectId) {
-      throw new Error(t('opsManagement.rollbackProjectMissing'))
-    }
-
-    const res = await request.get(`/publish/${projectId}/versions`, {
-      params: { page: 1, pageSize: 200 },
+    const cluster = await opsAPI.createRuntimeCluster({
+      ...clusterForm,
+      name: clusterForm.name.trim(),
+      code: clusterForm.code.trim(),
     })
-    const payload = res?.data ?? res
-    const data = payload?.data || payload || {}
-    const allItems = Array.isArray(data.items) ? data.items : []
-    const candidates = allItems
-      .filter((item) => item?.mode === 'RELEASE')
-      .filter((item) => item?.status === 'success')
-      .filter((item) => item?.id !== deploy?.deploymentId)
-      .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
-    rollbackCandidateVersions.value = candidates
-
-    if (candidates.length === 0) {
-      ElMessage.warning(t('opsManagement.rollbackNoCandidates'))
-    } else {
-      rollbackTargetDeploymentId.value = candidates[0].id
-    }
+    clusters.value = [cluster, ...clusters.value]
+    enrollmentForm.runtimeClusterId = cluster.id
+    clusterDialog.value = false
+    clusterForm.name = ''
+    clusterForm.code = ''
+    clusterForm.description = ''
+    ElMessage.success('运行集群已创建，请继续创建接入任务')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, t('opsManagement.rollbackLoadFailed')))
-    showRollbackDialog.value = false
+    ElMessage.error(getApiErrorMessage(error, '创建运行集群失败'))
   } finally {
-    rollbackDialogLoading.value = false
+    submitting.value = false
   }
 }
-
-/**
- * 执行回滚。
- * @returns {Promise<void>}
- */
-const confirmRollback = async () => {
-  const deploy = rollbackSourceDeploy.value
-  if (!deploy || !rollbackTargetDeploymentId.value) {
-    return ElMessage.warning(t('opsManagement.rollbackSelectRequired'))
-  }
-  if (!deploy.nodeId) {
-    return ElMessage.warning(t('opsManagement.rollbackNodeMissing'))
-  }
-
+async function createEnrollment() {
+  if (!enrollmentForm.displayName.trim()) return ElMessage.warning('请填写节点显示名称')
+  if (enrollmentForm.role === 'runtime_linux' && !enrollmentForm.runtimeClusterId)
+    return ElMessage.warning('请选择运行集群')
+  if (!enrollmentForm.packageId) return ElMessage.warning('请选择节点安装包')
+  submitting.value = true
   try {
-    await ElMessageBox.confirm(
-      t('opsManagement.rollbackConfirmSelected'),
-      t('opsManagement.rollbackConfirmTitle'),
-      { type: 'warning' },
-    )
-
-    rollbackSubmitLoading.value = true
-    await request.post(`/deployments/${rollbackTargetDeploymentId.value}/rollback`, {
-      nodeId: deploy.nodeId,
+    const task = await opsAPI.createEnrollment({
+      role: enrollmentForm.role,
+      displayName: enrollmentForm.displayName.trim(),
+      ttlMinutes: enrollmentForm.ttlMinutes,
+      runtimeClusterId:
+        enrollmentForm.role === 'runtime_linux' ? enrollmentForm.runtimeClusterId : null,
+      packageId: enrollmentForm.packageId,
     })
-    ElMessage.success(t('opsManagement.rollbackCreated'))
-    showRollbackDialog.value = false
-    await fetchNodes()
+    activeEnrollment.value = task
+    enrollments.value = [task, ...enrollments.value.filter((item) => item.id !== task.id)]
+    wizardStep.value = 1
+    startEnrollmentPolling()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, t('opsManagement.rollbackFailed')))
-    }
+    ElMessage.error(getApiErrorMessage(error, '创建接入任务失败'))
   } finally {
-    rollbackSubmitLoading.value = false
+    submitting.value = false
   }
 }
-
-// 新增：撤销部署
-const handleUndeploy = async (deploy) => {
+async function refreshEnrollment() {
+  if (!activeEnrollment.value) return
   try {
-    const confirmMessageKey = isRuntimeActiveDeploy(deploy?.status)
-      ? 'opsManagement.undeployConfirmRunning'
-      : 'opsManagement.undeployConfirmStopped'
-
-    await ElMessageBox.confirm(
-      t(confirmMessageKey, { name: deploy.project?.name }),
-      t('opsManagement.undeployConfirmTitle'),
-      { type: 'warning' },
-    )
-
-    await request.delete(`/deployments/node-deployment/${deploy.id}`)
-    ElMessage.success(t('opsManagement.undeploySuccess'))
-    fetchNodes()
+    const task = await opsAPI.getEnrollment(activeEnrollment.value.id)
+    const mergedTask = {
+      ...activeEnrollment.value,
+      ...task,
+      enrollmentCode: activeEnrollment.value.enrollmentCode,
+      packageId: activeEnrollment.value.packageId,
+      packageName: activeEnrollment.value.packageName,
+    }
+    activeEnrollment.value = mergedTask
+    enrollments.value = [mergedTask, ...enrollments.value.filter((item) => item.id !== task.id)]
+    if (task.status === 'approved') await reloadAll()
   } catch (error) {
-    if (error !== 'cancel')
-      ElMessage.error(getApiErrorMessage(error, t('opsManagement.undeployFailed')))
+    ElMessage.error(getApiErrorMessage(error, '刷新接入状态失败'))
   }
 }
-
-// WebSocket 实时处理
-const setupRealtimeUpdates = () => {
-  const tenantId = Storage.getTenantId() || 'default'
-  const socket = initSocket(tenantId)
-
-  // 监听节点指标更新
-  socket.on('ops:node:metrics', (data) => {
-    const node = nodeList.value.find((n) => n.id === data.nodeId)
-    if (node) {
-      node.metrics = data.metrics
-      node.lastHeartbeatAt = data.timestamp
-    }
-  })
-
-  // 监听节点状态变化
-  socket.on('ops:node:status', (data) => {
-    const node = nodeList.value.find((n) => n.id === data.nodeId)
-    if (node) {
-      node.status = data.status
-      node.lastHeartbeatAt = data.timestamp
-    }
-  })
-
-  // 监听工程指标更新
-  socket.on('ops:project:metrics', (data) => {
-    const node = nodeList.value.find((n) => n.id === data.nodeId)
-    if (node) {
-      const deploy = node.deployments?.find((d) => d.projectId === data.projectId)
-      if (deploy) {
-        deploy.runtimeMetrics = data.metrics
-      }
-    }
-  })
-
-  socket.on('ops:deploy:status', (data) => {
-    const node = nodeList.value.find((n) => n.id === data.nodeId)
-    if (!node || !Array.isArray(node.deployments)) {
-      return
-    }
-    if (data.removed) {
-      node.deployments = node.deployments.filter((d) => d.id !== data.deploymentId)
-      return
-    }
-    const deploy = node.deployments.find((d) => d.id === data.deploymentId)
-    if (!deploy) {
-      return
-    }
-    deploy.status = data.status || deploy.status
-    if (data.startedAt) {
-      deploy.startedAt = data.startedAt
-    }
-    if (data.stoppedAt) {
-      deploy.stoppedAt = data.stoppedAt
-    }
-    if (data.errorMessage) {
-      deploy.errorMessage = data.errorMessage
-    }
-
-    const ack = data.commandAck
-    if (!ack || !Array.isArray(deploy.commands)) {
-      return
-    }
-    const command = deploy.commands.find((item) => item.id === ack.id)
-    if (!command) {
-      return
-    }
-    command.status = ack.status || command.status
-    command.acknowledgedAt = ack.acknowledgedAt || command.acknowledgedAt
-    command.completedAt = ack.completedAt || command.completedAt
-    command.lastError = ack.lastError || null
-    command.updatedAt = ack.completedAt || ack.acknowledgedAt || command.updatedAt
-
-    if (currentDeployment.value?.id === deploy.id) {
-      commandTimeline.value = sortCommandTimeline(deploy.commands)
-    }
-  })
-
-  // 监听新的待审核节点注册申请
-  if (canApproveNode.value) {
-    socket.on('ops:node:pending', async (data = {}) => {
-      console.log('[OpsManagement][WS] 收到待审核事件:', data)
-      await fetchPendingList()
-    })
+async function approveEnrollment(task: NodeEnrollment) {
+  const fingerprint = task.machineFingerprint || '未提供'
+  try {
+    await ElMessageBox.confirm(
+      `请确认主机“${task.reportedHostName || task.displayName || task.id}”及机器指纹“${fingerprint}”可信。确认后节点将加入平台。`,
+      '确认节点接入',
+      { type: 'warning', confirmButtonText: '确认接入', cancelButtonText: '取消' },
+    )
+    const approved = await opsAPI.approveEnrollment(task.id)
+    enrollments.value = enrollments.value.map((item) => (item.id === approved.id ? approved : item))
+    ElMessage.success('节点已确认接入')
+    await reloadAll()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(getApiErrorMessage(error, '确认节点接入失败'))
   }
 }
-
-/**
- * 初始化运维页面视图模式（持久化）。
- * @returns {void}
- */
-const initActiveViewMode = () => {
-  const storedMode = window.localStorage.getItem(OPS_VIEW_MODE_STORAGE_KEY)
-  if (storedMode === 'dashboard' || storedMode === 'list') {
-    activeView.value = storedMode
+async function rejectEnrollment(task: NodeEnrollment) {
+  try {
+    await ElMessageBox.confirm(
+      '拒绝后该节点不能使用当前接入码继续注册。确定拒绝吗？',
+      '拒绝节点接入',
+      { type: 'warning', confirmButtonText: '拒绝', cancelButtonText: '取消' },
+    )
+    const rejected = await opsAPI.rejectEnrollment(task.id)
+    enrollments.value = enrollments.value.map((item) => (item.id === rejected.id ? rejected : item))
+    ElMessage.success('已拒绝节点接入')
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(getApiErrorMessage(error, '拒绝节点接入失败'))
   }
 }
-
-const handleSetProjectFilter = async (event) => {
-  const projectName = event?.detail?.projectName || ''
-  const projectId = event?.detail?.projectId || ''
-  if (projectName) {
-    nodeSearch.projectName = projectName
-  } else if (projectId) {
-    // 兼容旧事件：若仅传 projectId，尝试映射为工程名称。
-    let matchedName = ''
-    nodeList.value.forEach((node) => {
-      ;(node.deployments || []).forEach((deploy) => {
-        if (!matchedName && deploy.projectId === projectId) {
-          matchedName = deploy.project?.name || deploy.projectId
+async function loadProjectOptions(keyword = '') {
+  projectOptionsLoading.value = true
+  try {
+    const response = await projectAPI.getProjects({ page: 1, limit: 20, name: keyword })
+    const payload = (response as { data?: unknown }).data ?? response
+    const source = payload as
+      | {
+          projects?: Array<{ id?: string; name?: string }>
+          items?: Array<{ id?: string; name?: string }>
+          list?: Array<{ id?: string; name?: string }>
         }
-      })
-    })
-    nodeSearch.projectName = matchedName
-  } else {
-    nodeSearch.projectName = ''
+      | Array<{ id?: string; name?: string }>
+    const items = Array.isArray(source)
+      ? source
+      : source.projects || source.items || source.list || []
+    projectOptions.value = items
+      .filter((item) => item.id && item.name)
+      .map((item) => ({ id: String(item.id), name: String(item.name) }))
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载可访问工程失败'))
+  } finally {
+    projectOptionsLoading.value = false
   }
-  nodePagination.page = 1
-  await fetchNodes()
 }
-
-// 挂载与卸载
-onMounted(async () => {
-  initActiveViewMode()
-  await fetchNodes()
-  if (canApproveNode.value) {
-    fetchPendingList()
-    updateCounts()
+function loadProjectOptionsOnVisible(visible: boolean) {
+  if (visible && projectOptions.value.length === 0) void loadProjectOptions()
+}
+function startEnrollmentPolling() {
+  if (enrollmentTimer) clearInterval(enrollmentTimer)
+  enrollmentTimer = setInterval(() => {
+    if (wizardDialog.value && activeEnrollment.value) void refreshEnrollment()
+  }, 10000)
+}
+function contentDispositionFileName(value?: string) {
+  const encoded = value?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encoded) return decodeURIComponent(encoded)
+  const plain = value?.match(/filename="?([^";]+)"?/i)?.[1]
+  return plain || ''
+}
+async function downloadPackage(id?: string) {
+  if (!id) return
+  try {
+    const response = (await opsAPI.downloadNodePackage(id)) as unknown as {
+      data: Blob
+      headers?: Record<string, string>
+    }
+    const url = URL.createObjectURL(response.data)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download =
+      contentDispositionFileName(response.headers?.['content-disposition']) ||
+      chosenPackage.value?.fileName ||
+      chosenPackage.value?.name ||
+      'induforge-node-package'
+    anchor.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('安装包下载已开始')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '下载安装包失败'))
   }
-  setupRealtimeUpdates()
-  window.addEventListener('ops:open-pending-requests', openPendingRequestsDialog)
-  window.addEventListener('ops:set-project-filter', handleSetProjectFilter)
+}
+async function copyCode() {
+  if (!activeEnrollment.value?.enrollmentCode) return
+  try {
+    await navigator.clipboard.writeText(activeEnrollment.value.enrollmentCode)
+    ElMessage.success('接入码已复制')
+  } catch {
+    ElMessage.warning('复制失败，请手动复制接入码')
+  }
+}
+async function createDeployment() {
+  if (!deploymentForm.projectId || !deploymentForm.runtimeClusterId)
+    return ElMessage.warning('请选择工程并选择运行集群')
+  if (
+    !deployableRuntimeClusters.value.some(
+      (cluster) => cluster.id === deploymentForm.runtimeClusterId,
+    )
+  )
+    return ElMessage.warning('请选择已就绪的单节点运行集群')
+  if (!deploymentForm.hostNodeId) return ElMessage.warning('请选择采集节点，以启动采集演示服务')
+  submitting.value = true
+  try {
+    const deployment = await opsAPI.createProjectDeployment({
+      projectId: deploymentForm.projectId.trim(),
+      runtimeClusterId: deploymentForm.runtimeClusterId,
+      deploymentMode: deploymentForm.deploymentMode,
+      workloads: [
+        { role: 'compute' },
+        { role: 'alert' },
+        { role: 'collector', hostNodeId: deploymentForm.hostNodeId },
+      ],
+    })
+    deployments.value = [deployment, ...deployments.value]
+    deploymentDialog.value = false
+    deploymentForm.projectId = ''
+    deploymentForm.hostNodeId = ''
+    ElMessage.success('发布任务已创建')
+    await openDeploymentDetail(deployment)
+    if (deployment.runId) startDeploymentRunPolling(deployment.runId)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '创建工程部署失败'))
+  } finally {
+    submitting.value = false
+  }
+}
+async function openDeploymentDetail(deployment: ProjectDeployment) {
+  stopDeploymentRunPolling()
+  activeDeploymentRunId.value = ''
+  deploymentRunPollingState.value = 'idle'
+  selectedDeployment.value = deployment
+  deploymentDetailDialog.value = true
+  runEvents.value = []
+  try {
+    selectedDeployment.value = await opsAPI.getProjectDeployment(deployment.id)
+    if (selectedDeployment.value.runId) startDeploymentRunPolling(selectedDeployment.value.runId)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载部署详情失败'))
+  }
+}
+async function operateWorkload(role: OpsWorkloadRole, action: OpsWorkloadAction) {
+  if (
+    !selectedDeployment.value ||
+    workloadActionKey.value ||
+    isDeploymentPending(selectedDeployment.value.observedStatus)
+  )
+    return
+  workloadActionKey.value = `${role}:${action}`
+  try {
+    const run = await opsAPI.runWorkloadAction(selectedDeployment.value.id, role, action)
+    runEvents.value = sortRunEvents([...(run?.events || []), ...runEvents.value])
+    ElMessage.success(
+      `${workloadRoleLabel[role]}${action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启'}任务已提交`,
+    )
+    selectedDeployment.value = await opsAPI.getProjectDeployment(selectedDeployment.value.id)
+    deployments.value = deployments.value.map((item) =>
+      item.id === selectedDeployment.value?.id ? selectedDeployment.value! : item,
+    )
+    if (run?.id) startDeploymentRunPolling(run.id)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '服务操作提交失败'))
+  } finally {
+    workloadActionKey.value = ''
+  }
+}
+function workloadActionDisabled(workload: DeploymentWorkload, action: OpsWorkloadAction) {
+  if (
+    workloadActionKey.value ||
+    deploymentRunPollingState.value !== 'idle' ||
+    isDeploymentPending(selectedDeployment.value?.observedStatus)
+  )
+    return true
+  const status = String(workload.observedStatus || '').toLowerCase()
+  if (['pending', 'starting', 'stopping'].includes(status)) return true
+  if (action === 'start') return status === 'running'
+  return status !== 'running'
+}
+async function refreshDeploymentAfterRun() {
+  if (!selectedDeployment.value) return
+  selectedDeployment.value = await opsAPI.getProjectDeployment(selectedDeployment.value.id)
+  deployments.value = deployments.value.map((item) =>
+    item.id === selectedDeployment.value?.id ? selectedDeployment.value! : item,
+  )
+}
+async function refreshDeploymentDetail() {
+  if (!selectedDeployment.value) return
+  refreshingDeployment.value = true
+  try {
+    await refreshDeploymentAfterRun()
+    ElMessage.success('部署详情已刷新')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '刷新部署详情失败'))
+  } finally {
+    refreshingDeployment.value = false
+  }
+}
+async function syncDeploymentRun(runId: string) {
+  const [run, eventResult] = await Promise.all([
+    opsAPI.getDeploymentRun(runId),
+    opsAPI.listDeploymentRunEvents(runId),
+  ])
+  runEvents.value = sortRunEvents(eventResult.items)
+  await refreshDeploymentAfterRun()
+  return isDeploymentRunActive(run.status, run.completedAt)
+}
+function stopDeploymentRunPolling() {
+  if (deploymentRunTimer) clearInterval(deploymentRunTimer)
+  deploymentRunTimer = undefined
+}
+function completeDeploymentRunPolling() {
+  stopDeploymentRunPolling()
+  activeDeploymentRunId.value = ''
+  deploymentRunPollingState.value = 'idle'
+}
+function pauseDeploymentRunPolling() {
+  stopDeploymentRunPolling()
+  deploymentRunPollingState.value = 'timed_out'
+}
+async function refreshDeploymentRun() {
+  const runId = activeDeploymentRunId.value
+  if (!runId) return
+  refreshingRun.value = true
+  try {
+    if (await syncDeploymentRun(runId)) {
+      deploymentRunPollingState.value = 'timed_out'
+      ElMessage.info('任务仍在执行，请稍后继续刷新')
+    } else {
+      completeDeploymentRunPolling()
+      ElMessage.success('任务已完成，详情已同步')
+    }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '刷新任务状态失败'))
+  } finally {
+    refreshingRun.value = false
+  }
+}
+function startDeploymentRunPolling(runId: string) {
+  stopDeploymentRunPolling()
+  activeDeploymentRunId.value = runId
+  deploymentRunPollingState.value = 'polling'
+  let attempt = 0
+  const poll = async () => {
+    attempt += 1
+    try {
+      if (!(await syncDeploymentRun(runId))) return completeDeploymentRunPolling()
+      if (attempt >= 30) return pauseDeploymentRunPolling()
+    } catch {
+      if (attempt >= 3) pauseDeploymentRunPolling()
+    }
+  }
+  void poll()
+  deploymentRunTimer = setInterval(() => void poll(), 2000)
+}
+watch(
+  () => enrollmentForm.role,
+  () => {
+    enrollmentForm.packageId = availablePackages.value[0]?.id || ''
+    if (enrollmentForm.role !== 'runtime_linux') enrollmentForm.runtimeClusterId = ''
+  },
+)
+watch(wizardDialog, (visible) => {
+  if (!visible && enrollmentTimer) {
+    clearInterval(enrollmentTimer)
+    enrollmentTimer = undefined
+  }
 })
-
+watch(deploymentDetailDialog, (visible) => {
+  if (!visible) completeDeploymentRunPolling()
+})
+onMounted(() => {
+  void reloadAll()
+})
 onBeforeUnmount(() => {
-  // 注意：此处不推荐直接 closeSocket，因为其他组件可能还在使用
-  // 但可以取消事件监听
-  const socket = getSocket()
-  if (socket) {
-    socket.off('ops:node:metrics')
-    socket.off('ops:node:status')
-    socket.off('ops:project:metrics')
-    socket.off('ops:deploy:status')
-    socket.off('ops:node:pending')
-  }
-  if (searchDebounceTimer.value) {
-    window.clearTimeout(searchDebounceTimer.value)
-    searchDebounceTimer.value = null
-  }
-  window.removeEventListener('ops:open-pending-requests', openPendingRequestsDialog)
-  window.removeEventListener('ops:set-project-filter', handleSetProjectFilter)
+  if (enrollmentTimer) clearInterval(enrollmentTimer)
+  stopDeploymentRunPolling()
 })
-
-watch(
-  () => nodeSearch.status,
-  () => {
-    nodePagination.page = 1
-    fetchNodes()
-  },
-)
-
-watch(
-  () => nodeSearch.keyword,
-  () => {
-    if (searchDebounceTimer.value) {
-      window.clearTimeout(searchDebounceTimer.value)
-    }
-    searchDebounceTimer.value = window.setTimeout(() => {
-      nodePagination.page = 1
-      fetchNodes()
-    }, 800)
-  },
-)
-
-watch(
-  () => activeView.value,
-  (val) => {
-    if (val === 'dashboard' || val === 'list') {
-      window.localStorage.setItem(OPS_VIEW_MODE_STORAGE_KEY, val)
-      if (val === 'list') {
-        expandedNodeRowKeys.value = filteredNodeList.value.map((node) => node.id)
-      }
-    }
-  },
-)
 </script>
 
 <style scoped>
-.ops-management {
+.ops-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 18px;
+  overflow: auto;
+  padding: 24px;
+  background: #f5f7fb;
+  color: #263852;
+}
+.ops-page h1,
+.ops-page h2,
+.ops-page h3,
+.ops-page p {
+  margin: 0;
+}
+.ops-page h1 {
+  font-size: 24px;
+}
+.ops-page h2 {
+  font-size: 17px;
+}
+.ops-page h3 {
+  font-size: 15px;
+}
+.eyebrow {
+  color: #4772c8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.subtitle,
+.section-heading p,
+.panel header p,
+.drawer-hint {
+  margin-top: 5px !important;
+  color: #77869b;
+  font-size: 13px;
+}
+.form-field-hint {
+  margin: 7px 0 0;
+  color: #77869b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.form-field-hint.is-warning {
+  color: #a26a15;
+}
+.ops-page__header,
+.header-actions,
+.section-heading,
+.panel header,
+.resource-card header,
+.resource-card footer,
+.wizard footer,
+.download-actions,
+.deployment-summary,
+.workload-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.header-actions {
+  flex-wrap: wrap;
+}
+.ops-nav {
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #e0e7f0;
+  border-radius: 14px;
+  background: #fff;
+}
+.ops-nav button {
+  display: flex;
+  min-width: 130px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
   background: transparent;
+  color: #637288;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
 }
-
-.node-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.ops-nav button small {
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: #edf1f7;
+  font-size: 11px;
 }
-
-.node-card:hover {
-  transform: translateY(-4px);
+.ops-nav button.active {
+  background: #eaf1ff;
+  color: #1d4ed8;
+  font-weight: 700;
 }
-
-.ops-pagination-bar {
-  justify-content: flex-end;
+.onboarding {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid #cfe0ff;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #eff6ff, #fff);
 }
-
-:deep(.el-table) {
-  border-radius: var(--ck-radius-md);
-  background: var(--ck-bg-secondary);
+.onboarding-icon {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  place-items: center;
+  border-radius: 18px;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 30px;
 }
-
-:deep(.el-table th) {
-  height: 48px;
-  background-color: #f4f6f9 !important;
-  color: var(--ck-text-secondary) !important;
+.onboarding > div {
+  flex: 1;
+}
+.onboarding h2 {
+  margin: 5px 0 8px;
+}
+.onboarding p:not(.eyebrow) {
+  margin-bottom: 16px;
+  color: #58677d;
+  line-height: 1.7;
+}
+.onboarding ol {
+  display: grid;
+  min-width: 210px;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: #53637a;
+}
+.onboarding li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.onboarding b {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 12px;
+}
+.content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.stats article,
+.panel,
+.resource-card,
+.table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(31, 53, 84, 0.035);
+}
+.stats article {
+  padding: 17px;
+}
+.stats span,
+.stats small {
+  display: block;
+  color: #78869a;
+  font-size: 12px;
+}
+.stats b {
+  display: block;
+  margin: 7px 0 4px;
+  color: #263c63;
+  font-size: 28px;
+}
+.stats .attention b {
+  color: #c56e0b;
+}
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.panel {
+  min-height: 205px;
+  padding: 18px;
+}
+.mini-list,
+.enrollment-list {
+  display: grid;
+  gap: 8px;
+}
+.mini-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.mini-list small,
+.enrollment-list small {
+  color: #7d899a;
+  font-size: 12px;
+}
+.enrollment-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid #edf1f5;
+  color: #758297;
+  font-size: 12px;
+}
+.enrollment-list b {
+  color: #2f60b5;
+  font-size: 13px;
+}
+.enrollment-list small {
+  grid-column: 1/-1;
+}
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 14px;
+}
+.resource-card {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  padding: 18px;
+}
+.resource-card header > div,
+.node-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.resource-card p {
+  flex: 1;
+  margin: 14px 0;
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.resource-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.resource-card dt {
+  color: #93a0b1;
+  font-size: 11px;
+}
+.resource-card dd {
+  margin: 4px 0 0;
+  color: #34445e;
+  font-size: 12px;
   font-weight: 600;
-  border-bottom: 1px solid var(--ck-border-light) !important;
 }
-
-:deep(.el-table td) {
-  border-bottom: 1px solid var(--ck-border-light);
+.resource-card footer {
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
 }
-
-:deep(.el-table__row:hover > td.el-table__cell) {
-  background-color: var(--ck-bg-hover);
+.resource-card footer small {
+  color: #91a0b4;
+  font-size: 11px;
 }
-
-:deep(.el-progress-circle) {
-  margin: 0 auto;
+.create-card {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed #b6c9e9;
+  border-radius: 14px;
+  background: #f9fbff;
+  color: #3f6fbe;
+  cursor: pointer;
+  font: inherit;
 }
-
-:deep(.el-card__header) {
-  padding: 12px 16px;
+.create-card .el-icon {
+  font-size: 28px;
+}
+.create-card span {
+  color: #8190a6;
+  font-size: 12px;
+}
+.table-wrap {
+  overflow: hidden;
+}
+.node-name b,
+.node-name small {
+  display: block;
+}
+.node-name small {
+  margin-top: 3px;
+  color: #8793a5;
+  font-size: 12px;
+}
+.metrics,
+.service-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #5d6c80;
+  font-size: 12px;
+}
+.health-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: #9aa6b8;
+}
+.health-dot.healthy {
+  background: #27a56b;
+  box-shadow: 0 0 0 3px #e1f7eb;
+}
+.health-dot.degraded {
+  background: #e2a02d;
+  box-shadow: 0 0 0 3px #fff3d7;
+}
+.health-dot.unavailable {
+  background: #d65757;
+  box-shadow: 0 0 0 3px #fde8e8;
+}
+.wizard {
+  min-height: 380px;
+  padding: 22px 4px 0;
+}
+.wizard > h3 {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
+.wizard > p {
+  margin-bottom: 20px;
+  color: #738095;
+  font-size: 13px;
+}
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.role-grid button {
+  display: flex;
+  min-height: 145px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #dfe6f0;
+  border-radius: 13px;
+  background: #fff;
+  color: #4d5d73;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.role-grid .el-icon {
+  color: #5275b9;
+  font-size: 23px;
+}
+.role-grid b {
+  color: #2f405b;
+}
+.role-grid span {
+  font-size: 12px;
+  line-height: 1.55;
+}
+.role-grid button.selected {
+  border-color: #5a82d4;
+  background: #f2f6ff;
+  box-shadow: 0 0 0 3px #e5efff;
+}
+.wizard-form {
+  margin-top: 20px;
+}
+.wizard-form small {
+  display: block;
+  margin-top: 7px;
+  color: #8a97a9;
+  font-size: 12px;
+}
+.wizard footer {
+  margin-top: 24px;
+}
+.success {
+  padding-top: 4px;
+}
+.enrollment-result {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e4e9f0;
+  border-radius: 12px;
+  background: #e4e9f0;
+}
+.enrollment-result > div {
+  min-height: 72px;
+  padding: 13px;
+  background: #fff;
+}
+.enrollment-result span,
+.enrollment-result b,
+.enrollment-result code,
+.enrollment-result small {
+  display: block;
+}
+.enrollment-result span,
+.enrollment-result small {
+  color: #7d899a;
+  font-size: 12px;
+}
+.enrollment-result b,
+.enrollment-result code {
+  margin: 6px 0;
+  color: #2e405e;
+  font-size: 13px;
+}
+.enrollment-result code {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+.download-actions {
+  justify-content: center;
+  margin-top: 18px;
+}
+.install-hint {
+  margin-top: 10px !important;
+  color: #748196;
+  font-size: 12px;
+  text-align: center;
+}
+.deployment-summary {
+  margin-bottom: 24px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f5f8fc;
+}
+.deployment-summary b,
+.deployment-summary small,
+.workload-list b,
+.workload-list span {
+  display: block;
+}
+.deployment-summary small,
+.workload-list span {
+  margin-top: 4px;
+  color: #748196;
+  font-size: 12px;
+}
+.workload-list {
+  display: grid;
+  gap: 9px;
+}
+.workload-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 13px;
+  border: 1px solid #e5eaf1;
+  border-radius: 10px;
+}
+.workload-list footer {
+  grid-column: 1/-1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+.timeline {
+  margin-top: 28px;
+}
+.timeline__header,
+.timeline__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.timeline__header {
+  margin-bottom: 14px;
+}
+.timeline__header h3 {
+  margin-bottom: 0;
+}
+.timeline__pending {
+  color: #a26a15;
+}
+.timeline h3 {
+  margin-bottom: 14px;
+}
+.timeline p {
+  margin: 4px 0 0;
+  color: #738094;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .ops-page {
+    padding: 16px;
+  }
+  .onboarding {
+    flex-wrap: wrap;
+  }
+  .onboarding ol {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .ops-page__header,
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .header-actions {
+    width: 100%;
+  }
+  .header-actions .el-button {
+    flex: 1;
+  }
+  .ops-nav button {
+    min-width: 110px;
+  }
+  .onboarding {
+    padding: 20px;
+  }
+  .onboarding ol,
+  .stats,
+  .role-grid,
+  .enrollment-result {
+    grid-template-columns: 1fr;
+  }
+  .resource-card dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .table-wrap {
+    overflow: auto;
+  }
+  .table-wrap :deep(.el-table) {
+    min-width: 830px;
+  }
 }
 </style>
