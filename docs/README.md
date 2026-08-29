@@ -18,19 +18,24 @@
 - [平台系统架构](./01-产品与架构/平台系统架构.md)
 - [平台开发与管理系统架构](./02-系统设计/平台开发与管理系统架构.md)
 - [平台部署拓扑架构](./02-系统设计/平台部署拓扑架构.md)
+- [运维与节点运行态总体架构](./02-系统设计/运维与节点运行态总体架构.md)
 - [节点管理与交付架构](./02-系统设计/节点管理与交付架构.md)
 - [工程运行系统架构](./02-系统设计/工程运行系统架构.md)
 - [工程运行微服务设计](./02-系统设计/工程运行微服务设计.md)
 - [NATS JetStream 消息架构](./02-系统设计/NATS-JetStream消息架构.md)
 - [工业采集架构](./02-系统设计/工业采集架构.md)
 - [工程发布与资源分发架构](./02-系统设计/工程发布与资源分发架构.md)
+- [平台运维体系设计](./06-运维与安全/平台运维体系设计.md)
 
 ## 3. 当前关键技术基线
 
 - 中心开发与管理系统运行于 Linux Docker。
 - 运行站点一套 K3s、一套 NATS JetStream，可承载多个工程。
-- 每个工程使用独立 Namespace、NATS Account 和 Release。
+- 每个 ProjectDeployment 按 `deploymentId` 隔离 Namespace、NATS Account 和数据空间；环境差异
+  通过 DeploymentBinding 注入，同一工程多阶段可以并存。
 - 工程资源存放于中心 S3，发布后下载到工程运行空间。
+- 每台宿主机运行 K3s 外的 NodeAgent；K3s 站点使用 site-controller 协调工程资源、
+  infrastructure-controller 协调公共基础设施。
 - Windows/Linux 工业采集均为 NodeAgent 托管的原生进程。
 - MQTT 是工程对外协议能力，JetStream 是内部可靠事件总线。
 
