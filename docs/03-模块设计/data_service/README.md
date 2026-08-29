@@ -48,7 +48,7 @@ TDengine 通过独立 WebSocket 只读运行时提供真实开发态 SQL 工作�
 
 - `data_service` 是平台侧与开发态数据域服务，不承担平台治理和发布部署编排职责。
 - `data_service` 为 `datacenter`、`designer` 开发态预览和其他平台侧模块提供统一数据域能力。
-- `data_service` 与运行态的 `runtime_data_service` 共享数据域契约与领域模型，但不是同一部署实体。
+- `data_service` 与运行态的 `runtime-engine` 共享数据域契约与领域模型，但不是同一部署实体。
 
 ## 工业协议执行边界
 
