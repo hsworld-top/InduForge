@@ -6,6 +6,7 @@
   "properties": {
     "nodeId": {
       "type": "string",
+      "title": "节点 ID",
       "minLength": 3,
       "pattern": "^(ns=[0-9]+;)?(i=[0-9]+|s=.+|g=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|b=[A-Za-z0-9+/]+={0,2})$",
       "description": "例如 i=111、ns=2;i=111、s=LastChange 或 ns=2;s=LastChange",
