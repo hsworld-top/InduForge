@@ -133,6 +133,7 @@ type UpdateDataPointInput struct {
 	Unit              *string
 	PrecisionNum      *int
 	DefaultValue      *string
+	HasDefaultValue   bool
 	MinValue          *float64
 	MaxValue          *float64
 	Tags              []any
@@ -390,7 +391,7 @@ func (s *DataPointService) UpdateDataPoint(ctx context.Context, projectID, id, u
 	}
 
 	nextDefaultValue := cloneOptionalString(current.DefaultValue)
-	if input.DefaultValue != nil {
+	if input.HasDefaultValue {
 		nextDefaultValue = cloneOptionalString(input.DefaultValue)
 	}
 
@@ -1377,7 +1378,7 @@ func hasDataPointUpdateChanges(input UpdateDataPointInput) bool {
 		input.DataType != nil ||
 		input.Unit != nil ||
 		input.PrecisionNum != nil ||
-		input.DefaultValue != nil ||
+		input.HasDefaultValue ||
 		input.MinValue != nil ||
 		input.MaxValue != nil ||
 		input.HasTags ||

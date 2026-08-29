@@ -819,10 +819,7 @@ func dataPointRuntimeKey(connection *repository.ConnectionRecord) string {
 }
 
 func defaultValueOrNil(value *string) any {
-	if value == nil {
-		return nil
-	}
-	return *value
+	return parseStoredHTTPDefaultValue(value)
 }
 
 func stringifyDataPointValue(value any) string {

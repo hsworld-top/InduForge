@@ -409,11 +409,14 @@ func parseDataPointUpdateInput(raw map[string]json.RawMessage) (service.UpdateDa
 		input.PrecisionNum = &next
 	}
 	if value, ok := raw["defaultValue"]; ok {
-		var next string
-		if err := json.Unmarshal(value, &next); err != nil {
-			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "defaultValue 字段格式无效", err)
+		input.HasDefaultValue = true
+		if !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			var next string
+			if err := json.Unmarshal(value, &next); err != nil {
+				return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "defaultValue 字段格式无效", err)
+			}
+			input.DefaultValue = &next
 		}
-		input.DefaultValue = &next
 	}
 	if value, ok := raw["minValue"]; ok {
 		var next float64
