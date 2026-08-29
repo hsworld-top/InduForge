@@ -67,7 +67,7 @@ func (s *Supervisor) Start(workloadID string, role WorkloadRole, generation int6
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if existing := s.processes[workloadID]; existing != nil && existing.cmd.Process != nil && processAlive(existing.cmd.Process) {
+	if existing := s.processes[workloadID]; existing != nil && existing.cmd != nil && existing.cmd.Process != nil && processAlive(existing.cmd.Process) {
 		if generation > existing.status.Generation {
 			existing.status.Generation = generation
 		}
@@ -130,14 +130,23 @@ func (s *Supervisor) reap(workloadID string, process *managedProcess) {
 func (s *Supervisor) Stop(workloadID string, generation int64) (ProcessStatus, error) {
 	s.mu.Lock()
 	process := s.processes[workloadID]
-	if process == nil || process.cmd.Process == nil || !processAlive(process.cmd.Process) {
+	if process == nil || process.cmd == nil || process.cmd.Process == nil || !processAlive(process.cmd.Process) {
+		now := time.Now().UTC()
 		if process == nil {
-			process = &managedProcess{status: ProcessStatus{WorkloadID: workloadID, State: "stopped", Generation: generation, LogPath: s.logPath(workloadID)}}
+			process = &managedProcess{status: ProcessStatus{WorkloadID: workloadID, State: "stopped", Generation: generation, StoppedAt: &now, LogPath: s.logPath(workloadID)}}
 			s.processes[workloadID] = process
-		} else if generation > process.status.Generation {
-			process.status.Generation = generation
+		} else {
+			if generation > process.status.Generation {
+				process.status.Generation = generation
+			}
+			if process.status.State != "stopped" || process.status.StoppedAt == nil {
+				process.status.StoppedAt = &now
+			}
+			process.status.State = "stopped"
+			process.status.PID = 0
+			process.status.LastError = ""
 		}
-		status := process.status
+		status := withObservedReplicas(process.status)
 		s.mu.Unlock()
 		return status, nil
 	}

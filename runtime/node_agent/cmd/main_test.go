@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,4 +67,40 @@ func TestGenerateDefaultConfigProducesValidOpsYAML(t *testing.T) {
 	if parsed.Agent.Ops.Role != "collector_linux" || parsed.Agent.Ops.HeartbeatEvery != "10s" {
 		t.Fatalf("unexpected default ops config: %+v", parsed.Agent.Ops)
 	}
+}
+
+func TestCheckSingleInstanceRecoversReusedCurrentPIDLock(t *testing.T) {
+	lockFile := filepath.Join(t.TempDir(), "node_agent.lock")
+	t.Setenv("NODE_AGENT_ENV", "")
+	t.Setenv("NODE_AGENT_LOCK_FILE", lockFile)
+	staleContent := fmt.Sprintf("%d\nstale", os.Getpid())
+	if err := os.WriteFile(lockFile, []byte(staleContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if !checkSingleInstance(true) {
+		t.Fatal("daemon must reclaim a lock left by a previous process with the reused current PID")
+	}
+	content, err := os.ReadFile(lockFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != fmt.Sprintf("%d", os.Getpid()) {
+		t.Fatalf("lock was not recreated by current process: %q", content)
+	}
+	cleanupLockFile()
+}
+
+func TestCheckSingleInstanceRemovesDeadDaemonLock(t *testing.T) {
+	lockFile := filepath.Join(t.TempDir(), "node_agent.lock")
+	t.Setenv("NODE_AGENT_ENV", "")
+	t.Setenv("NODE_AGENT_LOCK_FILE", lockFile)
+	if err := os.WriteFile(lockFile, []byte("999999999"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if !checkSingleInstance(true) {
+		t.Fatal("daemon must remove a lock whose process no longer exists")
+	}
+	cleanupLockFile()
 }

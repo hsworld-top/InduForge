@@ -204,7 +204,7 @@ func checkSingleInstance(daemonMode bool) bool {
 		return true
 	}
 	// 锁定文件路径
-	lockFile := filepath.Join(os.TempDir(), "node_agent.lock")
+	lockFile := nodeAgentLockFile()
 
 	// 检查锁定文件是否存在
 	if _, err := os.Stat(lockFile); err == nil {
@@ -216,8 +216,10 @@ func checkSingleInstance(daemonMode bool) bool {
 			fmt.Sscanf(string(content), "%d", &pid)
 
 			if pid > 0 {
-				// 守护进程模式下，如果锁文件是由当前父进程（交互窗口）写入，则允许接管
-				if daemonMode && pid == os.Getppid() {
+				// 守护进程模式下允许接管交互父进程的锁。容器或服务异常退出后，
+				// 操作系统还可能把旧 PID 分配给本次新进程；本进程尚未创建锁，
+				// 因此 pid == Getpid 必然是残留锁，也应安全清理。
+				if daemonMode && (pid == os.Getppid() || pid == os.Getpid()) {
 					_ = os.Remove(lockFile)
 				} else {
 					// 检查进程是否存在
@@ -226,14 +228,18 @@ func checkSingleInstance(daemonMode bool) bool {
 						return false
 					}
 
-					// 进程已不存在，清理残留的锁定文件
+					// 进程已不存在时，无论前台还是守护模式都必须清理残留锁；
+					// 否则一次崩溃会让服务永久无法再次启动。
 					if !daemonMode {
-						// 只有交互模式才清理残留的 lock 文件
 						fmt.Println("检测到残留的锁定文件，正在清理...")
-						os.Remove(lockFile)
 					}
+					_ = os.Remove(lockFile)
 				}
+			} else {
+				_ = os.Remove(lockFile)
 			}
+		} else {
+			_ = os.Remove(lockFile)
 		}
 	}
 
@@ -253,8 +259,14 @@ func checkSingleInstance(daemonMode bool) bool {
 
 // cleanupLockFile 清理锁定文件
 func cleanupLockFile() {
-	lockFile := filepath.Join(os.TempDir(), "node_agent.lock")
-	os.Remove(lockFile)
+	os.Remove(nodeAgentLockFile())
+}
+
+func nodeAgentLockFile() string {
+	if path := strings.TrimSpace(os.Getenv("NODE_AGENT_LOCK_FILE")); path != "" {
+		return path
+	}
+	return filepath.Join(os.TempDir(), "node_agent.lock")
 }
 
 // initFileLogger 初始化文件日志

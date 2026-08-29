@@ -98,3 +98,50 @@ func TestSupervisorReportsObservedReplicasFromProcessState(t *testing.T) {
 		t.Fatal("failed workload must report zero replicas")
 	}
 }
+
+func TestSupervisorRestartStartsWorkloadMissingFromMemory(t *testing.T) {
+	s := testSupervisor(t)
+	restarted, err := s.Restart("restored-workload", WorkloadCompute, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.State != "running" || restarted.PID <= 0 || restarted.Generation != 5 {
+		t.Fatalf("unexpected restarted status: %+v", restarted)
+	}
+	s.Shutdown()
+}
+
+func TestSupervisorStopMissingWorkloadIsIdempotent(t *testing.T) {
+	s := testSupervisor(t)
+	for generation := int64(1); generation <= 2; generation++ {
+		stopped, err := s.Stop("missing-workload", generation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stopped.State != "stopped" || stopped.Generation != generation {
+			t.Fatalf("generation=%d unexpected status: %+v", generation, stopped)
+		}
+	}
+}
+
+func TestSupervisorStopClearsPreviousFailure(t *testing.T) {
+	s := testSupervisor(t)
+	s.RecordFailure("failed-workload", WorkloadAlert, 3, fmt.Errorf("启动失败"))
+
+	stopped, err := s.Stop("failed-workload", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped.State != "stopped" || stopped.Generation != 4 || stopped.ReplicasObserved != 0 || stopped.LastError != "" || stopped.StoppedAt == nil {
+		t.Fatalf("unexpected stopped status: %+v", stopped)
+	}
+
+	restarted, err := s.Start("failed-workload", WorkloadAlert, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.State != "running" || restarted.Generation != 5 || restarted.ReplicasObserved != 1 {
+		t.Fatalf("unexpected recovered status: %+v", restarted)
+	}
+	s.Shutdown()
+}
