@@ -254,7 +254,8 @@ func (s *AlarmSettingsService) ListGroupTree(ctx context.Context, claims *auth.C
 	}
 	return &AlarmGroupListResult{
 		List:       items,
-		Pagination: Pagination{Page: 1, PageSize: len(items), Total: len(items)},
+		// 空树也必须返回合法分页契约，pageSize=0 会让统一列表 Schema 拒绝响应。
+		Pagination: Pagination{Page: 1, PageSize: positive(len(items), 1), Total: len(items)},
 	}, nil
 }
 
