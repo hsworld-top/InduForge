@@ -183,7 +183,7 @@ func (s *CollectorImportService) templateHeaders(driverID string) []string {
 	for _, name := range properties {
 		headers = append(headers, "address."+name)
 	}
-	return append(headers, "readOptions", "acquisition", "metadata")
+	return append(headers, "readOptions", "acquisitionMode", "acquisitionOverrides", "metadata")
 }
 func (s *CollectorImportService) parseImportRow(driverID string, headers map[string]int, row []string) (CreateCollectorPointInput, string, error) {
 	get := func(name string) string {
@@ -229,9 +229,13 @@ func (s *CollectorImportService) parseImportRow(driverID string, headers map[str
 	if err != nil {
 		return CreateCollectorPointInput{}, "", fmt.Errorf("readOptions 必须是 JSON 对象")
 	}
-	acquisition, err := parseCollectorImportObject(get("acquisition"))
+	acquisitionMode := get("acquisitionMode")
+	if acquisitionMode == "" {
+		acquisitionMode = "inherit"
+	}
+	acquisitionOverrides, err := parseCollectorImportObject(get("acquisitionOverrides"))
 	if err != nil {
-		return CreateCollectorPointInput{}, "", fmt.Errorf("acquisition 必须是 JSON 对象")
+		return CreateCollectorPointInput{}, "", fmt.Errorf("acquisitionOverrides 必须是 JSON 对象")
 	}
 	metadata, err := parseCollectorImportObject(get("metadata"))
 	if err != nil {
@@ -241,7 +245,7 @@ func (s *CollectorImportService) parseImportRow(driverID string, headers map[str
 	if value := get("description"); value != "" {
 		description = &value
 	}
-	return CreateCollectorPointInput{Name: name, Description: description, Address: address, DataType: dataType, ElementCount: elementCount, ReadOptions: readOptions, Acquisition: acquisition, Enabled: &enabled, Metadata: metadata}, get("groupPath"), nil
+	return CreateCollectorPointInput{Name: name, Description: description, Address: address, DataType: dataType, ElementCount: elementCount, ReadOptions: readOptions, AcquisitionMode: acquisitionMode, AcquisitionOverrides: acquisitionOverrides, Enabled: &enabled, Metadata: metadata}, get("groupPath"), nil
 }
 func parseCollectorImportScalar(raw, valueType string) (any, error) {
 	switch valueType {
@@ -318,7 +322,7 @@ func buildCollectorImportPreview(session *repository.CollectorImportSessionRecor
 	return CollectorImportPreview{ImportID: session.ID, TotalRows: session.TotalRows, ValidRows: session.ValidRows, Candidates: candidateList, Errors: errorList, Pagination: CollectorDriverPagination{Page: page, PageSize: pageSize, Total: session.TotalRows, TotalPages: totalPages}, ExpiresAt: session.ExpiresAt.Format("2006-01-02 15:04:05")}
 }
 func toCollectorPointParams(point repository.CreateCollectorPointParams) CollectorPoint {
-	return CollectorPoint{ID: point.ID, GroupID: point.GroupID, Code: point.Code, Name: point.Name, Description: point.Description, Address: point.Address, AddressText: point.AddressText, AddressSchemaVersion: point.AddressSchemaVersion, DataType: point.DataType, ElementCount: point.ElementCount, ReadOptions: point.ReadOptions, Acquisition: point.Acquisition, Enabled: point.Enabled, SortOrder: point.SortOrder, Metadata: point.Metadata}
+	return CollectorPoint{ID: point.ID, GroupID: point.GroupID, Code: point.Code, Name: point.Name, Description: point.Description, Address: point.Address, AddressText: point.AddressText, AddressSchemaVersion: point.AddressSchemaVersion, DataType: point.DataType, ElementCount: point.ElementCount, ReadOptions: point.ReadOptions, Acquisition: point.Acquisition, AcquisitionMode: point.AcquisitionMode, AcquisitionOverrides: point.AcquisitionOverrides, Enabled: point.Enabled, SortOrder: point.SortOrder, Metadata: point.Metadata}
 }
 
 var _ io.Reader

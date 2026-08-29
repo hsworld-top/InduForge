@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 
@@ -442,15 +443,70 @@ func toCollectorConnection(record repository.CollectorConnectionRecord) Collecto
 }
 
 func normalizeCollectorDefaultAcquisition(input map[string]any) (map[string]any, error) {
-	result := map[string]any{"intervalMs": 1000, "timeoutMs": 3000, "retryCount": 0, "deadband": 0, "changeOnly": false, "priority": 0}
-	for key, value := range input {
-		result[key] = value
-	}
-	for _, key := range []string{"intervalMs", "timeoutMs"} {
-		value, ok := result[key].(float64)
-		if ok && value <= 0 {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, key+" 必须为正数")
+	result := map[string]any{"intervalMs": 1000, "deadband": 0.0, "changeOnly": false}
+	for key := range input {
+		if key != "intervalMs" && key != "deadband" && key != "changeOnly" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "不支持的采集参数："+key)
 		}
 	}
+	if value, exists := input["intervalMs"]; exists {
+		interval, ok := collectorAcquisitionInteger(value)
+		if !ok || interval < 1 || interval > 86400000 {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集周期必须是 1 至 86400000 毫秒的整数")
+		}
+		result["intervalMs"] = interval
+	}
+	if value, exists := input["deadband"]; exists {
+		deadband, ok := collectorAcquisitionNumber(value)
+		if !ok || deadband < 0 || math.IsInf(deadband, 0) || math.IsNaN(deadband) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数值死区必须是大于等于 0 的数字")
+		}
+		result["deadband"] = deadband
+	}
+	if value, exists := input["changeOnly"]; exists {
+		changeOnly, ok := value.(bool)
+		if !ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅变化时上报必须是布尔值")
+		}
+		result["changeOnly"] = changeOnly
+	}
 	return result, nil
+}
+
+func collectorAcquisitionInteger(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), int64(int(typed)) == typed
+	case float64:
+		return int(typed), math.Trunc(typed) == typed && typed >= -9007199254740991 && typed <= 9007199254740991
+	case json.Number:
+		parsed, err := typed.Int64()
+		return int(parsed), err == nil && int64(int(parsed)) == parsed
+	default:
+		return 0, false
+	}
+}
+
+func collectorAcquisitionNumber(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case float32:
+		return float64(typed), true
+	case float64:
+		return typed, true
+	case json.Number:
+		parsed, err := typed.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }

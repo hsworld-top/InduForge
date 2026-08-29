@@ -381,7 +381,7 @@ CREATE TABLE data_collector_connections (
     name text NOT NULL,
     code text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
-    default_acquisition jsonb DEFAULT '{"intervalMs":1000,"timeoutMs":3000,"retryCount":0,"deadband":0,"changeOnly":false,"priority":0}'::jsonb NOT NULL,
+    default_acquisition jsonb DEFAULT '{"intervalMs":1000,"deadband":0,"changeOnly":false}'::jsonb NOT NULL,
     display_order integer DEFAULT 0 NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,

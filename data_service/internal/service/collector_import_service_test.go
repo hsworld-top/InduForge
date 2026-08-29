@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
 	"github.com/indu-forge/data_service/internal/repository"
+	"github.com/xuri/excelize/v2"
 )
 
 func TestCollectorImportPreviewParsesSchemaAddressColumns(t *testing.T) {
@@ -39,6 +41,27 @@ func TestCollectorImportTemplateCreatesXLSX(t *testing.T) {
 	}
 	if len(template.Content) < 100 || template.ContentType == "" {
 		t.Fatalf("invalid template: %#v", template)
+	}
+	file, err := excelize.OpenReader(bytes.NewReader(template.Content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }()
+	rows, err := file.GetRows(file.GetSheetList()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]bool{}
+	for _, header := range rows[0] {
+		headers[header] = true
+	}
+	for _, expected := range []string{"acquisitionMode", "acquisitionOverrides"} {
+		if !headers[expected] {
+			t.Fatalf("模板缺少字段 %s: %#v", expected, rows[0])
+		}
+	}
+	if headers["acquisition"] {
+		t.Fatalf("模板仍包含已废弃字段 acquisition: %#v", rows[0])
 	}
 }
 

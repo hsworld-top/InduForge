@@ -44,6 +44,8 @@ type CollectorPointDebugSnapshotRecord struct {
 
 type CollectorPointRecord struct {
 	ID, ProjectID, ConnectionID, Code, Name, AddressText, DataType    string
+	DataPointID, DataPointPath                                        string
+	DataPointDefaultValue                                             *string
 	GroupID                                                           *string
 	Description                                                       *string
 	Address, ReadOptions, Acquisition, AcquisitionOverrides, Metadata map[string]any
@@ -253,10 +255,12 @@ func (r *CollectorRepository) ListPoints(ctx context.Context, projectID, connect
 	}
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	query := fmt.Sprintf(`SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at,
+		COALESCE(datapoint.id::text,''),COALESCE(datapoint.path,''),datapoint.default_value,
 		snapshot.point_id,snapshot.value,snapshot.value_text,snapshot.data_type,snapshot.quality,snapshot.source_timestamp,snapshot.server_timestamp,snapshot.read_at,snapshot.last_attempt_status,snapshot.last_attempt_at,snapshot.last_error_code,snapshot.last_error_message,
 		COUNT(*) OVER()::int
 		FROM data_collector_points point
 		JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id
+		LEFT JOIN data_points datapoint ON datapoint.project_id=point.project_id AND datapoint.source_type='collector.point' AND datapoint.source_id=point.id
 		LEFT JOIN data_collector_point_debug_snapshots snapshot ON snapshot.point_id=point.id
 		WHERE %s ORDER BY %s %s,point.id ASC LIMIT $%d OFFSET $%d`, strings.Join(conditions, " AND "), order, direction, len(args)-1, len(args))
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -533,7 +537,7 @@ func insertCollectorPointAndDataPoint(ctx context.Context, tx pgx.Tx, item Creat
 }
 
 func (r *CollectorRepository) listPointsByIDs(ctx context.Context, projectID, connectionID string, ids []string) ([]CollectorPointRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at FROM data_collector_points point JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id WHERE point.project_id=$1 AND point.connection_id=$2 AND point.id=ANY($3::uuid[]) ORDER BY point.sort_order,point.id`, projectID, connectionID, ids)
+	rows, err := r.pool.Query(ctx, `SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at,COALESCE(datapoint.id::text,''),COALESCE(datapoint.path,''),datapoint.default_value FROM data_collector_points point JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id LEFT JOIN data_points datapoint ON datapoint.project_id=point.project_id AND datapoint.source_type='collector.point' AND datapoint.source_id=point.id WHERE point.project_id=$1 AND point.connection_id=$2 AND point.id=ANY($3::uuid[]) ORDER BY point.sort_order,point.id`, projectID, connectionID, ids)
 	if err != nil {
 		return nil, wrapUnifiedCollectorRepositoryError("读取批量采集点结果失败", err)
 	}
@@ -558,7 +562,7 @@ func (r *CollectorRepository) GetPointsByIDs(ctx context.Context, projectID, con
 
 // GetPointByID 按项目和采集点主键解析所属连接，供数据点列表统一展示来源。
 func (r *CollectorRepository) GetPointByID(ctx context.Context, projectID, pointID string) (*CollectorPointRecord, error) {
-	record, err := scanCollectorPoint(r.pool.QueryRow(ctx, `SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at FROM data_collector_points point JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id WHERE point.project_id=$1 AND point.id=$2`, projectID, pointID))
+	record, err := scanCollectorPoint(r.pool.QueryRow(ctx, `SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at,COALESCE(datapoint.id::text,''),COALESCE(datapoint.path,''),datapoint.default_value FROM data_collector_points point JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id LEFT JOIN data_points datapoint ON datapoint.project_id=point.project_id AND datapoint.source_type='collector.point' AND datapoint.source_id=point.id WHERE point.project_id=$1 AND point.id=$2`, projectID, pointID))
 	if err != nil {
 		return nil, wrapUnifiedCollectorRepositoryError("读取采集点失败", err)
 	}
@@ -582,7 +586,7 @@ func scanCollectorPointGroup(row unifiedCollectorPointRow) (CollectorPointGroupR
 func scanCollectorPoint(row unifiedCollectorPointRow) (CollectorPointRecord, error) {
 	var record CollectorPointRecord
 	var address, readOptions, acquisitionOverrides, defaultAcquisition, metadata []byte
-	err := row.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description, &address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &record.AcquisitionMode, &acquisitionOverrides, &defaultAcquisition, &record.Enabled, &record.SortOrder, &metadata, &record.CreatedAt, &record.UpdatedAt)
+	err := row.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description, &address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &record.AcquisitionMode, &acquisitionOverrides, &defaultAcquisition, &record.Enabled, &record.SortOrder, &metadata, &record.CreatedAt, &record.UpdatedAt, &record.DataPointID, &record.DataPointPath, &record.DataPointDefaultValue)
 	if err != nil {
 		return record, err
 	}
@@ -618,6 +622,7 @@ func scanCollectorPointWithTotal(row unifiedCollectorPointRow) (CollectorPointRe
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description,
 		&address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &record.AcquisitionMode, &acquisitionOverrides, &defaultAcquisition,
 		&record.Enabled, &record.SortOrder, &metadata, &record.CreatedAt, &record.UpdatedAt,
+		&record.DataPointID, &record.DataPointPath, &record.DataPointDefaultValue,
 		&snapshotPointID, &snapshotValue, &snapshotValueText, &snapshotDataType, &snapshotQuality, &sourceTimestamp, &serverTimestamp,
 		&readAt, &lastAttemptStatus, &lastAttemptAt, &lastErrorCode, &lastErrorMessage, &total,
 	)

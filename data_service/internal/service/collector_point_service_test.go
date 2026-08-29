@@ -1028,12 +1028,12 @@ func TestCollectorPointServiceDoesNotCreateLaterRowsAfterConflict(t *testing.T) 
 func TestCollectorPointExportWritesReimportableCSV(t *testing.T) {
 	description := "现场温度"
 	store := &fakeCollectorPointStore{
-		connection: repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", Name: "锅炉 OPC UA", DriverID: "opcua.standard", SchemaVersion: 1},
+		connection: repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", Name: "锅炉 OPC UA", DriverID: "opcua.standard", SchemaVersion: 1, DefaultAcquisition: map[string]any{"intervalMs": 1000, "deadband": 0.0, "changeOnly": false}},
 		exportRecords: []repository.CollectorPointExportRecord{{
 			CollectorPointRecord: repository.CollectorPointRecord{
 				ID: "550e8400-e29b-41d4-a716-446655440003", Name: "温度", Description: &description,
 				Address: map[string]any{"nodeId": "ns=2;s=Temperature"}, DataType: "float32",
-				ElementCount: 1, Enabled: true, ReadOptions: map[string]any{}, Acquisition: map[string]any{"intervalMs": 1000}, Metadata: map[string]any{},
+				ElementCount: 1, Enabled: true, ReadOptions: map[string]any{}, AcquisitionMode: "override", AcquisitionOverrides: map[string]any{"intervalMs": 2500}, Acquisition: map[string]any{"intervalMs": 2500, "deadband": 0.0, "changeOnly": false}, Metadata: map[string]any{},
 			},
 			GroupPath: "锅炉/温度",
 		}},
@@ -1052,6 +1052,43 @@ func TestCollectorPointExportWritesReimportableCSV(t *testing.T) {
 		if !strings.Contains(payload, expected) {
 			t.Fatalf("CSV 缺少内容 %q: %s", expected, payload)
 		}
+	}
+	importStore := &fakeCollectorImportStore{}
+	importService, err := NewCollectorImportService(importStore, pointService, pointService.catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := importService.Preview(context.Background(), store.connection.ProjectID, store.connection.ID, "550e8400-e29b-41d4-a716-446655440001", "roundtrip.csv", buffer.Bytes(), 1, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ValidRows != 1 || len(importStore.session.Candidates) != 1 {
+		t.Fatalf("导出文件无法重新导入: %#v", preview)
+	}
+	reimported := importStore.session.Candidates[0].Point
+	if reimported.AcquisitionMode != "override" || reimported.AcquisitionOverrides["intervalMs"] != float64(2500) {
+		t.Fatalf("重新导入丢失采集覆盖参数: %#v", reimported)
+	}
+}
+
+func TestPLCAddressNormalizersRejectSymbolOnlyValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		normalize func() (string, error)
+	}{
+		{name: "keyence", normalize: func() (string, error) { return normalizeKeyenceAddress("??", "keyence.mc-3e-tcp") }},
+		{name: "delta", normalize: func() (string, error) { return normalizeDeltaAddress("??") }},
+		{name: "xinje", normalize: func() (string, error) { return normalizeXinjeAddress("??") }},
+		{name: "megmeet", normalize: func() (string, error) { return normalizeMegMeetAddress("??") }},
+		{name: "fuji", normalize: func() (string, error) { return normalizeFujiAddress("??", "fuji.spb") }},
+		{name: "vigor", normalize: func() (string, error) { return normalizeVigorAddress("??") }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if value, err := test.normalize(); err == nil {
+				t.Fatalf("纯符号地址不应通过规范化: %q", value)
+			}
+		})
 	}
 }
 

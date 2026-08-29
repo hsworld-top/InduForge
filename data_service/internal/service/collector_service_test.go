@@ -52,6 +52,31 @@ func TestCollectorServiceCreateRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestNormalizeCollectorDefaultAcquisitionRejectsUnknownAndInvalidValues(t *testing.T) {
+	for name, input := range map[string]map[string]any{
+		"unknown":  {"priority": 1},
+		"interval": {"intervalMs": 0},
+		"deadband": {"deadband": -1},
+		"boolean":  {"changeOnly": "true"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := normalizeCollectorDefaultAcquisition(input); err == nil {
+				t.Fatalf("expected invalid acquisition error for %#v", input)
+			}
+		})
+	}
+}
+
+func TestNormalizeCollectorDefaultAcquisitionReturnsStableShape(t *testing.T) {
+	result, err := normalizeCollectorDefaultAcquisition(map[string]any{"intervalMs": float64(2500), "deadband": 0.5, "changeOnly": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 3 || result["intervalMs"] != 2500 || result["deadband"] != 0.5 || result["changeOnly"] != true {
+		t.Fatalf("unexpected acquisition: %#v", result)
+	}
+}
+
 func newCollectorServiceWithSecretSchema(t *testing.T, store CollectorConnectionStore) *CollectorService {
 	t.Helper()
 	manifest := `{"protocolFamily":"test","driverId":"test.driver","driverVersion":"1.0.0","schemaVersion":1,"displayName":"Test","category":"plc","transports":["tcp"],"operations":[],"dataTypes":["bool"],"acquisitionModes":["polling"],"platforms":{"devAgent":[],"runtime":[]}}`

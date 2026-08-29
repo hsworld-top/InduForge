@@ -38,16 +38,14 @@ type CollectorPointStore interface {
 }
 
 type CreateCollectorPointInput struct {
-	GroupID      *string        `json:"groupId"`
-	Code         string         `json:"code"`
-	Name         string         `json:"name"`
-	Description  *string        `json:"description"`
-	Address      map[string]any `json:"address"`
-	DataType     string         `json:"dataType"`
-	ElementCount int            `json:"elementCount"`
-	ReadOptions  map[string]any `json:"readOptions"`
-	// Acquisition 仅作为旧表单提交的编辑值边界；持久化始终使用继承模式和差异覆盖。
-	Acquisition          map[string]any `json:"acquisition,omitempty"`
+	GroupID              *string        `json:"groupId"`
+	Code                 string         `json:"code"`
+	Name                 string         `json:"name"`
+	Description          *string        `json:"description"`
+	Address              map[string]any `json:"address"`
+	DataType             string         `json:"dataType"`
+	ElementCount         int            `json:"elementCount"`
+	ReadOptions          map[string]any `json:"readOptions"`
 	AcquisitionMode      string         `json:"acquisitionMode,omitempty"`
 	AcquisitionOverrides map[string]any `json:"acquisitionOverrides,omitempty"`
 	Enabled              *bool          `json:"enabled"`
@@ -94,24 +92,27 @@ type CollectorPointDebugSnapshot struct {
 }
 
 type CollectorPoint struct {
-	ID                   string                       `json:"id"`
-	GroupID              *string                      `json:"groupId"`
-	Code                 string                       `json:"code"`
-	Name                 string                       `json:"name"`
-	Description          *string                      `json:"description"`
-	Address              map[string]any               `json:"address"`
-	AddressText          string                       `json:"addressText"`
-	AddressSchemaVersion int                          `json:"addressSchemaVersion"`
-	DataType             string                       `json:"dataType"`
-	ElementCount         int                          `json:"elementCount"`
-	ReadOptions          map[string]any               `json:"readOptions"`
-	Acquisition          map[string]any               `json:"acquisition"`
-	AcquisitionMode      string                       `json:"acquisitionMode"`
-	AcquisitionOverrides map[string]any               `json:"acquisitionOverrides"`
-	Enabled              bool                         `json:"enabled"`
-	SortOrder            int                          `json:"sortOrder"`
-	Metadata             map[string]any               `json:"metadata"`
-	LatestDebugSnapshot  *CollectorPointDebugSnapshot `json:"latestDebugSnapshot"`
+	ID                    string                       `json:"id"`
+	GroupID               *string                      `json:"groupId"`
+	Code                  string                       `json:"code"`
+	Name                  string                       `json:"name"`
+	Description           *string                      `json:"description"`
+	Address               map[string]any               `json:"address"`
+	AddressText           string                       `json:"addressText"`
+	AddressSchemaVersion  int                          `json:"addressSchemaVersion"`
+	DataType              string                       `json:"dataType"`
+	DataPointID           string                       `json:"dataPointId"`
+	DataPointPath         string                       `json:"dataPointPath"`
+	DataPointDefaultValue *string                      `json:"dataPointDefaultValue"`
+	ElementCount          int                          `json:"elementCount"`
+	ReadOptions           map[string]any               `json:"readOptions"`
+	Acquisition           map[string]any               `json:"acquisition"`
+	AcquisitionMode       string                       `json:"acquisitionMode"`
+	AcquisitionOverrides  map[string]any               `json:"acquisitionOverrides"`
+	Enabled               bool                         `json:"enabled"`
+	SortOrder             int                          `json:"sortOrder"`
+	Metadata              map[string]any               `json:"metadata"`
+	LatestDebugSnapshot   *CollectorPointDebugSnapshot `json:"latestDebugSnapshot"`
 }
 type CollectorPointPage struct {
 	List       []CollectorPoint          `json:"list"`
@@ -437,7 +438,7 @@ func (s *CollectorPointService) UpdatePointsBatch(ctx context.Context, projectID
 		if !exists {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点不存在")
 		}
-		if input.AcquisitionMode == "" && input.Acquisition == nil && input.AcquisitionOverrides == nil {
+		if input.AcquisitionMode == "" && input.AcquisitionOverrides == nil {
 			input.AcquisitionMode = current.AcquisitionMode
 			input.AcquisitionOverrides = cloneCollectorMap(current.AcquisitionOverrides)
 		}
@@ -541,7 +542,7 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		input.Address["address"] = address
 	}
 	if strings.HasPrefix(connection.DriverID, "keyence.") {
-		address, err := normalizeKeyenceAddress(input.Address["address"])
+		address, err := normalizeKeyenceAddress(input.Address["address"], connection.DriverID)
 		if err != nil {
 			return repository.CreateCollectorPointParams{}, err
 		}
@@ -573,7 +574,7 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		input.Address["address"] = address
 	}
 	if strings.HasPrefix(connection.DriverID, "fuji.") {
-		address, err := normalizeFujiAddress(input.Address["address"], connection.DriverID == "fuji.spb-over-tcp" || connection.DriverID == "fuji.spb")
+		address, err := normalizeFujiAddress(input.Address["address"], connection.DriverID)
 		if err != nil {
 			return repository.CreateCollectorPointParams{}, err
 		}
@@ -889,7 +890,7 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 	}
 	mode := strings.TrimSpace(input.AcquisitionMode)
 	if mode == "" {
-		if input.Acquisition != nil || input.AcquisitionOverrides != nil {
+		if input.AcquisitionOverrides != nil {
 			mode = "override"
 		} else {
 			mode = "inherit"
@@ -899,9 +900,6 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		return repository.CreateCollectorPointParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集参数模式必须为 inherit 或 override")
 	}
 	overrides := cloneCollectorMap(input.AcquisitionOverrides)
-	if input.Acquisition != nil {
-		overrides = collectorAcquisitionDifferences(connection.DefaultAcquisition, input.Acquisition)
-	}
 	if mode == "inherit" {
 		overrides = map[string]any{}
 	}
@@ -910,17 +908,6 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		return repository.CreateCollectorPointParams{}, err
 	}
 	return repository.CreateCollectorPointParams{ID: id, ProjectID: connection.ProjectID, ConnectionID: connection.ID, ConnectionCode: connection.Code, UserID: userID, GroupID: input.GroupID, Code: code, Name: name, Description: input.Description, Address: cloneCollectorMap(input.Address), AddressText: addressText, AddressSchemaVersion: connection.SchemaVersion, DataType: input.DataType, ElementCount: elementCount, ReadOptions: cloneCollectorMap(input.ReadOptions), AcquisitionMode: mode, AcquisitionOverrides: overrides, Acquisition: effectiveAcquisition, Enabled: enabled, SortOrder: input.SortOrder, Metadata: cloneCollectorMap(input.Metadata)}, nil
-}
-
-func collectorAcquisitionDifferences(defaults, edited map[string]any) map[string]any {
-	result := map[string]any{}
-	for key, value := range edited {
-		defaultValue, exists := defaults[key]
-		if !exists || fmt.Sprint(defaultValue) != fmt.Sprint(value) {
-			result[key] = value
-		}
-	}
-	return result
 }
 
 func mergeCollectorPointAcquisition(defaults map[string]any, mode string, overrides map[string]any) map[string]any {
@@ -1506,15 +1493,27 @@ func normalizeCimonAddress(value any) (string, error) {
 	return address, nil
 }
 
-// normalizeKeyenceAddress 统一软元件地址大小写，避免同一地址因录入形式不同形成重复变量。
-func normalizeKeyenceAddress(value any) (string, error) {
+var keyenceMcAddressPattern = regexp.MustCompile(`^(?:R|MR|LR|CR|CM|DM|EM|FM|ZF|W|TN|TS|CN|CS)[0-9A-F]+$`)
+var keyenceKvOldAddressPattern = regexp.MustCompile(`^[A-Z]{1,4}[0-9]+(?:\.[0-9]+)?$`)
+var keyenceNanoAddressPattern = regexp.MustCompile(`^(?:(?:R|B|MR|LR|CR|VB|DM|EM|FM|ZF|W|TM|Z|AT|CM|VM|T|C|TC|CC|TS|CS)[0-9]+|UNIT=[0-9]+;[0-9]+)$`)
+
+// normalizeKeyenceAddress 统一软元件地址大小写，并使用与节点驱动一致的协议地址语法。
+func normalizeKeyenceAddress(value any, driverID string) (string, error) {
 	address, ok := value.(string)
 	address = strings.ToUpper(strings.TrimSpace(address))
-	if !ok || len(address) < 2 || len([]rune(address)) > 128 || strings.IndexFunc(address, unicode.IsSpace) >= 0 {
+	pattern := keyenceNanoAddressPattern
+	if driverID == "keyence.mc-3e-tcp" || driverID == "keyence.mc-ascii-tcp" {
+		pattern = keyenceMcAddressPattern
+	} else if driverID == "keyence.kv-old-tcp" {
+		pattern = keyenceKvOldAddressPattern
+	}
+	if !ok || len(address) < 2 || len([]rune(address)) > 128 || strings.IndexFunc(address, unicode.IsSpace) >= 0 || !pattern.MatchString(address) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "基恩士设备地址无效")
 	}
 	return address, nil
 }
+
+var deltaAddressPattern = regexp.MustCompile(`^(?:X|Y|M|SM|S|SR|D|T|C|HC|E)[0-9]+(?:\.[0-9]+)?$`)
 
 // normalizeDeltaAddress 规范站号覆盖和软元件地址，避免大小写差异形成重复变量。
 func normalizeDeltaAddress(value any) (string, error) {
@@ -1536,11 +1535,14 @@ func normalizeDeltaAddress(value any) (string, error) {
 		prefix = fmt.Sprintf("s=%d;", station)
 		address = address[separator+1:]
 	}
-	if len(address) < 2 {
+	address = strings.ToUpper(address)
+	if len(address) < 2 || !deltaAddressPattern.MatchString(address) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "台达 PLC 设备地址无效")
 	}
-	return prefix + strings.ToUpper(address), nil
+	return prefix + address, nil
 }
+
+var xinjeAddressPattern = regexp.MustCompile(`^[A-Z]{1,4}[0-9]+$`)
 
 // normalizeXinjeAddress 统一站号覆盖及软元件地址大小写。
 func normalizeXinjeAddress(value any) (string, error) {
@@ -1562,11 +1564,14 @@ func normalizeXinjeAddress(value any) (string, error) {
 		prefix = fmt.Sprintf("s=%d;", station)
 		address = address[separator+1:]
 	}
-	if len(address) < 2 {
+	address = strings.ToUpper(address)
+	if len(address) < 2 || !xinjeAddressPattern.MatchString(address) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "信捷 PLC 设备地址无效")
 	}
-	return prefix + strings.ToUpper(address), nil
+	return prefix + address, nil
 }
+
+var megMeetAddressPattern = regexp.MustCompile(`^(?:X|Y|M|SM|S|D|SD|Z|R|T|C)[0-9]+(?:\.[0-9]+)?$`)
 
 // normalizeMegMeetAddress 统一站号覆盖及软元件地址大小写，避免同一地址因格式差异重复保存。
 func normalizeMegMeetAddress(value any) (string, error) {
@@ -1588,14 +1593,19 @@ func normalizeMegMeetAddress(value any) (string, error) {
 		prefix = fmt.Sprintf("s=%d;", station)
 		address = address[separator+1:]
 	}
-	if len(address) < 2 {
+	address = strings.ToUpper(address)
+	if len(address) < 2 || !megMeetAddressPattern.MatchString(address) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "麦格米特 PLC 设备地址无效")
 	}
-	return prefix + strings.ToUpper(address), nil
+	return prefix + address, nil
 }
 
+var fujiCommandAddressPattern = regexp.MustCompile(`^(?:B|M|K|F|A|D|S|W|TS|TR|CS|CR|BD|WL)[0-9]+(?:\.[0-9]+)?$`)
+var fujiSphAddressPattern = regexp.MustCompile(`^(?:M(?:1|3|10)\.[0-9]+(?:\.[0-9]+)?|[IQ][0-9]+(?:\.[0-9]+)?)$`)
+var fujiSpbAddressPattern = regexp.MustCompile(`^(?:X|Y|L|M|D|TN|CN|TC|CC|R|W)[0-9]+(?:\.[0-9]+)?$`)
+
 // normalizeFujiAddress 统一富士软元件地址大小写，SPB 协议额外支持站号覆盖。
-func normalizeFujiAddress(value any, allowStation bool) (string, error) {
+func normalizeFujiAddress(value any, driverID string) (string, error) {
 	address, ok := value.(string)
 	address = strings.TrimSpace(address)
 	if !ok || len(address) < 2 || len([]rune(address)) > 128 || strings.IndexFunc(address, unicode.IsSpace) >= 0 {
@@ -1603,7 +1613,7 @@ func normalizeFujiAddress(value any, allowStation bool) (string, error) {
 	}
 	prefix := ""
 	if separator := strings.IndexByte(address, ';'); separator >= 0 {
-		if !allowStation {
+		if driverID != "fuji.spb" && driverID != "fuji.spb-over-tcp" {
 			return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前富士协议不支持地址内覆盖站号")
 		}
 		stationText := address[:separator]
@@ -1617,11 +1627,20 @@ func normalizeFujiAddress(value any, allowStation bool) (string, error) {
 		prefix = fmt.Sprintf("s=%d;", station)
 		address = address[separator+1:]
 	}
-	if len(address) < 2 {
+	address = strings.ToUpper(address)
+	pattern := fujiCommandAddressPattern
+	if driverID == "fuji.sph-tcp" {
+		pattern = fujiSphAddressPattern
+	} else if driverID == "fuji.spb" || driverID == "fuji.spb-over-tcp" {
+		pattern = fujiSpbAddressPattern
+	}
+	if len(address) < 2 || !pattern.MatchString(address) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "富士 PLC 设备地址无效")
 	}
-	return prefix + strings.ToUpper(address), nil
+	return prefix + address, nil
 }
+
+var vigorAddressPattern = regexp.MustCompile(`^(?:X|Y|M|SM|S|TS|TC|CS|CC|D|SD|R|T|C)[0-9]+$`)
 
 // normalizeVigorAddress 统一站号覆盖和 VS 系列软元件地址大小写。
 func normalizeVigorAddress(value any) (string, error) {
@@ -1643,10 +1662,11 @@ func normalizeVigorAddress(value any) (string, error) {
 		prefix = fmt.Sprintf("s=%d;", station)
 		address = address[separator+1:]
 	}
-	if len(address) < 2 {
+	address = strings.ToUpper(address)
+	if len(address) < 2 || !vigorAddressPattern.MatchString(address) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "丰炜 PLC 设备地址无效")
 	}
-	return prefix + strings.ToUpper(address), nil
+	return prefix + address, nil
 }
 
 // normalizeYokogawaAddress 统一 CPU 覆盖、软元件和特殊模块地址，并在保存时校验位区与数据类型。
@@ -2207,7 +2227,7 @@ func formatCollectorAddress(driverID string, address map[string]any) (string, er
 		return value, nil
 	case "keyence.mc-3e-tcp", "keyence.mc-ascii-tcp", "keyence.kv-old-tcp", "keyence.nano-tcp",
 		"keyence.nano-serial", "keyence.nano-serial-over-tcp":
-		return normalizeKeyenceAddress(address["address"])
+		return normalizeKeyenceAddress(address["address"], driverID)
 	case "delta.tcp", "delta.rtu-over-tcp", "delta.ascii-over-tcp", "delta.rtu", "delta.ascii":
 		return normalizeDeltaAddress(address["address"])
 	case "xinje.tcp", "xinje.rtu-over-tcp", "xinje.rtu", "xinje.internal-tcp":
@@ -2215,9 +2235,9 @@ func formatCollectorAddress(driverID string, address map[string]any) (string, er
 	case "megmeet.tcp", "megmeet.rtu-over-tcp", "megmeet.rtu":
 		return normalizeMegMeetAddress(address["address"])
 	case "fuji.command-setting-tcp", "fuji.sph-tcp":
-		return normalizeFujiAddress(address["address"], false)
+		return normalizeFujiAddress(address["address"], driverID)
 	case "fuji.spb-over-tcp", "fuji.spb":
-		return normalizeFujiAddress(address["address"], true)
+		return normalizeFujiAddress(address["address"], driverID)
 	case "vigor.serial-over-tcp", "vigor.serial":
 		return normalizeVigorAddress(address["address"])
 	case "yokogawa.link-tcp":
@@ -2256,7 +2276,7 @@ func mapCollectorPoints(records []repository.CollectorPointRecord) []CollectorPo
 	return result
 }
 func toCollectorPoint(record repository.CollectorPointRecord) CollectorPoint {
-	point := CollectorPoint{ID: record.ID, GroupID: record.GroupID, Code: record.Code, Name: record.Name, Description: record.Description, Address: record.Address, AddressText: record.AddressText, AddressSchemaVersion: record.AddressSchemaVersion, DataType: record.DataType, ElementCount: record.ElementCount, ReadOptions: record.ReadOptions, Acquisition: record.Acquisition, AcquisitionMode: record.AcquisitionMode, AcquisitionOverrides: record.AcquisitionOverrides, Enabled: record.Enabled, SortOrder: record.SortOrder, Metadata: record.Metadata}
+	point := CollectorPoint{ID: record.ID, GroupID: record.GroupID, Code: record.Code, Name: record.Name, Description: record.Description, Address: record.Address, AddressText: record.AddressText, AddressSchemaVersion: record.AddressSchemaVersion, DataType: record.DataType, DataPointID: record.DataPointID, DataPointPath: record.DataPointPath, DataPointDefaultValue: cloneOptionalString(record.DataPointDefaultValue), ElementCount: record.ElementCount, ReadOptions: record.ReadOptions, Acquisition: record.Acquisition, AcquisitionMode: record.AcquisitionMode, AcquisitionOverrides: record.AcquisitionOverrides, Enabled: record.Enabled, SortOrder: record.SortOrder, Metadata: record.Metadata}
 	if snapshot := record.LatestDebugSnapshot; snapshot != nil {
 		point.LatestDebugSnapshot = &CollectorPointDebugSnapshot{
 			Value: snapshot.Value, ValueText: snapshot.ValueText, DataType: snapshot.DataType, Quality: snapshot.Quality,

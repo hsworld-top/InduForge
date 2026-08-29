@@ -122,7 +122,8 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 		"points": []map[string]any{{
 			"name": "Temperature", "address": map[string]any{"nodeId": "ns=2;s=Temperature"},
 			"dataType": "float32", "elementCount": 1, "readOptions": map[string]any{},
-			"acquisition": map[string]any{"intervalMs": 1000}, "enabled": true, "sortOrder": 0, "metadata": map[string]any{},
+			"acquisitionMode": "inherit", "acquisitionOverrides": map[string]any{},
+			"enabled": true, "sortOrder": 0, "metadata": map[string]any{},
 		}},
 	})
 	var pointBatch struct {
