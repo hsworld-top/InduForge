@@ -35,6 +35,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 // 阻止 $attrs 自动透传到根元素，改由 v-bind="$attrs" 显式传给 el-dialog
 defineOptions({ inheritAttrs: false })
@@ -59,7 +62,7 @@ const props = withDefaults(
     confirmOnDirtyClose: true,
     dirty: false,
     closeDisabled: false,
-    dirtyCloseMessage: '当前有未保存内容，确认关闭吗？',
+    dirtyCloseMessage: datacenterLocale.value === 'en' ? 'There are unsaved changes. Close anyway?' : '当前有未保存内容，确认关闭吗？',
     appendToBody: true,
     lockScroll: true,
     bodyMaxHeight: 'calc(100vh - 200px)',
@@ -84,9 +87,9 @@ const confirmDirtyClose = async () => {
     return true
   }
 
-  return ElMessageBox.confirm(props.dirtyCloseMessage, '关闭确认', {
-    confirmButtonText: '关闭',
-    cancelButtonText: '继续编辑',
+  return ElMessageBox.confirm(props.dirtyCloseMessage, ui('关闭确认', 'Confirm Close'), {
+    confirmButtonText: ui('关闭', 'Close'),
+    cancelButtonText: ui('继续编辑', 'Keep Editing'),
     type: 'warning',
   })
     .then(() => true)

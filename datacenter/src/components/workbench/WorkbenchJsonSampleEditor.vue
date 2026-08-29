@@ -6,7 +6,7 @@
         <el-button size="small" :disabled="fillLatestDisabled" @click="$emit('fillLatest')">
           {{ fillLatestText }}
         </el-button>
-        <el-button size="small" @click="formatEditor">格式化</el-button>
+        <el-button size="small" @click="formatEditor">{{ ui('格式化', 'Format') }}</el-button>
         <el-button type="primary" size="small" @click="$emit('parse')">
           {{ parseText }}
         </el-button>
@@ -29,6 +29,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 withDefaults(
   defineProps<{
@@ -40,10 +43,10 @@ withDefaults(
     error?: string
   }>(),
   {
-    title: 'JSON 样例',
-    fillLatestText: '填入最近样本',
+    title: datacenterLocale.value === 'en' ? 'JSON Sample' : 'JSON 样例',
+    fillLatestText: datacenterLocale.value === 'en' ? 'Use Latest Sample' : '填入最近样本',
     fillLatestDisabled: false,
-    parseText: '解析字段',
+    parseText: datacenterLocale.value === 'en' ? 'Parse Fields' : '解析字段',
     error: '',
   },
 )

@@ -1,25 +1,25 @@
 <template>
-  <DcDialog v-model="visible" title="Excel 导入报警项" width="720px">
+  <DcDialog v-model="visible" :title="t('alarmImport.title')" width="720px">
     <el-steps :active="step" finish-status="success" simple
-      ><el-step title="选择文件" /><el-step title="校验预览" /><el-step title="确认导入"
+      ><el-step :title="t('alarmImport.selectFile')" /><el-step :title="t('alarmImport.validatePreview')" /><el-step :title="t('alarmImport.confirmImport')"
     /></el-steps>
     <section class="alarm-import">
       <template v-if="step === 0">
         <input ref="fileInput" type="file" accept=".xlsx" @change="selectFile" />
-        <p>仅新增和更新普通报警。缺失行不会删除报警，组合报警不参与 Excel 导入。</p>
+        <p>{{ t('alarmImport.scopeHint') }}</p>
       </template>
       <template v-else-if="preview">
         <div class="alarm-import__summary">
           <span
-            >新增 <strong>{{ preview.createCount }}</strong></span
+            >{{ t('alarmImport.created') }} <strong>{{ preview.createCount }}</strong></span
           ><span
-            >更新 <strong>{{ preview.updateCount }}</strong></span
+            >{{ t('alarmImport.updated') }} <strong>{{ preview.updateCount }}</strong></span
           ><span
-            >无变化 <strong>{{ preview.unchangedCount }}</strong></span
+            >{{ t('alarmImport.unchanged') }} <strong>{{ preview.unchangedCount }}</strong></span
           ><span
-            >错误 <strong>{{ preview.errorCount }}</strong></span
+            >{{ t('alarmImport.errors') }} <strong>{{ preview.errorCount }}</strong></span
           ><span
-            >警告 <strong>{{ preview.warningCount }}</strong></span
+            >{{ t('alarmImport.warnings') }} <strong>{{ preview.warningCount }}</strong></span
           >
         </div>
         <el-table
@@ -27,23 +27,23 @@
           :data="preview.issues"
           height="230"
           :row-class-name="issueRowClass"
-          ><el-table-column prop="sheet" label="工作表" width="110" /><el-table-column
+          ><el-table-column prop="sheet" :label="t('alarmImport.sheet')" width="110" /><el-table-column
             prop="row"
-            label="行"
-            width="64" /><el-table-column label="类型" width="80"
+            :label="t('alarmImport.row')"
+            width="64" /><el-table-column :label="t('alarmImport.type')" width="80"
             ><template #default="{ row }"
               ><el-tag :type="row.type === 'error' ? 'danger' : 'warning'" size="small">{{
-                row.type === 'error' ? '错误' : '警告'
+                row.type === 'error' ? t('alarmImport.errors') : t('alarmImport.warnings')
               }}</el-tag></template
             ></el-table-column
-          ><el-table-column prop="message" label="问题" min-width="300"
+          ><el-table-column prop="message" :label="t('alarmImport.issue')" min-width="300"
         /></el-table>
         <el-checkbox
           v-if="preview.warningCount > 0"
           v-model="warningsConfirmed"
           class="alarm-import__warning-confirm"
         >
-          我已检查全部警告，确认继续导入并接受这些影响
+          {{ t('alarmImport.confirmWarnings') }}
         </el-checkbox>
         <button
           v-if="preview.issues.length"
@@ -51,13 +51,13 @@
           class="alarm-import__error-download"
           @click="downloadErrors"
         >
-          下载带问题说明的工作簿
+          {{ t('alarmImport.downloadIssues') }}
         </button>
-        <el-empty v-else :image-size="52" description="校验通过，可以导入" />
+        <el-empty v-else :image-size="52" :description="t('alarmImport.valid')" />
       </template>
     </section>
     <template #footer
-      ><button type="button" class="dc-button" @click="visible = false">取消</button
+      ><button type="button" class="dc-button" @click="visible = false">{{ t('alarmImport.cancel') }}</button
       ><button
         v-if="step === 0"
         type="button"
@@ -65,7 +65,7 @@
         :disabled="!file || loading"
         @click="previewFile"
       >
-        校验文件</button
+        {{ t('alarmImport.validate') }}</button
       ><button
         v-else
         type="button"
@@ -78,7 +78,7 @@
         "
         @click="apply"
       >
-        确认导入
+        {{ t('alarmImport.confirm') }}
       </button></template
     >
   </DcDialog>
@@ -90,6 +90,7 @@ import DcDialog from '@/components/shared/DcDialog.vue'
 import { applyAlarmImport, downloadAlarmImportErrors, previewAlarmImport } from '@/api/alarm.api'
 import type { AlarmExcelPreview } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 const props = defineProps<{ modelValue: boolean; projectId: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; imported: [count: number] }>()
 const visible = computed({
@@ -122,7 +123,7 @@ async function previewFile() {
     preview.value = await previewAlarmImport(props.projectId, file.value)
     step.value = 1
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '校验导入文件失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmImport.validationFailed')))
   } finally {
     loading.value = false
   }
@@ -138,11 +139,11 @@ async function apply() {
       warningsConfirmed.value ? preview.value.warningKeys : [],
     )
     step.value = 2
-    ElMessage.success(`已导入 ${result.affectedCount} 条报警项`)
+    ElMessage.success(t('alarmImport.imported', { count: result.affectedCount }))
     emit('imported', result.affectedCount)
     visible.value = false
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '导入报警项失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmImport.importFailed')))
   } finally {
     loading.value = false
   }
@@ -157,11 +158,11 @@ async function downloadErrors() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = '报警项-导入问题.xlsx'
+    anchor.download = t('alarmImport.issueFilename')
     anchor.click()
     URL.revokeObjectURL(url)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '下载问题工作簿失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmImport.downloadFailed')))
   }
 }
 </script>

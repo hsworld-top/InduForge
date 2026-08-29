@@ -13,11 +13,11 @@
     <template v-if="step === 1">
       <div class="connection-dialog__step1">
         <div class="connection-dialog__step1-header">
-          <h3 class="connection-dialog__step1-title">选择接入类型</h3>
-          <p class="connection-dialog__step1-sub">先选择协议，再填写配置参数</p>
+          <h3 class="connection-dialog__step1-title">{{ tc('connectionDialog.selectType') }}</h3>
+          <p class="connection-dialog__step1-sub">{{ tc('connectionDialog.selectTypeHint') }}</p>
         </div>
         <div class="connection-dialog__type-section">
-          <div class="connection-dialog__section-title">内置运行库</div>
+          <div class="connection-dialog__section-title">{{ tc('connectionDialog.builtin') }}</div>
           <div class="connection-dialog__step1-grid">
             <button
               v-for="source in builtinSourceOptions"
@@ -34,7 +34,7 @@
           </div>
         </div>
         <div class="connection-dialog__type-section">
-          <div class="connection-dialog__section-title">外部数据源</div>
+          <div class="connection-dialog__section-title">{{ tc('connectionDialog.external') }}</div>
           <div class="connection-dialog__step1-grid">
             <button
               v-for="source in externalSourceOptions"
@@ -70,7 +70,7 @@
               <h3>{{ activeFormTitle }}</h3>
             </div>
             <el-button v-if="mode === 'create'" size="small" text @click="resetCurrentForm">
-              重置默认值
+              {{ tc('connectionDialog.resetDefaults') }}
             </el-button>
           </div>
 
@@ -95,19 +95,19 @@
             label-position="top"
             class="connection-dialog__protocol-form"
           >
-            <el-form-item :label="isBuiltinStoreSelected ? '名称' : '连接名称'" prop="name">
+            <el-form-item :label="isBuiltinStoreSelected ? tc('connectionDialog.form.name') : tc('connectionDialog.form.connectionName')" prop="name">
               <el-input v-model="formData.name" :placeholder="connectionNamePlaceholder" />
             </el-form-item>
 
             <template v-if="connectionType === 'kafka'">
               <div class="connection-dialog__form-section">
-                <div class="connection-dialog__form-section-title">基础信息</div>
+                <div class="connection-dialog__form-section-title">{{ tc('connectionDialog.form.basic') }}</div>
                 <el-form-item prop="brokers">
                   <template #label>
                     <span class="connection-dialog__field-label">
-                      服务器地址
+                      {{ tc('connectionDialog.form.serverAddresses') }}
                       <el-tooltip
-                        content="保持 IP:端口 格式；支持配置多个地址，用英文逗号分隔。"
+                        :content="tc('connectionDialog.form.serverHint')"
                         placement="top"
                       >
                         <IconTablerHelpCircle class="connection-dialog__field-help" />
@@ -118,19 +118,19 @@
                     v-model="formData.brokers"
                     placeholder="127.0.0.1:9092,127.0.0.2:9092"
                   />
-                  <p class="connection-dialog__field-tip">支持配置多个地址，用英文逗号分隔。</p>
+                  <p class="connection-dialog__field-tip">{{ tc('connectionDialog.form.multiAddress') }}</p>
                 </el-form-item>
               </div>
 
               <div class="connection-dialog__form-section">
-                <div class="connection-dialog__form-section-title">认证信息</div>
+                <div class="connection-dialog__form-section-title">{{ tc('connectionDialog.form.auth') }}</div>
                 <div class="connection-dialog__form-grid">
                   <el-form-item>
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        安全协议
+                        {{ tc('connectionDialog.form.securityProtocol') }}
                         <el-tooltip
-                          content="本地测试通常选择 PLAINTEXT；启用 TLS 或 SASL 时按 Broker 要求选择。"
+                          :content="tc('connectionDialog.form.securityHint')"
                           placement="top"
                         >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
@@ -149,8 +149,8 @@
                   <el-form-item v-if="isKafkaSaslEnabled">
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        SASL 机制
-                        <el-tooltip content="需与 Broker 开启的认证机制一致。" placement="top">
+                        {{ tc('connectionDialog.form.saslMechanism') }}
+                        <el-tooltip :content="tc('connectionDialog.form.saslHint')" placement="top">
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
                         </el-tooltip>
                       </span>
@@ -169,24 +169,24 @@
                   <el-form-item>
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        用户名
-                        <el-tooltip content="Kafka SASL 认证用户名。" placement="top">
+                        {{ tc('connectionDialog.form.username') }}
+                        <el-tooltip :content="tc('connectionDialog.form.kafkaUsernameHint')" placement="top">
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
                         </el-tooltip>
                       </span>
                     </template>
                     <el-input
                       v-model="formData.username"
-                      placeholder="请输入 SASL 用户名"
+                      :placeholder="tc('connectionDialog.form.usernamePlaceholder')"
                       clearable
                     />
                   </el-form-item>
                   <el-form-item>
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        密码
+                        {{ tc('connectionDialog.form.password') }}
                         <el-tooltip
-                          content="Kafka SASL 认证密码，保存后按接入源配置加密/脱敏策略处理。"
+                          :content="tc('connectionDialog.form.kafkaPasswordHint')"
                           placement="top"
                         >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
@@ -200,8 +200,8 @@
                       clearable
                       :placeholder="
                         mode === 'edit' && connection?.secretStatus?.['option.password']
-                          ? '已保存，留空保持不变'
-                          : '请输入 SASL 密码'
+                          ? tc('connectionDialog.form.savedKeep')
+                          : tc('connectionDialog.form.passwordPlaceholder')
                       "
                     />
                   </el-form-item>
@@ -209,22 +209,22 @@
               </div>
 
               <div class="connection-dialog__form-section">
-                <div class="connection-dialog__form-section-title">连接参数</div>
+                <div class="connection-dialog__form-section-title">{{ tc('connectionDialog.form.params') }}</div>
                 <el-form-item>
                   <template #label>
                     <span class="connection-dialog__field-label">
-                      客户端 ID
+                      {{ tc('connectionDialog.form.clientId') }}
                       <el-tooltip
-                        content="用于 Broker 日志和监控识别当前接入源；留空时系统会自动生成。"
+                        :content="tc('connectionDialog.form.clientIdHint')"
                         placement="top"
                       >
                         <IconTablerHelpCircle class="connection-dialog__field-help" />
                       </el-tooltip>
                     </span>
                   </template>
-                  <el-input v-model="formData.clientId" placeholder="自动生成" clearable>
+                  <el-input v-model="formData.clientId" :placeholder="tc('connectionDialog.form.auto')" clearable>
                     <template #append>
-                      <el-button @click="generateKafkaClientId" icon="Refresh">生成</el-button>
+                      <el-button @click="generateKafkaClientId" icon="Refresh">{{ tc('connectionDialog.form.generate') }}</el-button>
                     </template>
                   </el-input>
                 </el-form-item>
@@ -232,9 +232,9 @@
                   <el-form-item>
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        连接超时
+                        {{ tc('connectionDialog.form.dialTimeout') }}
                         <el-tooltip
-                          content="建立 TCP/TLS/SASL 连接的最大等待时间，单位毫秒。"
+                          :content="tc('connectionDialog.form.dialTimeoutHint')"
                           placement="top"
                         >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
@@ -251,9 +251,9 @@
                   <el-form-item>
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        请求超时
+                        {{ tc('connectionDialog.form.requestTimeout') }}
                         <el-tooltip
-                          content="测试连接和读取元信息时的最大等待时间，单位毫秒。"
+                          :content="tc('connectionDialog.form.requestTimeoutHint')"
                           placement="top"
                         >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
@@ -271,37 +271,37 @@
               </div>
 
               <el-collapse v-model="kafkaActiveCollapse" class="connection-dialog__collapse">
-                <el-collapse-item title="SSL/TLS 配置" name="ssl">
-                  <el-form-item label="CA 证书">
+                <el-collapse-item :title="tc('connectionDialog.form.tls')" name="ssl">
+                  <el-form-item :label="tc('connectionDialog.form.ca')">
                     <el-input
                       v-model="formData.sslConfig.ca"
                       type="textarea"
                       :rows="4"
-                      placeholder="PEM，可选"
+                      :placeholder="tc('connectionDialog.form.pemOptional')"
                     />
                   </el-form-item>
-                  <el-form-item label="客户端证书">
+                  <el-form-item :label="tc('connectionDialog.form.clientCert')">
                     <el-input
                       v-model="formData.sslConfig.cert"
                       type="textarea"
                       :rows="4"
-                      placeholder="PEM，可选"
+                      :placeholder="tc('connectionDialog.form.pemOptional')"
                     />
                   </el-form-item>
-                  <el-form-item label="客户端私钥">
+                  <el-form-item :label="tc('connectionDialog.form.clientKey')">
                     <el-input
                       v-model="formData.sslConfig.key"
                       type="textarea"
                       :rows="4"
-                      placeholder="PEM，可选"
+                      :placeholder="tc('connectionDialog.form.pemOptional')"
                     />
                   </el-form-item>
                   <el-form-item>
                     <template #label>
                       <span class="connection-dialog__field-label">
-                        验证服务器证书
+                        {{ tc('connectionDialog.form.verifyServer') }}
                         <el-tooltip
-                          content="生产环境建议开启；使用自签名证书调试时可按需关闭。"
+                          :content="tc('connectionDialog.form.verifyServerHint')"
                           placement="top"
                         >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
@@ -312,8 +312,8 @@
                     <span class="connection-dialog__field-inline-tip">
                       {{
                         formData.sslConfig.rejectUnauthorized
-                          ? '校验证书链与主机名'
-                          : '跳过证书校验'
+                          ? tc('connectionDialog.form.verifyChain')
+                          : tc('connectionDialog.form.skipVerify')
                       }}
                     </span>
                   </el-form-item>
@@ -321,46 +321,46 @@
               </el-collapse>
               <el-form-item
                 v-if="mode === 'edit' && Object.keys(connection?.secretStatus || {}).length"
-                label="密钥操作"
+                :label="tc('connectionDialog.form.secretActions')"
               >
                 <el-checkbox v-model="formData.clearSecrets"
-                  >清除已保存的 Kafka 密码和证书密钥</el-checkbox
+                  >{{ tc('connectionDialog.form.clearKafkaSecrets') }}</el-checkbox
                 >
               </el-form-item>
             </template>
 
             <template v-else-if="connectionType === 'redis'">
-              <el-form-item label="连接方式">
+              <el-form-item :label="tc('connectionDialog.form.redisMode')">
                 <el-segmented v-model="formData.mode" :options="redisModeOptions" />
               </el-form-item>
-              <el-form-item label="节点地址" prop="address">
+              <el-form-item :label="tc('connectionDialog.form.nodeAddress')" prop="address">
                 <el-input
                   v-model="formData.address"
-                  placeholder="127.0.0.1:6379；多个节点用英文逗号分隔"
+                  :placeholder="tc('connectionDialog.form.redisAddressPlaceholder')"
                 />
               </el-form-item>
               <div class="connection-dialog__form-grid">
-                <el-form-item label="数据库编号">
+                <el-form-item :label="tc('connectionDialog.form.dbNumber')">
                   <el-input v-model.number="formData.db" inputmode="numeric" placeholder="0" />
                 </el-form-item>
-                <el-form-item v-if="formData.mode === 'sentinel'" label="主节点名称">
+                <el-form-item v-if="formData.mode === 'sentinel'" :label="tc('connectionDialog.form.masterName')">
                   <el-input v-model="formData.masterName" placeholder="mymaster" />
                 </el-form-item>
-                <el-form-item label="Key 筛选规则">
-                  <el-input v-model="formData.keyPattern" placeholder="* 表示全部 Key" />
+                <el-form-item :label="tc('connectionDialog.form.keyPattern')">
+                  <el-input v-model="formData.keyPattern" :placeholder="tc('connectionDialog.form.allKeys')" />
                 </el-form-item>
               </div>
               <div class="connection-dialog__form-grid">
-                <el-form-item label="用户名（可选）">
-                  <el-input v-model="formData.username" placeholder="未配置时使用默认用户" />
+                <el-form-item :label="tc('connectionDialog.form.optionalUsername')">
+                  <el-input v-model="formData.username" :placeholder="tc('connectionDialog.form.defaultUser')" />
                 </el-form-item>
-                <el-form-item label="密码（可选）">
+                <el-form-item :label="tc('connectionDialog.form.optionalPassword')">
                   <SavedPasswordInput
                     v-model="formData.password"
                     :placeholder="
                       mode === 'edit' && connection?.secretStatus?.password
-                        ? '已保存，留空保持不变'
-                        : '可选'
+                        ? tc('connectionDialog.form.savedKeep')
+                        : tc('connectionDialog.form.optional')
                     "
                     :saved-password-configured="showSavedPassword"
                     :loading="revealingPassword"
@@ -372,30 +372,29 @@
 
             <template v-else-if="connectionType === 'tdengine'">
               <div class="connection-dialog__form-grid">
-                <el-form-item label="协议">
+                <el-form-item :label="tc('connectionDialog.form.protocol')">
                   <el-segmented v-model="formData.protocol" :options="tdengineProtocolOptions" />
                 </el-form-item>
-                <el-form-item label="主机" prop="host">
+                <el-form-item :label="tc('connectionDialog.form.host')" prop="host">
                   <el-input v-model="formData.host" placeholder="127.0.0.1" />
                 </el-form-item>
-                <el-form-item label="端口">
+                <el-form-item :label="tc('connectionDialog.form.port')">
                   <el-input v-model.number="formData.port" inputmode="numeric" placeholder="6041" />
                 </el-form-item>
               </div>
               <p class="connection-dialog__field-tip connection-dialog__tdengine-tip">
-                使用 taosAdapter WebSocket 接口，默认端口 6041；支持 TDengine Server 3.3.6.0
-                及以上版本。
+                {{ tc('connectionDialog.form.tdengineHint') }}
               </p>
               <div class="connection-dialog__form-grid">
                 <el-form-item label="Database" prop="database">
                   <el-input v-model="formData.database" placeholder="iot_data" />
                 </el-form-item>
-                <el-form-item label="时区">
+                <el-form-item :label="tc('connectionDialog.form.timezone')">
                   <el-select
                     v-model="formData.timezone"
                     filterable
                     class="w-full"
-                    placeholder="请选择时区"
+                    :placeholder="tc('connectionDialog.form.selectTimezone')"
                   >
                     <el-option
                       v-for="timezone in timezoneOptions"
@@ -407,16 +406,16 @@
                 </el-form-item>
               </div>
               <div class="connection-dialog__form-grid">
-                <el-form-item label="用户名">
+                <el-form-item :label="tc('connectionDialog.form.username')">
                   <el-input v-model="formData.username" placeholder="root" />
                 </el-form-item>
-                <el-form-item label="密码">
+                <el-form-item :label="tc('connectionDialog.form.password')">
                   <SavedPasswordInput
                     v-model="formData.password"
                     :placeholder="
                       mode === 'edit' && connection?.secretStatus?.password
-                        ? '已保存，留空保持不变'
-                        : '请输入密码'
+                        ? tc('connectionDialog.form.savedKeep')
+                        : tc('connectionDialog.form.password')
                     "
                     :saved-password-configured="showSavedPassword"
                     :loading="revealingPassword"
@@ -424,25 +423,25 @@
                   />
                 </el-form-item>
               </div>
-              <el-form-item v-if="formData.protocol === 'wss'" label="证书校验">
+              <el-form-item v-if="formData.protocol === 'wss'" :label="tc('connectionDialog.form.trustMode')">
                 <el-radio-group v-model="formData.tlsSkipVerify">
-                  <el-radio-button :value="false">验证证书</el-radio-button>
-                  <el-radio-button :value="true">信任自签名证书</el-radio-button>
+                  <el-radio-button :value="false">{{ tc('connectionDialog.form.verifyCertificate') }}</el-radio-button>
+                  <el-radio-button :value="true">{{ tc('connectionDialog.form.trustSelfSigned') }}</el-radio-button>
                 </el-radio-group>
               </el-form-item>
             </template>
 
             <template v-else-if="isSimpleMetadataSource">
-              <el-form-item label="说明">
+              <el-form-item :label="tc('connectionDialog.form.description')">
                 <el-input
                   v-model="formData.description"
                   type="textarea"
                   :rows="3"
-                  placeholder="可选，描述该接入源在工程中的用途"
+                  :placeholder="tc('connectionDialog.form.descriptionPlaceholder')"
                 />
               </el-form-item>
               <template v-if="connectionType === 'builtin.realtime'">
-                <el-form-item label="默认 TTL">
+                <el-form-item :label="tc('connectionDialog.form.defaultTtl')">
                   <el-input-number v-model="formData.defaultTtlSeconds" :min="0" :max="86400" />
                 </el-form-item>
               </template>
@@ -452,7 +451,7 @@
 
         <aside class="connection-dialog__inspector">
           <section class="connection-dialog__summary">
-            <div class="connection-dialog__section-title">配置摘要</div>
+            <div class="connection-dialog__section-title">{{ tc('connectionDialog.summary') }}</div>
             <dl>
               <template v-for="row in summaryRows" :key="row.label">
                 <dt>{{ row.label }}</dt>
@@ -462,7 +461,7 @@
           </section>
 
           <section v-if="showTestButton" class="connection-dialog__test">
-            <div class="connection-dialog__section-title">连接测试</div>
+            <div class="connection-dialog__section-title">{{ tc('connectionDialog.connectionTest') }}</div>
             <div class="connection-dialog__test-state" :class="`is-${testState.status}`">
               <component :is="testState.icon" class="connection-dialog__test-icon" />
               <div>
@@ -478,12 +477,12 @@
               {{ testState.detail }}
             </div>
             <div v-if="isTestStale" class="connection-dialog__test-stale">
-              配置已修改，建议重新测试后保存。
+              {{ tc('connectionDialog.staleTest') }}
             </div>
           </section>
 
           <section class="connection-dialog__checklist">
-            <div class="connection-dialog__section-title">保存前检查</div>
+            <div class="connection-dialog__section-title">{{ tc('connectionDialog.preSaveCheck') }}</div>
             <div
               v-for="item in checklist"
               :key="item.label"
@@ -507,7 +506,7 @@
           </template>
           <template v-else>
             <!-- 返回上一步：仅 create 模式可见 -->
-            <el-button v-if="mode === 'create'" @click="goBackToStep1"> ← 返回上一步 </el-button>
+            <el-button v-if="mode === 'create'" @click="goBackToStep1"> ← {{ tc('connectionDialog.back') }} </el-button>
             <el-button @click="requestClose">{{ tc('actions.cancel') }}</el-button>
             <el-button v-if="showTestButton" @click="handleTest" :loading="testing">
               {{ tc('actions.testConnection') }}
@@ -613,16 +612,16 @@ const revealingPassword = ref(false)
 const revealedPassword = ref('')
 const testResult = ref({
   status: 'idle',
-  title: '尚未测试',
-  message: '填写连接参数后，可以先验证网络、认证与基础协议是否可用。',
+  title: t('connectionDialog.notTested'),
+  message: t('connectionDialog.notTestedHint'),
   detail: '',
   durationMs: 0,
 })
 
 const builtinSourceOptions = BUILTIN_STORE_TYPES.map((store) => ({
   value: store.type,
-  label: store.name,
-  description: store.description,
+  label: t(`accessSources.builtinTypes.${store.type.split('.').at(-1)}`),
+  description: t(`connectionDialog.descriptions.${store.type.split('.').at(-1)}`),
   icon: markRaw(
     store.type === 'builtin.timeseries'
       ? IconTablerTimeline
@@ -638,55 +637,55 @@ const externalSourceOptions = [
   {
     value: 'mysql',
     label: 'MySQL',
-    description: 'MySQL 数据库连接',
+    description: t('connectionDialog.descriptions.mysql'),
     icon: markRaw(IconTablerDatabase),
   },
   {
     value: 'postgresql',
     label: 'PG',
-    description: 'PostgreSQL 数据库连接',
+    description: t('connectionDialog.descriptions.postgresql'),
     icon: markRaw(IconTablerDatabase),
   },
   {
     value: 'sqlserver',
     label: 'SqlServer',
-    description: 'SQL Server 数据库连接',
+    description: t('connectionDialog.descriptions.sqlserver'),
     icon: markRaw(IconTablerDatabase),
   },
   {
     value: 'mqtt',
     label: 'MQTT',
-    description: 'Broker 连接与订阅配置',
+    description: t('connectionDialog.descriptions.mqtt'),
     icon: markRaw(IconTablerMessageCircle),
   },
   {
     value: 'kafka',
     label: 'Kafka',
-    description: 'Broker 地址与客户端参数',
+    description: t('connectionDialog.descriptions.kafka'),
     icon: markRaw(IconTablerServer),
   },
   {
     value: 'http',
     label: 'HTTP',
-    description: '接口请求与响应样本',
+    description: t('connectionDialog.descriptions.http'),
     icon: markRaw(IconTablerWorldWww),
   },
   {
     value: 'websocket',
     label: 'WebSocket',
-    description: '短连接消息预览',
+    description: t('connectionDialog.descriptions.websocket'),
     icon: markRaw(IconTablerWebhook),
   },
   {
     value: 'redis',
     label: 'Redis',
-    description: '浏览、维护 Key 并生成数据点',
+    description: t('connectionDialog.descriptions.redis'),
     icon: markRaw(IconTablerDatabase),
   },
   {
     value: 'tdengine',
     label: 'TDengine',
-    description: '时序库查询与历史存储',
+    description: t('connectionDialog.descriptions.tdengine'),
     icon: markRaw(IconTablerDatabase),
   },
 ]
@@ -707,11 +706,11 @@ const kafkaSaslMechanismOptions = [
   { label: 'SCRAM-SHA-256', value: 'SCRAM-SHA-256' },
   { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512' },
 ]
-const redisModeOptions = [
-  { label: '单机', value: 'standalone' },
-  { label: '哨兵', value: 'sentinel' },
-  { label: '集群', value: 'cluster' },
-]
+const redisModeOptions = computed(() => [
+  { label: t('connectionDialog.modes.standalone'), value: 'standalone' },
+  { label: t('connectionDialog.modes.sentinel'), value: 'sentinel' },
+  { label: t('connectionDialog.modes.cluster'), value: 'cluster' },
+])
 const tdengineProtocolOptions = [
   { label: 'WebSocket', value: 'ws' },
   { label: 'WebSocket TLS', value: 'wss' },
@@ -736,14 +735,14 @@ const timezoneOptions = (() => {
   return [...new Set(['Asia/Shanghai', 'UTC', ...values])]
 })()
 const protocolRules = {
-  name: [{ required: true, message: '连接名称不能为空', trigger: 'blur' }],
-  brokers: [{ required: true, message: '服务器地址不能为空', trigger: 'blur' }],
-  url: [{ required: true, message: '连接地址不能为空', trigger: 'blur' }],
-  address: [{ required: true, message: 'Redis 节点地址不能为空', trigger: 'blur' }],
-  ip: [{ required: true, message: 'IP 地址不能为空', trigger: 'blur' }],
-  username: [{ required: true, message: '用户名不能为空', trigger: 'blur' }],
-  serialPort: [{ required: true, message: '串口不能为空', trigger: 'blur' }],
-  database: [{ required: true, message: 'Database 不能为空', trigger: 'blur' }],
+  name: [{ required: true, message: t('connectionDialog.validation.name'), trigger: 'blur' }],
+  brokers: [{ required: true, message: t('connectionDialog.validation.brokers'), trigger: 'blur' }],
+  url: [{ required: true, message: t('connectionDialog.validation.url'), trigger: 'blur' }],
+  address: [{ required: true, message: t('connectionDialog.validation.redisAddress'), trigger: 'blur' }],
+  ip: [{ required: true, message: t('connectionDialog.validation.ip'), trigger: 'blur' }],
+  username: [{ required: true, message: t('connectionDialog.validation.username'), trigger: 'blur' }],
+  serialPort: [{ required: true, message: t('connectionDialog.validation.serialPort'), trigger: 'blur' }],
+  database: [{ required: true, message: t('connectionDialog.validation.database'), trigger: 'blur' }],
 }
 
 const activeSource = computed(() => {
@@ -757,12 +756,12 @@ const activeFormTitle = computed(() => {
   if (connectionType.value === 'mqtt') {
     return 'MQTT Broker'
   }
-  if (connectionType.value === 'kafka') return 'Kafka 接入源'
+  if (connectionType.value === 'kafka') return t('connectionDialog.titles.kafka')
   if (connectionType.value === 'http') return 'HTTP Source'
   if (connectionType.value === 'websocket') return 'WebSocket Source'
-  if (connectionType.value === 'redis') return 'Redis 接入源'
-  if (connectionType.value === 'tdengine') return 'TDengine 连接'
-  return activeDatabase.value?.label || '数据库连接'
+  if (connectionType.value === 'redis') return t('connectionDialog.titles.redis')
+  if (connectionType.value === 'tdengine') return t('connectionDialog.titles.tdengine')
+  return activeDatabase.value?.label || t('connectionDialog.titles.database')
 })
 
 // 动态加载表单组件
@@ -784,13 +783,13 @@ const isBuiltinStoreSelected = computed(() => isBuiltinStoreType(connectionType.
 const connectionNamePlaceholder = computed(() => {
   if (isBuiltinStoreSelected.value) return activeSource.value.label
   const examples: Record<string, string> = {
-    kafka: '例如：生产 Kafka',
-    http: '例如：设备接口',
-    websocket: '例如：实时消息',
-    redis: '例如：生产 Redis',
-    tdengine: '例如：生产时序库',
+    kafka: t('connectionDialog.examples.kafka'),
+    http: t('connectionDialog.examples.http'),
+    websocket: t('connectionDialog.examples.websocket'),
+    redis: t('connectionDialog.examples.redis'),
+    tdengine: t('connectionDialog.examples.tdengine'),
   }
-  return examples[connectionType.value] || `例如：${activeSource.value.label} 接入源`
+  return examples[connectionType.value] || t('connectionDialog.examples.generic', { name: activeSource.value.label })
 })
 const isSimpleMetadataSource = computed(
   () => isBuiltinStoreSelected.value || ['http', 'websocket'].includes(connectionType.value),
@@ -850,8 +849,8 @@ const testState = computed(() => {
     return {
       status: 'testing',
       icon: markRaw(IconTablerLoader2),
-      title: '正在测试',
-      message: '正在向 data_service 发起一次短时连接测试。',
+      title: t('connectionDialog.testing'),
+      message: t('connectionDialog.testingHint'),
       detail: '',
     }
   }
@@ -869,67 +868,67 @@ const testState = computed(() => {
 })
 
 const redisModeLabel = (mode: unknown) => {
-  const option = redisModeOptions.find((item) => item.value === String(mode || 'standalone'))
-  return option?.label || '单机'
+  const option = redisModeOptions.value.find((item) => item.value === String(mode || 'standalone'))
+  return option?.label || t('connectionDialog.values.empty')
 }
 
 const summaryRows = computed(() => {
   const data = formData.value || {}
   const rows = [
-    { label: '类型', value: activeSource.value.label },
-    { label: '名称', value: data.name || '未填写' },
+    { label: t('connectionDialog.fields.type'), value: activeSource.value.label },
+    { label: t('connectionDialog.fields.name'), value: data.name || t('connectionDialog.values.empty') },
   ]
 
   if (isBuiltinStoreSelected.value) {
-    rows.push({ label: '能力', value: '平台内置' }, { label: '运行态', value: '随工程环境映射' })
+    rows.push({ label: t('connectionDialog.fields.capability'), value: t('connectionDialog.values.builtin') }, { label: t('connectionDialog.fields.runtime'), value: t('connectionDialog.values.mapped') })
   } else if (relationalSourceTypes.includes(connectionType.value)) {
     rows.push(
-      { label: '数据库', value: activeDatabase.value?.label || dbType.value },
-      { label: '地址', value: formatEndpoint(data.host, data.port) },
-      { label: '库名', value: data.database || '未填写' },
-      { label: '账号', value: data.username || '未填写' },
+      { label: t('connectionDialog.fields.database'), value: activeDatabase.value?.label || dbType.value },
+      { label: t('connectionDialog.fields.endpoint'), value: formatEndpoint(data.host, data.port) },
+      { label: t('connectionDialog.fields.databaseName'), value: data.database || t('connectionDialog.values.empty') },
+      { label: t('connectionDialog.fields.account'), value: data.username || t('connectionDialog.values.empty') },
       {
-        label: '超时',
+        label: t('connectionDialog.fields.timeout'),
         value: formatTimeout(data.queryTimeout || data.timeout),
       },
     )
   } else if (connectionType.value === 'mqtt') {
     rows.push(
-      { label: '协议', value: data.protocol || 'mqtt' },
+      { label: t('connectionDialog.fields.protocol'), value: data.protocol || 'mqtt' },
       { label: 'Broker', value: formatEndpoint(data.brokerUrl, data.port) },
-      { label: 'Client ID', value: data.clientId || '自动生成' },
+      { label: 'Client ID', value: data.clientId || t('connectionDialog.values.auto') },
       { label: 'QoS', value: String(data.qos ?? 0) },
-      { label: '认证', value: data.username ? '用户名/密码' : '匿名' },
+      { label: t('connectionDialog.fields.authentication'), value: data.username ? t('connectionDialog.values.credentials') : t('connectionDialog.values.anonymous') },
     )
   } else if (connectionType.value === 'kafka') {
     rows.push(
-      { label: '服务器地址', value: data.brokers || '未填写' },
-      { label: '安全协议', value: data.securityProtocol || 'PLAINTEXT' },
+      { label: t('connectionDialog.fields.server'), value: data.brokers || t('connectionDialog.values.empty') },
+      { label: t('connectionDialog.fields.securityProtocol'), value: data.securityProtocol || 'PLAINTEXT' },
       {
         label: 'SASL',
         value: String(data.securityProtocol || '').includes('SASL')
           ? data.saslMechanism || 'PLAIN'
-          : '未启用',
+          : t('connectionDialog.values.disabled'),
       },
-      { label: '超时', value: formatTimeout(data.requestTimeoutMs || data.dialTimeoutMs) },
+      { label: t('connectionDialog.fields.timeout'), value: formatTimeout(data.requestTimeoutMs || data.dialTimeoutMs) },
     )
   } else if (connectionType.value === 'http') {
-    rows.push({ label: '配置方式', value: '请求在工作台维护' })
+    rows.push({ label: t('connectionDialog.fields.configuration'), value: t('connectionDialog.values.requestWorkbench') })
   } else if (connectionType.value === 'websocket') {
-    rows.push({ label: '配置方式', value: '会话在工作台维护' })
+    rows.push({ label: t('connectionDialog.fields.configuration'), value: t('connectionDialog.values.sessionWorkbench') })
   } else if (connectionType.value === 'redis') {
     rows.push(
-      { label: '连接方式', value: redisModeLabel(data.mode) },
-      { label: '节点地址', value: data.address || '未填写' },
-      { label: '数据库编号', value: String(data.db ?? 0) },
-      { label: 'Key 筛选规则', value: data.keyPattern || '*' },
+      { label: t('connectionDialog.fields.connectionMode'), value: redisModeLabel(data.mode) },
+      { label: t('connectionDialog.fields.nodeAddress'), value: data.address || t('connectionDialog.values.empty') },
+      { label: t('connectionDialog.fields.dbNumber'), value: String(data.db ?? 0) },
+      { label: t('connectionDialog.fields.keyPattern'), value: data.keyPattern || '*' },
     )
   } else if (connectionType.value === 'tdengine') {
     rows.push(
-      { label: '地址', value: formatEndpoint(data.host, data.port) },
-      { label: '库名', value: data.database || '未填写' },
-      { label: '账号', value: data.username || 'root' },
-      { label: '时区', value: data.timezone || '未填写' },
+      { label: t('connectionDialog.fields.endpoint'), value: formatEndpoint(data.host, data.port) },
+      { label: t('connectionDialog.fields.databaseName'), value: data.database || t('connectionDialog.values.empty') },
+      { label: t('connectionDialog.fields.account'), value: data.username || 'root' },
+      { label: t('connectionDialog.fields.timezone'), value: data.timezone || t('connectionDialog.values.empty') },
     )
   }
 
@@ -941,10 +940,10 @@ const checklist = computed(() => {
   const hasName = Boolean(data.name)
   if (isBuiltinStoreSelected.value) {
     return [
-      { label: '名称已填写', ready: hasName },
-      { label: '使用工程内置运行库', ready: true },
-      { label: '无需配置外部地址和账号', ready: true },
-      { label: '保存后在工作台验证功能', ready: true },
+      { label: t('connectionDialog.checks.builtinName'), ready: hasName },
+      { label: t('connectionDialog.checks.builtinStore'), ready: true },
+      { label: t('connectionDialog.checks.noExternal'), ready: true },
+      { label: t('connectionDialog.checks.verifyWorkbench'), ready: true },
     ]
   }
   const hasEndpoint =
@@ -964,33 +963,33 @@ const checklist = computed(() => {
     : Boolean(data.database)
 
   return [
-    { label: '基础名称已填写', ready: hasName },
+    { label: t('connectionDialog.checks.name'), ready: hasName },
     {
       label: ['http', 'websocket'].includes(connectionType.value)
         ? connectionType.value === 'http'
-          ? '工作台内配置请求'
-          : '工作台内配置会话'
-        : '网络地址已填写',
+          ? t('connectionDialog.checks.requestWorkbench')
+          : t('connectionDialog.checks.sessionWorkbench')
+        : t('connectionDialog.checks.endpoint'),
       ready: hasEndpoint,
     },
     {
       label: ['http', 'websocket'].includes(connectionType.value)
         ? connectionType.value === 'http'
-          ? '保存后创建请求项'
-          : '保存后创建会话'
-        : '目标资源已明确',
+          ? t('connectionDialog.checks.createRequest')
+          : t('connectionDialog.checks.createSession')
+        : t('connectionDialog.checks.target'),
       ready: hasTarget,
     },
     {
       label: ['http', 'websocket'].includes(connectionType.value)
-        ? '无需测试连接'
+        ? t('connectionDialog.checks.noTest')
         : previewProtocolTypes.includes(connectionType.value)
           ? connectionType.value === 'kafka'
-            ? '可先测试 Broker 连通'
-            : '保存后可短时预览'
+            ? t('connectionDialog.checks.brokerTest')
+            : t('connectionDialog.checks.preview')
           : industrialProtocolTypes.includes(connectionType.value)
-            ? '保存后进入只读 SQL 工作台'
-            : '连接测试可选完成',
+            ? t('connectionDialog.checks.readonlySql')
+            : t('connectionDialog.checks.optionalTest'),
       ready:
         ['http', 'websocket'].includes(connectionType.value) ||
         (previewProtocolTypes.includes(connectionType.value) && connectionType.value !== 'kafka') ||
@@ -1068,8 +1067,8 @@ const resetTestState = () => {
   lastTestSignature.value = ''
   testResult.value = {
     status: 'idle',
-    title: '尚未测试',
-    message: '填写连接参数后，可以先验证网络、认证与基础协议是否可用。',
+    title: t('connectionDialog.notTested'),
+    message: t('connectionDialog.notTestedHint'),
     detail: '',
     durationMs: 0,
   }
@@ -1209,8 +1208,8 @@ const handleMqttConnectionTest = async () => {
     lastTestSignature.value = configSignature.value
     testResult.value = {
       status: 'success',
-      title: '测试通过',
-      message: `MQTT Broker 连接验证通过，耗时 ${durationMs}ms。`,
+      title: t('connectionDialog.test.passed'),
+      message: t('connectionDialog.test.mqttPassed', { duration: durationMs }),
       detail: '',
       durationMs,
     }
@@ -1219,12 +1218,12 @@ const handleMqttConnectionTest = async () => {
     const durationMs = Math.round(performance.now() - startAt)
     testResult.value = {
       status: 'error',
-      title: '测试失败',
-      message: 'MQTT Broker 连接未通过验证，请检查地址、端口或认证配置。',
-      detail: getApiErrorMessage(error, 'MQTT 连接测试失败'),
+      title: t('connectionDialog.test.failed'),
+      message: t('connectionDialog.test.mqttFailed'),
+      detail: getApiErrorMessage(error, t('connectionDialog.test.mqttError')),
       durationMs,
     }
-    ElMessage.error(getApiErrorMessage(error, 'MQTT 连接测试失败'))
+    ElMessage.error(getApiErrorMessage(error, t('connectionDialog.test.mqttError')))
   } finally {
     testing.value = false
   }
@@ -1242,7 +1241,7 @@ const handleTest = async () => {
   }
 
   if (!props.projectId) {
-    ElMessage.warning('缺少工程上下文，无法测试连接')
+    ElMessage.warning(t('connectionDialog.test.missingProject'))
     return
   }
 
@@ -1254,12 +1253,12 @@ const handleTest = async () => {
   if (isBuiltinStoreSelected.value) {
     testResult.value = {
       status: 'idle',
-      title: '保存后测试',
-      message: '内置运行库不需要连接测试，保存后进入对应工作台执行真实开发态测试。',
+      title: t('connectionDialog.test.afterSave'),
+      message: t('connectionDialog.test.builtinHint'),
       detail: '',
       durationMs: 0,
     }
-    ElMessage.info('保存后进入内置运行库工作台测试')
+    ElMessage.info(t('connectionDialog.test.builtinToast'))
     return
   }
 
@@ -1297,8 +1296,8 @@ const handleTest = async () => {
     lastTestSignature.value = configSignature.value
     testResult.value = {
       status: 'success',
-      title: '测试通过',
-      message: result.message || `data_service 已完成短时连接验证，耗时 ${durationMs}ms。`,
+      title: t('connectionDialog.test.passed'),
+      message: result.message || t('connectionDialog.test.passedHint', { duration: durationMs }),
       detail: result.detail || '',
       durationMs,
     }
@@ -1307,12 +1306,12 @@ const handleTest = async () => {
     const durationMs = Math.round(performance.now() - startAt)
     testResult.value = {
       status: 'error',
-      title: '测试失败',
-      message: '连接参数未通过验证，请检查网络、认证或协议配置。',
-      detail: getApiErrorMessage(error, '连接测试失败'),
+      title: t('connectionDialog.test.failed'),
+      message: t('connectionDialog.test.failedHint'),
+      detail: getApiErrorMessage(error, t('connectionDialog.test.error')),
       durationMs,
     }
-    ElMessage.error(getApiErrorMessage(error, '连接测试失败'))
+    ElMessage.error(getApiErrorMessage(error, t('connectionDialog.test.error')))
   } finally {
     testing.value = false
   }
@@ -1374,21 +1373,21 @@ const revealSavedPassword = async () => {
     formData.value = { ...formData.value, password: revealedPassword.value }
     if (wasClean) emptyFormSignature.value = formInputSignature.value
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '查看已保存密码失败'))
+    ElMessage.error(getApiErrorMessage(error, t('connectionDialog.test.revealFailed')))
   } finally {
     revealingPassword.value = false
   }
 }
 
 const fetchSavedPassword = async () => {
-  if (!props.projectId || !props.connection?.id) throw new Error('缺少接入源上下文')
+  if (!props.projectId || !props.connection?.id) throw new Error(t('connectionDialog.test.missingContext'))
   const response = await dataAPI.revealConnectionSecret(
     props.projectId,
     props.connection.id,
     savedPasswordKey.value,
   )
   const password = String(response?.data?.value ?? response?.value ?? '')
-  if (!password) throw new Error('已保存密码为空')
+  if (!password) throw new Error(t('connectionDialog.test.emptyPassword'))
   return password
 }
 
@@ -1636,12 +1635,12 @@ const normalizeProtocolSubmitConfig = (type, config) => {
 }
 
 const formatEndpoint = (host, port) => {
-  const safeHost = host || '未填写'
+  const safeHost = host || t('connectionDialog.values.empty')
   return port ? `${safeHost}:${port}` : safeHost
 }
 
 const formatTimeout = (timeout) => {
-  if (!timeout) return '未设置'
+  if (!timeout) return t('connectionDialog.values.empty')
   return `${timeout}ms`
 }
 

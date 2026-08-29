@@ -2,8 +2,8 @@
   <section class="kafka-workbench">
     <aside class="kafka-workbench__explorer">
       <WorkbenchSourceHeader
-        :title="connection.name || '未命名 Kafka 接入源'"
-        fallback-title="未命名 Kafka 接入源"
+        :title="connection.name || ui('未命名 Kafka 接入源', 'Unnamed Kafka Source')"
+        :fallback-title="ui('未命名 Kafka 接入源', 'Unnamed Kafka Source')"
         :meta="sourceMetaRows"
         @back="$emit('back')"
       >
@@ -11,11 +11,11 @@
           <button
             type="button"
             class="kafka-workbench__connect-action"
-            title="测试 Broker 连通性"
+            :title="ui('测试 Broker 连通性', 'Test Broker Connectivity')"
             @click="testBroker"
           >
             <IconTablerLoader2 v-if="testingBroker" />
-            <span>{{ testingBroker ? '测试中' : '测试 Broker' }}</span>
+            <span>{{ testingBroker ? ui('测试中', 'Testing') : ui('测试 Broker', 'Test Broker') }}</span>
           </button>
         </template>
         <template #actions>
@@ -24,13 +24,13 @@
             class="kafka-workbench__search"
             size="small"
             clearable
-            placeholder="筛选消费规则"
+            :placeholder="ui('筛选消费规则', 'Filter consumer rules')"
           />
           <button
             type="button"
             class="workbench-source-header__icon-action is-primary"
-            title="新建消费规则"
-            aria-label="新建消费规则"
+            :title="ui('新建消费规则', 'New Consumer Rule')"
+            :aria-label="ui('新建消费规则', 'New consumer rule')"
             @click="openCreateMapping"
           >
             <IconTablerPlus />
@@ -38,8 +38,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action"
-            title="新建分组"
-            aria-label="新建分组"
+            :title="ui('新建分组', 'New Group')"
+            :aria-label="ui('新建分组', 'New group')"
             @click="openCreateGroup"
           >
             <IconTablerFolderPlus />
@@ -47,8 +47,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action"
-            title="刷新"
-            aria-label="刷新"
+            :title="ui('刷新', 'Refresh')"
+            :aria-label="ui('刷新', 'Refresh')"
             @click="loadWorkbench"
           >
             <IconTablerRefresh />
@@ -59,7 +59,7 @@
       <div class="kafka-workbench__tree">
         <div v-if="loading" class="kafka-workbench__loading">
           <IconTablerLoader2 />
-          <span>加载消费规则...</span>
+          <span>{{ ui('加载消费规则...', 'Loading consumer rules...') }}</span>
         </div>
         <template v-else>
           <KafkaTopicTreeBranch
@@ -96,7 +96,7 @@
             v-if="filteredTree.groups.length === 0 && filteredTree.rootMappings.length === 0"
             class="kafka-workbench__empty"
           >
-            {{ filterText ? '没有匹配的消费规则' : '暂无消费规则' }}
+            {{ filterText ? ui('没有匹配的消费规则', 'No matching consumer rules') : ui('暂无消费规则', 'No consumer rules') }}
           </div>
         </template>
       </div>
@@ -141,8 +141,8 @@
         </template>
         <div v-else class="kafka-workbench__placeholder">
           <IconTablerMessages />
-          <strong>选择消费规则</strong>
-          <span>整包规则可测试拉取样本，字段规则可通过 JSON 样例生成字段映射。</span>
+          <strong>{{ ui('选择消费规则', 'Select a Consumer Rule') }}</strong>
+          <span>{{ ui('整包规则可测试拉取样本，字段规则可通过 JSON 样例生成字段映射。', 'Raw-message rules can pull test samples; field rules can generate mappings from JSON samples.') }}</span>
         </div>
       </div>
     </main>
@@ -176,13 +176,13 @@
     />
     <el-dialog
       v-model="detailDialogVisible"
-      title="消费规则详情"
+      :title="ui('消费规则详情', 'Consumer Rule Details')"
       width="620px"
       class="kafka-workbench__detail-dialog"
     >
       <div v-if="detailMapping" class="kafka-workbench__detail">
         <section class="kafka-workbench__detail-section">
-          <h3>基础信息</h3>
+          <h3>{{ ui('基础信息', 'Basic Information') }}</h3>
           <dl class="kafka-workbench__detail-grid">
             <template v-for="row in basicDetailRows" :key="row.label">
               <dt>{{ row.label }}</dt>
@@ -191,7 +191,7 @@
           </dl>
         </section>
         <section class="kafka-workbench__detail-section">
-          <h3>消费配置</h3>
+          <h3>{{ ui('消费配置', 'Consumer Configuration') }}</h3>
           <dl class="kafka-workbench__detail-grid">
             <template v-for="row in consumeDetailRows" :key="row.label">
               <dt>{{ row.label }}</dt>
@@ -200,7 +200,7 @@
           </dl>
         </section>
         <section class="kafka-workbench__detail-section">
-          <h3>输出配置</h3>
+          <h3>{{ ui('输出配置', 'Output Configuration') }}</h3>
           <dl class="kafka-workbench__detail-grid">
             <template v-for="row in outputDetailRows" :key="row.label">
               <dt>{{ row.label }}</dt>
@@ -210,7 +210,7 @@
         </section>
       </div>
       <template #footer>
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
+        <el-button @click="detailDialogVisible = false">{{ ui('关闭', 'Close') }}</el-button>
       </template>
     </el-dialog>
 
@@ -232,7 +232,7 @@
             @click="emitContextAction('details')"
           >
             <IconTablerInfoCircle class="kafka-workbench__menu-icon" />
-            <span>查看详情</span>
+            <span>{{ ui('查看详情', 'View Details') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'mapping'"
@@ -240,7 +240,7 @@
             @click="emitContextAction('edit')"
           >
             <IconTablerPencil class="kafka-workbench__menu-icon" />
-            <span>编辑规则</span>
+            <span>{{ ui('编辑规则', 'Edit Rule') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'mapping'"
@@ -248,11 +248,11 @@
             @click="emitContextAction('copyTopic')"
           >
             <IconTablerCopy class="kafka-workbench__menu-icon" />
-            <span>复制 Topic</span>
+            <span>{{ ui('复制 Topic', 'Copy Topic') }}</span>
           </button>
           <button type="button" @click="emitContextAction('move')">
             <IconTablerFolderSymlink class="kafka-workbench__menu-icon" />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -260,7 +260,7 @@
             @click="emitContextAction('createChildGroup')"
           >
             <IconTablerFolderPlus class="kafka-workbench__menu-icon" />
-            <span>新建子分组</span>
+            <span>{{ ui('新建子分组', 'New Child Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -268,7 +268,7 @@
             @click="emitContextAction('renameGroup')"
           >
             <IconTablerPencil class="kafka-workbench__menu-icon" />
-            <span>编辑分组</span>
+            <span>{{ ui('编辑分组', 'Edit Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -276,7 +276,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="kafka-workbench__menu-icon" />
-            <span>移动分组</span>
+            <span>{{ ui('移动分组', 'Move Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -285,7 +285,7 @@
             @click="emitContextAction('deleteGroup')"
           >
             <IconTablerTrash class="kafka-workbench__menu-icon" />
-            <span>删除分组</span>
+            <span>{{ ui('删除分组', 'Delete Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'mapping'"
@@ -294,7 +294,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="kafka-workbench__menu-icon" />
-            <span>删除</span>
+            <span>{{ ui('删除', 'Delete') }}</span>
           </button>
         </div>
       </div>
@@ -322,6 +322,7 @@ import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.
 import WorkbenchTabBar from '@/components/workbench/WorkbenchTabBar.vue'
 import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
 import KafkaFieldMappingPanel from './KafkaFieldMappingPanel.vue'
 import KafkaRawOutputPanel from './KafkaRawOutputPanel.vue'
@@ -344,6 +345,8 @@ type KafkaModeTab = {
   title: string
   mappingId: string
 }
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   projectId: string
@@ -400,8 +403,8 @@ const contextMenu = ref<{
 
 const config = computed(() => props.connection.config || {})
 const sourceMetaRows = computed(() => [
-  { label: '类型', value: 'Kafka' },
-  { label: 'Brokers', value: String(config.value.brokers || '未配置') },
+  { label: ui('类型', 'Type'), value: 'Kafka' },
+  { label: 'Brokers', value: String(config.value.brokers || ui('未配置', 'Not Configured')) },
 ])
 const tree = computed(() => buildKafkaTopicTree(groups.value, mappings.value))
 const filteredTree = computed(() =>
@@ -411,36 +414,36 @@ const basicDetailRows = computed(() => {
   const mapping = detailMapping.value
   if (!mapping) return []
   return [
-    { label: '规则名称', value: mapping.name || '-' },
-    { label: '所属分组', value: getGroupName(mapping.groupId) },
+    { label: ui('规则名称', 'Rule Name'), value: mapping.name || '-' },
+    { label: ui('所属分组', 'Group'), value: getGroupName(mapping.groupId) },
     { label: 'Topic', value: mapping.topic || '-' },
-    { label: '描述', value: mapping.description || '-' },
-    { label: '创建时间', value: formatTime(mapping.createdAt) },
-    { label: '更新时间', value: formatTime(mapping.updatedAt) },
+    { label: ui('描述', 'Description'), value: mapping.description || '-' },
+    { label: ui('创建时间', 'Created At'), value: formatTime(mapping.createdAt) },
+    { label: ui('更新时间', 'Updated At'), value: formatTime(mapping.updatedAt) },
   ]
 })
 const consumeDetailRows = computed(() => {
   const mapping = detailMapping.value
   if (!mapping) return []
   return [
-    { label: '消费组', value: mapping.consumerGroup || '默认生成' },
-    { label: '分区', value: formatPartition(mapping) },
-    { label: '起始位置', value: formatStartPosition(mapping) },
-    { label: '解码方式', value: formatDecode(mapping.decode) },
-    { label: '样本上限', value: String(mapping.sampleLimit ?? 100) },
-    { label: '拉取超时', value: `${mapping.timeoutMs ?? 5000} ms` },
+    { label: ui('消费组', 'Consumer Group'), value: mapping.consumerGroup || ui('默认生成', 'Generated by Default') },
+    { label: ui('分区', 'Partition'), value: formatPartition(mapping) },
+    { label: ui('起始位置', 'Start Position'), value: formatStartPosition(mapping) },
+    { label: ui('解码方式', 'Decode'), value: formatDecode(mapping.decode) },
+    { label: ui('样本上限', 'Sample Limit'), value: String(mapping.sampleLimit ?? 100) },
+    { label: ui('拉取超时', 'Pull Timeout'), value: `${mapping.timeoutMs ?? 5000} ms` },
   ]
 })
 const outputDetailRows = computed(() => {
   const mapping = detailMapping.value
   if (!mapping) return []
   const rows = [
-    { label: '输出模式', value: formatOutputMode(mapping.outputMode) },
-    { label: '整包范围', value: formatRawOutputScope(mapping) },
-    { label: '数据点路径', value: mapping.rawDataPointPath || '-' },
+    { label: ui('输出模式', 'Output Mode'), value: formatOutputMode(mapping.outputMode) },
+    { label: ui('整包范围', 'Raw Message Scope'), value: formatRawOutputScope(mapping) },
+    { label: ui('数据点路径', 'Data Point Path'), value: mapping.rawDataPointPath || '-' },
   ]
   if (mapping.outputMode === 'field_mapping') {
-    return rows.filter((row) => row.label !== '整包范围')
+    return rows.filter((row) => row.label !== ui('整包范围', 'Raw Message Scope'))
   }
   return rows
 })
@@ -455,7 +458,7 @@ const loadWorkbench = async () => {
     groups.value = groupRes.list || []
     mappings.value = mappingRes.list || []
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载 Kafka 工作台失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载 Kafka 工作台失败', 'Failed to load Kafka workbench')))
   } finally {
     loading.value = false
   }
@@ -470,9 +473,9 @@ const testBroker = async () => {
       timeoutMs: 1000,
       probe: true,
     })
-    ElMessage.success('Kafka Broker 可连接')
+    ElMessage.success(ui('Kafka Broker 可连接', 'Kafka Broker is reachable'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, 'Kafka Broker 测试失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('Kafka Broker 测试失败', 'Kafka Broker test failed')))
   } finally {
     testingBroker.value = false
   }
@@ -499,19 +502,19 @@ const saveGroup = async (payload: { name: string; parentId: string | null }) => 
         name: payload.name,
         parentId: payload.parentId,
       })
-      ElMessage.success('规则分组已更新')
+      ElMessage.success(ui('规则分组已更新', 'Rule group updated'))
     } else {
       await dataAPI.createKafkaTopicGroup(props.projectId, props.connection.id, {
         name: payload.name,
         parentId: pendingParentGroupId.value || payload.parentId,
       })
-      ElMessage.success('规则分组已创建')
+      ElMessage.success(ui('规则分组已创建', 'Rule group created'))
     }
     groupDialogRef.value?.closeSilently()
     groupDialogVisible.value = false
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存规则分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存规则分组失败', 'Failed to save rule group')))
   } finally {
     groupSaving.value = false
   }
@@ -526,13 +529,13 @@ const saveMapping = async (payload: Record<string, unknown>) => {
         : await dataAPI.createKafkaTopicMapping(props.projectId, props.connection.id, payload)
     mappingSaving.value = false
     mappingDialogVisible.value = false
-    ElMessage.success('消费规则已保存')
+    ElMessage.success(ui('消费规则已保存', 'Consumer rule saved'))
     await loadWorkbench()
     if (saved?.id) {
       selectMapping(saved)
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存消费规则失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存消费规则失败', 'Failed to save consumer rule')))
   } finally {
     mappingSaving.value = false
   }
@@ -638,7 +641,7 @@ const emitContextAction = async (
     }
     if (action === 'copyTopic') {
       await navigator.clipboard.writeText(mapping.topic)
-      ElMessage.success('Topic 已复制')
+      ElMessage.success(ui('Topic 已复制', 'Topic copied'))
       return
     }
     if (action === 'move') {
@@ -728,19 +731,19 @@ const handleMoveSubmit = async (groupId: string | null) => {
         ...buildMappingPayload(movingMapping.value),
         groupId,
       })
-      ElMessage.success('消费规则已移动')
+      ElMessage.success(ui('消费规则已移动', 'Consumer rule moved'))
     } else if (moveTargetType.value === 'group' && movingGroup.value) {
       await dataAPI.updateKafkaTopicGroup(props.projectId, movingGroup.value.id, {
         name: movingGroup.value.name,
         parentId: groupId,
       })
-      ElMessage.success('规则分组已移动')
+      ElMessage.success(ui('规则分组已移动', 'Rule group moved'))
     }
     moving.value = false
     moveDialogVisible.value = false
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动失败', 'Move failed')))
   } finally {
     moving.value = false
   }
@@ -748,11 +751,11 @@ const handleMoveSubmit = async (groupId: string | null) => {
 
 const deleteMapping = async (mapping: KafkaTopicMapping) => {
   const ok = await ElMessageBox.confirm(
-    `删除消费规则“${mapping.name || mapping.topic}”？相关数据点配置会一并标记为失效。`,
-    '删除消费规则',
+    ui(`删除消费规则“${mapping.name || mapping.topic}”？相关数据点配置会一并标记为失效。`, `Delete consumer rule “${mapping.name || mapping.topic}”? Related data points will be marked invalid.`),
+    ui('删除消费规则', 'Delete Consumer Rule'),
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     },
   )
@@ -775,20 +778,20 @@ const deleteMapping = async (mapping: KafkaTopicMapping) => {
     const nextSamples = new Map(previewSamplesByMapping.value)
     nextSamples.delete(String(mapping.id))
     previewSamplesByMapping.value = nextSamples
-    ElMessage.success('消费规则已删除')
+    ElMessage.success(ui('消费规则已删除', 'Consumer rule deleted'))
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除消费规则失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除消费规则失败', 'Failed to delete consumer rule')))
   }
 }
 
 const deleteGroup = async (group: KafkaTopicGroupNode) => {
   const ok = await ElMessageBox.confirm(
-    `确认删除分组「${group.name}」？组内消费规则会回到根目录。`,
-    '删除分组',
+    ui(`确认删除分组「${group.name}」？组内消费规则会回到根目录。`, `Delete group “${group.name}”? Its consumer rules will move to the root.`),
+    ui('删除分组', 'Delete Group'),
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     },
   )
@@ -798,10 +801,10 @@ const deleteGroup = async (group: KafkaTopicGroupNode) => {
 
   try {
     await dataAPI.deleteKafkaTopicGroup(props.projectId, group.id)
-    ElMessage.success('规则分组已删除')
+    ElMessage.success(ui('规则分组已删除', 'Rule group deleted'))
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除规则分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除规则分组失败', 'Failed to delete rule group')))
   }
 }
 
@@ -820,8 +823,8 @@ const getPreviewSamples = (mappingId: string | number) => {
 }
 
 const getGroupName = (groupId?: string | number | null) => {
-  if (!groupId) return '根目录'
-  return groups.value.find((group) => String(group.id) === String(groupId))?.name || '未知分组'
+  if (!groupId) return ui('根目录', 'Root')
+  return groups.value.find((group) => String(group.id) === String(groupId))?.name || ui('未知分组', 'Unknown Group')
 }
 
 const formatTime = (value?: string | number | Date | null) => {
@@ -831,37 +834,37 @@ const formatTime = (value?: string | number | Date | null) => {
 }
 
 const formatOutputMode = (mode?: string) => {
-  if (mode === 'raw_message') return '整包数据点'
-  if (mode === 'field_mapping') return '字段数据点'
+  if (mode === 'raw_message') return ui('整包数据点', 'Raw Message Data Point')
+  if (mode === 'field_mapping') return ui('字段数据点', 'Field Data Points')
   return '-'
 }
 
 const formatRawOutputScope = (mapping: KafkaTopicMapping) => {
   if (mapping.outputMode !== 'raw_message') return '-'
-  return mapping.rawOutputScope === 'full_message' ? '完整 Kafka 消息' : '仅消息 Value'
+  return mapping.rawOutputScope === 'full_message' ? ui('完整 Kafka 消息', 'Complete Kafka Message') : ui('仅消息 Value', 'Message Value Only')
 }
 
 const formatPartition = (mapping: KafkaTopicMapping) => {
-  if (mapping.partitionMode === 'single') return `分区 ${mapping.partition ?? '-'}`
-  return '全部分区'
+  if (mapping.partitionMode === 'single') return ui(`分区 ${mapping.partition ?? '-'}`, `Partition ${mapping.partition ?? '-'}`)
+  return ui('全部分区', 'All Partitions')
 }
 
 const formatStartPosition = (mapping: KafkaTopicMapping) => {
-  if (mapping.startPosition === 'earliest') return '最早消息'
-  if (mapping.startPosition === 'offset') return `指定 Offset ${mapping.startOffset ?? '-'}`
-  return '最新消息'
+  if (mapping.startPosition === 'earliest') return ui('最早消息', 'Earliest')
+  if (mapping.startPosition === 'offset') return ui(`指定 Offset ${mapping.startOffset ?? '-'}`, `Offset ${mapping.startOffset ?? '-'}`)
+  return ui('最新消息', 'Latest')
 }
 
 const formatDecode = (decode?: string) => {
   if (decode === 'json') return 'JSON'
-  if (decode === 'string') return '字符串'
-  if (decode === 'binary') return '二进制'
+  if (decode === 'string') return ui('字符串', 'String')
+  if (decode === 'binary') return ui('二进制', 'Binary')
   return '-'
 }
 
 const mappingTooltip = (mapping: KafkaTopicMapping) => {
-  const output = mapping.outputMode === 'raw_message' ? '整包数据点' : '字段数据点'
-  return `Topic: ${mapping.topic}\n消费组: ${mapping.consumerGroup || '默认生成'}\n输出: ${output}`
+  const output = mapping.outputMode === 'raw_message' ? ui('整包数据点', 'Raw Message Data Point') : ui('字段数据点', 'Field Data Points')
+  return ui(`Topic: ${mapping.topic}\n消费组: ${mapping.consumerGroup || '默认生成'}\n输出: ${output}`, `Topic: ${mapping.topic}\nConsumer Group: ${mapping.consumerGroup || 'Generated by Default'}\nOutput: ${output}`)
 }
 
 onMounted(loadWorkbench)

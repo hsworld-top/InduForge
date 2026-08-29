@@ -12,8 +12,8 @@
       :render-after-expand="false"
       :disabled="disabled"
       :loading="loading"
-      placeholder="根目录（未分组）"
-      empty-text="暂无目录"
+      :placeholder="t('alarm.ungroupedRoot')"
+      :empty-text="t('alarm.emptyDirectory')"
       @visible-change="handleVisible"
     />
     <small v-if="selectedPath" :title="selectedPath">{{ selectedPath }}</small>
@@ -26,6 +26,7 @@ import { ElMessage } from 'element-plus'
 import { listAlarmGroups } from '@/api/alarm.api'
 import type { AlarmGroup } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 
 type AlarmGroupTreeNode = AlarmGroup & { children: AlarmGroupTreeNode[] }
 
@@ -77,10 +78,20 @@ async function loadTree() {
   const version = ++requestVersion
   loading.value = true
   try {
-    const result = await listAlarmGroups(props.projectId, { view: 'tree' })
-    if (version === requestVersion) groups.value = result.list
+    const loaded: AlarmGroup[] = []
+    let page = 1
+    let totalPages = 1
+    do {
+      const result = await listAlarmGroups(props.projectId, { page, pageSize: 100 })
+      if (version !== requestVersion) return
+      loaded.push(...result.list)
+      totalPages = result.pagination.totalPages
+      page += 1
+    } while (page <= totalPages)
+    groups.value = Array.from(new Map(loaded.map((item) => [item.id, item])).values())
   } catch (error) {
-    if (version === requestVersion) ElMessage.error(getApiErrorMessage(error, '加载报警目录失败'))
+    if (version === requestVersion)
+      ElMessage.error(getApiErrorMessage(error, t('alarm.loadDirectoryFailed')))
   } finally {
     if (version === requestVersion) loading.value = false
   }

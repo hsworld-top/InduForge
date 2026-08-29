@@ -9,7 +9,7 @@
       :icon="IconTablerRss"
       :title="subscriptionTitle"
       :subtitle="subscription?.topic || ''"
-      :status-label="isSubscribed ? '已订阅' : '未订阅'"
+      :status-label="isSubscribed ? ui('已订阅', 'Subscribed') : ui('未订阅', 'Not Subscribed')"
       :status-tone="isSubscribed ? 'success' : 'neutral'"
       :status-clickable="true"
       :status-action-loading="subscriptionChanging"
@@ -36,11 +36,11 @@
 
     <footer class="mqtt-message-viewer__status">
       <span>
-        共 {{ messages.length }} 条
-        <template v-if="searchText"> · 筛选 {{ filteredMessages.length }} 条</template>
+        {{ ui(`共 ${messages.length} 条`, `${messages.length} total`) }}
+        <template v-if="searchText"> · {{ ui(`筛选 ${filteredMessages.length} 条`, `${filteredMessages.length} filtered`) }}</template>
       </span>
-      <span v-if="lastMessageTime">最后消息 {{ formatTimestamp(lastMessageTime) }}</span>
-      <span>{{ isSubscribed ? '实时订阅已启用' : '实时订阅已停止' }}</span>
+      <span v-if="lastMessageTime">{{ ui('最后消息', 'Last message') }} {{ formatTimestamp(lastMessageTime) }}</span>
+      <span>{{ isSubscribed ? ui('实时订阅已启用', 'Live subscription enabled') : ui('实时订阅已停止', 'Live subscription stopped') }}</span>
     </footer>
   </div>
 </template>
@@ -55,6 +55,9 @@ import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
 import WorkbenchStreamMessageList from '@/components/workbench/WorkbenchStreamMessageList.vue'
 import WorkbenchStreamToolbar from '@/components/workbench/WorkbenchStreamToolbar.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type MqttMessage = {
   id?: string | number
@@ -100,12 +103,12 @@ const subscriptionChanging = ref(false)
 const messageListRef = ref<any>(null)
 
 const subscriptionTitle = computed(
-  () => props.subscription?.name || props.subscription?.topic || '消息查看器',
+  () => props.subscription?.name || props.subscription?.topic || ui('消息查看器', 'Message Viewer'),
 )
 const isBuiltinMessage = computed(() => props.source === 'builtin-message')
-const emptyText = computed(() => (isBuiltinMessage.value ? '暂无 IF消息' : '暂无 MQTT 消息'))
+const emptyText = computed(() => (isBuiltinMessage.value ? ui('暂无 IF消息', 'No IF messages') : ui('暂无 MQTT 消息', 'No MQTT messages')))
 const emptyHint = computed(() =>
-  isBuiltinMessage.value ? '发布或接收消息后会显示在这里' : '启动预览连接后，实时消息会显示在这里',
+  isBuiltinMessage.value ? ui('发布或接收消息后会显示在这里', 'Published or received messages appear here') : ui('启动预览连接后，实时消息会显示在这里', 'Live messages appear here after starting the preview connection'),
 )
 
 const filteredMessages = computed(() => {
@@ -204,7 +207,7 @@ const loadMessages = async () => {
     ).slice(0, MESSAGE_WINDOW_LIMIT)
     await messageListRef.value?.scrollToTop?.()
   } catch (error) {
-    ElMessage.error('加载消息失败：' + getApiErrorMessage(error, '加载消息失败'))
+    ElMessage.error(ui('加载消息失败：', 'Failed to load messages: ') + getApiErrorMessage(error, ui('加载消息失败', 'Failed to load messages')))
   } finally {
     loading.value = false
   }
@@ -242,9 +245,9 @@ const handleSelectMessage = (message) => {
 const handleCopyMessage = async (message) => {
   try {
     await navigator.clipboard.writeText(formatPayload(message.payload))
-    ElMessage.success('已复制 Payload')
+    ElMessage.success(ui('已复制 Payload', 'Payload copied'))
   } catch {
-    ElMessage.error('复制失败')
+    ElMessage.error(ui('复制失败', 'Copy failed'))
   }
 }
 
@@ -256,9 +259,9 @@ const handleClear = async () => {
   try {
     await dataAPI.clearMqttSubscriptionMessages(props.projectId, props.subscription.id)
     messages.value = []
-    ElMessage.success('消息已清空')
+    ElMessage.success(ui('消息已清空', 'Messages cleared'))
   } catch (error) {
-    ElMessage.error('清空消息失败：' + getApiErrorMessage(error, '清空消息失败'))
+    ElMessage.error(ui('清空消息失败：', 'Failed to clear messages: ') + getApiErrorMessage(error, ui('清空消息失败', 'Failed to clear messages')))
   } finally {
     clearing.value = false
   }

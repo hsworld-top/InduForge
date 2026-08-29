@@ -1,7 +1,7 @@
 <template>
-  <DcDrawer v-model="visible" title="配置报警" :width="820" :max="920">
+  <DcDrawer v-model="visible" :title="t('quickAlarm.title')" :width="820" :max="920">
     <template #actions>
-      <button type="button" class="quick-alarm__icon" title="关闭" @click="visible = false">
+      <button type="button" class="quick-alarm__icon" :title="t('quickAlarm.close')" @click="visible = false">
         <IconTablerX />
       </button>
     </template>
@@ -9,29 +9,29 @@
     <form class="quick-alarm" @submit.prevent="submit">
       <section class="quick-alarm__context">
         <div class="quick-alarm__point">
-          <span>报警数据点</span>
+          <span>{{ t('quickAlarm.datapoint') }}</span>
           <strong>{{ pointTitle }}</strong>
           <small :title="pointPath">{{ pointPath }}</small>
         </div>
         <label class="quick-alarm__field">
-          <span>归属目录</span>
+          <span>{{ t('quickAlarm.directory') }}</span>
           <AlarmGroupSelect v-model="groupId" :project-id="projectId" />
         </label>
         <label class="quick-alarm__field is-switch">
-          <span>启用</span>
+          <span>{{ t('quickAlarm.enable') }}</span>
           <el-switch v-model="isEnabled" />
         </label>
       </section>
 
       <el-alert
         v-if="!isCompatible"
-        title="所选数据点类型不一致，请重新选择同一类型的数据点"
+        :title="t('quickAlarm.incompatible')"
         type="warning"
         :closable="false"
         show-icon
       />
 
-      <div class="quick-alarm__mode" role="tablist" aria-label="配置方式">
+      <div class="quick-alarm__mode" role="tablist" :aria-label="t('quickAlarm.configMode')">
         <button
           type="button"
           :class="{ 'is-active': configurationMode === 'basic' }"
@@ -39,7 +39,7 @@
           :aria-selected="configurationMode === 'basic'"
           @click="setConfigurationMode('basic')"
         >
-          默认配置
+          {{ t('quickAlarm.basic') }}
         </button>
         <button
           type="button"
@@ -48,7 +48,7 @@
           :aria-selected="configurationMode === 'advanced'"
           @click="setConfigurationMode('advanced')"
         >
-          高级配置
+          {{ t('quickAlarm.advanced') }}
         </button>
       </div>
 
@@ -57,8 +57,8 @@
         class="quick-alarm__names"
       >
         <div>
-          <strong>报警名称</strong>
-          <span>留空自动生成</span>
+          <strong>{{ t('quickAlarm.alarmName') }}</strong>
+          <span>{{ t('quickAlarm.autoName') }}</span>
         </div>
         <div class="quick-alarm__name-fields">
           <label v-for="item in activeNameItems" :key="item.slot" class="quick-alarm__field">
@@ -75,26 +75,26 @@
 
       <section class="quick-alarm__config">
         <header v-if="category !== 'number'">
-          <h3>报警配置</h3>
+          <h3>{{ t('quickAlarm.config') }}</h3>
         </header>
 
         <div v-if="category === 'number'" class="quick-alarm__numeric">
           <div class="quick-alarm__numeric-group">
-            <strong>限值报警</strong>
+            <strong>{{ t('quickAlarm.limitAlarms') }}</strong>
           </div>
           <div
             class="quick-alarm__numeric-head"
             :class="{ 'is-advanced': configurationMode === 'advanced' }"
           >
-            <span>启用</span>
-            <span>报警项</span>
-            <span>限值 / 参数</span>
-            <span>报警文本</span>
-            <span>级别</span>
+            <span>{{ t('quickAlarm.enable') }}</span>
+            <span>{{ t('quickAlarm.alarmItem') }}</span>
+            <span>{{ t('quickAlarm.limitParams') }}</span>
+            <span>{{ t('quickAlarm.alarmText') }}</span>
+            <span>{{ t('quickAlarm.level') }}</span>
           </div>
           <template v-for="item in numericItems" :key="item.key">
             <div v-if="item.key === 'rate'" class="quick-alarm__numeric-group is-divider">
-              <strong>动态报警</strong>
+              <strong>{{ t('quickAlarm.dynamicAlarms') }}</strong>
             </div>
             <div
               class="quick-alarm__numeric-row"
@@ -103,7 +103,7 @@
                 'is-advanced': configurationMode === 'advanced',
               }"
             >
-              <el-checkbox v-model="numericEnabled[item.key]" :aria-label="`启用${item.label}`" />
+              <el-checkbox v-model="numericEnabled[item.key]" :aria-label="`${t('quickAlarm.enable')} ${item.label}`" />
               <strong>{{ item.label }}</strong>
 
               <div v-if="item.kind === 'threshold'" class="quick-alarm__numeric-params">
@@ -119,21 +119,21 @@
                 class="quick-alarm__numeric-params is-rate"
               >
                 <el-select v-model="rateDirection" :disabled="!numericEnabled[item.key]">
-                  <el-option label="双向" value="absolute" />
-                  <el-option label="上升" value="rise" />
-                  <el-option label="下降" value="fall" />
+                  <el-option :label="t('quickAlarm.bidirectional')" value="absolute" />
+                  <el-option :label="t('quickAlarm.rise')" value="rise" />
+                  <el-option :label="t('quickAlarm.fall')" value="fall" />
                 </el-select>
                 <el-input-number
                   v-model="rateLimit"
                   :disabled="!numericEnabled[item.key]"
                   :min="0"
                   controls-position="right"
-                  placeholder="速率"
+                  :placeholder="t('quickAlarm.rate')"
                 />
                 <el-select v-model="rateWindowSeconds" :disabled="!numericEnabled[item.key]">
-                  <el-option label="10 秒" :value="10" />
-                  <el-option label="1 分钟" :value="60" />
-                  <el-option label="5 分钟" :value="300" />
+                  <el-option :label="t('quickAlarm.tenSeconds')" :value="10" />
+                  <el-option :label="t('quickAlarm.oneMinute')" :value="60" />
+                  <el-option :label="t('quickAlarm.fiveMinutes')" :value="300" />
                 </el-select>
               </div>
               <div v-else class="quick-alarm__numeric-params is-deviation">
@@ -141,21 +141,21 @@
                   v-model="deviationBaseline"
                   :disabled="!numericEnabled[item.key]"
                   controls-position="right"
-                  placeholder="基准值"
+                  :placeholder="t('quickAlarm.baseline')"
                 />
                 <el-input-number
                   v-model="deviationLimit"
                   :disabled="!numericEnabled[item.key]"
                   :min="0"
                   controls-position="right"
-                  placeholder="允许偏差"
+                  :placeholder="t('quickAlarm.allowedDeviation')"
                 />
               </div>
 
               <el-input
                 v-model="numericMessages[item.key]"
                 :disabled="!numericEnabled[item.key]"
-                placeholder="报警文本"
+                :placeholder="t('quickAlarm.alarmText')"
               />
 
               <el-select
@@ -173,7 +173,7 @@
           </template>
           <div class="quick-alarm__numeric-common">
             <label :class="{ 'is-advanced': configurationMode === 'advanced' }">
-              <el-checkbox v-model="numericEnabled.offline">离线报警</el-checkbox>
+              <el-checkbox v-model="numericEnabled.offline">{{ t('quickAlarm.offlineAlarm') }}</el-checkbox>
               <el-select v-model="numericSeverities.offline" :disabled="!numericEnabled.offline">
                 <el-option
                   v-for="option in severityOptions"
@@ -184,13 +184,13 @@
               </el-select>
             </label>
             <label>
-              <span>持续后触发（秒）</span>
+              <span>{{ t('quickAlarm.triggerDelaySeconds') }}</span>
               <el-input-number v-model="triggerDelaySeconds" :min="0" controls-position="right" />
             </label>
           </div>
         </div>
 
-        <div v-else class="quick-alarm__types" role="radiogroup" aria-label="报警类型">
+        <div v-else class="quick-alarm__types" role="radiogroup" :aria-label="t('quickAlarm.alarmType')">
           <button
             v-for="option in typeOptions"
             :key="option.value"
@@ -207,25 +207,25 @@
         <div v-if="category !== 'number'" class="quick-alarm__params">
           <template v-if="alarmType === 'state'">
             <label class="quick-alarm__field is-primary">
-              <span>当值等于</span>
+              <span>{{ t('quickAlarm.valueEquals') }}</span>
               <el-select v-if="category === 'boolean'" v-model="booleanExpected">
                 <el-option label="true" :value="true" />
                 <el-option label="false" :value="false" />
               </el-select>
-              <el-input v-else v-model="textExpected" placeholder="期望值" />
+              <el-input v-else v-model="textExpected" :placeholder="t('quickAlarm.expectedValue')" />
             </label>
           </template>
 
           <template v-else-if="alarmType === 'text'">
             <label class="quick-alarm__field is-primary">
-              <span>包含文本</span>
-              <el-input v-model="textExpected" placeholder="输入匹配内容" />
+              <span>{{ t('quickAlarm.containsText') }}</span>
+              <el-input v-model="textExpected" :placeholder="t('quickAlarm.matchText')" />
             </label>
           </template>
 
           <template v-else-if="alarmType === 'stale'">
             <label class="quick-alarm__field is-primary">
-              <span>超过未更新（分钟）</span>
+              <span>{{ t('quickAlarm.staleMinutes') }}</span>
               <el-input-number v-model="staleMinutes" :min="1" controls-position="right" />
             </label>
           </template>
@@ -235,7 +235,7 @@
           </div>
 
           <label class="quick-alarm__field">
-            <span>严重度</span>
+            <span>{{ t('quickAlarm.severity') }}</span>
             <el-select v-model="severity">
               <el-option
                 v-for="option in severityOptions"
@@ -246,7 +246,7 @@
             </el-select>
           </label>
           <label class="quick-alarm__field">
-            <span>持续后触发（秒）</span>
+            <span>{{ t('quickAlarm.triggerDelaySeconds') }}</span>
             <el-input-number v-model="triggerDelaySeconds" :min="0" controls-position="right" />
           </label>
         </div>
@@ -255,29 +255,29 @@
       <section v-if="configurationMode === 'advanced'" class="quick-alarm__advanced">
         <template v-if="category === 'number'">
           <header class="quick-alarm__advanced-head">
-            <h3>附加限值</h3>
+            <h3>{{ t('quickAlarm.additionalLimits') }}</h3>
             <div>
-              <button type="button" @click="addAdvancedLimit('high')">+ 高限</button>
-              <button type="button" @click="addAdvancedLimit('low')">+ 低限</button>
+              <button type="button" @click="addAdvancedLimit('high')">{{ t('quickAlarm.addHigh') }}</button>
+              <button type="button" @click="addAdvancedLimit('low')">{{ t('quickAlarm.addLow') }}</button>
             </div>
           </header>
           <div v-if="advancedLimits.length" class="quick-alarm__limit-list">
             <div class="quick-alarm__limit-head" aria-hidden="true">
-              <span>名称</span><span>方向</span><span>限值</span><span>报警文本</span
-              ><span>级别</span><span></span>
+              <span>{{ t('quickAlarm.name') }}</span><span>{{ t('quickAlarm.direction') }}</span><span>{{ t('quickAlarm.limit') }}</span><span>{{ t('quickAlarm.alarmText') }}</span
+              ><span>{{ t('quickAlarm.level') }}</span><span></span>
             </div>
             <div v-for="item in advancedLimits" :key="item.id" class="quick-alarm__limit-row">
-              <el-input v-model="item.name" placeholder="自定义限值" />
+              <el-input v-model="item.name" :placeholder="t('quickAlarm.customLimit')" />
               <el-select v-model="item.direction">
-                <el-option label="高于" value="high" />
-                <el-option label="低于" value="low" />
+                <el-option :label="t('quickAlarm.above')" value="high" />
+                <el-option :label="t('quickAlarm.below')" value="low" />
               </el-select>
               <el-input-number
                 v-model="item.threshold"
                 controls-position="right"
-                placeholder="限值"
+                :placeholder="t('quickAlarm.limit')"
               />
-              <el-input v-model="item.message" placeholder="报警文本" />
+              <el-input v-model="item.message" :placeholder="t('quickAlarm.alarmText')" />
               <el-select v-model="item.severity">
                 <el-option
                   v-for="option in severityOptions"
@@ -289,7 +289,7 @@
               <button
                 type="button"
                 class="quick-alarm__remove"
-                title="删除附加限值"
+                :title="t('quickAlarm.removeLimit')"
                 @click="removeAdvancedLimit(item.id)"
               >
                 ×
@@ -299,48 +299,48 @@
         </template>
 
         <header>
-          <h3>触发与恢复</h3>
+          <h3>{{ t('quickAlarm.triggerAndRecovery') }}</h3>
         </header>
         <div class="quick-alarm__advanced-grid">
           <label class="quick-alarm__field">
-            <span>恢复延时（秒）</span>
+            <span>{{ t('quickAlarm.clearDelaySeconds') }}</span>
             <el-input-number v-model="clearDelaySeconds" :min="0" controls-position="right" />
           </label>
           <label v-if="category === 'number'" class="quick-alarm__field">
-            <span>死区</span>
+            <span>{{ t('quickAlarm.deadband') }}</span>
             <el-input-number v-model="deadband" :min="0" controls-position="right" />
           </label>
           <label class="quick-alarm__field">
-            <span>通知方式</span>
+            <span>{{ t('quickAlarm.notificationMode') }}</span>
             <el-select v-model="notificationMode">
-              <el-option label="继承工程设置" value="inherit" />
-              <el-option label="不发送通知" value="off" />
-              <el-option label="自定义" value="custom" />
+              <el-option :label="t('quickAlarm.inheritNotifications')" value="inherit" />
+              <el-option :label="t('quickAlarm.noNotifications')" value="off" />
+              <el-option :label="t('quickAlarm.custom')" value="custom" />
             </el-select>
           </label>
         </div>
         <div v-if="notificationMode === 'custom'" class="quick-alarm__notification">
-          <el-checkbox v-model="notifyOnRaise">触发时通知</el-checkbox>
-          <el-checkbox v-model="notifyOnClear">恢复时通知</el-checkbox>
+          <el-checkbox v-model="notifyOnRaise">{{ t('quickAlarm.notifyOnRaise') }}</el-checkbox>
+          <el-checkbox v-model="notifyOnClear">{{ t('quickAlarm.notifyOnClear') }}</el-checkbox>
           <label class="quick-alarm__field">
-            <span>重复通知（秒）</span>
+            <span>{{ t('quickAlarm.repeatSeconds') }}</span>
             <el-input-number
               v-model="repeatIntervalSeconds"
               :min="1"
               controls-position="right"
-              placeholder="不重复"
+              :placeholder="t('quickAlarm.noRepeat')"
             />
           </label>
           <label class="quick-alarm__field is-wide">
-            <span>消息模板（可选）</span>
-            <el-input v-model="messageTemplate" placeholder="留空使用默认报警消息" />
+            <span>{{ t('quickAlarm.messageTemplate') }}</span>
+            <el-input v-model="messageTemplate" :placeholder="t('quickAlarm.defaultMessage')" />
           </label>
         </div>
       </section>
 
       <footer class="quick-alarm__footer">
         <div>
-          <button type="button" class="quick-alarm__cancel" @click="visible = false">取消</button>
+          <button type="button" class="quick-alarm__cancel" @click="visible = false">{{ t('quickAlarm.cancel') }}</button>
           <button
             type="submit"
             class="quick-alarm__primary"
@@ -385,6 +385,7 @@ import {
 } from '@/models/alarm-item'
 import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 
 type QuickAlarmType = 'state' | 'transition' | 'text' | 'quality' | 'stale' | 'offline'
 
@@ -457,13 +458,13 @@ const numericSeverities = ref<Record<NumericAlarmKey, AlarmSeverity>>({
   offline: 'warning',
 })
 const numericMessages = ref<Record<NumericAlarmKey, string>>({
-  hh: '高高限报警',
-  h: '高限报警',
-  l: '低限报警',
-  ll: '低低限报警',
-  rate: '变化率报警',
-  deviation: '偏差报警',
-  offline: '离线报警',
+  hh: t('quickAlarm.presets.limit'),
+  h: t('quickAlarm.presets.limit'),
+  l: t('quickAlarm.presets.limit'),
+  ll: t('quickAlarm.presets.limit'),
+  rate: t('quickAlarm.presets.rate'),
+  deviation: t('quickAlarm.presets.deviation'),
+  offline: t('quickAlarm.presets.offline'),
 })
 const rateLimit = ref<number>()
 const rateDirection = ref<'absolute' | 'rise' | 'fall'>('absolute')
@@ -492,8 +493,11 @@ const category = computed<AlarmPointCategory>(() => alarmPointCategory(props.poi
 const isCompatible = computed(() => compatibleAlarmPoints(props.points))
 const pointTitle = computed(() =>
   props.points.length === 1
-    ? props.points[0]?.name || '数据点'
-    : `已选 ${props.points.length} 个${categoryLabel.value}数据点`,
+    ? props.points[0]?.name || t('quickAlarm.datapointFallback')
+    : t('quickAlarm.selectedPoints', {
+        count: props.points.length,
+        category: categoryLabel.value,
+      }),
 )
 const pointPath = computed(() =>
   props.points.length === 1
@@ -501,50 +505,50 @@ const pointPath = computed(() =>
     : props.points
         .slice(0, 3)
         .map((point) => point.name || point.path)
-        .join('、') + (props.points.length > 3 ? '…' : ''),
+        .join(', ') + (props.points.length > 3 ? '…' : ''),
 )
 const categoryLabel = computed(
-  () => ({ number: '数值', boolean: '布尔', text: '文本', structured: '对象' })[category.value],
+  () => t(`quickAlarm.categories.${category.value}`),
 )
-const numericItems: Array<{
+const numericItems = computed<Array<{
   key: NumericAlarmKey
   label: string
   kind: 'threshold' | 'rate_of_change' | 'deviation' | 'offline'
-}> = [
-  { key: 'hh', label: '高高限', kind: 'threshold' },
-  { key: 'h', label: '高限', kind: 'threshold' },
-  { key: 'l', label: '低限', kind: 'threshold' },
-  { key: 'll', label: '低低限', kind: 'threshold' },
-  { key: 'rate', label: '变化率', kind: 'rate_of_change' },
-  { key: 'deviation', label: '偏差', kind: 'deviation' },
-]
+}>>(() => [
+  { key: 'hh', label: t('quickAlarm.levels.hh'), kind: 'threshold' },
+  { key: 'h', label: t('quickAlarm.levels.h'), kind: 'threshold' },
+  { key: 'l', label: t('quickAlarm.levels.l'), kind: 'threshold' },
+  { key: 'll', label: t('quickAlarm.levels.ll'), kind: 'threshold' },
+  { key: 'rate', label: t('quickAlarm.levels.rate'), kind: 'rate_of_change' },
+  { key: 'deviation', label: t('quickAlarm.levels.deviation'), kind: 'deviation' },
+])
 const typeOptions = computed<Array<{ label: string; value: QuickAlarmType }>>(() => {
   if (category.value === 'boolean')
     return [
-      { label: '状态等于', value: 'state' },
-      { label: '状态变化', value: 'transition' },
-      { label: '离线', value: 'offline' },
+      { label: t('quickAlarm.types.state'), value: 'state' },
+      { label: t('quickAlarm.types.transition'), value: 'transition' },
+      { label: t('quickAlarm.types.offline'), value: 'offline' },
     ]
   if (category.value === 'structured')
     return [
-      { label: '质量异常', value: 'quality' },
-      { label: '数据陈旧', value: 'stale' },
-      { label: '离线', value: 'offline' },
+      { label: t('quickAlarm.types.quality'), value: 'quality' },
+      { label: t('quickAlarm.types.stale'), value: 'stale' },
+      { label: t('quickAlarm.types.offline'), value: 'offline' },
     ]
   return [
-    { label: '状态等于', value: 'state' },
-    { label: '包含文本', value: 'text' },
-    { label: '状态变化', value: 'transition' },
-    { label: '离线', value: 'offline' },
+    { label: t('quickAlarm.types.state'), value: 'state' },
+    { label: t('quickAlarm.types.text'), value: 'text' },
+    { label: t('quickAlarm.types.transition'), value: 'transition' },
+    { label: t('quickAlarm.types.offline'), value: 'offline' },
   ]
 })
 const noParamHint = computed(() => {
-  if (alarmType.value === 'offline') return '数据点离线时触发'
-  if (alarmType.value === 'quality') return '数据质量为异常或未知时触发'
-  return '数据值发生变化时触发'
+  if (alarmType.value === 'offline') return t('quickAlarm.hints.offline')
+  if (alarmType.value === 'quality') return t('quickAlarm.hints.quality')
+  return t('quickAlarm.hints.transition')
 })
 const submitText = computed(() => {
-  return props.saving ? '保存中' : '保存报警配置'
+  return props.saving ? t('quickAlarm.saving') : t('quickAlarm.save')
 })
 const numericDraftCount = computed(() => {
   const hasThreshold = (['hh', 'h', 'l', 'll'] as NumericThresholdKey[]).some(
@@ -559,30 +563,15 @@ const numericDraftCount = computed(() => {
   )
 })
 const severityOptions = computed(() =>
-  severityDefinitions.value.map((item) => ({ value: item.key, label: item.displayName })),
+  severityDefinitions.value.map((item) => ({
+    value: item.key,
+    label: ['info', 'warning', 'major', 'critical'].includes(item.key)
+      ? t(`alarm.severities.${item.key}`)
+      : item.displayName,
+  })),
 )
-const presetNameLabels: Record<AlarmPresetSlot, string> = {
-  limit: '越限报警',
-  rate: '变化率报警',
-  deviation: '偏差报警',
-  state: '状态报警',
-  transition: '状态变化报警',
-  text: '文本报警',
-  quality: '质量报警',
-  stale: '数据陈旧报警',
-  offline: '离线报警',
-}
-const presetNameSuffixes: Record<AlarmPresetSlot, string> = {
-  limit: '越限',
-  rate: '变化率',
-  deviation: '偏差',
-  state: '状态',
-  transition: '状态变化',
-  text: '文本',
-  quality: '质量',
-  stale: '数据陈旧',
-  offline: '离线',
-}
+const presetNameLabel = (slot: AlarmPresetSlot) => t(`quickAlarm.presets.${slot}`)
+const presetNameSuffix = (slot: AlarmPresetSlot) => t(`quickAlarm.suffixes.${slot}`)
 const activeNameItems = computed(() => {
   const slots: AlarmPresetSlot[] = []
   if (category.value === 'number') {
@@ -597,11 +586,11 @@ const activeNameItems = computed(() => {
   } else {
     slots.push(nonNumericPresetSlot())
   }
-  return slots.map((slot) => ({ slot, label: presetNameLabels[slot] }))
+  return slots.map((slot) => ({ slot, label: presetNameLabel(slot) }))
 })
 
 function suggestedAlarmName(slot: AlarmPresetSlot) {
-  return `${props.points[0]?.name || '数据点'}_${presetNameSuffixes[slot]}`
+  return `${props.points[0]?.name || t('quickAlarm.datapointFallback')}_${presetNameSuffix(slot)}`
 }
 
 watch(
@@ -635,13 +624,13 @@ watch(
       offline: 'warning',
     }
     numericMessages.value = {
-      hh: '高高限报警',
-      h: '高限报警',
-      l: '低限报警',
-      ll: '低低限报警',
-      rate: '变化率报警',
-      deviation: '偏差报警',
-      offline: '离线报警',
+      hh: t('quickAlarm.presets.limit'),
+      h: t('quickAlarm.presets.limit'),
+      l: t('quickAlarm.presets.limit'),
+      ll: t('quickAlarm.presets.limit'),
+      rate: t('quickAlarm.presets.rate'),
+      deviation: t('quickAlarm.presets.deviation'),
+      offline: t('quickAlarm.presets.offline'),
     }
     rateLimit.value = undefined
     rateDirection.value = 'absolute'
@@ -673,7 +662,7 @@ async function loadPresetConfiguration() {
     else restoreNonNumericItem(items[0]!)
     restoreAdvancedOptions(items)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载已有报警配置失败'))
+    ElMessage.error(getApiErrorMessage(error, t('quickAlarm.loadExistingFailed')))
   } finally {
     loadingPreset.value = false
   }
@@ -681,7 +670,7 @@ async function loadPresetConfiguration() {
 
 function setConfigurationMode(mode: 'basic' | 'advanced') {
   if (mode === configurationMode.value) return
-  if (mode === 'basic') ElMessage.info('保存默认配置后将移除高级配置')
+  if (mode === 'basic') ElMessage.info(t('quickAlarm.basicModeNotice'))
   configurationMode.value = mode
 }
 
@@ -701,7 +690,7 @@ function addAdvancedLimit(direction: 'high' | 'low') {
   advancedLimits.value.push({
     id: crypto.randomUUID(),
     direction,
-    name: `${direction === 'high' ? '附加高限' : '附加低限'} ${index}`,
+    name: `${direction === 'high' ? t('quickAlarm.additionalHigh') : t('quickAlarm.additionalLow')} ${index}`,
     threshold: undefined,
     message: '',
     severity: 'warning',
@@ -757,7 +746,7 @@ function restoreNumericItems(items: AlarmItem[]) {
     advancedLimits.value = custom.map((condition) => ({
       id: condition.id || crypto.randomUUID(),
       direction: ['gt', 'gte'].includes(condition.operator) ? 'high' : 'low',
-      name: String(condition.params.levelName || '附加限值'),
+      name: String(condition.params.levelName || t('quickAlarm.additionalLimit')),
       threshold: Number(condition.params.threshold),
       message: condition.label,
       severity: condition.severity,
@@ -902,7 +891,7 @@ function buildNumericPayloads(): AlarmItemSave[] {
     .map((key) => {
       const condition = createAlarmCondition(
         'threshold',
-        numericItems.find((item) => item.key === key)?.label,
+        numericItems.value.find((item) => item.key === key)?.label,
       )
       condition.operator = key === 'hh' || key === 'h' ? 'gt' : 'lt'
       condition.params = { threshold: numericThresholds.value[key], presetLevel: key }
@@ -1009,35 +998,35 @@ function buildPayload(
 }
 
 function localValidationMessage() {
-  if (!props.points.length) return '请至少选择一个数据点'
-  if (!isCompatible.value) return '所选数据点类型不兼容'
+  if (!props.points.length) return t('quickAlarm.validation.selectPoint')
+  if (!isCompatible.value) return t('quickAlarm.validation.incompatible')
   if (category.value === 'number') {
-    if (!numericDraftCount.value) return '请至少启用一项报警'
+    if (!numericDraftCount.value) return t('quickAlarm.validation.enableOne')
     const enabledThresholds = (['hh', 'h', 'l', 'll'] as NumericThresholdKey[]).filter(
       (key) => numericEnabled.value[key],
     )
     if (enabledThresholds.some((key) => typeof numericThresholds.value[key] !== 'number'))
-      return '请填写已启用的越限阈值'
+      return t('quickAlarm.validation.thresholdRequired')
     if (
       advancedLimits.value.some((item) => !item.name.trim() || typeof item.threshold !== 'number')
     )
-      return '请填写附加限值的名称和限值'
+      return t('quickAlarm.validation.additionalRequired')
     const value = (key: NumericThresholdKey) => numericThresholds.value[key] as number
     if (numericEnabled.value.hh && numericEnabled.value.h && value('hh') <= value('h'))
-      return '高高限必须大于高限'
+      return t('quickAlarm.validation.hhGreaterH')
     if (numericEnabled.value.ll && numericEnabled.value.l && value('ll') >= value('l'))
-      return '低低限必须小于低限'
+      return t('quickAlarm.validation.llLessL')
     if (numericEnabled.value.h && numericEnabled.value.l && value('l') >= value('h'))
-      return '低限必须小于高限，并保留正常区间'
+      return t('quickAlarm.validation.normalRange')
     if (numericEnabled.value.rate && (!rateLimit.value || rateLimit.value <= 0))
-      return '请填写大于 0 的变化率阈值'
+      return t('quickAlarm.validation.ratePositive')
     if (
       numericEnabled.value.deviation &&
       (typeof deviationBaseline.value !== 'number' ||
         typeof deviationLimit.value !== 'number' ||
         deviationLimit.value < 0)
     )
-      return '请填写偏差基准值和非负允许偏差'
+      return t('quickAlarm.validation.deviationRequired')
   }
   if (
     category.value !== 'number' &&
@@ -1045,7 +1034,7 @@ function localValidationMessage() {
     category.value !== 'boolean' &&
     !textExpected.value
   )
-    return '请填写匹配值'
+    return t('quickAlarm.validation.matchRequired')
   return ''
 }
 
@@ -1064,24 +1053,32 @@ async function submit() {
     })
     const errors = validation.errors
     if (errors.length) {
-      await ElMessageBox.alert(errors[0]?.message || '报警配置校验失败', '无法创建', {
-        confirmButtonText: '知道了',
-      })
+      await ElMessageBox.alert(
+        errors[0]?.message || t('quickAlarm.validation.failed'),
+        t('quickAlarm.validation.cannotCreate'),
+        {
+          confirmButtonText: t('quickAlarm.validation.understood'),
+        },
+      )
       return
     }
     const warnings = validation.warnings
     if (warnings.length) {
       await ElMessageBox.confirm(
-        `所选配置与已有报警重叠，共 ${warnings.length} 项。是否继续？`,
-        '重叠条件确认',
-        { confirmButtonText: '继续创建', cancelButtonText: '返回修改', type: 'warning' },
+        t('quickAlarm.validation.overlap', { count: warnings.length }),
+        t('quickAlarm.validation.overlapTitle'),
+        {
+          confirmButtonText: t('quickAlarm.validation.continueCreate'),
+          cancelButtonText: t('quickAlarm.validation.returnEdit'),
+          type: 'warning',
+        },
       )
       const acknowledgementKeys = warnings.map((item) => item.ackKey).filter(Boolean)
       payloads.forEach((payload) => (payload.acknowledgedWarningKeys = acknowledgementKeys))
     }
     emit('save', payloads.length === 1 ? payloads[0]! : payloads, datapointIds)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '报警配置校验失败'))
+    ElMessage.error(getApiErrorMessage(error, t('quickAlarm.validation.failed')))
   }
 }
 

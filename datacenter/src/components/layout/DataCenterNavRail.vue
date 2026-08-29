@@ -1,6 +1,6 @@
 <template>
   <aside class="datacenter-nav-rail">
-    <nav class="datacenter-nav-rail__nav" aria-label="数据中心模块导航">
+    <nav class="datacenter-nav-rail__nav" :aria-label="t('shell.moduleNavigation')">
       <button
         v-for="item in modules"
         :key="item.id"
@@ -16,7 +16,7 @@
       </button>
     </nav>
 
-    <div class="datacenter-nav-rail__actions" aria-label="数据中心快捷操作">
+    <div class="datacenter-nav-rail__actions" :aria-label="t('shell.quickActions')">
       <slot name="actions" />
     </div>
   </aside>
@@ -30,6 +30,7 @@ import IconTablerFunction from '~icons/tabler/function'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerRouter from '~icons/tabler/router'
 import type { DatacenterModuleId, DatacenterModuleMeta } from '@/config/datacenterModules'
+import { t } from '@/i18n/runtime'
 
 defineProps<{
   modules: DatacenterModuleMeta[]
@@ -148,35 +149,4 @@ const moduleIcons: Record<string, unknown> = {
   transform: translate(0, -50%);
 }
 
-.dark .datacenter-nav-rail {
-  background: #162033;
-  color: rgba(248, 250, 252, 0.76);
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08);
-}
-
-.dark .datacenter-nav-rail__item {
-  color: rgba(226, 232, 240, 0.76);
-}
-
-.dark .datacenter-nav-rail__actions {
-  border-top-color: rgba(255, 255, 255, 0.08);
-}
-
-.dark .datacenter-nav-rail__item:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-}
-
-.dark .datacenter-nav-rail__item.is-active {
-  border-color: rgba(125, 168, 255, 0.9);
-  background: #e7efff;
-  color: var(--dc-primary);
-}
-
-.dark .datacenter-nav-rail__label {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: #1e293b;
-  color: #f8fafc;
-}
 </style>

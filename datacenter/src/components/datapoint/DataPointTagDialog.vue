@@ -16,7 +16,7 @@
         <button
           type="button"
           class="dp-tag-dialog__close"
-          aria-label="关闭标签管理"
+          :aria-label="ui('关闭标签管理', 'Close tag management')"
           @click="requestClose"
         >
           <Close />
@@ -27,27 +27,27 @@
     <div class="dp-tag-dialog__body">
       <!-- 批量模式说明 -->
       <p v-if="isBatch" class="dp-tag-dialog__batch-tip">
-        将为 {{ batchDisplayCount }} 个数据点合并以下标签（已有标签保留，不覆盖）。
+        {{ ui(`将为 ${batchDisplayCount} 个数据点合并以下标签（已有标签保留，不覆盖）。`, `The selected tags will be merged into ${batchDisplayCount} data points; existing tags are preserved.`) }}
       </p>
 
       <!-- 新建标签 -->
       <div class="dp-tag-dialog__row">
-        <label>新建标签</label>
+        <label>{{ ui('新建标签', 'New Tag') }}</label>
         <div class="dp-tag-dialog__create">
           <el-input
             v-model="tagCreateInput"
-            placeholder="请输入标签名称"
+            :placeholder="ui('请输入标签名称', 'Enter a tag name')"
             @keyup.enter="appendTag"
           />
           <button type="button" class="dp-tag-dialog__create-btn" @click="appendTag">
-            新建标签
+            {{ ui('新建标签', 'Create Tag') }}
           </button>
         </div>
       </div>
 
       <!-- 标签选择 -->
       <div class="dp-tag-dialog__row">
-        <label>标签选择</label>
+        <label>{{ ui('标签选择', 'Select Tags') }}</label>
         <el-select
           v-model="tagDraft"
           multiple
@@ -56,7 +56,7 @@
           default-first-option
           collapse-tags
           collapse-tags-tooltip
-          placeholder="请选择或输入标签"
+          :placeholder="ui('请选择或输入标签', 'Select or enter tags')"
         >
           <el-option
             v-for="item in tagOptions"
@@ -70,8 +70,8 @@
 
     <template #footer>
       <div class="dp-tag-dialog__footer">
-        <el-button @click="requestClose">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSubmit"> 保存 </el-button>
+        <el-button @click="requestClose">{{ ui('取消', 'Cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSubmit">{{ ui('保存', 'Save') }}</el-button>
       </div>
     </template>
   </DcDialog>
@@ -81,6 +81,9 @@
 import { ref, computed, watch } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 interface DataPointRow {
   id: string
@@ -128,8 +131,8 @@ const isDirty = computed(() => props.visible && draftSnapshot.value !== initialS
 
 const dialogTitle = computed(() =>
   isBatch.value
-    ? `标签管理（${batchDisplayCount.value} 项）`
-    : `标签管理：${props.datapoint?.name || '-'}`,
+    ? ui(`标签管理（${batchDisplayCount.value} 项）`, `Manage Tags (${batchDisplayCount.value})`)
+    : ui(`标签管理：${props.datapoint?.name || '-'}`, `Manage Tags: ${props.datapoint?.name || '-'}`),
 )
 
 // 初始化 draft

@@ -37,6 +37,7 @@
 <script setup lang="ts">
 import { Search } from '@element-plus/icons-vue'
 import IconTablerFolders from '~icons/tabler/folders'
+import { datacenterLocale } from '@/i18n/runtime'
 
 withDefaults(
   defineProps<{
@@ -49,7 +50,7 @@ withDefaults(
   }>(),
   {
     searchText: '',
-    searchPlaceholder: '搜索',
+    searchPlaceholder: datacenterLocale.value === 'en' ? 'Search' : '搜索',
     allActive: false,
     loading: false,
   },

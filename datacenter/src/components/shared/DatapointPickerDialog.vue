@@ -1,21 +1,21 @@
 <template>
-  <DcDialog v-model="visible" :title="title" width="800px" class="datapoint-picker">
+  <DcDialog v-model="visible" :title="resolvedTitle" width="800px" class="datapoint-picker">
     <section class="datapoint-picker__panel">
       <header class="datapoint-picker__head">
         <div class="datapoint-picker__summary">
-          <strong>可选数据点</strong>
-          <span>共 {{ total }} 条</span>
-          <span v-if="selected.size" class="is-selected">已选择 {{ selected.size }} 个</span>
+          <strong>{{ t('datapointPicker.available') }}</strong>
+          <span>{{ t('common.total', { total }) }}</span>
+          <span v-if="selected.size" class="is-selected">{{ t('datapointPicker.selected', { count: selected.size }) }}</span>
         </div>
         <div class="datapoint-picker__filters">
-          <el-input v-model="search" clearable placeholder="搜索名称或路径" @keyup.enter="reload">
+          <el-input v-model="search" clearable :placeholder="t('datapointPicker.search')" @keyup.enter="reload">
             <template #prefix><IconTablerSearch /></template>
           </el-input>
-          <el-select v-model="status" clearable placeholder="全部状态" @change="reload">
-            <el-option label="正常" value="active" />
-            <el-option label="停用" value="inactive" />
-            <el-option label="失效" value="invalid" />
-            <el-option label="异常" value="error" />
+          <el-select v-model="status" clearable :placeholder="t('datapointPicker.allStatuses')" @change="reload">
+            <el-option :label="t('datapointPicker.normal')" value="active" />
+            <el-option :label="t('datapointPicker.inactive')" value="inactive" />
+            <el-option :label="t('datapointPicker.invalid')" value="invalid" />
+            <el-option :label="t('datapointPicker.error')" value="error" />
           </el-select>
         </div>
       </header>
@@ -39,7 +39,7 @@
               />
             </template>
           </el-table-column>
-          <el-table-column label="名称" min-width="260" show-overflow-tooltip>
+          <el-table-column :label="t('datapointPicker.name')" min-width="260" show-overflow-tooltip>
             <template #default="{ row }">
               <div class="datapoint-picker__name">
                 <strong>{{ row.name || row.path }}</strong>
@@ -48,8 +48,8 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="dataType" label="类型" width="120" />
-          <el-table-column label="状态" width="90">
+          <el-table-column prop="dataType" :label="t('datapointPicker.type')" width="120" />
+          <el-table-column :label="t('datapointPicker.status')" width="90">
             <template #default="{ row }">
               <span :class="{ 'is-invalid-status': isInvalidPoint(row) }">
                 {{ statusLabel(row.status) }}
@@ -73,14 +73,14 @@
       <div class="datapoint-picker__footer">
         <slot name="warning" :points="selectedPoints" />
         <span class="datapoint-picker__footer-spacer" />
-        <button type="button" class="dc-button" @click="visible = false">取消</button>
+        <button type="button" class="dc-button" @click="visible = false">{{ t('datapointPicker.cancel') }}</button>
         <button
           type="button"
           class="dc-button dc-button--primary"
           :disabled="!selected.size || selectionDisabled"
           @click="apply"
         >
-          {{ confirmText }}{{ selected.size ? `（${selected.size}）` : '' }}
+          {{ resolvedConfirmText }}{{ selected.size ? t('datapointPicker.selectedSuffix', { count: selected.size }) : '' }}
         </button>
       </div>
     </template>
@@ -96,6 +96,7 @@ import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
 import { getDatapoints } from '@/api/datapoint.api'
 import type { Datapoint } from '@/api/schemas/datapoint.schema'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 
 export type DatapointPickerSelection = Pick<Datapoint, 'id' | 'path' | 'name'> &
   Partial<Pick<Datapoint, 'dataType' | 'status' | 'sourceType'>>
@@ -113,8 +114,8 @@ const props = withDefaults(
     initialSelection?: DatapointPickerSelection[]
   }>(),
   {
-    title: '选择数据点',
-    confirmText: '确定',
+    title: '',
+    confirmText: '',
     multiple: true,
     disabled: false,
     initialSelection: () => [],
@@ -130,6 +131,8 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const resolvedTitle = computed(() => props.title || t('datapointPicker.title'))
+const resolvedConfirmText = computed(() => props.confirmText || t('datapointPicker.confirm'))
 const options = ref<Datapoint[]>([])
 const selected = ref(new Map<string, DatapointPickerSelection>())
 const loading = ref(false)
@@ -138,7 +141,7 @@ const status = ref('')
 const page = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
-const invalidPointHint = '该数据点已失效，仅可在数据点模块查看或清理'
+const invalidPointHint = computed(() => t('datapointPicker.invalidHint'))
 const totalPages = computed(() => (total.value > 0 ? Math.ceil(total.value / pageSize.value) : 0))
 const selectedPoints = computed(() => [...selected.value.values()])
 const selectionDisabled = computed(
@@ -178,7 +181,7 @@ async function loadOptions() {
     selected.value = nextSelected
     total.value = result.pagination.total || 0
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, t('datapointPicker.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -233,7 +236,7 @@ function isInvalidPoint(point: Pick<DatapointPickerSelection, 'status'>) {
 }
 
 function pointDisabledReason(point: DatapointPickerSelection) {
-  if (isInvalidPoint(point)) return invalidPointHint
+  if (isInvalidPoint(point)) return invalidPointHint.value
   return props.disabledReason?.(point) || ''
 }
 
@@ -243,7 +246,12 @@ function isPointDisabled(point: DatapointPickerSelection) {
 
 function statusLabel(value?: string) {
   return (
-    { active: '正常', inactive: '停用', invalid: '失效', error: '异常' }[value || ''] ||
+    {
+      active: t('datapointPicker.normal'),
+      inactive: t('datapointPicker.inactive'),
+      invalid: t('datapointPicker.invalid'),
+      error: t('datapointPicker.error'),
+    }[value || ''] ||
     value ||
     '-'
   )
@@ -283,9 +291,9 @@ function statusLabel(value?: string) {
 }
 .datapoint-picker__filters {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) 120px;
+  grid-template-columns: minmax(170px, 1fr) 148px;
   gap: 8px;
-  width: min(410px, 70%);
+  width: min(438px, 72%);
 }
 .datapoint-picker__table-scroll {
   min-width: 0;

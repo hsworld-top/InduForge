@@ -4,12 +4,12 @@
       <div class="mqtt-publish-tester__title">
         <IconTablerSend />
         <div>
-          <strong>发布测试</strong>
+          <strong>{{ ui('发布测试', 'Publish Test') }}</strong>
           <span>{{ subscription?.name || subscription?.topic || '-' }}</span>
         </div>
       </div>
       <WorkbenchStatusPill
-        :label="connected ? '可发布' : '未连接'"
+        :label="connected ? ui('可发布', 'Ready') : ui('未连接', 'Disconnected')"
         :tone="connected ? 'success' : 'neutral'"
       />
     </header>
@@ -19,7 +19,7 @@
         v-if="!connected"
         type="warning"
         :closable="false"
-        title="请先连接后再发布测试消息"
+        :title="ui('请先连接后再发布测试消息', 'Connect before publishing a test message')"
         show-icon
       />
 
@@ -48,14 +48,14 @@
         />
 
         <div class="mqtt-publish-tester__actions">
-          <el-button :disabled="publishing" @click="resetPayload">重置</el-button>
+          <el-button :disabled="publishing" @click="resetPayload">{{ ui('重置', 'Reset') }}</el-button>
           <el-button
             type="primary"
             :loading="publishing"
             :disabled="!connected || !topic.trim()"
             @click="publishMessage"
           >
-            发布
+            {{ ui('发布', 'Publish') }}
           </el-button>
         </div>
       </section>
@@ -70,6 +70,9 @@ import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import IconTablerSend from '~icons/tabler/send'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const defaultPayload = () => JSON.stringify({ value: 1 }, null, 2)
 
@@ -109,12 +112,12 @@ const publishMessage = async () => {
   try {
     payload = JSON.parse(payloadText.value)
   } catch {
-    errorMessage.value = 'Payload 必须是合法 JSON'
+    errorMessage.value = ui('Payload 必须是合法 JSON', 'Payload must be valid JSON')
     return
   }
 
   if (!props.connected) {
-    errorMessage.value = '请先连接后再发布测试消息'
+    errorMessage.value = ui('请先连接后再发布测试消息', 'Connect before publishing a test message')
     return
   }
 
@@ -127,11 +130,11 @@ const publishMessage = async () => {
       payload,
     }
     await dataAPI.publishMqttMessage(props.projectId, props.connectionId, input)
-    ElMessage.success('消息已发布')
+    ElMessage.success(ui('消息已发布', 'Message published'))
   } catch (error) {
     errorMessage.value = getApiErrorMessage(
       error,
-      props.source === 'builtin-message' ? '发布 IF消息库消息失败' : '发布 MQTT 消息失败',
+      props.source === 'builtin-message' ? ui('发布 IF消息库消息失败', 'Failed to publish IF Message Store message') : ui('发布 MQTT 消息失败', 'Failed to publish MQTT message'),
     )
   } finally {
     publishing.value = false

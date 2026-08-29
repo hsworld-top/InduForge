@@ -3,13 +3,13 @@
     <el-scrollbar ref="scrollbarRef" class="workbench-stream-list__scroll" @scroll="handleScroll">
       <div v-if="loading" class="workbench-stream-list__state">
         <IconTablerLoader2 class="workbench-stream-list__spinner" />
-        <span>加载消息...</span>
+        <span>{{ ui('加载消息...', 'Loading messages...') }}</span>
       </div>
 
       <div v-else-if="messages.length === 0" class="workbench-stream-list__state">
         <IconTablerInbox />
-        <span>{{ emptyText }}</span>
-        <small>{{ emptyHint }}</small>
+        <span>{{ resolvedEmptyText }}</span>
+        <small>{{ resolvedEmptyHint }}</small>
       </div>
 
       <div v-else class="workbench-stream-list__items" :style="{ height: `${virtualHeight}px` }">
@@ -32,7 +32,7 @@
               <time v-if="showTimestamp">
                 {{ formatTimestamp(item.message.timestamp) }}
               </time>
-              <el-tooltip content="复制 Payload" placement="top">
+              <el-tooltip :content="ui('复制 Payload', 'Copy Payload')" placement="top">
                 <button
                   type="button"
                   class="workbench-stream-list__copy"
@@ -61,6 +61,9 @@ import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerInbox from '~icons/tabler/inbox'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type StreamMessage = {
   id?: string | number
@@ -83,9 +86,12 @@ const props = withDefaults(
     loading: false,
     showTimestamp: true,
     formatJson: true,
-    emptyText: '暂无消息',
-    emptyHint: '等待接收实时数据',
   },
+)
+
+const resolvedEmptyText = computed(() => props.emptyText || ui('暂无消息', 'No Messages'))
+const resolvedEmptyHint = computed(
+  () => props.emptyHint || ui('等待接收实时数据', 'Waiting for live data'),
 )
 
 defineEmits<{

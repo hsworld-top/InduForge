@@ -1,27 +1,27 @@
 <template>
   <DcDialog
     :model-value="visible"
-    :title="`报警项：${datapointName || '-'}`"
+    :title="t('alarmSummary.title', { name: datapointName || '-' })"
     width="min(760px, calc(100vw - 32px))"
     body-max-height="520px"
     @update:model-value="handleVisibleChange"
   >
     <div v-loading="loading" class="alarm-point-summary">
       <el-table v-if="items.length" :data="items" size="small" row-key="id">
-        <el-table-column label="报警名称" min-width="150">
+        <el-table-column :label="t('alarmSummary.alarmName')" min-width="150">
           <template #default="{ row }">
             <div class="alarm-point-summary__name">
               <strong>{{ row.displayName }}</strong>
               <span>{{
-                row.mode === 'derived' ? '组合报警' : alarmConditionLabels[row.alarmType]
+                row.mode === 'derived' ? t('alarmSummary.composite') : conditionTypeLabel(row.alarmType)
               }}</span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="条件" width="112">
-          <template #default="{ row }">{{ alarmItemConditionSummary(row) }}</template>
+        <el-table-column :label="t('alarmSummary.condition')" width="112">
+          <template #default="{ row }">{{ conditionSummary(row) }}</template>
         </el-table-column>
-        <el-table-column label="最高等级" width="86">
+        <el-table-column :label="t('alarmSummary.highestLevel')" width="104">
           <template #default="{ row }">
             <span
               class="alarm-point-summary__severity"
@@ -30,34 +30,34 @@
             >
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="72">
+        <el-table-column :label="t('alarmSummary.status')" width="82">
           <template #default="{ row }">
             <StatusBadge
               :tone="row.isEnabled ? 'success' : 'muted'"
-              :text="row.isEnabled ? '已启用' : '已停用'"
+              :text="row.isEnabled ? t('alarmSummary.enabled') : t('alarmSummary.disabled')"
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="76" align="right">
+        <el-table-column :label="t('alarmSummary.actions')" width="82" align="right">
           <template #default="{ row }">
             <button
               type="button"
               class="alarm-point-summary__open"
-              :aria-label="`打开报警 ${row.displayName}`"
+              :aria-label="t('alarmSummary.openAria', { name: row.displayName })"
               @click="openItem(row.id)"
             >
-              打开
+              {{ t('alarmSummary.open') }}
               <IconTablerArrowRight />
             </button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-else-if="!loading" :image-size="56" description="暂无关联报警" />
+      <el-empty v-else-if="!loading" :image-size="56" :description="t('alarmSummary.empty')" />
     </div>
 
     <template #footer>
-      <el-button @click="emit('cancel')">关闭</el-button>
-      <el-button type="primary" @click="openAlarmWorkspace">前往报警单元</el-button>
+      <el-button @click="emit('cancel')">{{ t('alarmSummary.close') }}</el-button>
+      <el-button type="primary" @click="openAlarmWorkspace">{{ t('alarmSummary.gotoWorkspace') }}</el-button>
     </template>
   </DcDialog>
 </template>
@@ -69,12 +69,11 @@ import type { AlarmItem, AlarmSeverity } from '@/api/schemas/alarm.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import {
-  alarmConditionLabels,
-  alarmItemConditionSummary,
   alarmItemHighestSeverity,
   alarmSeverityLabel,
 } from '@/models/alarm-item'
 import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
+import { datacenterLocale, t } from '@/i18n/runtime'
 
 const props = withDefaults(
   defineProps<{
@@ -98,7 +97,31 @@ const emit = defineEmits<{
 function highestSeverity(item: AlarmItem) {
   return alarmItemHighestSeverity(item, severityDefinitions.value)
 }
+function conditionTypeLabel(kind: string) {
+  return t(`alarm.conditionLabels.${kind}`)
+}
+function localizedConditionLabel(label: string, kind: string) {
+  if (datacenterLocale.value !== 'en') return label || conditionTypeLabel(kind)
+  const builtinLabels: Record<string, string> = {
+    '高': t('quickAlarm.levels.h'), '高限': t('quickAlarm.levels.h'), '高限报警': t('quickAlarm.levels.h'),
+    '高高': t('quickAlarm.levels.hh'), '高高限': t('quickAlarm.levels.hh'), '高高限报警': t('quickAlarm.levels.hh'),
+    '低': t('quickAlarm.levels.l'), '低限': t('quickAlarm.levels.l'), '低限报警': t('quickAlarm.levels.l'),
+    '低低': t('quickAlarm.levels.ll'), '低低限': t('quickAlarm.levels.ll'), '低低限报警': t('quickAlarm.levels.ll'),
+    '变化率': t('quickAlarm.levels.rate'), '变化率报警': t('quickAlarm.levels.rate'),
+    '偏差': t('quickAlarm.levels.deviation'), '偏差报警': t('quickAlarm.levels.deviation'),
+    '结果条件': conditionTypeLabel(kind),
+  }
+  return builtinLabels[label] || label || conditionTypeLabel(kind)
+}
+function conditionSummary(item: AlarmItem) {
+  return item.conditions
+    .map((condition) => localizedConditionLabel(condition.label, condition.kind))
+    .join(' / ')
+}
 function severityLabel(value: AlarmSeverity) {
+  if (datacenterLocale.value === 'en' && ['info', 'warning', 'major', 'critical'].includes(value)) {
+    return t(`alarm.severities.${value}`)
+  }
   return alarmSeverityLabel(value, severityDefinitions.value)
 }
 function severityBadgeStyle(value: AlarmSeverity) {

@@ -11,7 +11,7 @@
         class="saved-password-input__toggle"
         link
         :loading="loading"
-        :aria-label="visible ? '隐藏密码' : '查看密码'"
+        :aria-label="visible ? ui('隐藏密码', 'Hide Password') : ui('查看密码', 'Show Password')"
         @click.stop="toggleVisibility"
       >
         <IconTablerEyeOff v-if="visible" />
@@ -25,6 +25,9 @@
 import { ref, watch } from 'vue'
 import IconTablerEye from '~icons/tabler/eye'
 import IconTablerEyeOff from '~icons/tabler/eye-off'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps({
   modelValue: { type: String, default: '' },

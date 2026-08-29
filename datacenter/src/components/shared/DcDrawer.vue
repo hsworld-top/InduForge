@@ -22,7 +22,7 @@
       <button
         type="button"
         class="dc-drawer__resize-handle"
-        aria-label="拖拽调整抽屉宽度"
+        :aria-label="ui('拖拽调整抽屉宽度', 'Drag to resize drawer')"
         @mousedown.prevent="startResize"
       ></button>
     </div>
@@ -31,6 +31,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

@@ -2,8 +2,8 @@
   <section class="ws-workbench">
     <aside class="ws-workbench__sidebar">
       <WorkbenchSourceHeader
-        :title="connection.name || '未命名 WebSocket 接入源'"
-        fallback-title="未命名 WebSocket 接入源"
+        :title="connection.name || ui('未命名 WebSocket 接入源', 'Unnamed WebSocket Source')"
+        :fallback-title="ui('未命名 WebSocket 接入源', 'Unnamed WebSocket Source')"
         :meta="sourceMetaRows"
         @back="$emit('back')"
       >
@@ -13,13 +13,13 @@
             class="ws-workbench__search"
             size="small"
             clearable
-            placeholder="搜索会话"
+            :placeholder="ui('搜索会话', 'Search sessions')"
             @keyup.enter="loadSessions(1)"
           />
           <button
             class="workbench-source-header__icon-action is-primary"
-            title="新建会话"
-            aria-label="新建会话"
+            :title="ui('新建会话', 'New Session')"
+            :aria-label="ui('新建会话', 'New Session')"
             type="button"
             @click="createDraftSession"
           >
@@ -27,8 +27,8 @@
           </button>
           <button
             class="workbench-source-header__icon-action"
-            title="新建分组"
-            aria-label="新建分组"
+            :title="ui('新建分组', 'New Group')"
+            :aria-label="ui('新建分组', 'New Group')"
             type="button"
             @click="openGroupDialog()"
           >
@@ -36,8 +36,8 @@
           </button>
           <button
             class="workbench-source-header__icon-action"
-            title="刷新"
-            aria-label="刷新"
+            :title="ui('刷新', 'Refresh')"
+            :aria-label="ui('刷新', 'Refresh')"
             type="button"
             @click="reloadWorkbench"
           >
@@ -49,7 +49,7 @@
       <div class="ws-workbench__tree">
         <div v-if="loading" class="ws-workbench__loading">
           <IconTablerLoader2 />
-          <span>加载会话...</span>
+          <span>{{ ui('加载会话...', 'Loading sessions...') }}</span>
         </div>
         <template v-else>
           <WebSocketTreeNode
@@ -83,7 +83,7 @@
             </el-tag>
           </button>
           <div v-if="sessions.length === 0" class="ws-workbench__empty">
-            {{ search ? '没有匹配的会话' : '暂无会话' }}
+            {{ search ? ui('没有匹配的会话', 'No matching sessions') : ui('暂无会话', 'No sessions') }}
           </div>
           <button
             v-if="sessions.length < pagination.total"
@@ -92,7 +92,7 @@
             :disabled="loadingMore"
             @click="loadMoreSessions"
           >
-            {{ loadingMore ? '加载中...' : `加载更多（${sessions.length}/${pagination.total}）` }}
+            {{ loadingMore ? ui('加载中...', 'Loading...') : ui(`加载更多（${sessions.length}/${pagination.total}）`, `Load more (${sessions.length}/${pagination.total})`) }}
           </button>
         </template>
       </div>
@@ -110,12 +110,12 @@
         >
           <span class="ws-workbench__badge">WS</span>
           <el-tooltip
-            :content="tab.draft.name || '未命名会话'"
+            :content="tab.draft.name || ui('未命名会话', 'Unnamed Session')"
             placement="top"
             :show-after="400"
             :disabled="(tab.draft.name || '').length <= 12"
           >
-            <span class="ws-workbench__tab-name">{{ tab.draft.name || '未命名会话' }}</span>
+            <span class="ws-workbench__tab-name">{{ tab.draft.name || ui('未命名会话', 'Unnamed Session') }}</span>
           </el-tooltip>
           <i v-if="tab.dirty" />
           <IconTablerX @click.stop="closeTab(tab.id)" />
@@ -125,7 +125,7 @@
       <div v-if="activeTab" class="ws-workbench__editor">
         <div class="ws-workbench__crumb-row">
           <div class="ws-workbench__crumb">
-            <span>WebSocket 接入源</span>
+            <span>{{ ui('WebSocket 接入源', 'WebSocket Source') }}</span>
             <IconTablerChevronRight />
             <span>{{ groupName(activeTab.draft.groupId) }}</span>
             <IconTablerChevronRight />
@@ -133,22 +133,22 @@
               v-model="activeTab.draft.name"
               class="ws-workbench__name-input"
               size="small"
-              placeholder="未命名会话"
+              :placeholder="ui('未命名会话', 'Unnamed Session')"
               maxlength="64"
               @input="markDirty"
             />
           </div>
           <div class="ws-workbench__actions">
             <span v-if="activeTab.draft.outputs.length" class="ws-workbench__datapoint-path">
-              {{ activeTab.draft.outputs.length }} 个输出数据点
+              {{ outputCountLabel(activeTab.draft.outputs.length) }}
             </span>
-            <el-tooltip content="保存当前会话" placement="top" :show-after="400">
+            <el-tooltip :content="ui('保存当前会话', 'Save session')" placement="top" :show-after="400">
               <el-button
                 size="small"
                 type="primary"
                 :loading="saving"
                 class="ws-workbench__icon-btn"
-                aria-label="保存"
+                :aria-label="ui('保存', 'Save')"
                 @click="saveActive"
               >
                 <IconTablerDeviceFloppy />
@@ -168,7 +168,7 @@
           </el-select>
           <el-input
             v-model="activeTab.draft.url"
-            placeholder="ws://example.com/stream 或 wss://example.com/stream"
+            :placeholder="ui('ws://example.com/stream 或 wss://example.com/stream', 'ws://example.com/stream or wss://example.com/stream')"
             @input="markDirty"
           />
           <el-tooltip :content="connectButtonTooltip" placement="top" :show-after="400">
@@ -177,7 +177,7 @@
               :loading="activeTab.streamStatus === 'connecting'"
               class="ws-workbench__icon-btn ws-workbench__connect-btn"
               :class="`is-${activeTab.streamStatus}`"
-              :aria-label="isActiveConnected ? '断开连接' : '连接'"
+              :aria-label="isActiveConnected ? ui('断开连接', 'Disconnect') : ui('连接', 'Connect')"
               @click="connectActive"
             >
               <IconTablerPlugConnected v-if="isActiveConnected" />
@@ -187,18 +187,18 @@
         </div>
 
         <el-tabs v-model="activeConfigTab" class="ws-workbench__config-tabs">
-          <el-tab-pane label="请求头" name="headers">
+          <el-tab-pane :label="ui('请求头', 'Headers')" name="headers">
             <WebSocketKeyValueEditor v-model="activeTab.draft.headers" @change="markDirty" />
           </el-tab-pane>
-          <el-tab-pane label="认证" name="auth">
+          <el-tab-pane :label="ui('认证', 'Authorization')" name="auth">
             <el-form class="ws-workbench__form" label-position="top" size="small" @submit.prevent>
-              <el-form-item label="认证方式">
+              <el-form-item :label="ui('认证方式', 'Authorization Type')">
                 <el-select
                   v-model="activeTab.draft.auth.type"
                   class="ws-workbench__form-control"
                   @change="markDirty"
                 >
-                  <el-option label="无认证" value="none" />
+                  <el-option :label="ui('无认证', 'No Authorization')" value="none" />
                   <el-option label="Bearer Token" value="bearer" />
                   <el-option label="Basic Auth" value="basic" />
                 </el-select>
@@ -207,24 +207,24 @@
                 <el-input
                   v-model="activeTab.draft.auth.token"
                   class="ws-workbench__form-control"
-                  placeholder="请输入 Token"
+                  :placeholder="ui('请输入 Token', 'Enter a token')"
                   @input="markDirty"
                 />
               </el-form-item>
               <template v-if="activeTab.draft.auth.type === 'basic'">
-                <el-form-item label="用户名">
+                <el-form-item :label="ui('用户名', 'Username')">
                   <el-input
                     v-model="activeTab.draft.auth.username"
                     class="ws-workbench__form-control"
-                    placeholder="请输入用户名"
+                    :placeholder="ui('请输入用户名', 'Enter a username')"
                     @input="markDirty"
                   />
                 </el-form-item>
-                <el-form-item label="密码">
+                <el-form-item :label="ui('密码', 'Password')">
                   <el-input
                     v-model="activeTab.draft.auth.password"
                     class="ws-workbench__form-control"
-                    placeholder="请输入密码"
+                    :placeholder="ui('请输入密码', 'Enter a password')"
                     show-password
                     @input="markDirty"
                   />
@@ -232,10 +232,10 @@
               </template>
             </el-form>
           </el-tab-pane>
-          <el-tab-pane label="子协议" name="protocols">
+          <el-tab-pane :label="ui('子协议', 'Subprotocols')" name="protocols">
             <WebSocketProtocolEditor v-model="activeTab.draft.protocols" @change="markDirty" />
           </el-tab-pane>
-          <el-tab-pane label="消息" name="messages">
+          <el-tab-pane :label="ui('消息', 'Messages')" name="messages">
             <div class="ws-workbench__message-composer">
               <div class="ws-workbench__message-toolbar">
                 <el-radio-group v-model="activeTab.messageMode" size="small" @change="markDirty">
@@ -247,7 +247,7 @@
                 v-model="activeTab.messageText"
                 :language="activeTab.messageMode === 'json' ? 'json' : 'plaintext'"
                 height="240px"
-                theme="vs-dark"
+                :theme="isDark ? 'vs-dark' : 'vs'"
                 :options="messageEditorOptions"
                 @change="handleMessageEditorChange"
               />
@@ -261,24 +261,24 @@
                   @click="sendActiveMessage"
                 >
                   <IconTablerSend />
-                  发送消息
+                  {{ ui('发送消息', 'Send Message') }}
                 </el-button>
               </div>
             </div>
           </el-tab-pane>
-          <el-tab-pane label="输出映射" name="outputs">
+          <el-tab-pane :label="ui('输出映射', 'Output Mapping')" name="outputs">
             <SourceOutputEditor
               v-model="activeTab.draft.outputs"
-              title="消息输出"
+              :title="ui('消息输出', 'Message Output')"
               :sample="latestIncomingPayload"
               whole-data-type="object"
               @change="markDirty"
             />
           </el-tab-pane>
-          <el-tab-pane label="设置" name="settings">
+          <el-tab-pane :label="ui('设置', 'Settings')" name="settings">
             <el-form class="ws-workbench__form" label-position="top" size="small" @submit.prevent>
               <div class="ws-workbench__form-grid">
-                <el-form-item label="超时（毫秒）">
+                <el-form-item :label="ui('超时（毫秒）', 'Timeout (ms)')">
                   <el-input-number
                     v-model="activeTab.draft.settings.timeoutMs"
                     :min="1000"
@@ -288,10 +288,10 @@
                     @change="markDirty"
                   />
                 </el-form-item>
-                <el-form-item label="行为">
+                <el-form-item :label="ui('行为', 'Behavior')">
                   <div class="ws-workbench__settings-checks">
                     <el-checkbox v-model="activeTab.draft.settings.tlsVerify" @change="markDirty">
-                      TLS 校验
+                      {{ ui('TLS 校验', 'Verify TLS') }}
                     </el-checkbox>
                   </div>
                 </el-form-item>
@@ -305,21 +305,21 @@
             class="ws-workbench__response-resizer"
             role="separator"
             aria-orientation="horizontal"
-            title="拖拽调整消息流高度，双击恢复默认"
+            :title="ui('拖拽调整消息流高度，双击恢复默认', 'Drag to resize the message stream; double-click to reset')"
             @mousedown.prevent="startResponseResize"
             @dblclick="resetResponseHeight"
           />
           <header>
             <div>
-              <strong>消息流</strong>
+              <strong>{{ ui('消息流', 'Message Stream') }}</strong>
               <WorkbenchStatusPill :label="streamStatusLabel" :tone="streamStatusTone" />
             </div>
           </header>
           <div class="ws-workbench__response-body">
             <div v-show="activeTab.streamStatus === 'error'" class="ws-workbench__error-response">
               <IconTablerAlertTriangle />
-              <strong>连接失败</strong>
-              <span>{{ activeTab.streamError || '未知错误' }}</span>
+              <strong>{{ ui('连接失败', 'Connection Failed') }}</strong>
+              <span>{{ activeTab.streamError || ui('未知错误', 'Unknown error') }}</span>
             </div>
             <div
               v-show="activeTab.streamStatus !== 'error' && activeTab.streamMessages.length === 0"
@@ -327,10 +327,10 @@
             >
               {{
                 activeTab.streamStatus === 'connected'
-                  ? '已连接，等待消息...'
+                  ? ui('已连接，等待消息...', 'Connected; waiting for messages...')
                   : activeTab.streamStatus === 'connecting'
-                    ? '连接中...'
-                    : '连接后持续显示 WebSocket 消息'
+                    ? ui('连接中...', 'Connecting...')
+                    : ui('连接后持续显示 WebSocket 消息', 'Connect to continuously display WebSocket messages')
               }}
             </div>
             <div v-show="activeTab.streamMessages.length > 0" class="ws-workbench__messages">
@@ -342,7 +342,7 @@
               >
                 <div>
                   <el-tag size="small" :type="message.direction === 'in' ? 'success' : 'info'">
-                    {{ message.direction === 'in' ? '接收' : '发送' }}
+                    {{ message.direction === 'in' ? ui('接收', 'Received') : ui('发送', 'Sent') }}
                   </el-tag>
                   <span>{{ message.type }}</span>
                   <small>{{ message.sizeBytes }} bytes</small>
@@ -359,8 +359,8 @@
 
       <div v-else class="ws-workbench__blank">
         <IconTablerWebhook />
-        <strong>选择或新建一个 WebSocket 会话</strong>
-        <span>每个会话可以把完整消息或样本字段映射为一个或多个强类型数据点。</span>
+        <strong>{{ ui('选择或新建一个 WebSocket 会话', 'Select or Create a WebSocket Session') }}</strong>
+        <span>{{ ui('每个会话可以把完整消息或样本字段映射为一个或多个强类型数据点。', 'Map a complete message or sample fields to one or more strongly typed data points.') }}</span>
       </div>
     </main>
 
@@ -368,7 +368,7 @@
       ref="groupDialogRef"
       v-model="groupDialog.visible"
       :mode="groupDialog.id ? 'edit' : 'create'"
-      :title="groupDialog.id ? '编辑分组' : '新建分组'"
+      :title="groupDialog.id ? ui('编辑分组', 'Edit Group') : ui('新建分组', 'New Group')"
       :group="editingGroup"
       :group-options="groupOptions"
       :initial-parent-id="groupDialog.parentId"
@@ -378,19 +378,19 @@
 
     <DcDialog
       v-model="moveDialogVisible"
-      :title="moveTargetType === 'group' ? '移动分组' : '移动会话'"
+      :title="moveTargetType === 'group' ? ui('移动分组', 'Move Group') : ui('移动会话', 'Move Session')"
       width="420px"
       :close-disabled="moveSaving"
     >
       <el-form label-position="top" class="ws-workbench__move-form" @submit.prevent>
-        <el-form-item label="目标分组">
+        <el-form-item :label="ui('目标分组', 'Destination Group')">
           <el-select
             v-model="moveTargetGroupId"
             class="ws-workbench__move-select"
             clearable
-            placeholder="根目录"
+            :placeholder="ui('根目录', 'Root')"
           >
-            <el-option label="根目录" :value="null" />
+            <el-option :label="ui('根目录', 'Root')" :value="null" />
             <el-option
               v-for="group in allGroupOptions"
               :key="group.id"
@@ -402,14 +402,14 @@
       </el-form>
       <template #footer>
         <div class="ws-workbench__move-footer">
-          <el-button @click="moveDialogVisible = false">取消</el-button>
+          <el-button @click="moveDialogVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
           <el-button
             type="primary"
             :loading="moveSaving"
             :disabled="!canMoveTarget"
             @click="moveTarget"
           >
-            移动
+            {{ ui('移动', 'Move') }}
           </el-button>
         </div>
       </template>
@@ -433,7 +433,7 @@
             @click="emitContextAction('open')"
           >
             <IconTablerWebhook class="ws-workbench__menu-icon" />
-            <span>打开会话</span>
+            <span>{{ ui('打开会话', 'Open Session') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'session'"
@@ -441,7 +441,7 @@
             @click="emitContextAction('duplicate')"
           >
             <IconTablerCopy class="ws-workbench__menu-icon" />
-            <span>复制会话</span>
+            <span>{{ ui('复制会话', 'Duplicate Session') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'session'"
@@ -449,7 +449,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="ws-workbench__menu-icon" />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -457,7 +457,7 @@
             @click="emitContextAction('create-child')"
           >
             <IconTablerFolderPlus class="ws-workbench__menu-icon" />
-            <span>新建子分组</span>
+            <span>{{ ui('新建子分组', 'New Child Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -465,7 +465,7 @@
             @click="emitContextAction('edit')"
           >
             <IconTablerPencil class="ws-workbench__menu-icon" />
-            <span>编辑分组</span>
+            <span>{{ ui('编辑分组', 'Edit Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -473,7 +473,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="ws-workbench__menu-icon" />
-            <span>移动分组</span>
+            <span>{{ ui('移动分组', 'Move Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -482,7 +482,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="ws-workbench__menu-icon" />
-            <span>删除分组</span>
+            <span>{{ ui('删除分组', 'Delete Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'session'"
@@ -491,7 +491,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="ws-workbench__menu-icon" />
-            <span>删除</span>
+            <span>{{ ui('删除', 'Delete') }}</span>
           </button>
         </div>
       </div>
@@ -556,6 +556,13 @@ import type { SourceOutputInput } from '@/api/schemas/source-output.schema'
 import { createWholeSourceOutput } from '@/api/schemas/source-output.schema'
 import { getApiErrorMessage } from '@/utils/request'
 import { useWorkbenchBottomPanelResize } from '@/composables/useWorkbenchBottomPanelResize'
+import { datacenterLocale } from '@/i18n/runtime'
+import { datacenterTheme } from '@/theme/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+const isDark = computed(() => datacenterTheme.value === 'dark')
+const outputCountLabel = (count: number) =>
+  ui(`${count} 个输出数据点`, `${count} output data point${count === 1 ? '' : 's'}`)
 
 type AccessSourceConnection = {
   id: string
@@ -691,8 +698,8 @@ let searchTimer: number | undefined
 let sessionListSequence = 0
 
 const sourceMetaRows = computed(() => [
-  { label: '类型', value: 'WebSocket' },
-  { label: '连接数', value: `${pagination.total || sessions.value.length} 个` },
+  { label: ui('类型', 'Type'), value: 'WebSocket' },
+  { label: ui('连接数', 'Sessions'), value: String(pagination.total || sessions.value.length) },
 ])
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value))
 const latestIncomingPayload = computed(() => {
@@ -711,15 +718,15 @@ const connectButtonType = computed(() => {
 })
 const connectButtonTooltip = computed(() => {
   const tab = activeTab.value
-  if (!tab) return '连接'
-  if (tab.streamStatus === 'connected') return '断开连接'
-  if (tab.streamStatus === 'connecting') return '连接中...'
-  if (tab.streamStatus === 'error') return tab.streamError || '连接失败，点击重试'
-  return '连接'
+  if (!tab) return ui('连接', 'Connect')
+  if (tab.streamStatus === 'connected') return ui('断开连接', 'Disconnect')
+  if (tab.streamStatus === 'connecting') return ui('连接中...', 'Connecting...')
+  if (tab.streamStatus === 'error') return tab.streamError || ui('连接失败，点击重试', 'Connection failed; click to retry')
+  return ui('连接', 'Connect')
 })
 const streamStatusLabel = computed(() => {
   const tab = activeTab.value
-  if (!tab) return '未连接'
+  if (!tab) return ui('未连接', 'Disconnected')
   return streamStatusText(tab)
 })
 const streamStatusTone = computed<'neutral' | 'success' | 'warning' | 'danger' | 'info'>(() => {
@@ -862,8 +869,8 @@ function toggleGroup(id: string) {
 }
 
 function groupName(id?: string | null) {
-  if (!id || id === '__ungrouped') return '未分组'
-  return groups.value.find((group) => group.id === id)?.name || '未知分组'
+  if (!id || id === '__ungrouped') return ui('未分组', 'Ungrouped')
+  return groups.value.find((group) => group.id === id)?.name || ui('未知分组', 'Unknown Group')
 }
 
 function createDraftSession() {
@@ -896,7 +903,7 @@ function activateTab(id: string) {
 
 const isPristineNewDraft = (draft: SessionDraft): boolean => {
   if (draft.id && !String(draft.id).startsWith('draft-')) return false
-  if (draft.name && !/^新建会话\s+\d+$/.test(draft.name)) return false
+  if (draft.name && !/^(?:新建会话\s+|Session_)\d+$/.test(draft.name)) return false
   if (draft.url) return false
   if (draft.headers.length > 0) return false
   if (draft.auth.type !== 'none') return false
@@ -913,9 +920,9 @@ async function closeTab(id: string) {
   const tab = tabs.value[index]
   if (tab.dirty && !isPristineNewDraft(tab.draft)) {
     try {
-      await ElMessageBox.confirm('当前会话有未保存改动，关闭后会丢失。', '关闭会话', {
-        confirmButtonText: '放弃',
-        cancelButtonText: '取消',
+      await ElMessageBox.confirm(ui('当前会话有未保存改动，关闭后会丢失。', 'This session has unsaved changes that will be lost.'), ui('关闭会话', 'Close Session'), {
+        confirmButtonText: ui('放弃', 'Discard'),
+        cancelButtonText: ui('取消', 'Cancel'),
         type: 'warning',
       })
     } catch {
@@ -949,7 +956,7 @@ async function saveActive() {
     tab.draft = normalizeDraft(saved)
     activeTabId.value = savedId
     await loadSessions()
-    ElMessage.success('会话已保存')
+    ElMessage.success(ui('会话已保存', 'Session saved'))
     return saved
   } finally {
     saving.value = false
@@ -990,7 +997,7 @@ async function connectActive() {
     if (tab.streamEpoch !== epoch || tab.socket !== socket || tab.streamStatus !== 'connecting') {
       return
     }
-    setStreamFailure(tab, `连接超时（${timeoutMs} ms）`)
+    setStreamFailure(tab, ui(`连接超时（${timeoutMs} ms）`, `Connection timed out (${timeoutMs} ms)`))
     detachStreamSocket(tab, socket)
     socket.close()
   }, timeoutMs)
@@ -1000,7 +1007,7 @@ async function connectActive() {
   }
   socket.onerror = () => {
     if (tab.streamEpoch !== epoch || tab.streamStatus !== 'connecting') return
-    setStreamFailure(tab, tab.streamError || 'WebSocket 连接异常')
+    setStreamFailure(tab, tab.streamError || ui('WebSocket 连接异常', 'WebSocket connection error'))
   }
   socket.onclose = (event) => {
     if (tab.streamEpoch !== epoch) return
@@ -1009,7 +1016,7 @@ async function connectActive() {
     tab.socket = null
     if (tab.streamStatus === 'connecting') {
       const reason =
-        tab.streamError || normalizeCloseReason(event) || `连接失败（code ${event.code || 1006}）`
+        tab.streamError || normalizeCloseReason(event) || ui(`连接失败（code ${event.code || 1006}）`, `Connection failed (code ${event.code || 1006})`)
       setStreamFailure(tab, reason, !tab.streamError)
     } else if (tab.streamStatus !== 'error') {
       tab.streamStatus = 'idle'
@@ -1147,7 +1154,7 @@ function handleStreamMessage(tab: SessionTab, rawData: string) {
       return
     }
     if (envelope.type === 'error') {
-      setStreamFailure(tab, envelope.message || 'WebSocket 连接失败')
+      setStreamFailure(tab, envelope.message || ui('WebSocket 连接失败', 'WebSocket connection failed'))
       return
     }
     if (envelope.type === 'status' && envelope.status === 'connected') {
@@ -1178,7 +1185,7 @@ function handleMessageEditorChange(value: string) {
 function sendActiveMessage() {
   const tab = activeTab.value
   if (!tab || tab.streamStatus !== 'connected' || !tab.socket) {
-    ElMessage.warning('请先连接 WebSocket')
+    ElMessage.warning(ui('请先连接 WebSocket', 'Connect WebSocket first'))
     return
   }
   const payload = tab.messageText.trim()
@@ -1186,13 +1193,13 @@ function sendActiveMessage() {
   try {
     tab.socket.send(payload)
   } catch (error) {
-    setStreamFailure(tab, error instanceof Error ? error.message : 'WebSocket 发送消息失败')
+    setStreamFailure(tab, error instanceof Error ? error.message : ui('WebSocket 发送消息失败', 'Failed to send WebSocket message'))
   }
 }
 
 function setStreamFailure(tab: SessionTab, message: string, notify = true) {
   clearConnectTimer(tab)
-  const reason = message.trim() || 'WebSocket 连接失败'
+  const reason = message.trim() || ui('WebSocket 连接失败', 'WebSocket connection failed')
   const shouldNotify = notify && (tab.streamStatus !== 'error' || tab.streamError !== reason)
   tab.streamStatus = 'error'
   tab.streamError = reason
@@ -1208,17 +1215,17 @@ function normalizeCloseReason(event: CloseEvent) {
   const reason = event.reason?.trim()
   if (reason) return reason
   if (event.code === 1000) return ''
-  if (event.code === 1006) return '连接异常关闭'
-  if (event.code === 1008) return '连接被拒绝'
-  if (event.code === 1011) return '服务端内部错误'
+  if (event.code === 1006) return ui('连接异常关闭', 'Connection closed abnormally')
+  if (event.code === 1008) return ui('连接被拒绝', 'Connection rejected')
+  if (event.code === 1011) return ui('服务端内部错误', 'Server internal error')
   return ''
 }
 
 function streamStatusText(tab: SessionTab) {
-  if (tab.streamStatus === 'connecting') return '连接中'
-  if (tab.streamStatus === 'connected') return `监听中 · ${tab.streamMessages.length} 条`
-  if (tab.streamStatus === 'error') return tab.streamError || '连接异常'
-  return '未连接'
+  if (tab.streamStatus === 'connecting') return ui('连接中', 'Connecting')
+  if (tab.streamStatus === 'connected') return ui(`监听中 · ${tab.streamMessages.length} 条`, `Listening · ${tab.streamMessages.length} messages`)
+  if (tab.streamStatus === 'error') return tab.streamError || ui('连接异常', 'Connection Error')
+  return ui('未连接', 'Disconnected')
 }
 
 function duplicateSession(session: WebSocketSession) {
@@ -1330,7 +1337,7 @@ const moveSession = async () => {
     openTab.draft.groupId = moveTargetGroupId.value || null
     activeTabId.value = openTab.id
     moveDialogVisible.value = false
-    ElMessage.info('已在未保存的会话中调整分组，保存会话后生效')
+    ElMessage.info(ui('已在未保存的会话中调整分组，保存会话后生效', 'Group changed in the draft; save the session to apply'))
     return
   }
 
@@ -1350,9 +1357,9 @@ const moveSession = async () => {
     moveDialogVisible.value = false
     movingSession.value = null
     await loadSessions()
-    ElMessage.success('会话已移动')
+    ElMessage.success(ui('会话已移动', 'Session moved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动会话失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动会话失败', 'Failed to move session')))
   } finally {
     moveSaving.value = false
   }
@@ -1370,9 +1377,9 @@ const moveGroup = async () => {
     moveDialogVisible.value = false
     movingGroup.value = null
     await loadGroups()
-    ElMessage.success('分组已移动')
+    ElMessage.success(ui('分组已移动', 'Group moved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动分组失败', 'Failed to move group')))
   } finally {
     moveSaving.value = false
   }
@@ -1380,9 +1387,9 @@ const moveGroup = async () => {
 
 async function deleteSession(sessionId: string) {
   try {
-    await ElMessageBox.confirm('删除会话后对应数据点会标记失效，确认删除？', '删除会话', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(ui('删除会话后对应数据点会标记失效，确认删除？', 'Deleting the session marks its data points as invalid. Continue?'), ui('删除会话', 'Delete Session'), {
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     })
     const tab = tabs.value.find((item) => item.draft.id === sessionId)
@@ -1393,10 +1400,10 @@ async function deleteSession(sessionId: string) {
       activeTabId.value = tabs.value[0]?.id || ''
     }
     await loadSessions()
-    ElMessage.success('会话已删除')
+    ElMessage.success(ui('会话已删除', 'Session deleted'))
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, '删除会话失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除会话失败', 'Failed to delete session')))
     }
   }
 }
@@ -1404,20 +1411,20 @@ async function deleteSession(sessionId: string) {
 async function deleteGroup(group: WebSocketSessionGroupNode) {
   try {
     await ElMessageBox.confirm(
-      `确认删除分组「${group.name}」？组内会话会回到根目录。`,
-      '删除分组',
+      ui(`确认删除分组「${group.name}」？组内会话会回到根目录。`, `Delete group “${group.name}”? Its sessions will return to Root.`),
+      ui('删除分组', 'Delete Group'),
       {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
+        confirmButtonText: ui('删除', 'Delete'),
+        cancelButtonText: ui('取消', 'Cancel'),
         type: 'warning',
       },
     )
     await dataAPI.deleteWebSocketSessionGroup(props.projectId, String(group.id))
     await Promise.all([loadGroups(), loadSessions()])
-    ElMessage.success('分组已删除')
+    ElMessage.success(ui('分组已删除', 'Group deleted'))
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除分组失败', 'Failed to delete group')))
     }
   }
 }
@@ -1428,7 +1435,7 @@ function normalizeDraft(input: Partial<WebSocketSession>): SessionDraft {
     projectId: input.projectId ? String(input.projectId) : undefined,
     connectionId: input.connectionId ? String(input.connectionId) : props.connection.id,
     groupId: input.groupId ? String(input.groupId) : null,
-    name: input.name || '未命名会话',
+    name: input.name || ui('未命名会话', 'Unnamed Session'),
     url: input.url || '',
     headers: Array.isArray(input.headers) ? [...input.headers] : [],
     auth: normalizeAuthDraft(input.auth),
@@ -1442,7 +1449,7 @@ function normalizeDraft(input: Partial<WebSocketSession>): SessionDraft {
     dataPointPath: input.dataPointPath || '',
     outputs: input.outputs?.length
       ? input.outputs.map((output) => ({ ...output, selector: { ...output.selector } }))
-      : [createWholeSourceOutput('message', '完整消息', 'object')],
+      : [createWholeSourceOutput('message', ui('完整消息', 'Complete Message'), 'object')],
     lastMessage: input.lastMessage,
     lastDiagnostic: input.lastDiagnostic || '',
     quality: input.quality || 'unknown',
@@ -1471,7 +1478,7 @@ function syncDraftMessage(tab: SessionTab) {
   tab.draft.messages = [
     {
       enabled: true,
-      name: existing?.name || '发送消息',
+      name: existing?.name || ui('发送消息', 'Send Message'),
       description: existing?.description || '',
       payload: tab.messageText,
     },
@@ -1541,15 +1548,16 @@ function generateUniqueDraftName(): string {
   }
   let maxIndex = 0
   for (const name of taken) {
-    const match = /^新建会话\s+(\d+)$/.exec(name)
+    const match = /^(?:新建会话\s+|Session_)(\d+)$/.exec(name)
     if (match) {
       const n = Number(match[1])
       if (Number.isFinite(n) && n > maxIndex) maxIndex = n
     }
   }
   let next = maxIndex + 1
-  while (taken.has(`新建会话 ${next}`)) next += 1
-  return `新建会话 ${next}`
+  const prefix = datacenterLocale.value === 'en' ? 'Session_' : '新建会话 '
+  while (taken.has(`${prefix}${next}`)) next += 1
+  return `${prefix}${next}`
 }
 
 function buildWebSocketSessionTree(
@@ -1748,14 +1756,14 @@ const WebSocketKeyValueEditor = defineComponent({
     return () =>
       h('div', { class: 'ws-workbench__table-editor' }, [
         h('div', { class: 'ws-workbench__table-toolbar' }, [
-          h(ElButton, { size: 'small', onClick: add }, () => '添加'),
+          h(ElButton, { size: 'small', onClick: add }, () => ui('添加', 'Add')),
         ]),
         h(
           ElTable,
           { data: rows.value, size: 'small', border: true, class: 'ws-workbench__edit-table' },
           () => [
             h(ElTableColumn, {
-              label: '启用',
+              label: ui('启用', 'Enabled'),
               width: 70,
               align: 'center',
               formatter: (
@@ -1802,7 +1810,7 @@ const WebSocketKeyValueEditor = defineComponent({
                 }),
             }),
             h(ElTableColumn, {
-              label: '操作',
+              label: ui('操作', 'Actions'),
               width: 90,
               align: 'center',
               formatter: (
@@ -1814,7 +1822,7 @@ const WebSocketKeyValueEditor = defineComponent({
                 h(
                   ElButton,
                   { size: 'small', text: true, type: 'danger', onClick: () => remove(index) },
-                  () => '删除',
+                  () => ui('删除', 'Delete'),
                 ),
             }),
           ],
@@ -1848,14 +1856,14 @@ const WebSocketProtocolEditor = defineComponent({
     return () =>
       h('div', { class: 'ws-workbench__table-editor' }, [
         h('div', { class: 'ws-workbench__table-toolbar' }, [
-          h(ElButton, { size: 'small', onClick: add }, () => '添加'),
+          h(ElButton, { size: 'small', onClick: add }, () => ui('添加', 'Add')),
         ]),
         h(
           ElTable,
           { data: rows.value, size: 'small', border: true, class: 'ws-workbench__edit-table' },
           () => [
             h(ElTableColumn, {
-              label: '启用',
+              label: ui('启用', 'Enabled'),
               width: 70,
               align: 'center',
               formatter: (
@@ -1870,7 +1878,7 @@ const WebSocketProtocolEditor = defineComponent({
                 }),
             }),
             h(ElTableColumn, {
-              label: '子协议',
+              label: ui('子协议', 'Subprotocol'),
               minWidth: 260,
               formatter: (
                 _row: WebSocketProtocolRow,
@@ -1886,7 +1894,7 @@ const WebSocketProtocolEditor = defineComponent({
                 }),
             }),
             h(ElTableColumn, {
-              label: '操作',
+              label: ui('操作', 'Actions'),
               width: 90,
               align: 'center',
               formatter: (
@@ -1898,7 +1906,7 @@ const WebSocketProtocolEditor = defineComponent({
                 h(
                   ElButton,
                   { size: 'small', text: true, type: 'danger', onClick: () => remove(index) },
-                  () => '删除',
+                  () => ui('删除', 'Delete'),
                 ),
             }),
           ],
@@ -1914,14 +1922,14 @@ const WebSocketProtocolEditor = defineComponent({
   min-height: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  background: #f6f7f9;
-  color: #1f2937;
+  background: var(--dc-bg);
+  color: var(--dc-text);
 }
 
 .ws-workbench__sidebar {
   min-width: 0;
-  border-right: 1px solid #dfe3ea;
-  background: #fff;
+  border-right: 1px solid var(--dc-border);
+  background: var(--dc-surface);
   display: flex;
   flex-direction: column;
 }
@@ -2017,14 +2025,14 @@ const WebSocketProtocolEditor = defineComponent({
 
 .ws-workbench__tree :deep(.ws-workbench__group-head:hover),
 .ws-workbench__tree :deep(.ws-workbench__session-node:hover) {
-  border-color: #dfe3ea;
-  background: #eef5ff;
-  color: #1f2937;
+  border-color: var(--dc-border-strong);
+  background: var(--dc-primary-soft);
+  color: var(--dc-text);
 }
 
 .ws-workbench__tree :deep(.ws-workbench__session-node.is-active) {
-  background: #e9f5f3;
-  color: #035f59;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .ws-workbench__tree :deep(.ws-workbench__group-head svg) {
@@ -2035,7 +2043,7 @@ const WebSocketProtocolEditor = defineComponent({
 .ws-workbench__tree :deep(.ws-workbench__group-head svg:first-child) {
   width: 14px;
   height: 14px;
-  color: #94a3b8;
+  color: var(--dc-text-muted);
   transition: transform 0.16s ease;
 }
 
@@ -2044,15 +2052,15 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__tree :deep(.ws-workbench__group-head svg:nth-child(2)) {
-  color: #04756f;
+  color: var(--dc-primary);
 }
 
 .ws-workbench__tree :deep(.ws-workbench__group-head small) {
   min-width: 20px;
   padding: 2px 6px;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
   font-size: 11px;
   text-align: center;
 }
@@ -2064,7 +2072,7 @@ const WebSocketProtocolEditor = defineComponent({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1f2937;
+  color: var(--dc-text);
   font-size: 13px;
   font-weight: 700;
 }
@@ -2087,14 +2095,14 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__tree > .ws-workbench__session-node:hover {
-  border-color: #dfe3ea;
-  background: #eef5ff;
-  color: #1f2937;
+  border-color: var(--dc-border-strong);
+  background: var(--dc-primary-soft);
+  color: var(--dc-text);
 }
 
 .ws-workbench__tree > .ws-workbench__session-node.is-active {
-  background: #e9f5f3;
-  color: #035f59;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .ws-workbench__group-name,
@@ -2114,8 +2122,8 @@ const WebSocketProtocolEditor = defineComponent({
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  background: #e9f5f3;
-  color: #04756f;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -2127,23 +2135,23 @@ const WebSocketProtocolEditor = defineComponent({
   align-items: center;
   border-radius: 999px;
   font-size: 12px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
 }
 
 .ws-workbench__quality.is-good {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .ws-workbench__quality.is-bad {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .ws-workbench__pager {
   padding: 8px;
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid var(--dc-border);
 }
 
 .ws-workbench__main {
@@ -2152,14 +2160,15 @@ const WebSocketProtocolEditor = defineComponent({
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--dc-surface);
 }
 
 .ws-workbench__tabs {
   height: 36px;
   display: flex;
   overflow-x: auto;
-  border-bottom: 1px solid #dfe3ea;
-  background: #fff;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface);
 }
 
 .ws-workbench__tab {
@@ -2170,26 +2179,26 @@ const WebSocketProtocolEditor = defineComponent({
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border-right: 1px solid #eef1f5;
+  border-right: 1px solid var(--dc-border);
   cursor: pointer;
 }
 
 .ws-workbench__tab.is-active {
-  background: #f8fafc;
-  border-top: 2px solid #04756f;
+  background: var(--dc-surface-subtle);
+  border-top: 2px solid var(--dc-primary);
 }
 
 .ws-workbench__tab i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--dc-warning);
 }
 
 .ws-workbench__tab svg {
   width: 14px;
   height: 14px;
-  color: #94a3b8;
+  color: var(--dc-text-muted);
 }
 
 .ws-workbench__editor {
@@ -2207,8 +2216,8 @@ const WebSocketProtocolEditor = defineComponent({
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  background: #fff;
-  border-bottom: 1px solid #eef1f5;
+  background: var(--dc-surface);
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .ws-workbench__crumb {
@@ -2217,13 +2226,13 @@ const WebSocketProtocolEditor = defineComponent({
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #64748b;
+  color: var(--dc-text-secondary);
 }
 
 .ws-workbench__crumb svg {
   width: 14px;
   height: 14px;
-  color: #94a3b8;
+  color: var(--dc-text-muted);
 }
 
 .ws-workbench__name-input {
@@ -2238,8 +2247,8 @@ const WebSocketProtocolEditor = defineComponent({
 
 .ws-workbench__name-input :deep(.el-input__wrapper:hover),
 .ws-workbench__name-input :deep(.el-input__wrapper.is-focus) {
-  background: #f8fafc;
-  box-shadow: 0 0 0 1px #d8dee8 inset;
+  background: var(--dc-surface-subtle);
+  box-shadow: 0 0 0 1px var(--dc-border-strong) inset;
 }
 
 .ws-workbench__actions {
@@ -2251,7 +2260,7 @@ const WebSocketProtocolEditor = defineComponent({
 
 .ws-workbench__datapoint-path {
   max-width: min(360px, 34vw);
-  color: #64748b;
+  color: var(--dc-text-secondary);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2281,7 +2290,7 @@ const WebSocketProtocolEditor = defineComponent({
 .ws-workbench__config-tabs {
   flex: 1;
   min-height: 0;
-  background: #fff;
+  background: var(--dc-surface);
   padding: 0 14px;
   overflow: hidden;
 }
@@ -2294,11 +2303,11 @@ const WebSocketProtocolEditor = defineComponent({
 .ws-workbench__config-tabs :deep(.el-tabs__item),
 .ws-workbench__response :deep(.el-tabs__item) {
   height: 36px;
-  color: #64748b;
+  color: var(--dc-text-secondary);
 }
 
 .ws-workbench__config-tabs :deep(.el-tabs__item.is-active) {
-  color: #04756f;
+  color: var(--dc-primary);
 }
 
 .ws-workbench__form {
@@ -2319,7 +2328,7 @@ const WebSocketProtocolEditor = defineComponent({
 .ws-workbench__form :deep(.el-form-item__label) {
   height: auto;
   margin-bottom: 6px;
-  color: #475569;
+  color: var(--dc-text-secondary);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -2367,8 +2376,8 @@ const WebSocketProtocolEditor = defineComponent({
   position: relative;
   flex: 0 0 auto;
   min-height: 160px;
-  border-top: 1px solid #dfe3ea;
-  background: #fbfcfe;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
   display: flex;
   flex-direction: column;
 }
@@ -2391,12 +2400,12 @@ const WebSocketProtocolEditor = defineComponent({
   width: 52px;
   height: 2px;
   border-radius: 999px;
-  background: color-mix(in oklch, #64748b 42%, transparent);
+  background: color-mix(in oklch, var(--dc-text-muted) 42%, transparent);
   transform: translateX(-50%);
 }
 
 .ws-workbench__response-resizer:hover::before {
-  background: #04756f;
+  background: var(--dc-primary);
 }
 
 :global(body.ws-workbench--resizing-panel) {
@@ -2411,7 +2420,7 @@ const WebSocketProtocolEditor = defineComponent({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .ws-workbench__response header > div {
@@ -2421,7 +2430,7 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__response header span {
-  color: #64748b;
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
@@ -2446,9 +2455,9 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__message {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--dc-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--dc-surface);
   margin-bottom: 10px;
   overflow: hidden;
 }
@@ -2459,7 +2468,7 @@ const WebSocketProtocolEditor = defineComponent({
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .ws-workbench__message pre,
@@ -2476,7 +2485,7 @@ const WebSocketProtocolEditor = defineComponent({
 .ws-workbench__empty-response,
 .ws-workbench__blank,
 .ws-workbench__loading {
-  color: #64748b;
+  color: var(--dc-text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2495,13 +2504,13 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__connect-btn.is-connected :deep(svg) {
-  color: #fff;
+  color: var(--dc-text-on-primary);
 }
 
 .ws-workbench__connect-btn.is-error:not(.is-loading) {
-  --el-button-bg-color: #fee2e2;
-  --el-button-border-color: #fecaca;
-  --el-button-text-color: #b91c1c;
+  --el-button-bg-color: var(--dc-danger-soft);
+  --el-button-border-color: color-mix(in oklch, var(--dc-danger) 40%, transparent);
+  --el-button-text-color: var(--dc-danger);
 }
 
 .ws-workbench__error-response {
@@ -2511,7 +2520,7 @@ const WebSocketProtocolEditor = defineComponent({
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #b91c1c;
+  color: var(--dc-danger);
   text-align: center;
   box-sizing: border-box;
 }
@@ -2522,13 +2531,13 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__error-response strong {
-  color: #991b1b;
+  color: var(--dc-danger);
   font-size: 14px;
 }
 
 .ws-workbench__error-response span {
   max-width: min(560px, 90%);
-  color: #7f1d1d;
+  color: var(--dc-danger);
   font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
@@ -2547,11 +2556,11 @@ const WebSocketProtocolEditor = defineComponent({
 .ws-workbench__blank svg {
   width: 42px;
   height: 42px;
-  color: #94a3b8;
+  color: var(--dc-text-muted);
 }
 
 .ws-workbench__blank strong {
-  color: #334155;
+  color: var(--dc-text);
 }
 
 .ws-workbench__move-form {

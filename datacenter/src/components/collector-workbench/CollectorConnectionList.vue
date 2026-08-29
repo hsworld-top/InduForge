@@ -5,21 +5,27 @@
         v-model="search"
         clearable
         :prefix-icon="IconTablerSearch"
-        placeholder="搜索连接名称或协议"
-        @keyup.enter="reload(1)"
-        @clear="reload(1)"
+        :placeholder="ui('搜索连接名称或协议', 'Search connections or protocols')"
+        @keyup.enter="applySearch"
+        @clear="applySearch"
       />
       <button
         type="button"
-        aria-label="收起连接列表"
-        title="收起连接列表"
+        :aria-label="ui('收起连接列表', 'Collapse Connection List')"
+        :title="ui('收起连接列表', 'Collapse Connection List')"
         @click="emit('collapse')"
       >
         <IconTablerLayoutSidebarLeftCollapse />
       </button>
     </div>
 
-    <div v-loading="loading" class="collector-connection-list__items">
+    <div
+      ref="itemsContainer"
+      v-loading="loading && !items.length"
+      class="collector-connection-list__items"
+      :aria-busy="loading"
+      @scroll.passive="handleItemsScroll"
+    >
       <section
         v-for="group in groupedItems"
         :key="group.key"
@@ -71,7 +77,7 @@
                 <button
                   type="button"
                   class="collector-connection-list__more"
-                  :aria-label="`${item.name}更多操作`"
+                  :aria-label="ui(`${item.name}更多操作`, `More actions for ${item.name}`)"
                   @click.stop
                 >
                   <IconTablerDots />
@@ -82,15 +88,15 @@
                       v-if="connectionStatus(item.id) === 'connected'"
                       command="disconnect"
                     >
-                      <IconTablerPlugConnectedX />断开连接
+                      <IconTablerPlugConnectedX />{{ ui('断开连接', 'Disconnect') }}
                     </el-dropdown-item>
                     <el-dropdown-item v-else command="connect" :disabled="connectionBusy(item.id)">
                       <IconTablerPlugConnected />{{
-                        connectionStatus(item.id) === 'error' ? '重新连接' : '连接'
+                        connectionStatus(item.id) === 'error' ? ui('重新连接', 'Reconnect') : ui('连接', 'Connect')
                       }}</el-dropdown-item
                     >
                     <el-dropdown-item divided command="delete">
-                      <IconTablerTrash />删除连接
+                      <IconTablerTrash />{{ ui('删除连接', 'Delete Connection') }}
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -102,42 +108,44 @@
                   v-if="connectionStatus(item.id) === 'connected'"
                   command="disconnect"
                 >
-                  <IconTablerPlugConnectedX />断开连接
+                  <IconTablerPlugConnectedX />{{ ui('断开连接', 'Disconnect') }}
                 </el-dropdown-item>
                 <el-dropdown-item v-else command="connect" :disabled="connectionBusy(item.id)">
                   <IconTablerPlugConnected />{{
-                    connectionStatus(item.id) === 'error' ? '重新连接' : '连接'
+                    connectionStatus(item.id) === 'error' ? ui('重新连接', 'Reconnect') : ui('连接', 'Connect')
                   }}</el-dropdown-item
                 >
                 <el-dropdown-item divided command="delete">
-                  <IconTablerTrash />删除连接
+                  <IconTablerTrash />{{ ui('删除连接', 'Delete Connection') }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
         </div>
       </section>
-      <el-empty v-if="!loading && !items.length" description="暂无工业连接" :image-size="64" />
+      <el-empty v-if="!loading && !items.length" :description="ui('暂无工业连接', 'No Industrial Connections')" :image-size="64" />
+      <div v-if="loading && items.length" class="collector-connection-list__load-state">
+        <IconTablerLoader2 />{{ ui('正在加载', 'Loading') }}
+      </div>
+      <button
+        v-else-if="hasMore"
+        type="button"
+        class="collector-connection-list__load-more"
+        @click="loadMore"
+      >
+        {{ ui('加载更多', 'Load More') }}
+      </button>
     </div>
 
     <div class="collector-connection-list__footer">
-      <span>共 {{ total }} 个连接</span>
-      <el-pagination
-        v-if="total > pageSize"
-        small
-        layout="prev, pager, next"
-        :pager-count="5"
-        :current-page="page"
-        :page-size="pageSize"
-        :total="total"
-        @current-change="reload"
-      />
+      <span>{{ ui(`已加载 ${items.length} / ${total} 个连接`, `Loaded ${items.length} / ${total} connections`) }}</span>
+      <span v-if="hasMore">{{ ui('向下滚动继续加载', 'Scroll down to load more') }}</span>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   deleteCollectorConnection,
   getCollectorConnectionDeleteImpact,
@@ -157,10 +165,14 @@ import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerDots from '~icons/tabler/dots'
 import IconTablerLayoutSidebarLeftCollapse from '~icons/tabler/layout-sidebar-left-collapse'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerPlugConnected from '~icons/tabler/plug-connected'
 import IconTablerPlugConnectedX from '~icons/tabler/plug-connected-x'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerSearch from '~icons/tabler/search'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   projectId: string
@@ -176,13 +188,18 @@ const emit = defineEmits<{
   disconnect: [connection: CollectorConnection]
 }>()
 const items = ref<CollectorConnection[]>([])
+const itemsContainer = ref<HTMLElement>()
 const loading = ref(false)
 const search = ref('')
-const page = ref(1)
+const appliedSearch = ref('')
+const page = ref(0)
 const pageSize = 20
 const total = ref(0)
+const totalPages = ref(0)
+const hasMore = computed(() => page.value < totalPages.value)
 const collapsedGroups = ref(new Set<string>())
 const groupedItems = computed(() => groupCollectorConnections(items.value))
+let requestVersion = 0
 
 function toggleGroup(key: string) {
   const next = new Set(collapsedGroups.value)
@@ -214,7 +231,7 @@ async function handleItemCommand(command: string, item: CollectorConnection) {
 
 async function removeConnection(item: CollectorConnection) {
   if (connectionStatus(item.id) !== 'disconnected') {
-    ElMessage.warning('请先断开调试长连接，再删除工业连接')
+    ElMessage.warning(ui('请先断开调试长连接，再删除工业连接', 'Disconnect the debug session before deleting this connection'))
     return
   }
   const impact = await getCollectorConnectionDeleteImpact(props.projectId, item.id)
@@ -222,51 +239,99 @@ async function removeConnection(item: CollectorConnection) {
     const blockers = impact.blockingUsages
       .map(
         (usage) =>
-          `${usage.label || usage.type} ${usage.count} 项${usage.examples.length ? `（${usage.examples.map((example) => example.name).join('、')}）` : ''}`,
+          ui(
+            `${usage.label || usage.type} ${usage.count} 项${usage.examples.length ? `（${usage.examples.map((example) => example.name).join('、')}）` : ''}`,
+            `${usage.label || usage.type}: ${usage.count}${usage.examples.length ? ` (${usage.examples.map((example) => example.name).join(', ')})` : ''}`,
+          ),
       )
       .join('\n')
     await ElMessageBox.alert(
-      `当前工业连接仍被以下配置引用，请先解除引用：\n${blockers}`,
-      '无法删除工业连接',
+      ui(`当前工业连接仍被以下配置引用，请先解除引用：\n${blockers}`, `This connection is still referenced. Remove these references first:\n${blockers}`),
+      ui('无法删除工业连接', 'Cannot Delete Connection'),
       {
         type: 'warning',
-        confirmButtonText: '知道了',
+        confirmButtonText: ui('知道了', 'OK'),
       },
     )
     return
   }
   const owned = impact.ownedResources.reduce((sum, resource) => sum + resource.count, 0)
   await ElMessageBox.confirm(
-    `确认删除连接“${item.name}”及 ${owned} 个来源内配置？${impact.generatedDatapoints.count} 个已生成数据点会保留并标记为无效。`,
-    '删除工业连接',
+    ui(
+      `确认删除连接“${item.name}”及 ${owned} 个来源内配置？${impact.generatedDatapoints.count} 个已生成数据点会保留并标记为无效。`,
+      `Delete “${item.name}” and ${owned} owned configuration item${owned === 1 ? '' : 's'}? ${impact.generatedDatapoints.count} generated data point${impact.generatedDatapoints.count === 1 ? '' : 's'} will be retained and marked invalid.`,
+    ),
+    ui('删除工业连接', 'Delete Industrial Connection'),
     {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       confirmButtonClass: 'el-button--danger',
     },
   )
   await deleteCollectorConnection(props.projectId, item.id)
   emit('deleted', item.id)
-  ElMessage.success('工业连接已删除')
-  await reload(items.value.length === 1 && page.value > 1 ? page.value - 1 : page.value)
+  ElMessage.success(ui('工业连接已删除', 'Industrial connection deleted'))
+  await reload()
 }
 
-async function reload(nextPage = page.value) {
-  page.value = nextPage
+function mergeConnections(current: CollectorConnection[], incoming: CollectorConnection[]) {
+  const merged = new Map(current.map((item) => [item.id, item]))
+  for (const item of incoming) merged.set(item.id, item)
+  return Array.from(merged.values())
+}
+
+async function loadPage(nextPage: number, version: number) {
   loading.value = true
   try {
     const result = await listCollectorConnections(props.projectId, {
-      page: page.value,
+      page: nextPage,
       pageSize,
-      search: search.value,
+      search: appliedSearch.value,
     })
-    items.value = result.list
+    if (version !== requestVersion) return
+    items.value = nextPage === 1 ? result.list : mergeConnections(items.value, result.list)
+    page.value = result.pagination.page
     total.value = result.pagination.total
-    emit('loaded', result.list)
+    totalPages.value = result.pagination.totalPages
+    emit('loaded', items.value)
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
+}
+
+function applySearch() {
+  appliedSearch.value = search.value.trim()
+  void reload()
+}
+
+async function reload() {
+  // 每次刷新都作废旧请求，避免快速搜索时较慢的响应覆盖当前树。
+  const version = ++requestVersion
+  page.value = 0
+  total.value = 0
+  totalPages.value = 0
+  items.value = []
+  if (itemsContainer.value) itemsContainer.value.scrollTop = 0
+  await loadPage(1, version)
+}
+
+async function loadMore() {
+  if (loading.value || !hasMore.value) return
+  await loadPage(page.value + 1, requestVersion)
+}
+
+function handleItemsScroll(event: Event) {
+  const target = event.currentTarget as HTMLElement
+  if (target.scrollHeight - target.scrollTop - target.clientHeight <= 96) void loadMore()
+}
+
+async function fillVisibleArea() {
+  // 宽屏下首批数据可能无法撑出滚动条，继续补载直到可滚动或全部加载完成。
+  await nextTick()
+  const container = itemsContainer.value
+  if (!container || loading.value || !hasMore.value) return
+  if (container.scrollHeight <= container.clientHeight + 1) await loadMore()
 }
 
 defineExpose({
@@ -275,9 +340,10 @@ defineExpose({
 })
 watch(
   () => props.projectId,
-  () => reload(1),
+  () => reload(),
 )
-onMounted(() => reload())
+watch([items, hasMore, loading], () => void fillVisibleArea(), { flush: 'post' })
+onMounted(() => void reload())
 </script>
 
 <style scoped>
@@ -323,6 +389,34 @@ onMounted(() => reload())
   flex: 1;
   overflow: auto;
   padding-right: 2px;
+}
+.collector-connection-list__load-state,
+.collector-connection-list__load-more {
+  display: flex;
+  width: calc(100% - 17px);
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0 0 17px;
+  border: none;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+.collector-connection-list__load-more {
+  cursor: pointer;
+}
+.collector-connection-list__load-more:hover,
+.collector-connection-list__load-more:focus-visible {
+  background: var(--dc-surface-subtle);
+  color: var(--dc-primary);
+}
+.collector-connection-list__load-state svg {
+  width: 14px;
+  height: 14px;
+  animation: collector-connection-spin 0.9s linear infinite;
 }
 .collector-connection-list__group + .collector-connection-list__group {
   margin-top: 4px;
@@ -469,6 +563,11 @@ onMounted(() => reload())
     opacity: 0.35;
   }
 }
+@keyframes collector-connection-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .collector-connection-list__footer {
   display: flex;
   min-height: 28px;
@@ -477,9 +576,5 @@ onMounted(() => reload())
   gap: 8px;
   color: var(--dc-text-muted);
   font-size: 11px;
-}
-.collector-connection-list__footer :deep(.el-pagination) {
-  --el-pagination-button-width: 24px;
-  --el-pagination-button-height: 24px;
 }
 </style>

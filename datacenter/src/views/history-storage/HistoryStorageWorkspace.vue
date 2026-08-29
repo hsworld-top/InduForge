@@ -8,7 +8,7 @@
             class="history-storage-workspace__search"
             size="small"
             clearable
-            placeholder="搜索来源名称"
+            :placeholder="ui('搜索来源名称', 'Search source names')"
             :prefix-icon="Search"
           />
 
@@ -49,14 +49,14 @@
           <button
             type="button"
             class="history-storage-workspace__icon-button"
-            title="刷新"
-            aria-label="刷新历史存储来源"
+            :title="ui('刷新', 'Refresh')"
+            :aria-label="ui('刷新历史存储来源', 'Refresh history storage sources')"
             @click="loadSources"
           >
             <IconTablerRefresh />
           </button>
 
-          <span class="history-storage-workspace__total">共 {{ pagination.total }}</span>
+          <span class="history-storage-workspace__total">{{ ui(`共 ${pagination.total}`, `${pagination.total} total`) }}</span>
         </FilterToolbar>
       </header>
 
@@ -69,7 +69,7 @@
               height="100%"
               class="history-storage-workspace__table"
             >
-              <el-table-column label="来源" min-width="260">
+              <el-table-column :label="ui('来源', 'Source')" min-width="260">
                 <template #default="{ row }">
                   <div class="history-storage-workspace__identity">
                     <span
@@ -88,33 +88,33 @@
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="数据点" width="110" align="center">
+              <el-table-column :label="ui('数据点', 'Data Points')" width="110" align="center">
                 <template #default="{ row }">
                   <span class="history-storage-workspace__point-count">{{
                     row.datapointCount
                   }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="历史存储" min-width="300">
+              <el-table-column :label="ui('历史存储', 'History Storage')" min-width="300">
                 <template #default="{ row }">
                   <div class="history-storage-workspace__summary">
                     <StatusBadge
                       :tone="row.historyState === 'enabled' ? 'success' : 'muted'"
-                      :text="historyStorageSummary(row)"
+                      :text="localizedHistoryStorageSummary(row)"
                     />
                     <small v-if="row.pointOverrideCount > 0">
-                      {{ row.pointOverrideCount }} 个数据点单独设置
+                      {{ ui(`${row.pointOverrideCount} 个数据点单独设置`, `${row.pointOverrideCount} point override${row.pointOverrideCount === 1 ? '' : 's'}`) }}
                     </small>
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="88" align="right" fixed="right">
+              <el-table-column :label="ui('操作', 'Actions')" width="88" align="right" fixed="right">
                 <template #default="{ row }">
                   <button
                     type="button"
                     class="history-storage-workspace__settings"
-                    title="设置历史存储"
-                    :aria-label="`设置 ${row.scope.name} 的历史存储`"
+                    :title="ui('设置历史存储', 'Configure History Storage')"
+                    :aria-label="ui(`设置 ${row.scope.name} 的历史存储`, `Configure history storage for ${row.scope.name}`)"
                     @click="openSettings(row)"
                   >
                     <IconTablerSettings />
@@ -122,7 +122,7 @@
                 </template>
               </el-table-column>
               <template #empty>
-                <el-empty description="暂无匹配的来源" />
+                <el-empty :description="ui('暂无匹配的来源', 'No matching sources')" />
               </template>
             </el-table>
           </div>
@@ -184,6 +184,9 @@ import type {
 import { historyStorageSummary } from '@/models/history-storage'
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{ projectId: string }>()
 const sources = ref<HistoryStorageSourceItem[]>([])
@@ -195,7 +198,7 @@ const scopeType = ref<HistoryStorageScopeType | ''>('')
 const historyState = ref<'enabled' | 'disabled' | ''>('')
 const pagination = reactive({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
 const drawerVisible = ref(false)
-const drawerTitle = ref('历史存储设置')
+const drawerTitle = ref(ui('历史存储设置', 'History Storage Settings'))
 const editingRow = ref<HistoryStorageSourceItem | null>(null)
 const editingDetail = ref<HistoryStorageSourceDetail | null>(null)
 const { confirm } = useConfirm()
@@ -203,23 +206,23 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 let sourceRequestSeq = 0
 let settingsRequestSeq = 0
 
-const scopeTypeOptions: Array<{ label: string; value: HistoryStorageScopeType | '' }> = [
-  { label: '全部来源', value: '' },
-  { label: '接入源', value: 'access_source' },
-  { label: '工业采集', value: 'collector_connection' },
-  { label: '计算单元', value: 'compute_unit' },
-]
-const historyStateOptions: Array<{ label: string; value: 'enabled' | 'disabled' | '' }> = [
-  { label: '全部状态', value: '' },
-  { label: '已保存历史', value: 'enabled' },
-  { label: '未保存历史', value: 'disabled' },
-]
+const scopeTypeOptions = computed<Array<{ label: string; value: HistoryStorageScopeType | '' }>>(() => [
+  { label: ui('全部来源', 'All Sources'), value: '' },
+  { label: ui('接入源', 'Access Sources'), value: 'access_source' },
+  { label: ui('工业采集', 'Industrial Collection'), value: 'collector_connection' },
+  { label: ui('计算单元', 'Compute Units'), value: 'compute_unit' },
+])
+const historyStateOptions = computed<Array<{ label: string; value: 'enabled' | 'disabled' | '' }>>(() => [
+  { label: ui('全部状态', 'All States'), value: '' },
+  { label: ui('已保存历史', 'History Enabled'), value: 'enabled' },
+  { label: ui('未保存历史', 'History Disabled'), value: 'disabled' },
+])
 const scopeTypeLabel = computed(
-  () => scopeTypeOptions.find((option) => option.value === scopeType.value)?.label || '来源类别',
+  () => scopeTypeOptions.value.find((option) => option.value === scopeType.value)?.label || ui('来源类别', 'Source Type'),
 )
 const historyStateLabel = computed(
   () =>
-    historyStateOptions.find((option) => option.value === historyState.value)?.label || '历史状态',
+    historyStateOptions.value.find((option) => option.value === historyState.value)?.label || ui('历史状态', 'History State'),
 )
 
 async function loadSources() {
@@ -238,7 +241,7 @@ async function loadSources() {
     Object.assign(pagination, result.pagination)
   } catch (error) {
     if (seq !== sourceRequestSeq) return
-    ElMessage.error(getApiErrorMessage(error, '加载历史存储来源失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载历史存储来源失败', 'Failed to load history storage sources')))
   } finally {
     if (seq === sourceRequestSeq) loading.value = false
   }
@@ -259,11 +262,11 @@ async function openSettings(row: HistoryStorageSourceItem) {
     if (seq !== settingsRequestSeq) return
     editingRow.value = row
     editingDetail.value = detail
-    drawerTitle.value = `${row.scope.name} · 历史存储`
+    drawerTitle.value = `${row.scope.name} · ${ui('历史存储', 'History Storage')}`
     drawerVisible.value = true
   } catch (error) {
     if (seq !== settingsRequestSeq) return
-    ElMessage.error(getApiErrorMessage(error, '加载历史存储设置失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载历史存储设置失败', 'Failed to load history storage settings')))
   }
 }
 
@@ -273,19 +276,19 @@ async function saveSettings(payload: HistoryStorageSavePayload) {
   if (!row || !detail) return
   if (payload.behavior === 'off' && detail.behavior === 'custom' && detail.pointOverrideCount > 0) {
     const accepted = await confirm(
-      `关闭来源历史后，仍有 ${detail.pointOverrideCount} 个单点例外按各自设置生效。确认关闭？`,
-      { title: '关闭来源历史', confirmText: '确认关闭', type: 'warning' },
+      ui(`关闭来源历史后，仍有 ${detail.pointOverrideCount} 个单点例外按各自设置生效。确认关闭？`, `Disabling source history leaves ${detail.pointOverrideCount} point override${detail.pointOverrideCount === 1 ? '' : 's'} active. Continue?`),
+      { title: ui('关闭来源历史', 'Disable Source History'), confirmText: ui('确认关闭', 'Disable'), type: 'warning' },
     )
     if (!accepted) return
   }
   saving.value = true
   try {
     await saveHistoryStorageSource(props.projectId, row.scope.type, row.scope.id, payload)
-    ElMessage.success('历史存储设置已保存')
+    ElMessage.success(ui('历史存储设置已保存', 'History storage settings saved'))
     drawerVisible.value = false
     await loadSources()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存历史存储设置失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存历史存储设置失败', 'Failed to save history storage settings')))
   } finally {
     saving.value = false
   }
@@ -298,28 +301,43 @@ function handlePageChange(value: { page: number; pageSize: number }) {
 }
 
 function sourceTypeLabel(row: HistoryStorageSourceItem) {
-  if (row.scope.type === 'compute_unit') return '计算单元'
+  if (row.scope.type === 'compute_unit') return ui('计算单元', 'Compute Unit')
   if (row.scope.type === 'collector_connection') {
     const protocol = row.scope.sourceType
       ? formatCollectorProtocolFamily(row.scope.sourceType)
-      : '未知协议'
-    return `工业采集 · ${protocol}`
+      : ui('未知协议', 'Unknown Protocol')
+    return `${ui('工业采集', 'Industrial Collection')} · ${protocol}`
   }
-  if (row.scope.type === 'compute_unit') return '计算单元'
   const labels: Record<string, string> = {
-    relational: '数据库',
+    relational: ui('数据库', 'Database'),
     mqtt: 'MQTT',
     kafka: 'Kafka',
     http: 'HTTP',
     websocket: 'WebSocket',
     redis: 'Redis',
     tdengine: 'TDengine',
-    'builtin.relation': 'IF关系库',
-    'builtin.timeseries': 'IF时序库',
-    'builtin.realtime': 'IF实时库',
-    'builtin.message': 'IF消息库',
+    'builtin.relation': ui('IF关系库', 'IF Relational Database'),
+    'builtin.timeseries': ui('IF时序库', 'IF Time-series Database'),
+    'builtin.realtime': ui('IF实时库', 'IF Realtime Database'),
+    'builtin.message': ui('IF消息库', 'IF Message Database'),
   }
-  return labels[row.scope.sourceType || ''] || row.scope.sourceType || '接入源'
+  return labels[row.scope.sourceType || ''] || row.scope.sourceType || ui('接入源', 'Access Source')
+}
+
+function localizedHistoryStorageSummary(item: HistoryStorageSourceItem) {
+  if (datacenterLocale.value !== 'en') return historyStorageSummary(item)
+  if (item.historyState !== 'enabled' || !item.writeMode) return 'Not Stored'
+  const modes: Record<string, string> = {
+    on_change: 'On Change',
+    interval_latest: 'At Intervals',
+    periodic_snapshot: 'Periodic Snapshot',
+    every_sample: 'Every Sample',
+  }
+  const parts = [modes[item.writeMode] || item.writeMode]
+  if (item.primaryTargetName) parts.push(item.primaryTargetName)
+  parts.push(item.retentionDays === null ? 'Forever' : `${item.retentionDays || 30} days`)
+  if (item.targetCount > 1) parts.push(`${item.targetCount} targets`)
+  return parts.join(' · ')
 }
 
 watch([scopeType, historyState], () => {

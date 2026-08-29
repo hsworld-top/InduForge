@@ -1,4 +1,7 @@
 import type { SourceOutputInput } from '@/api/schemas/source-output.schema'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type QueryResult = {
   columns?: string[]
@@ -41,7 +44,7 @@ export const buildQueryOutputPreviews = (
   outputs.map((output, index) => {
     const base = {
       key: String(output.id || output.key || `output-${index}`),
-      displayName: output.displayName || output.key || `输出 ${index + 1}`,
+      displayName: output.displayName || output.key || ui(`输出 ${index + 1}`, `Output ${index + 1}`),
       path: output.datapointPath || '',
       quality: 'preview' as const,
     }
@@ -52,7 +55,7 @@ export const buildQueryOutputPreviews = (
       return {
         ...base,
         value: null,
-        error: `需要查询恰好返回 1 行，当前返回 ${rows.length} 行`,
+        error: ui(`需要查询恰好返回 1 行，当前返回 ${rows.length} 行`, `The query must return exactly one row; it returned ${rows.length}`),
       }
     }
     if (output.selector.kind === 'column') {
@@ -60,7 +63,7 @@ export const buildQueryOutputPreviews = (
         return {
           ...base,
           value: null,
-          error: `结果中没有字段“${output.selector.column}”`,
+          error: ui(`结果中没有字段“${output.selector.column}”`, `Column “${output.selector.column}” is not present in the result`),
         }
       }
       return { ...base, value: rows[0][output.selector.column] }
@@ -68,5 +71,5 @@ export const buildQueryOutputPreviews = (
     const selected = valueAtPath(rows[0], output.selector.segments)
     return selected.found
       ? { ...base, value: selected.value }
-      : { ...base, value: null, error: '结果中不存在已选择的嵌套字段' }
+      : { ...base, value: null, error: ui('结果中不存在已选择的嵌套字段', 'The selected nested field is not present in the result') }
   })

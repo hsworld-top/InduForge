@@ -2,7 +2,7 @@
   <DcDialog
     ref="dialogRef"
     v-model="visible"
-    :title="mode === 'create' ? t('subscription.create') : t('subscription.edit')"
+    :title="dialogTitle"
     width="600px"
     :dirty="isDirty"
     @close="handleClosed"
@@ -14,10 +14,10 @@
       label-width="100px"
       label-position="right"
     >
-      <el-form-item :label="t('subscription.nameLabel')" prop="name">
+      <el-form-item :label="entityNameLabel" prop="name">
         <el-input
           v-model="formData.name"
-          :placeholder="t('subscription.namePlaceholder')"
+          :placeholder="entityNamePlaceholder"
           maxlength="100"
           show-word-limit
         />
@@ -42,9 +42,9 @@
 
       <el-form-item :label="t('subscription.qosLevel')" prop="qos">
         <el-radio-group v-model="formData.qos">
-          <el-radio :label="0">QoS 0 (最多一次)</el-radio>
-          <el-radio :label="1">QoS 1 (至少一次)</el-radio>
-          <el-radio :label="2">QoS 2 (恰好一次)</el-radio>
+          <el-radio :label="0">QoS 0 ({{ ui('最多一次', 'At most once') }})</el-radio>
+          <el-radio :label="1">QoS 1 ({{ ui('至少一次', 'At least once') }})</el-radio>
+          <el-radio :label="2">QoS 2 ({{ ui('恰好一次', 'Exactly once') }})</el-radio>
         </el-radio-group>
       </el-form-item>
 
@@ -53,7 +53,7 @@
           v-model="formData.usageMode"
           class="mqtt-subscription-dialog__usage-select"
           :disabled="mode === 'edit'"
-          placeholder="请选择使用方式"
+          :placeholder="ui('请选择使用方式', 'Select a usage mode')"
         >
           <el-option
             v-for="option in usageModeOptions"
@@ -98,7 +98,7 @@ import IconTablerQuestionMark from '~icons/tabler/question-mark'
 import dataAPI from '@/api/data.api'
 import { Storage } from '@/utils/storage'
 import { getCurrentProjectId, isWujieMicroApp } from '@/runtime/wujie-context'
-import { t } from '@/i18n/runtime'
+import { datacenterLocale, t } from '@/i18n/runtime'
 import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
@@ -127,7 +127,27 @@ const props = defineProps({
     default: 'create',
     validator: (value) => ['create', 'edit'].includes(value),
   },
+  entityType: {
+    type: String,
+    default: 'subscription',
+    validator: (value) => ['subscription', 'topic'].includes(value),
+  },
 })
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+const isTopicEntity = computed(() => props.entityType === 'topic')
+const dialogTitle = computed(() => {
+  if (isTopicEntity.value) {
+    return props.mode === 'create' ? ui('新建 Topic', 'New Topic') : ui('编辑 Topic', 'Edit Topic')
+  }
+  return props.mode === 'create' ? t('subscription.create') : t('subscription.edit')
+})
+const entityNameLabel = computed(() =>
+  isTopicEntity.value ? ui('Topic 名称', 'Topic Name') : t('subscription.nameLabel'),
+)
+const entityNamePlaceholder = computed(() =>
+  isTopicEntity.value ? ui('请输入 Topic 名称', 'Enter a topic name') : t('subscription.namePlaceholder'),
+)
 
 const emit = defineEmits(['update:modelValue', 'success'])
 
@@ -284,10 +304,10 @@ const handleSubmit = async () => {
     ElMessage.error(
       props.mode === 'create'
         ? t('subscription.createFailed', {
-            message: getApiErrorMessage(error, '创建订阅失败'),
+            message: getApiErrorMessage(error, ui('创建订阅失败', 'Failed to create subscription')),
           })
         : t('subscription.updateFailed', {
-            message: getApiErrorMessage(error, '更新订阅失败'),
+            message: getApiErrorMessage(error, ui('更新订阅失败', 'Failed to update subscription')),
           }),
     )
   } finally {

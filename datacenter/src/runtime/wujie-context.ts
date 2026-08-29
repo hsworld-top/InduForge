@@ -1,4 +1,5 @@
 import { setDatacenterLocale } from '@/i18n/runtime'
+import { applyDatacenterTheme } from '@/theme/runtime'
 
 export type MicroAppContext = {
   instanceName?: string | undefined
@@ -48,7 +49,7 @@ export const applyMicroAppContext = (value: unknown): MicroAppContext | null => 
   if (!nextContext) return currentContext
 
   currentContext = nextContext
-  document.documentElement.classList.toggle('dark', nextContext.theme === 'dark')
+  applyDatacenterTheme(nextContext.theme)
   setDatacenterLocale(nextContext.locale ?? 'zh')
   return currentContext
 }

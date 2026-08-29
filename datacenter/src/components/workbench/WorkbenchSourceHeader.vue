@@ -2,12 +2,12 @@
   <div class="workbench-source-header">
     <button type="button" class="workbench-source-header__back" @click="$emit('back')">
       <IconTablerArrowLeft />
-      <span>返回接入源</span>
+      <span>{{ ui('返回接入源', 'Back to Access Sources') }}</span>
     </button>
 
     <div class="workbench-source-header__head">
-      <el-tooltip :content="title || fallbackTitle" placement="top" :show-after="400">
-        <strong class="workbench-source-header__title">{{ title || fallbackTitle }}</strong>
+      <el-tooltip :content="title || resolvedFallbackTitle" placement="top" :show-after="400">
+        <strong class="workbench-source-header__title">{{ title || resolvedFallbackTitle }}</strong>
       </el-tooltip>
       <slot name="status">
         <WorkbenchStatusPill v-if="statusLabel" :label="statusLabel" :tone="statusTone" />
@@ -28,15 +28,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import IconTablerArrowLeft from '~icons/tabler/arrow-left'
 import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type SourceMeta = {
   label: string
   value: string
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     title?: string
     fallbackTitle?: string
@@ -46,11 +50,15 @@ withDefaults(
   }>(),
   {
     title: '',
-    fallbackTitle: '未命名接入源',
+    fallbackTitle: '',
     statusLabel: '',
     statusTone: 'neutral',
     meta: () => [],
   },
+)
+
+const resolvedFallbackTitle = computed(
+  () => props.fallbackTitle || ui('未命名接入源', 'Unnamed Access Source'),
 )
 
 defineEmits<{
@@ -184,7 +192,7 @@ defineEmits<{
 .workbench-source-header__actions :deep(.workbench-source-header__icon-action.is-primary) {
   border-color: var(--dc-primary);
   background: var(--dc-primary);
-  color: var(--dc-surface-raised);
+  color: var(--dc-on-primary);
 }
 
 .workbench-source-header__actions :deep(.workbench-source-header__icon-action svg) {
@@ -198,7 +206,7 @@ defineEmits<{
 }
 
 .workbench-source-header__actions :deep(.workbench-source-header__icon-action.is-primary:hover) {
-  color: var(--dc-surface-raised);
+  color: var(--dc-on-primary);
   transform: translateY(-1px);
 }
 </style>

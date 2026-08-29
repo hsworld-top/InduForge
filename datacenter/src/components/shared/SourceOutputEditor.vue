@@ -2,14 +2,14 @@
   <section class="source-output-editor">
     <header class="source-output-editor__head">
       <div>
-        <strong>{{ title }}</strong>
+        <strong>{{ resolvedTitle }}</strong>
         <span v-if="progressive && !advancedMode">
-          默认将完整结果作为一个稳定数据集；需要独立数据点时再提取单个字段。
+          {{ ui('默认将完整结果作为一个稳定数据集；需要独立数据点时再提取单个字段。', 'The complete result is a stable dataset by default; extract one field only when a separate data point is needed.') }}
         </span>
         <span v-else-if="progressive">
-          每个查询只选择一个输出；数据点属性请在数据点列表维护。
+          {{ ui('每个查询只选择一个输出；数据点属性请在数据点列表维护。', 'Each query keeps one output; maintain data point properties in the Data Points list.') }}
         </span>
-        <span v-else>每项输出生成一个可被报警、计算和历史存储引用的数据点。</span>
+        <span v-else>{{ ui('每项输出生成一个可被报警、计算和历史存储引用的数据点。', 'Each output generates a data point usable by alarms, compute, and history storage.') }}</span>
       </div>
       <div class="source-output-editor__head-actions">
         <el-button
@@ -18,17 +18,17 @@
           type="primary"
           plain
           :disabled="!columns.length"
-          :title="columns.length ? '从查询结果中选择一个字段' : '请先运行 SQL 获取字段列表'"
+          :title="columns.length ? ui('从查询结果中选择一个字段', 'Select a field from the query result') : ui('请先运行 SQL 获取字段列表', 'Run SQL first to load the field list')"
           @click="enableFieldExtraction"
         >
-          提取单个字段
+          {{ ui('提取单个字段', 'Extract One Field') }}
         </el-button>
         <template v-else>
           <el-button v-if="progressive" size="small" @click="resetToWholeDataset">
-            恢复完整结果集
+            {{ ui('恢复完整结果集', 'Restore Full Dataset') }}
           </el-button>
           <el-button v-if="!progressive" size="small" type="primary" plain @click="addOutput">
-            添加输出
+            {{ ui('添加输出', 'Add Output') }}
           </el-button>
         </template>
         <el-button
@@ -48,12 +48,12 @@
 
     <div v-if="progressive && !advancedMode" class="source-output-editor__dataset">
       <div class="source-output-editor__dataset-main">
-        <strong>完整查询结果</strong>
-        <span>数据集对象</span>
+        <strong>{{ ui('完整查询结果', 'Complete Query Result') }}</strong>
+        <span>{{ ui('数据集对象', 'Dataset Object') }}</span>
       </div>
-      <p>包含 fields、rows 和 rowCount；数据库总量由查询自行返回。</p>
+      <p>{{ ui('包含 fields、rows 和 rowCount；数据库总量由查询自行返回。', 'Includes fields, rows, and rowCount; return the database total in the query when needed.') }}</p>
       <code v-if="outputs[0]?.datapointPath">{{ outputs[0].datapointPath }}</code>
-      <code v-else>主动生成后创建路径 · 输出 Key：result</code>
+      <code v-else>{{ ui('主动生成后创建路径 · 输出 Key：result', 'Path is created when generated · Output key: result') }}</code>
     </div>
 
     <template v-else-if="progressive">
@@ -64,17 +64,17 @@
       >
         <div class="source-output-editor__item-head">
           <div>
-            <strong>提取结果</strong>
+            <strong>{{ ui('提取结果', 'Extracted Result') }}</strong>
             <el-tag size="small" effect="plain">{{ selectorSummary(output) }}</el-tag>
           </div>
         </div>
         <div class="source-output-editor__row is-extraction">
           <label class="source-output-editor__field">
-            <span>选择字段</span>
+            <span>{{ ui('选择字段', 'Select Field') }}</span>
             <el-select
               :model-value="output.selector.column"
               filterable
-              placeholder="选择查询结果字段"
+              :placeholder="ui('选择查询结果字段', 'Select a query result field')"
               @update:model-value="setColumn(output, $event)"
             >
               <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
@@ -82,7 +82,7 @@
           </label>
         </div>
         <small v-if="output.datapointPath" class="source-output-editor__datapoint"
-          >数据点：{{ output.datapointPath }}</small
+          >{{ ui('数据点', 'Data Point') }}: {{ output.datapointPath }}</small
         >
       </div>
     </template>
@@ -95,20 +95,20 @@
       >
         <div class="source-output-editor__row is-primary">
           <label class="source-output-editor__field">
-            <span>输出 Key</span>
-            <el-input v-model="output.key" placeholder="例如 result" @input="emitChange" />
+            <span>{{ ui('输出 Key', 'Output Key') }}</span>
+            <el-input v-model="output.key" :placeholder="ui('例如 result', 'For example, result')" @input="emitChange" />
           </label>
           <label class="source-output-editor__field">
-            <span>显示名称</span>
+            <span>{{ ui('显示名称', 'Display Name') }}</span>
             <el-input
               v-model="output.displayName"
-              placeholder="用于数据点展示"
+              :placeholder="ui('用于数据点展示', 'Shown for the data point')"
               @input="emitChange"
             />
           </label>
           <label class="source-output-editor__field">
-            <span>数据类型</span>
-            <el-select v-model="output.dataType" placeholder="请选择" @change="emitChange">
+            <span>{{ ui('数据类型', 'Data Type') }}</span>
+            <el-select v-model="output.dataType" :placeholder="ui('请选择', 'Select')" @change="emitChange">
               <el-option
                 v-for="option in dataTypeOptions"
                 :key="option.value"
@@ -123,28 +123,28 @@
             type="danger"
             :disabled="outputs.length <= 1"
             @click="removeOutput(index)"
-            >删除</el-button
+            >{{ ui('删除', 'Delete') }}</el-button
           >
         </div>
         <div class="source-output-editor__row">
           <label class="source-output-editor__field">
-            <span>取值方式</span>
+            <span>{{ ui('取值方式', 'Value Source') }}</span>
             <el-select v-model="output.selector.kind" @change="resetSelector(output)">
-              <el-option label="完整结果" value="whole" />
+              <el-option :label="ui('完整结果', 'Complete Result')" value="whole" />
               <el-option
                 v-if="columns.length || output.selector.kind === 'column'"
-                label="结果列"
+                :label="ui('结果列', 'Result Column')"
                 value="column"
               />
               <el-option
                 v-if="samplePaths.length || output.selector.kind === 'path'"
-                label="响应字段"
+                :label="ui('响应字段', 'Response Field')"
                 value="path"
               />
             </el-select>
           </label>
           <label v-if="output.selector.kind === 'column'" class="source-output-editor__field">
-            <span>结果列</span>
+            <span>{{ ui('结果列', 'Result Column') }}</span>
             <el-select
               :model-value="output.selector.column"
               @update:model-value="setColumn(output, $event)"
@@ -153,7 +153,7 @@
             </el-select>
           </label>
           <label v-else-if="output.selector.kind === 'path'" class="source-output-editor__field">
-            <span>响应字段</span>
+            <span>{{ ui('响应字段', 'Response Field') }}</span>
             <el-select
               :model-value="pathKey(output.selector.segments)"
               @update:model-value="setPath(output, $event)"
@@ -167,11 +167,11 @@
             </el-select>
           </label>
           <label class="source-output-editor__field">
-            <span>单位</span>
-            <el-input v-model="output.unit" placeholder="可选" @input="emitChange" />
+            <span>{{ ui('单位', 'Unit') }}</span>
+            <el-input v-model="output.unit" :placeholder="ui('可选', 'Optional')" @input="emitChange" />
           </label>
           <label class="source-output-editor__field">
-            <span>精度</span>
+            <span>{{ ui('精度', 'Precision') }}</span>
             <el-input-number v-model="output.precisionNum" :min="0" @change="emitChange" />
           </label>
         </div>
@@ -184,6 +184,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { createWholeSourceOutput } from '@/api/schemas/source-output.schema'
+import { datacenterLocale } from '@/i18n/runtime'
 import type {
   CanonicalDataPointType,
   SourceOutputInput,
@@ -192,6 +193,8 @@ import type {
 
 type EditableOutput = SourceOutputInput & { datapointPath?: string }
 type SamplePath = { key: string; label: string; segments: Array<string | number>; type: string }
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -209,18 +212,21 @@ const props = withDefaults(
     canGenerate?: boolean
   }>(),
   {
-    title: '输出数据点',
     columns: () => [],
     columnTypes: () => ({}),
     sample: undefined,
     wholeDataType: 'object',
     progressive: false,
-    defaultOutputName: '完整结果',
     datapointsGenerated: false,
     outputModified: false,
     generating: false,
     canGenerate: true,
   },
+)
+
+const resolvedTitle = computed(() => props.title || ui('输出数据点', 'Output Data Point'))
+const resolvedDefaultOutputName = computed(
+  () => props.defaultOutputName || ui('完整结果', 'Complete Result'),
 )
 
 const emit = defineEmits<{
@@ -239,25 +245,25 @@ const isDefaultWholeDataset = computed(
 )
 const advancedMode = ref(!props.progressive || !isDefaultWholeDataset.value)
 const generationButtonText = computed(() => {
-  if (!props.canGenerate) return '保存查询后生成数据点'
-  if (!props.datapointsGenerated) return '保存并生成数据点'
-  if (props.outputModified) return '保存并更新数据点'
-  return '数据点已生成'
+  if (!props.canGenerate) return ui('保存查询后生成数据点', 'Save Query to Generate Data Point')
+  if (!props.datapointsGenerated) return ui('保存并生成数据点', 'Save and Generate Data Point')
+  if (props.outputModified) return ui('保存并更新数据点', 'Save and Update Data Point')
+  return ui('数据点已生成', 'Data Point Generated')
 })
 const generationButtonType = computed(() =>
   props.datapointsGenerated && !props.outputModified ? 'success' : 'primary',
 )
 const generationButtonTitle = computed(() => {
-  if (!props.canGenerate) return '请先保存查询，再主动生成数据点'
-  if (props.datapointsGenerated && !props.outputModified) return '提取配置和数据点已经同步保存'
-  return '保存当前提取配置，并创建或更新对应数据点'
+  if (!props.canGenerate) return ui('请先保存查询，再主动生成数据点', 'Save the query before generating a data point')
+  if (props.datapointsGenerated && !props.outputModified) return ui('提取配置和数据点已经同步保存', 'Extraction configuration and data point are synchronized')
+  return ui('保存当前提取配置，并创建或更新对应数据点', 'Save the current extraction configuration and create or update its data point')
 })
 
 watch(isDefaultWholeDataset, (isDefault) => {
   if (props.progressive && !isDefault) advancedMode.value = true
 })
-const dataTypeOptions: Array<{ value: CanonicalDataPointType; label: string }> = [
-  { value: 'bool', label: '布尔' },
+const dataTypeOptions = computed<Array<{ value: CanonicalDataPointType; label: string }>>(() => [
+  { value: 'bool', label: ui('布尔', 'Boolean') },
   { value: 'int8', label: 'int8' },
   { value: 'uint8', label: 'uint8' },
   { value: 'int16', label: 'int16' },
@@ -268,13 +274,13 @@ const dataTypeOptions: Array<{ value: CanonicalDataPointType; label: string }> =
   { value: 'uint64', label: 'uint64' },
   { value: 'float32', label: 'float32' },
   { value: 'float64', label: 'float64' },
-  { value: 'decimal', label: '高精度数值' },
-  { value: 'string', label: '文本' },
-  { value: 'bytes', label: '字节' },
-  { value: 'datetime', label: '日期时间' },
-  { value: 'object', label: '对象' },
-  { value: 'array', label: '数组' },
-]
+  { value: 'decimal', label: ui('高精度数值', 'Decimal') },
+  { value: 'string', label: ui('文本', 'Text') },
+  { value: 'bytes', label: ui('字节', 'Bytes') },
+  { value: 'datetime', label: ui('日期时间', 'Date and Time') },
+  { value: 'object', label: ui('对象', 'Object') },
+  { value: 'array', label: ui('数组', 'Array') },
+])
 
 const valueType = (value: unknown) => {
   if (Array.isArray(value)) return 'array'
@@ -330,11 +336,11 @@ const valueAtSegments = (root: unknown, segments: Array<string | number>) => {
 }
 
 const selectorSummary = (output: EditableOutput) => {
-  if (output.selector.kind === 'whole') return '完整数据集'
-  if (output.selector.kind === 'column') return output.selector.column || '未选择字段'
+  if (output.selector.kind === 'whole') return ui('完整数据集', 'Complete Dataset')
+  if (output.selector.kind === 'column') return output.selector.column || ui('未选择字段', 'No field selected')
   return (
     samplePaths.value.find((path) => path.key === pathKey(output.selector.segments))?.label ||
-    '嵌套字段'
+    ui('嵌套字段', 'Nested Field')
   )
 }
 
@@ -405,7 +411,7 @@ const addOutput = () => {
     ...outputs.value,
     {
       key: column ? normalizeOutputKey(column, `output${index}`) : `output${index}`,
-      displayName: column || `输出 ${index}`,
+      displayName: column || ui(`输出 ${index}`, `Output ${index}`),
       selector: column ? { kind: 'column', column } : { kind: 'whole' },
       dataType: column
         ? suggestedDataType(sampleRow[column], props.columnTypes[column])
@@ -432,11 +438,11 @@ const resetToWholeDataset = async () => {
   if (!isDefaultWholeDataset.value) {
     try {
       await ElMessageBox.confirm(
-        '恢复后只保留完整结果集，当前列/字段提取配置将被移除。',
-        '恢复完整结果集',
+        ui('恢复后只保留完整结果集，当前列/字段提取配置将被移除。', 'Only the complete dataset will remain; current column/field extraction settings will be removed.'),
+        ui('恢复完整结果集', 'Restore Full Dataset'),
         {
-          confirmButtonText: '确认恢复',
-          cancelButtonText: '取消',
+          confirmButtonText: ui('确认恢复', 'Restore'),
+          cancelButtonText: ui('取消', 'Cancel'),
           type: 'warning',
         },
       )
@@ -446,7 +452,7 @@ const resetToWholeDataset = async () => {
   }
   const wholeOutput = createWholeSourceOutput(
     'result',
-    props.defaultOutputName,
+    resolvedDefaultOutputName.value,
     props.wholeDataType,
   )
   const currentOutput = outputs.value.length === 1 ? outputs.value[0] : undefined
@@ -469,7 +475,7 @@ const resetSelector = (output: EditableOutput) => {
     output.selector = { kind: 'column', column: props.columns[0] || '' }
     applySelectionDefaults(
       output,
-      props.columns[0] || '字段',
+      props.columns[0] || ui('字段', 'Field'),
       valueAtSegments(props.sample, [props.columns[0]]),
     )
   } else if (output.selector.kind === 'path') {
@@ -477,7 +483,7 @@ const resetSelector = (output: EditableOutput) => {
     const selected = samplePaths.value[0]
     applySelectionDefaults(
       output,
-      selected?.label || '字段',
+      selected?.label || ui('字段', 'Field'),
       valueAtSegments(props.sample, selected?.segments || []),
     )
   } else {
@@ -485,7 +491,7 @@ const resetSelector = (output: EditableOutput) => {
     output.dataType = props.wholeDataType
     if (props.progressive) {
       output.key = 'result'
-      output.displayName = props.defaultOutputName
+      output.displayName = resolvedDefaultOutputName.value
     }
   }
   emitChange()

@@ -1,3 +1,5 @@
+import { datacenterLocale } from '@/i18n/runtime'
+
 export type DatapointSourceModule = 'access-source' | 'industrial-collector' | 'compute'
 
 export interface DatapointSourceLike {
@@ -54,8 +56,8 @@ export function resolveDatapointSourceNavigation(
       ? {
           module: 'compute',
           objectId: computeUnitId,
-          label: '计算单元',
-          actionLabel: '打开计算单元',
+          label: datacenterLocale.value === 'en' ? 'Compute Unit' : '计算单元',
+          actionLabel: datacenterLocale.value === 'en' ? 'Open Compute Unit' : '打开计算单元',
         }
       : null
   }
@@ -66,16 +68,16 @@ export function resolveDatapointSourceNavigation(
     return {
       module: 'industrial-collector',
       objectId: connectionId,
-      label: '工业采集连接',
-      actionLabel: '打开工业采集连接',
+      label: datacenterLocale.value === 'en' ? 'Industrial Collector' : '工业采集连接',
+      actionLabel: datacenterLocale.value === 'en' ? 'Open Industrial Collector' : '打开工业采集连接',
     }
   }
 
   return {
     module: 'access-source',
     objectId: connectionId,
-    label: '接入源',
-    actionLabel: '打开接入源',
+    label: datacenterLocale.value === 'en' ? 'Access Source' : '接入源',
+    actionLabel: datacenterLocale.value === 'en' ? 'Open Access Source' : '打开接入源',
   }
 }
 
@@ -85,11 +87,11 @@ export function resolveDatapointSourceDisplayName(datapoint: DatapointSourceLike
   if (accessSourceName) return accessSourceName
   switch (stringValue(datapoint.sourceType)) {
     case 'calc.output':
-      return '计算单元'
+      return datacenterLocale.value === 'en' ? 'Compute Unit' : '计算单元'
     case 'collector.point':
-      return '工业采集连接'
+      return datacenterLocale.value === 'en' ? 'Industrial Collector' : '工业采集连接'
     case 'static.var':
-      return '静态变量'
+      return datacenterLocale.value === 'en' ? 'Static Variable' : '静态变量'
     default:
       return '-'
   }

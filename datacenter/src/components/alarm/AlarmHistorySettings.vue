@@ -3,8 +3,8 @@
     <section class="alarm-history__section">
       <header class="alarm-history__head">
         <div>
-          <h3>报警历史</h3>
-          <p>配置发布到节点后，决定报警事件和通知投递结果的保存方式。</p>
+          <h3>{{ t('alarmHistory.title') }}</h3>
+          <p>{{ t('alarmHistory.description') }}</p>
         </div>
         <button
           type="button"
@@ -13,23 +13,23 @@
           @click="save"
         >
           <IconTablerDeviceFloppy />
-          保存设置
+          {{ t('alarmHistory.saveSettings') }}
         </button>
       </header>
 
       <div class="alarm-history__form">
         <div class="alarm-history__row">
           <div class="alarm-history__label">
-            <strong>保存报警历史</strong>
-            <span>保存触发、等级变化、确认和恢复等状态变化记录</span>
+            <strong>{{ t('alarmHistory.storeHistory') }}</strong>
+            <span>{{ t('alarmHistory.storeHistoryHint') }}</span>
           </div>
           <el-switch v-model="draft.isEnabled" />
         </div>
 
         <div class="alarm-history__row" :class="{ 'is-disabled': !draft.isEnabled }">
           <div class="alarm-history__label">
-            <strong>保留时间</strong>
-            <span>节点按此期限定期清理已保存的报警历史</span>
+            <strong>{{ t('alarmHistory.retention') }}</strong>
+            <span>{{ t('alarmHistory.retentionHint') }}</span>
           </div>
           <div class="alarm-history__retention">
             <el-segmented
@@ -45,15 +45,15 @@
                 :controls="false"
                 :disabled="!draft.isEnabled"
               />
-              <span>天</span>
+              <span>{{ t('alarmHistory.days') }}</span>
             </div>
           </div>
         </div>
 
         <div class="alarm-history__row" :class="{ 'is-disabled': !draft.isEnabled }">
           <div class="alarm-history__label">
-            <strong>保存通知投递记录</strong>
-            <span>记录通知渠道的投递结果，便于后续追溯</span>
+            <strong>{{ t('alarmHistory.storeDeliveries') }}</strong>
+            <span>{{ t('alarmHistory.storeDeliveriesHint') }}</span>
           </div>
           <el-switch v-model="draft.storeNotificationDeliveries" :disabled="!draft.isEnabled" />
         </div>
@@ -61,14 +61,14 @@
 
       <div class="alarm-history__notice">
         <IconTablerInfoCircle />
-        <span>此设置只影响历史记录。当前活动报警始终由节点维护，不受历史开关影响。</span>
+        <span>{{ t('alarmHistory.notice') }}</span>
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
 import IconTablerInfoCircle from '~icons/tabler/info-circle'
@@ -81,16 +81,17 @@ import {
 } from '@/models/alarm-history'
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
+import { t } from '@/i18n/runtime'
 
 const props = defineProps<{ projectId: string }>()
 const { confirm } = useConfirm()
 const loading = ref(false)
 const saving = ref(false)
 const draft = ref(createAlarmHistoryDraft())
-const retentionOptions: Array<{ label: string; value: AlarmHistoryRetentionMode }> = [
-  { label: '按天', value: 'days' },
-  { label: '永久', value: 'forever' },
-]
+const retentionOptions = computed<Array<{ label: string; value: AlarmHistoryRetentionMode }>>(() => [
+  { label: t('alarmHistory.byDays'), value: 'days' },
+  { label: t('alarmHistory.forever'), value: 'forever' },
+])
 
 onMounted(() => void load())
 watch(
@@ -103,7 +104,7 @@ async function load() {
   try {
     draft.value = createAlarmHistoryDraft(await getAlarmHistorySettings(props.projectId))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载报警历史设置失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmHistory.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -117,9 +118,9 @@ async function save() {
   }
   if (
     !draft.value.isEnabled &&
-    !(await confirm('关闭后仅停止新增历史，不影响当前报警，已有历史不会立即删除。', {
-      title: '关闭报警历史',
-      confirmText: '确认保存',
+    !(await confirm(t('alarmHistory.disableConfirm'), {
+      title: t('alarmHistory.disableTitle'),
+      confirmText: t('alarmHistory.confirmSave'),
       type: 'warning',
     }))
   ) {
@@ -132,9 +133,9 @@ async function save() {
       buildAlarmHistoryPayload(draft.value),
     )
     draft.value = createAlarmHistoryDraft(saved)
-    ElMessage.success('报警历史设置已保存')
+    ElMessage.success(t('alarmHistory.saved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存报警历史设置失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmHistory.saveFailed')))
   } finally {
     saving.value = false
   }

@@ -2,13 +2,14 @@
   <div class="collector-schema-form">
     <template v-for="field in visibleFields" :key="field.name">
       <el-form-item
-        :label="field.property.title || field.name"
+        :label="fieldLabel(field.name, field.property)"
         :required="requiredFields.has(field.name)"
       >
         <el-select
           v-if="field.property.enum"
           :model-value="model[field.name]"
           :disabled="disabled"
+          :placeholder="selectPlaceholder(field.name, field.property)"
           @update:model-value="setValue(field.name, $event)"
         >
           <el-option
@@ -52,7 +53,7 @@
           <el-select
             :model-value="stringValue(model[field.name])"
             :disabled="disabled"
-            :placeholder="field.property.description"
+            :placeholder="resourcePlaceholder(field.name, field.property)"
             allow-create
             clearable
             default-first-option
@@ -66,11 +67,11 @@
               :value="option"
             />
           </el-select>
-          <el-tooltip content="刷新调试代理资源" placement="top">
+          <el-tooltip :content="ui('刷新调试代理资源', 'Refresh Debug Agent Resources')" placement="top">
             <el-button
               :disabled="disabled"
               :icon="IconTablerRefresh"
-              aria-label="刷新可用选项"
+              :aria-label="ui('刷新可用选项', 'Refresh Available Options')"
               @click="emit('refresh-options', field.name)"
             />
           </el-tooltip>
@@ -81,30 +82,31 @@
           :type="field.property['x-induforge-secret'] ? 'password' : 'text'"
           :show-password="Boolean(field.property['x-induforge-secret'])"
           :disabled="disabled"
-          :placeholder="field.property.description"
+          :placeholder="inputPlaceholder(field.name, field.property)"
           @update:model-value="setValue(field.name, $event)"
         >
           <template v-if="field.property['x-induforge-unit']" #append>{{
             field.property['x-induforge-unit']
           }}</template>
         </el-input>
-        <div v-if="field.property.description" class="collector-schema-form__hint">
-          {{ field.property.description }}
+        <div v-if="fieldHint(field.name, field.property)" class="collector-schema-form__hint">
+          {{ fieldHint(field.name, field.property) }}
         </div>
       </el-form-item>
     </template>
 
     <el-collapse v-if="advancedFields.length" class="collector-schema-form__advanced">
-      <el-collapse-item title="高级参数" name="advanced">
+      <el-collapse-item :title="ui('高级参数', 'Advanced Settings')" name="advanced">
         <el-form-item
           v-for="field in advancedFields"
           :key="field.name"
-          :label="field.property.title || field.name"
+          :label="fieldLabel(field.name, field.property)"
         >
           <el-select
             v-if="field.property.enum"
             :model-value="model[field.name]"
             :disabled="disabled"
+            :placeholder="selectPlaceholder(field.name, field.property)"
             @update:model-value="setValue(field.name, $event)"
           >
             <el-option
@@ -140,7 +142,7 @@
             <el-select
               :model-value="stringValue(model[field.name])"
               :disabled="disabled"
-              :placeholder="field.property.description"
+              :placeholder="resourcePlaceholder(field.name, field.property)"
               allow-create
               clearable
               default-first-option
@@ -154,11 +156,11 @@
                 :value="option"
               />
             </el-select>
-            <el-tooltip content="刷新调试代理资源" placement="top">
+            <el-tooltip :content="ui('刷新调试代理资源', 'Refresh Debug Agent Resources')" placement="top">
               <el-button
                 :disabled="disabled"
                 :icon="IconTablerRefresh"
-                aria-label="刷新可用选项"
+                :aria-label="ui('刷新可用选项', 'Refresh Available Options')"
                 @click="emit('refresh-options', field.name)"
               />
             </el-tooltip>
@@ -169,11 +171,11 @@
             :type="field.property['x-induforge-secret'] ? 'password' : 'text'"
             :show-password="Boolean(field.property['x-induforge-secret'])"
             :disabled="disabled"
-            :placeholder="field.property.description"
+            :placeholder="inputPlaceholder(field.name, field.property)"
             @update:model-value="setValue(field.name, $event)"
           />
-          <div v-if="field.property.description" class="collector-schema-form__hint">
-            {{ field.property.description }}
+          <div v-if="fieldHint(field.name, field.property)" class="collector-schema-form__hint">
+            {{ fieldHint(field.name, field.property) }}
           </div>
         </el-form-item>
       </el-collapse-item>
@@ -187,8 +189,15 @@ import type {
   CollectorJsonSchema,
   CollectorJsonSchemaProperty,
 } from '@/api/schemas/collector.schema'
-import { resolveCollectorEnumOptionLabel } from './collector-workbench-model'
+import {
+  formatCollectorSchemaFieldHint,
+  formatCollectorSchemaFieldLabel,
+  resolveCollectorEnumOptionLabel,
+} from './collector-workbench-model'
 import IconTablerRefresh from '~icons/tabler/refresh'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 defineOptions({ name: 'CollectorSchemaForm' })
 
@@ -216,7 +225,12 @@ const requiredFields = computed(
 )
 const fields = computed(() => {
   const properties = props.schema.properties || {}
-  const section = props.uiSchema?.[props.section] as { order?: string[] } | undefined
+  const nestedSection = props.uiSchema?.[props.section] as { order?: string[] } | undefined
+  const section =
+    nestedSection ||
+    (props.section === 'connection' && Array.isArray(props.uiSchema?.order)
+      ? (props.uiSchema as { order?: string[] })
+      : undefined)
   const order = section?.order || Object.keys(properties)
   const visibleFieldNames = props.visibleFieldNames ? new Set(props.visibleFieldNames) : null
   return order
@@ -238,7 +252,7 @@ function stringValue(value: unknown) {
   return value === undefined || value === null ? '' : String(value)
 }
 function hasStringOptions(name: string) {
-  return Object.prototype.hasOwnProperty.call(props.stringFieldOptions || {}, name)
+  return (props.stringFieldOptions?.[name]?.length || 0) > 0
 }
 function stringOptions(name: string) {
   return props.stringFieldOptions?.[name] || []
@@ -248,6 +262,41 @@ function numberValue(value: unknown) {
 }
 function enumOptionLabel(property: CollectorJsonSchemaProperty, option: unknown) {
   return resolveCollectorEnumOptionLabel(property, option)
+}
+function fieldLabel(name: string, property: CollectorJsonSchemaProperty) {
+  return formatCollectorSchemaFieldLabel(name, property)
+}
+function fieldHint(name: string, property: CollectorJsonSchemaProperty) {
+  return formatCollectorSchemaFieldHint(name, property)
+}
+function selectPlaceholder(name: string, property: CollectorJsonSchemaProperty) {
+  return ui(`请选择${fieldLabel(name, property)}`, `Select ${fieldLabel(name, property)}`)
+}
+function resourcePlaceholder(name: string, property: CollectorJsonSchemaProperty) {
+  return ui(`选择或输入${fieldLabel(name, property)}`, `Select or enter ${fieldLabel(name, property)}`)
+}
+function inputPlaceholder(name: string, property: CollectorJsonSchemaProperty) {
+  const examples: Record<string, string> = {
+    host: '例如 192.168.1.10 或 plc.local',
+    portName: '例如 COM3 或 /dev/ttyUSB0',
+    endpointPath: '例如 /induforge/sim',
+    targetAmsNetId: '例如 192.168.1.10.1.1',
+    senderAmsNetId: '例如 192.168.1.20.1.1',
+    clientId: '例如 line-01-gateway',
+    deviceTopic: '例如 devices/device-01',
+  }
+  const englishExamples: Record<string, string> = {
+    host: 'For example, 192.168.1.10 or plc.local',
+    portName: 'For example, COM3 or /dev/ttyUSB0',
+    endpointPath: 'For example, /induforge/sim',
+    targetAmsNetId: 'For example, 192.168.1.10.1.1',
+    senderAmsNetId: 'For example, 192.168.1.20.1.1',
+    clientId: 'For example, line-01-gateway',
+    deviceTopic: 'For example, devices/device-01',
+  }
+  return datacenterLocale.value === 'en'
+    ? englishExamples[name] || `Enter ${fieldLabel(name, property)}`
+    : examples[name] || `请输入${fieldLabel(name, property)}`
 }
 function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -289,19 +338,19 @@ function objectValue(value: unknown) {
 }
 .collector-schema-form__unit {
   flex: 0 0 auto;
-  color: #667584;
+  color: var(--dc-text-secondary);
   font-size: 13px;
 }
 .collector-schema-form__hint {
   margin-top: 6px;
-  color: #7b8794;
+  color: var(--dc-text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
 .collector-schema-form__advanced {
   grid-column: 1 / -1;
   margin-top: 8px;
-  border-top: 1px solid #e7ebef;
+  border-top: 1px solid var(--dc-border);
   border-bottom: 0;
 }
 @media (max-width: 960px) {

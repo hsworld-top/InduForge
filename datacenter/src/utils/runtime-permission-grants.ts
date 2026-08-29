@@ -52,8 +52,11 @@ export const normalizeRuntimeGrantPayload = (input: RuntimeGrantPayload = {}) =>
  * @param {object} input - 原始授权输入
  * @returns {string}
  */
-export const summarizeRuntimeGrant = (input: RuntimeGrantPayload = {}) => {
+export const summarizeRuntimeGrant = (input: RuntimeGrantPayload = {}, locale = 'zh') => {
   const value = normalizeRuntimeGrantPayload(input)
+  if (locale === 'en') {
+    return `Allow ${value.allowRoles.length} / Deny ${value.denyRoles.length} / ${value.inherit ? 'Inherit' : 'Do not inherit'}`
+  }
   return `允许 ${value.allowRoles.length} / 拒绝 ${value.denyRoles.length} / ${value.inherit ? '继承' : '不继承'}`
 }
 

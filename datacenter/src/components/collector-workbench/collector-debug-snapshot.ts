@@ -4,6 +4,9 @@ import type {
   CollectorPointDebugSnapshot,
   CollectorPointReadResult,
 } from '@/api/schemas/collector.schema'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 export type CollectorDebugQualityTone = 'success' | 'warning' | 'danger' | 'info'
 
@@ -43,7 +46,7 @@ export function collectorDebugTime(value: string | null): string {
 
 export function collectorDebugFailureText(snapshot: CollectorPointDebugSnapshot): string {
   if (snapshot.lastAttemptStatus !== 'failed') return ''
-  return snapshot.lastErrorMessage?.trim() || snapshot.lastErrorCode?.trim() || '最近一次读取失败'
+  return snapshot.lastErrorMessage?.trim() || snapshot.lastErrorCode?.trim() || ui('最近一次读取失败', 'The latest read failed')
 }
 
 export function currentPageCollectorPointIds(points: Array<Pick<CollectorPoint, 'id'>>): string[] {
@@ -62,7 +65,7 @@ export function summarizeCollectorPointRead(
       index: indexByID.get(item.pointId) ?? 0,
       name: nameByID.get(item.pointId) || item.pointId,
       code: item.errorCode || 'COLLECTOR_POINT_READ_FAILED',
-      message: item.errorMessage || '变量读取失败',
+      message: item.errorMessage || ui('变量读取失败', 'Point read failed'),
     }))
   return {
     successCount: result.values.filter((item) => item.succeeded).length,

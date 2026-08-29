@@ -3,7 +3,7 @@
     ref="dialogRef"
     v-model="visible"
     :mode="mode"
-    :title="mode === 'create' ? '新建 Topic 分组' : '编辑 Topic 分组'"
+    :title="mode === 'create' ? ui('新建 Topic 分组', 'New Topic Group') : ui('编辑 Topic 分组', 'Edit Topic Group')"
     :group="group"
     :group-options="groupOptions"
     :initial-parent-id="initialParentId"
@@ -17,6 +17,9 @@ import { computed, ref } from 'vue'
 import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
 import type { KafkaTopicGroup } from './types'
 import { collectKafkaTopicGroupIds, flattenKafkaTopicGroups } from './kafkaTopicTreeModel'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

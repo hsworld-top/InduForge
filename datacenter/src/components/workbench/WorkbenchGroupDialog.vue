@@ -9,24 +9,24 @@
     :close-disabled="loading"
   >
     <el-form label-position="top" class="workbench-group-dialog" @submit.prevent>
-      <el-form-item label="名称" required>
+      <el-form-item :label="ui('名称', 'Name')" required>
         <el-input
           v-model="form.name"
           :maxlength="maxNameLength"
           show-word-limit
-          placeholder="输入分组名称"
+          :placeholder="ui('输入分组名称', 'Enter a group name')"
           @keyup.enter="submit"
         />
       </el-form-item>
 
-      <el-form-item label="上级分组">
+      <el-form-item :label="ui('上级分组', 'Parent Group')">
         <el-select
           v-model="form.parentId"
           class="workbench-group-dialog__select"
           clearable
-          placeholder="根目录"
+          :placeholder="ui('根目录', 'Root')"
         >
-          <el-option label="根目录" :value="null" />
+          <el-option :label="ui('根目录', 'Root')" :value="null" />
           <el-option
             v-for="group in groupOptions"
             :key="group.id"
@@ -39,9 +39,9 @@
 
     <template #footer>
       <div class="workbench-group-dialog__footer">
-        <el-button @click="requestClose">取消</el-button>
+        <el-button @click="requestClose">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          保存
+          {{ ui('保存', 'Save') }}
         </el-button>
       </div>
     </template>
@@ -51,6 +51,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type WorkbenchGroupOption = {
   id: string
@@ -102,8 +105,8 @@ const form = reactive({
 
 const title = computed(() => {
   if (props.title) return props.title
-  if (props.mode === 'create') return '新建分组'
-  return '编辑分组'
+  if (props.mode === 'create') return ui('新建分组', 'New Group')
+  return ui('编辑分组', 'Edit Group')
 })
 
 const canSubmit = computed(() => {

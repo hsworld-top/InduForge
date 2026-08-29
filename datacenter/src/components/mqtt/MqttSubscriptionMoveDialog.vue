@@ -1,21 +1,21 @@
 <template>
   <DcDialog
     v-model="visible"
-    :title="targetType === 'group' ? '移动分组' : '移动订阅'"
+    :title="targetType === 'group' ? ui('移动分组', 'Move Group') : ui('移动订阅', 'Move Subscription')"
     width="460px"
     body-max-height="260px"
     :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="mqtt-subscription-move-dialog">
-      <el-form-item label="目标分组">
+      <el-form-item :label="ui('目标分组', 'Target Group')">
         <el-select
           v-model="targetGroupId"
           class="mqtt-subscription-move-dialog__select"
           clearable
-          placeholder="根目录"
+          :placeholder="ui('根目录', 'Root')"
         >
-          <el-option label="根目录" :value="null" />
+          <el-option :label="ui('根目录', 'Root')" :value="null" />
           <el-option
             v-for="group in groupOptions"
             :key="group.id"
@@ -28,9 +28,9 @@
 
     <template #footer>
       <div class="mqtt-subscription-move-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          移动
+          {{ ui('移动', 'Move') }}
         </el-button>
       </div>
     </template>
@@ -40,6 +40,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 import type {
   MqttSubscription,
   MqttSubscriptionGroup,

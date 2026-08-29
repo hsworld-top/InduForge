@@ -1,16 +1,16 @@
 <template>
   <DcDrawer v-model="visible" :title="drawerTitle" :width="760" :max="920">
     <template #actions>
-      <button type="button" class="alarm-editor__icon" title="关闭" @click="visible = false">
+      <button type="button" class="alarm-editor__icon" :title="t('alarmEditor.close')" @click="visible = false">
         <IconTablerX />
       </button>
     </template>
 
     <form class="alarm-editor" @submit.prevent="submit">
       <section v-if="item" class="alarm-editor__impact">
-        当前编辑的是一条独立报警项，修改只影响
+        {{ t('alarmEditor.editImpact') }}
         <strong>{{
-          item.mode === 'point' ? item.datapointName || item.path : '当前组合报警'
+          item.mode === 'point' ? item.datapointName || item.path : t('alarmEditor.currentComposite')
         }}</strong
         >。
       </section>
@@ -18,17 +18,17 @@
       <section class="alarm-editor__context-card">
         <div v-if="showIdentityFields" class="alarm-editor__grid">
           <label v-if="showIdentityFields" class="alarm-editor__field is-wide"
-            ><span>{{ draft.mode === 'derived' ? '组合报警名称' : '报警名称（可选）' }}</span
+            ><span>{{ draft.mode === 'derived' ? t('alarmEditor.compositeName') : t('alarmEditor.alarmNameOptional') }}</span
             ><el-input
               v-model="draft.displayName"
               maxlength="100"
-              placeholder="普通报警留空时按类型自动生成"
+              :placeholder="t('alarmEditor.autoName')"
           /></label>
         </div>
 
         <div class="alarm-editor__context-grid">
           <div class="alarm-editor__point-field">
-            <span>{{ draft.mode === 'derived' ? '组合输入点' : '报警数据点' }}</span>
+            <span>{{ draft.mode === 'derived' ? t('alarmEditor.compositeInputs') : t('alarmEditor.alarmPoint') }}</span>
             <div v-if="draft.selectedPoints.length" class="alarm-editor__point-compact">
               <div>
                 <strong>{{ pointPreview }}</strong>
@@ -37,7 +37,7 @@
                 </small>
               </div>
               <button v-if="canManagePoints" type="button" @click="pointPickerVisible = true">
-                调整
+                {{ t('alarmEditor.adjust') }}
               </button>
             </div>
             <button
@@ -46,11 +46,11 @@
               class="alarm-editor__choose-point"
               @click="pointPickerVisible = true"
             >
-              <IconTablerPlus />选择数据点
+              <IconTablerPlus />{{ t('alarmEditor.selectPoint') }}
             </button>
           </div>
           <label class="alarm-editor__field"
-            ><span>目录</span
+            ><span>{{ t('alarmEditor.directory') }}</span
             ><AlarmGroupSelect
               v-model="draft.groupId"
               :project-id="projectId"
@@ -58,42 +58,40 @@
             />
           </label>
           <label class="alarm-editor__field is-switch"
-            ><span>启用</span><el-switch v-model="draft.isEnabled"
+            ><span>{{ t('alarmEditor.enabled') }}</span><el-switch v-model="draft.isEnabled"
           /></label>
         </div>
         <label v-if="showIdentityFields" class="alarm-editor__field"
-          ><span>说明（可选）</span><el-input v-model="draft.description" maxlength="500"
+          ><span>{{ t('alarmEditor.descriptionOptional') }}</span><el-input v-model="draft.description" maxlength="500"
         /></label>
       </section>
 
       <section v-if="draft.mode === 'derived'" class="alarm-editor__section is-card">
         <div class="alarm-editor__section-head">
           <div>
-            <h3>组合表达式</h3>
-            <p>
-              显示每个输入的数据类型；变量名仅用于表达式，不会修改数据点名称。保存时会校验表达式和结果条件的类型。
-            </p>
+            <h3>{{ t('alarmEditor.expression') }}</h3>
+            <p>{{ t('alarmEditor.expressionHint') }}</p>
           </div>
         </div>
         <div class="alarm-editor__aliases">
           <label v-for="point in draft.selectedPoints" :key="point.datapointId"
             ><span
               >{{ point.name }}<small>{{ formatPointDataType(point.dataType) }}</small></span
-            ><el-input v-model="point.inputKey" placeholder="表达式变量名"
+            ><el-input v-model="point.inputKey" :placeholder="t('alarmEditor.expressionAlias')"
           /></label>
         </div>
         <el-input
           v-model="draft.derivedExpression"
           type="textarea"
           :rows="3"
-          placeholder="例如：temperature > 80 && pressure > 1.2"
+          :placeholder="t('alarmEditor.expressionExample')"
         />
       </section>
 
       <section class="alarm-editor__section is-card">
         <div class="alarm-editor__section-head">
           <div>
-            <h3>{{ draft.evaluationMode === 'highest_matching' ? '越限等级' : '报警条件' }}</h3>
+            <h3>{{ draft.evaluationMode === 'highest_matching' ? t('alarmEditor.limitLevels') : t('alarmEditor.alarmCondition') }}</h3>
             <p>{{ conditionHint }}</p>
           </div>
           <el-segmented
@@ -107,15 +105,15 @@
         <template v-if="draft.evaluationMode === 'highest_matching'">
           <div class="alarm-editor__level-toolbar">
             <button type="button" class="alarm-editor__secondary" @click="addLevel('high')">
-              <IconTablerPlus />增加高限
+              <IconTablerPlus />{{ t('alarmEditor.addHigh') }}
             </button>
             <button type="button" class="alarm-editor__secondary" @click="addLevel('low')">
-              <IconTablerPlus />增加低限
+              <IconTablerPlus />{{ t('alarmEditor.addLow') }}
             </button>
           </div>
           <div class="alarm-editor__levels">
             <div class="alarm-editor__level-head" aria-hidden="true">
-              <span>等级名称</span><span>方向</span><span>阈值</span><span>严重度</span
+              <span>{{ t('alarmEditor.levelName') }}</span><span>{{ t('alarmEditor.direction') }}</span><span>{{ t('alarmEditor.threshold') }}</span><span>{{ t('alarmEditor.severity') }}</span
               ><span></span>
             </div>
             <article
@@ -126,18 +124,18 @@
               <el-input
                 v-model="condition.label"
                 class="alarm-editor__level-label"
-                placeholder="高 / 高高 / 自定义"
+                :placeholder="t('alarmEditor.levelExample')"
               />
               <el-select
                 v-model="condition.operator"
                 class="alarm-editor__direction"
                 @change="sortLevels"
-                ><el-option label="高限" value="gt" /><el-option label="低限" value="lt"
+                ><el-option :label="t('alarmEditor.highLimit')" value="gt" /><el-option :label="t('alarmEditor.lowLimit')" value="lt"
               /></el-select>
               <el-input-number
                 :model-value="numberParam(condition, 'threshold')"
                 controls-position="right"
-                placeholder="阈值"
+                :placeholder="t('alarmEditor.threshold')"
                 @update:model-value="setThreshold(condition, $event)"
               />
               <el-select
@@ -160,19 +158,19 @@
               </button>
               <div v-if="advancedVisible" class="alarm-editor__level-advanced">
                 <label
-                  >死区<el-input-number
+                  >{{ t('alarmEditor.deadband') }}<el-input-number
                     v-model="condition.deadband"
                     :min="0"
                     controls-position="right"
                 /></label>
                 <label
-                  >触发延时 ms<el-input-number
+                  >{{ t('alarmEditor.triggerDelayMs') }}<el-input-number
                     v-model="condition.triggerDelayMs"
                     :min="0"
                     controls-position="right"
                 /></label>
                 <label
-                  >清除延时 ms<el-input-number
+                  >{{ t('alarmEditor.clearDelayMs') }}<el-input-number
                     v-model="condition.clearDelayMs"
                     :min="0"
                     controls-position="right"
@@ -187,7 +185,7 @@
             ><el-option
               v-for="kind in availableKinds"
               :key="kind"
-              :label="alarmConditionLabels[kind]"
+              :label="conditionKindLabel(kind)"
               :value="kind"
           /></el-select>
           <el-select v-model="singleCondition.operator"
@@ -201,23 +199,23 @@
             ><el-input-number
               :model-value="numberParam(singleCondition, 'threshold')"
               controls-position="right"
-              placeholder="阈值"
+              :placeholder="t('alarmEditor.threshold')"
               @update:model-value="setParam(singleCondition, 'threshold', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'range'"
             ><el-input-number
               :model-value="numberParam(singleCondition, 'lower')"
-              placeholder="下限"
+              :placeholder="t('alarmEditor.lower')"
               @update:model-value="setParam(singleCondition, 'lower', $event)" /><el-input-number
               :model-value="numberParam(singleCondition, 'upper')"
-              placeholder="上限"
+              :placeholder="t('alarmEditor.upper')"
               @update:model-value="setParam(singleCondition, 'upper', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'state'"
             ><el-select
               v-if="stateUsesBooleanOptions"
               :model-value="Boolean(singleCondition.params.expected)"
-              placeholder="期望状态"
+              :placeholder="t('alarmEditor.expectedState')"
               @update:model-value="setParam(singleCondition, 'expected', $event)"
               ><el-option label="true" :value="true" /><el-option
                 label="false"
@@ -225,7 +223,7 @@
             ><el-input
               v-else
               :model-value="String(singleCondition.params.expected ?? '')"
-              placeholder="期望值"
+              :placeholder="t('alarmEditor.expectedValue')"
               @update:model-value="setParam(singleCondition, 'expected', $event)"
           /></template>
           <template
@@ -235,7 +233,7 @@
             ><el-select
               v-if="isBooleanPoint"
               :model-value="Boolean(singleCondition.params.from)"
-              placeholder="起始值"
+              :placeholder="t('alarmEditor.fromValue')"
               @update:model-value="setParam(singleCondition, 'from', $event)"
               ><el-option label="false" :value="false" /><el-option
                 label="true"
@@ -243,11 +241,11 @@
             ><el-input
               v-else
               :model-value="String(singleCondition.params.from ?? '')"
-              placeholder="起始值"
+              :placeholder="t('alarmEditor.fromValue')"
               @update:model-value="setParam(singleCondition, 'from', $event)" /><el-select
               v-if="isBooleanPoint"
               :model-value="Boolean(singleCondition.params.to)"
-              placeholder="目标值"
+              :placeholder="t('alarmEditor.toValue')"
               @update:model-value="setParam(singleCondition, 'to', $event)"
               ><el-option label="false" :value="false" /><el-option
                 label="true"
@@ -255,50 +253,50 @@
             ><el-input
               v-else
               :model-value="String(singleCondition.params.to ?? '')"
-              placeholder="目标值"
+              :placeholder="t('alarmEditor.toValue')"
               @update:model-value="setParam(singleCondition, 'to', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'text_match'"
             ><el-input
               :model-value="String(singleCondition.params.expected || '')"
-              placeholder="匹配文本"
+              :placeholder="t('alarmEditor.matchText')"
               @update:model-value="setParam(singleCondition, 'expected', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'rate_of_change'"
             ><el-select
               :model-value="String(singleCondition.params.direction || 'absolute')"
               @update:model-value="setParam(singleCondition, 'direction', $event)"
-              ><el-option label="上升速率" value="rise" /><el-option
-                label="下降速率"
-                value="fall" /><el-option label="绝对变化率" value="absolute" /></el-select
+              ><el-option :label="t('alarmEditor.riseRate')" value="rise" /><el-option
+                :label="t('alarmEditor.fallRate')"
+                value="fall" /><el-option :label="t('alarmEditor.absoluteRate')" value="absolute" /></el-select
             ><el-input-number
               :model-value="numberParam(singleCondition, 'limit')"
               :min="0"
-              placeholder="速率阈值"
+              :placeholder="t('alarmEditor.rateLimit')"
               @update:model-value="setParam(singleCondition, 'limit', $event)" /><el-input-number
               :model-value="numberParam(singleCondition, 'windowMs')"
               :min="1"
-              placeholder="窗口 ms"
+              :placeholder="t('alarmEditor.windowMs')"
               @update:model-value="setParam(singleCondition, 'windowMs', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'deviation'"
             ><el-input-number
               :model-value="numberParam(singleCondition, 'baseline')"
-              placeholder="基准值"
+              :placeholder="t('alarmEditor.baseline')"
               @update:model-value="setParam(singleCondition, 'baseline', $event)" /><el-input-number
               :model-value="numberParam(singleCondition, 'limit')"
               :min="0"
-              placeholder="偏差"
+              :placeholder="t('alarmEditor.deviation')"
               @update:model-value="setParam(singleCondition, 'limit', $event)"
           /></template>
           <template v-else-if="singleCondition.kind === 'quality'">
             <el-select
               :model-value="qualityParams(singleCondition)"
               multiple
-              placeholder="选择异常质量"
+              :placeholder="t('alarmEditor.selectBadQuality')"
               @update:model-value="setParam(singleCondition, 'qualities', $event)"
-              ><el-option label="异常" value="bad" /><el-option
-                label="未知 / 不确定"
+              ><el-option :label="t('alarmEditor.bad')" value="bad" /><el-option
+                :label="t('alarmEditor.unknownUncertain')"
                 value="unknown"
             /></el-select>
           </template>
@@ -306,13 +304,13 @@
             <el-input-number
               :model-value="staleDisplayValue(singleCondition)"
               :min="1"
-              placeholder="未更新时间"
+              :placeholder="t('alarmEditor.staleTime')"
               @update:model-value="setStaleDisplayValue(singleCondition, $event)"
             />
             <el-select v-model="staleUnit" @change="refreshStaleDisplay">
-              <el-option label="秒" value="seconds" />
-              <el-option label="分钟" value="minutes" />
-              <el-option label="小时" value="hours" />
+              <el-option :label="t('alarmEditor.seconds')" value="seconds" />
+              <el-option :label="t('alarmEditor.minutes')" value="minutes" />
+              <el-option :label="t('alarmEditor.hours')" value="hours" />
             </el-select>
           </template>
           <el-select
@@ -326,13 +324,13 @@
           /></el-select>
           <div v-if="advancedVisible" class="alarm-editor__level-advanced">
             <label v-if="conditionSupportsDeadband(singleCondition.kind)"
-              >死区<el-input-number v-model="singleCondition.deadband" :min="0" /></label
+              >{{ t('alarmEditor.deadband') }}<el-input-number v-model="singleCondition.deadband" :min="0" /></label
             ><label v-if="singleCondition.kind !== 'transition'"
-              >触发延时 ms<el-input-number
+              >{{ t('alarmEditor.triggerDelayMs') }}<el-input-number
                 v-model="singleCondition.triggerDelayMs"
                 :min="0" /></label
             ><label
-              >清除延时 ms<el-input-number v-model="singleCondition.clearDelayMs" :min="0"
+              >{{ t('alarmEditor.clearDelayMs') }}<el-input-number v-model="singleCondition.clearDelayMs" :min="0"
             /></label>
           </div>
         </article>
@@ -344,24 +342,24 @@
           class="alarm-editor__collapse"
           @click="advancedVisible = !advancedVisible"
         >
-          <span>通知与高级设置</span
+          <span>{{ t('alarmEditor.advanced') }}</span
           ><IconTablerChevronDown :class="{ 'is-open': advancedVisible }" />
         </button>
         <div v-if="advancedVisible" class="alarm-editor__advanced">
           <label class="alarm-editor__field"
-            ><span>通知</span
+            ><span>{{ t('alarmEditor.notification') }}</span
             ><el-select v-model="draft.notification.mode" @change="changeNotificationMode"
-              ><el-option label="沿用工程通知设置" value="inherit" /><el-option
-                label="不发送通知"
-                value="off" /><el-option label="单独设置" value="custom" /></el-select
+              ><el-option :label="t('alarmEditor.inheritNotifications')" value="inherit" /><el-option
+                :label="t('alarmEditor.noNotifications')"
+                value="off" /><el-option :label="t('alarmEditor.customNotifications')" value="custom" /></el-select
           ></label>
           <template v-if="draft.notification.mode === 'custom'"
             ><div class="alarm-editor__checks">
-              <el-checkbox v-model="draft.notification.notifyOnRaise">触发时通知</el-checkbox
-              ><el-checkbox v-model="draft.notification.notifyOnClear">恢复时通知</el-checkbox>
+              <el-checkbox v-model="draft.notification.notifyOnRaise">{{ t('alarmEditor.notifyRaise') }}</el-checkbox
+              ><el-checkbox v-model="draft.notification.notifyOnClear">{{ t('alarmEditor.notifyClear') }}</el-checkbox>
             </div>
             <label class="alarm-editor__field"
-              ><span>通知渠道</span
+              ><span>{{ t('alarmEditor.channels') }}</span
               ><el-select v-model="draft.notification.channelIds" multiple
                 ><el-option
                   v-for="channel in enabledChannels"
@@ -374,14 +372,14 @@
 
       <section class="alarm-editor__section is-card is-collapsible">
         <button type="button" class="alarm-editor__collapse" @click="debugVisible = !debugVisible">
-          <span>开发调试</span><IconTablerChevronDown :class="{ 'is-open': debugVisible }" />
+          <span>{{ t('alarmEditor.debug') }}</span><IconTablerChevronDown :class="{ 'is-open': debugVisible }" />
         </button>
         <div v-if="debugVisible" class="alarm-editor__debug">
           <div class="alarm-editor__trial-table">
             <div class="alarm-editor__trial-row is-head">
-              <span>时间偏移 ms</span
-              ><span>{{ draft.mode === 'derived' ? '输入 JSON' : '值' }}</span
-              ><span>质量</span><span>离线</span><span>源时间 / 龄期 ms</span><span></span>
+              <span>{{ t('alarmEditor.offsetMs') }}</span
+              ><span>{{ draft.mode === 'derived' ? t('alarmEditor.inputJson') : t('alarmEditor.value') }}</span
+              ><span>{{ t('alarmEditor.quality') }}</span><span>{{ t('alarmEditor.offline') }}</span><span>{{ t('alarmEditor.sourceTime') }}</span><span></span>
             </div>
             <div v-for="row in trialRows" :key="row.id" class="alarm-editor__trial-row">
               <el-input-number v-model="row.offsetMs" :min="0" controls-position="right" />
@@ -390,15 +388,15 @@
                 v-model="row.inputsText"
                 placeholder='{"temperature": 80, "running": true}'
               />
-              <el-input v-else v-model="row.valueText" placeholder="模拟值" />
+              <el-input v-else v-model="row.valueText" :placeholder="t('alarmEditor.mockValue')" />
               <el-select v-model="row.quality"
-                ><el-option label="正常" value="good" /><el-option
-                  label="异常"
-                  value="bad" /><el-option label="未知" value="unknown"
+                ><el-option :label="t('alarmEditor.good')" value="good" /><el-option
+                  :label="t('alarmEditor.bad')"
+                  value="bad" /><el-option :label="t('alarmEditor.unknown')" value="unknown"
               /></el-select>
               <el-checkbox v-model="row.offline" />
               <div class="alarm-editor__source-time">
-                <el-checkbox v-model="row.hasSourceTimestamp">有</el-checkbox>
+                <el-checkbox v-model="row.hasSourceTimestamp">{{ t('alarmEditor.yes') }}</el-checkbox>
                 <el-input-number
                   v-model="row.sourceAgeMs"
                   :disabled="!row.hasSourceTimestamp"
@@ -417,7 +415,7 @@
             </div>
           </div>
           <button type="button" class="alarm-editor__secondary" @click="addTrialRow">
-            <IconTablerPlus />增加样本
+            <IconTablerPlus />{{ t('alarmEditor.addSample') }}
           </button>
           <button
             type="button"
@@ -425,7 +423,7 @@
             :disabled="trialLoading"
             @click="runTrial"
           >
-            试算</button
+            {{ t('alarmEditor.trial') }}</button
           ><button
             v-if="item"
             type="button"
@@ -433,17 +431,17 @@
             :disabled="contractLoading"
             @click="loadContract"
           >
-            查看契约
+            {{ t('alarmEditor.contract') }}
           </button>
           <div v-if="trialResult" class="alarm-editor__trial-result">
             <div class="alarm-editor__trial-result-head">
-              <strong>试算过程</strong>
-              <span>{{ trialResult.triggered ? '最终处于报警' : '最终未报警' }}</span>
+              <strong>{{ t('alarmEditor.trialProcess') }}</strong>
+              <span>{{ trialResult.triggered ? t('alarmEditor.finalAlarm') : t('alarmEditor.finalNormal') }}</span>
             </div>
             <div class="alarm-editor__result-table">
               <div class="alarm-editor__result-row is-head">
-                <span>时间</span><span>判定</span><span>状态</span><span>活动等级</span
-                ><span>候选等级</span><span>剩余触发 / 清除</span><span>说明</span>
+                <span>{{ t('alarmEditor.time') }}</span><span>{{ t('alarmEditor.evaluation') }}</span><span>{{ t('alarmEditor.status') }}</span><span>{{ t('alarmEditor.activeLevel') }}</span
+                ><span>{{ t('alarmEditor.candidateLevel') }}</span><span>{{ t('alarmEditor.remainingDelay') }}</span><span>{{ t('alarmEditor.details') }}</span>
               </div>
               <div
                 v-for="(step, index) in trialResult.steps"
@@ -467,7 +465,7 @@
       </section>
 
       <footer class="alarm-editor__footer">
-        <button type="button" class="alarm-editor__cancel" @click="visible = false">取消</button
+        <button type="button" class="alarm-editor__cancel" @click="visible = false">{{ t('alarmEditor.cancel') }}</button
         ><button type="submit" class="alarm-editor__primary" :disabled="saving">
           <IconTablerDeviceFloppy />{{ saveButtonText }}
         </button>
@@ -513,7 +511,6 @@ import {
   validateAlarmItem,
 } from '@/api/alarm.api'
 import {
-  alarmConditionLabels,
   alarmPointCategory,
   buildAlarmItemPayload,
   compatibleAlarmPoints,
@@ -527,6 +524,7 @@ import {
 } from '@/models/alarm-item'
 import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale, t } from '@/i18n/runtime'
 
 const props = withDefaults(
   defineProps<{
@@ -570,9 +568,9 @@ async function requestClose() {
     return
   }
   const discard = await ElMessageBox.confirm(
-    '报警配置有未保存修改，确认放弃这些修改？',
-    '关闭报警编辑',
-    { confirmButtonText: '放弃修改', cancelButtonText: '继续编辑', type: 'warning' },
+    t('alarmEditor.discardConfirm'),
+    t('alarmEditor.closeEditor'),
+    { confirmButtonText: t('alarmEditor.discard'), cancelButtonText: t('alarmEditor.continueEdit'), type: 'warning' },
   )
     .then(() => true)
     .catch(() => false)
@@ -612,21 +610,26 @@ const { definitions: severityDefinitions, loadDefinitions } = useAlarmLevelDefin
   () => props.projectId,
 )
 const severityOptions = computed(() =>
-  severityDefinitions.value.map((item) => ({ value: item.key, label: item.displayName })),
+  severityDefinitions.value.map((item) => ({
+    value: item.key,
+    label: datacenterLocale.value === 'en' && ['info', 'warning', 'major', 'critical'].includes(item.key)
+      ? t(`alarm.severities.${item.key}`)
+      : item.displayName,
+  })),
 )
-const evaluationOptions = [
-  { label: '越限报警', value: 'highest_matching' },
-  { label: '其他报警类型', value: 'single' },
-]
+const evaluationOptions = computed(() => [
+  { label: t('alarmEditor.limitMode'), value: 'highest_matching' },
+  { label: t('alarmEditor.otherMode'), value: 'single' },
+])
 const drawerTitle = computed(() =>
   props.item
-    ? `编辑 · ${props.item.displayName}`
+    ? t('alarmEditor.editTitle', { name: props.item.displayName })
     : props.mode === 'derived'
-      ? '新建组合报警'
-      : '新建报警',
+      ? t('alarmEditor.newComposite')
+      : t('alarmEditor.newAlarm'),
 )
 const saveButtonText = computed(() =>
-  props.saving ? '保存中' : props.item ? '保存修改' : '创建报警',
+  props.saving ? t('alarmEditor.saving') : props.item ? t('alarmEditor.saveChanges') : t('alarmEditor.createAlarm'),
 )
 const enabledChannels = computed(() => props.channels.filter((channel) => channel.isEnabled))
 const isNumericPoint = computed(
@@ -662,13 +665,13 @@ const canManagePoints = computed(
   () => draft.value.mode === 'derived' || (!props.item && !isFixedPointCreate.value),
 )
 const selectedPointPath = computed(() => {
-  if (draft.value.selectedPoints.length !== 1) return `${selectedPointCount.value} 个数据点`
+  if (draft.value.selectedPoints.length !== 1) return t('alarmEditor.pointCount', { count: selectedPointCount.value })
   return draft.value.selectedPoints[0]?.path || ''
 })
 const conditionHint = computed(() =>
   draft.value.evaluationMode === 'highest_matching'
-    ? '当前配置处理一组越限等级；同一数据点还可以另建变化率、离线等报警。'
-    : '当前配置只处理一种触发语义；同一数据点可以继续创建其他类型报警。',
+    ? t('alarmEditor.limitHint')
+    : t('alarmEditor.singleHint'),
 )
 
 watch(
@@ -716,7 +719,7 @@ function changeEvaluationMode(value: string | number | boolean) {
   draft.value.evaluationMode = mode
   draft.value.conditions = [
     mode === 'highest_matching'
-      ? createAlarmCondition('threshold', '高')
+      ? createAlarmCondition('threshold', t('alarmEditor.high'))
       : createAlarmCondition(availableKinds.value[0]),
   ]
 }
@@ -730,11 +733,11 @@ function addLevel(direction: 'high' | 'low') {
     'threshold',
     direction === 'high'
       ? sameDirection
-        ? `高${'高'.repeat(sameDirection)}`
-        : '高'
+        ? `${t('alarmEditor.high')}${t('alarmEditor.high').repeat(sameDirection)}`
+        : t('alarmEditor.high')
       : sameDirection
-        ? `低${'低'.repeat(sameDirection)}`
-        : '低',
+        ? `${t('alarmEditor.low')}${t('alarmEditor.low').repeat(sameDirection)}`
+        : t('alarmEditor.low'),
   )
   condition.operator = direction === 'high' ? 'gt' : 'lt'
   draft.value.conditions.push(condition)
@@ -752,7 +755,7 @@ function setThreshold(condition: AlarmCondition, value: number | undefined) {
 }
 function changeSingleKind(kind: AlarmConditionKind) {
   draft.value.conditions = [
-    createAlarmCondition(kind, draft.value.mode === 'derived' ? '结果条件' : ''),
+    createAlarmCondition(kind, draft.value.mode === 'derived' ? t('alarmEditor.resultCondition') : ''),
   ]
 }
 function setParam(condition: AlarmCondition, key: string, value: unknown) {
@@ -766,7 +769,10 @@ function numberParam(condition: AlarmCondition, key: string) {
   return typeof value === 'number' ? value : undefined
 }
 function formatPointDataType(dataType?: string) {
-  return String(dataType || '未知类型').toLowerCase()
+  return String(dataType || t('alarmEditor.unknownType')).toLowerCase()
+}
+function conditionKindLabel(kind: AlarmConditionKind) {
+  return t(`alarm.conditionLabels.${kind}`)
 }
 function changeNotificationMode(mode: string | number | boolean) {
   if (mode !== 'custom') return
@@ -782,63 +788,63 @@ function changeNotificationMode(mode: string | number | boolean) {
 function operatorOptions(kind: AlarmConditionKind) {
   const options: Record<AlarmConditionKind, Array<{ label: string; value: string }>> = {
     threshold: [
-      { label: '高于', value: 'gt' },
-      { label: '大于等于', value: 'gte' },
-      { label: '低于', value: 'lt' },
-      { label: '小于等于', value: 'lte' },
+      { label: t('alarmEditor.operators.gt'), value: 'gt' },
+      { label: t('alarmEditor.operators.gte'), value: 'gte' },
+      { label: t('alarmEditor.operators.lt'), value: 'lt' },
+      { label: t('alarmEditor.operators.lte'), value: 'lte' },
     ],
     range: [
-      { label: '超出区间', value: 'outside' },
-      { label: '进入区间', value: 'between' },
+      { label: t('alarmEditor.operators.outside'), value: 'outside' },
+      { label: t('alarmEditor.operators.between'), value: 'between' },
     ],
     state: [
-      { label: '等于', value: 'eq' },
-      { label: '不等于', value: 'ne' },
+      { label: t('alarmEditor.operators.eq'), value: 'eq' },
+      { label: t('alarmEditor.operators.ne'), value: 'ne' },
     ],
     transition: [
-      { label: '发生变化', value: 'changed' },
-      { label: '上升沿', value: 'rising' },
-      { label: '下降沿', value: 'falling' },
-      { label: '指定状态变化', value: 'from_to' },
+      { label: t('alarmEditor.operators.changed'), value: 'changed' },
+      { label: t('alarmEditor.operators.rising'), value: 'rising' },
+      { label: t('alarmEditor.operators.falling'), value: 'falling' },
+      { label: t('alarmEditor.operators.from_to'), value: 'from_to' },
     ],
     text_match: [
-      { label: '包含', value: 'contains' },
-      { label: '等于', value: 'eq' },
-      { label: '不等于', value: 'ne' },
-      { label: '正则匹配', value: 'regex' },
+      { label: t('alarmEditor.operators.contains'), value: 'contains' },
+      { label: t('alarmEditor.operators.eq'), value: 'eq' },
+      { label: t('alarmEditor.operators.ne'), value: 'ne' },
+      { label: t('alarmEditor.operators.regex'), value: 'regex' },
     ],
     rate_of_change: [
-      { label: '大于', value: 'gt' },
-      { label: '大于等于', value: 'gte' },
-      { label: '小于', value: 'lt' },
-      { label: '小于等于', value: 'lte' },
+      { label: t('alarmEditor.operators.gt'), value: 'gt' },
+      { label: t('alarmEditor.operators.gte'), value: 'gte' },
+      { label: t('alarmEditor.operators.lt'), value: 'lt' },
+      { label: t('alarmEditor.operators.lte'), value: 'lte' },
     ],
-    deviation: [{ label: '大于', value: 'gt' }],
-    offline: [{ label: '离线', value: 'is_offline' }],
-    quality: [{ label: '属于', value: 'in' }],
-    stale: [{ label: '超过', value: 'age_gte' }],
+    deviation: [{ label: t('alarmEditor.operators.gt'), value: 'gt' }],
+    offline: [{ label: t('alarmEditor.operators.is_offline'), value: 'is_offline' }],
+    quality: [{ label: t('alarmEditor.operators.in'), value: 'in' }],
+    stale: [{ label: t('alarmEditor.operators.age_gte'), value: 'age_gte' }],
   }
   return options[kind]
 }
 
 function localValidate() {
-  if (draft.value.mode === 'derived' && !draft.value.displayName.trim()) return '请填写组合报警名称'
-  if (!selectedPointCount.value) return '请至少选择一个数据点'
+  if (draft.value.mode === 'derived' && !draft.value.displayName.trim()) return t('alarmEditor.validations.compositeName')
+  if (!selectedPointCount.value) return t('alarmEditor.validations.selectPoint')
   if (draft.value.mode === 'point' && !compatibleAlarmPoints(draft.value.selectedPoints))
-    return '所选数据点类型不兼容'
+    return t('alarmEditor.validations.incompatible')
   if (draft.value.mode === 'derived' && draft.value.selectedPoints.length < 2)
-    return '组合报警至少需要两个输入点'
+    return t('alarmEditor.validations.compositeInputs')
   if (draft.value.mode === 'derived' && !draft.value.derivedExpression.trim())
-    return '请填写组合表达式'
+    return t('alarmEditor.validations.expression')
   if (
     draft.value.mode === 'derived' &&
     draft.value.selectedPoints.some(
       (point) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(point.inputKey?.trim() || ''),
     )
   )
-    return '表达式变量名必须以字母或下划线开头，且只能包含字母、数字和下划线'
+    return t('alarmEditor.validations.alias')
   if (draft.value.notification.mode === 'custom' && !draft.value.notification.channelIds.length)
-    return '单独设置通知时请至少选择一个渠道'
+    return t('alarmEditor.validations.channel')
   return ''
 }
 async function submit() {
@@ -865,11 +871,13 @@ async function submit() {
       )
       const conflictPreview = conflictPoints.slice(0, 5).join('、')
       const conflictSuffix =
-        conflictPoints.length > 5 ? ` 等 ${conflictPoints.length} 个数据点` : conflictPreview
+        conflictPoints.length > 5
+          ? `${conflictPreview}… (${t('alarmEditor.pointCount', { count: conflictPoints.length })})`
+          : conflictPreview
       await ElMessageBox.alert(
         `${conflict.message}${conflictPreview ? `：${conflictSuffix}` : ''}`,
-        '无法保存',
-        { confirmButtonText: conflict.conflictAlarmItemId ? '打开已有报警' : '知道了' },
+        t('alarmEditor.cannotSave'),
+        { confirmButtonText: conflict.conflictAlarmItemId ? t('alarmEditor.openExisting') : t('alarmEditor.understood') },
       )
       if (conflict.conflictAlarmItemId) emit('open-conflict', conflict.conflictAlarmItemId)
       return
@@ -881,9 +889,9 @@ async function submit() {
       const total = warningPoints.length || validation.warnings.length
       const preview = warningPoints.slice(0, 5).join('、')
       await ElMessageBox.confirm(
-        `该条件与已有报警重叠，影响 ${total} 个数据点${preview ? `（${preview}${total > 5 ? ' 等' : ''}）` : ''}。确认后两个报警未来可同时活动，是否继续？`,
-        '重叠条件确认',
-        { confirmButtonText: '确认保存', cancelButtonText: '返回修改', type: 'warning' },
+        t('alarmEditor.conflictConfirm', { count: total, preview: preview ? ` (${preview}${total > 5 ? '…' : ''})` : '' }),
+        t('alarmEditor.conflictTitle'),
+        { confirmButtonText: t('alarmEditor.confirmSave'), cancelButtonText: t('alarmEditor.returnEdit'), type: 'warning' },
       )
       payload = {
         ...payload,
@@ -893,7 +901,7 @@ async function submit() {
     emit('save', payload, datapointIds)
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
-    ElMessage.error(getApiErrorMessage(error, '校验报警配置失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmEditor.validations.validateFailed')))
   }
 }
 async function runTrial() {
@@ -930,7 +938,7 @@ async function runTrial() {
     )
     debugOutput.value = ''
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '报警试算失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmEditor.validations.trialFailed')))
   } finally {
     trialLoading.value = false
   }
@@ -982,13 +990,13 @@ async function loadContract() {
     if (props.item?.id === itemId) debugOutput.value = JSON.stringify(result, null, 2)
   } catch (error) {
     if (props.item?.id !== itemId) return
-    ElMessage.error(getApiErrorMessage(error, '加载报警契约失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmEditor.validations.contractFailed')))
   } finally {
     if (props.item?.id === itemId) contractLoading.value = false
   }
 }
 function formatTrialTime(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(datacenterLocale.value, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -997,30 +1005,14 @@ function formatTrialTime(value: string) {
   }).format(new Date(value))
 }
 function trialEvaluationLabel(value: AlarmTrialResult['steps'][number]['evaluationState']) {
-  return { matched: '匹配', not_matched: '未匹配', paused: '暂停' }[value]
+  return t(`alarmEditor.evaluations.${value}`)
 }
 function trialStateLabel(value: AlarmTrialResult['steps'][number]['state']) {
-  return {
-    normal: '正常',
-    pending_trigger: '等待触发',
-    triggered: '报警中',
-    pending_clear: '等待恢复',
-    paused: '判定暂停',
-  }[value]
+  return t(`alarmEditor.states.${value}`)
 }
 function trialReasonLabel(reason: string, rate?: number | null) {
-  const labels: Record<string, string> = {
-    evaluated: '已判定',
-    quality_paused: '质量非良好，冻结状态',
-    offline_paused: '数据点离线，冻结状态',
-    insufficient_previous_sample: '等待前序样本',
-    insufficient_timestamp: '等待源时间',
-    stale: '数据时间已陈旧',
-    missing_timestamp_stale: '源时间持续缺失',
-    offline: '数据点离线',
-  }
-  const base = labels[reason] || reason
-  return typeof rate === 'number' ? `${base}，变化率 ${rate.toFixed(4)}/s` : base
+  const base = t(`alarmEditor.reasons.${reason}`)
+  return typeof rate === 'number' ? t('alarmEditor.rateDetail', { reason: base, rate: rate.toFixed(4) }) : base
 }
 </script>
 

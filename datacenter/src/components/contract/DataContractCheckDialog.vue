@@ -4,8 +4,8 @@
       <div class="contract-dialog__header">
         <div>
           <div class="contract-dialog__eyebrow">Release Contract Gate</div>
-          <h2>{{ dataContractCheckSummary.title }}</h2>
-          <p>{{ dataContractCheckSummary.description }}</p>
+          <h2>{{ contractSummary.title }}</h2>
+          <p>{{ contractSummary.description }}</p>
         </div>
         <div
           class="contract-dialog__result"
@@ -20,15 +20,15 @@
 
     <section class="contract-dialog__overview">
       <div>
-        <span>当前项目</span>
-        <strong>{{ projectId || '未选择项目' }}</strong>
+        <span>{{ ui('当前项目', 'Current Project') }}</span>
+        <strong>{{ projectId || ui('未选择项目', 'No project selected') }}</strong>
       </div>
       <div>
-        <span>检查范围</span>
-        <strong>{{ result?.scope || '项目级' }}</strong>
+        <span>{{ ui('检查范围', 'Scope') }}</span>
+        <strong>{{ result?.scope || ui('项目级', 'Project') }}</strong>
       </div>
       <div>
-        <span>数据来源</span>
+        <span>{{ ui('数据来源', 'Data Source') }}</span>
         <strong>data_service dry-run</strong>
       </div>
     </section>
@@ -44,14 +44,14 @@
 
     <div v-loading="loading" class="contract-dialog__content">
       <main class="contract-dialog__main">
-        <section v-if="result" class="contract-dialog__summary" aria-label="契约检查摘要">
+        <section v-if="result" class="contract-dialog__summary" :aria-label="ui('契约检查摘要', 'Contract check summary')">
           <div v-for="item in summaryItems" :key="item.status" :class="`is-${item.status}`">
             <strong>{{ item.count }}</strong>
             <span>{{ item.label }}</span>
           </div>
         </section>
 
-        <section v-if="result?.list.length" class="contract-dialog__items" aria-label="契约检查项">
+        <section v-if="result?.list.length" class="contract-dialog__items" :aria-label="ui('契约检查项', 'Contract check items')">
           <article
             v-for="(item, index) in result.list"
             :key="`${item.module}-${item.objectType}-${item.objectId || index}`"
@@ -59,18 +59,18 @@
             :class="`contract-check-card--${item.status}`"
           >
             <div class="contract-check-card__status">
-              {{ dataContractCheckStatusText[item.status] }}
+              {{ statusText[item.status] }}
             </div>
             <div class="contract-check-card__main">
               <div class="contract-check-card__title-row">
                 <h3>{{ item.title }}</h3>
                 <el-tag effect="plain" size="small">
-                  {{ dataContractCheckModuleText[item.module] || item.module }}
+                  {{ moduleText[item.module] || item.module }}
                 </el-tag>
               </div>
               <p v-if="item.detail">{{ item.detail }}</p>
               <div v-if="item.action" class="contract-check-card__action">
-                建议：{{ item.action }}
+                {{ ui('建议：', 'Recommendation: ') }}{{ item.action }}
               </div>
             </div>
             <div class="contract-check-card__owner">
@@ -81,48 +81,48 @@
         </section>
 
         <section v-else-if="result && !loading" class="contract-dialog__empty">
-          <strong>未发现契约问题</strong>
-          <span>本次 data_service 检查范围内没有失败、警告或待完成项。</span>
+          <strong>{{ ui('未发现契约问题', 'No Contract Issues Found') }}</strong>
+          <span>{{ ui('本次 data_service 检查范围内没有失败、警告或待完成项。', 'No failures, warnings, or pending items were found within this data_service check scope.') }}</span>
         </section>
 
         <section v-else-if="!loading" class="contract-dialog__empty">
-          <strong>尚未获取检查结果</strong>
-          <span>点击“运行检查”后获取真实项目契约状态。</span>
+          <strong>{{ ui('尚未获取检查结果', 'No Check Result Yet') }}</strong>
+          <span>{{ ui('点击“运行检查”后获取真实项目契约状态。', 'Run the check to retrieve the actual project contract status.') }}</span>
         </section>
       </main>
 
-      <aside class="contract-dialog__history" aria-label="最近检查记录">
+      <aside class="contract-dialog__history" :aria-label="ui('最近检查记录', 'Recent check history')">
         <div class="contract-dialog__history-title">
-          <strong>最近检查</strong>
-          <span v-if="historyPagination.total">{{ historyPagination.total }} 条</span>
+          <strong>{{ ui('最近检查', 'Recent Checks') }}</strong>
+          <span v-if="historyPagination.total">{{ ui(`${historyPagination.total} 条`, `${historyPagination.total} total`) }}</span>
         </div>
         <div v-loading="historyLoading" class="contract-dialog__history-list">
           <div v-for="run in history" :key="run.id" class="contract-dialog__history-item">
-            <span :class="`is-${run.status}`">{{ dataContractCheckStatusText[run.status] }}</span>
+            <span :class="`is-${run.status}`">{{ statusText[run.status] }}</span>
             <time>{{ formatTime(run.createdAt) }}</time>
           </div>
-          <p v-if="!historyLoading && !history.length">暂无历史记录</p>
+          <p v-if="!historyLoading && !history.length">{{ ui('暂无历史记录', 'No history') }}</p>
         </div>
       </aside>
     </div>
 
     <section class="contract-dialog__note">
-      <strong>边界说明</strong>
-      <span>{{ dataContractCheckSummary.extensionNote }}</span>
+      <strong>{{ ui('边界说明', 'Scope Notes') }}</strong>
+      <span>{{ contractSummary.extensionNote }}</span>
     </section>
 
     <template #footer>
       <div class="contract-dialog__footer">
-        <span>检查结果是发布准入依据，不会修改项目配置。</span>
+        <span>{{ ui('检查结果是发布准入依据，不会修改项目配置。', 'Check results are release-gate evidence and do not modify project configuration.') }}</span>
         <div>
-          <el-button @click="visible = false">关闭</el-button>
+          <el-button @click="visible = false">{{ ui('关闭', 'Close') }}</el-button>
           <el-button
             type="primary"
             :loading="running"
             :disabled="!normalizedProjectId || loading"
             @click="handleRun"
           >
-            {{ result ? '重新检查' : '运行检查' }}
+            {{ result ? ui('重新检查', 'Run Again') : ui('运行检查', 'Run Check') }}
           </el-button>
         </div>
       </div>
@@ -145,10 +145,16 @@ import type {
 import { getApiErrorMessage } from '@/utils/request'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import {
-  dataContractCheckModuleText,
-  dataContractCheckStatusText,
-  dataContractCheckSummary,
+  getDataContractCheckModuleText,
+  getDataContractCheckStatusText,
+  getDataContractCheckSummary,
 } from '@/components/contract/dataContractCheck'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+const contractSummary = computed(() => getDataContractCheckSummary(datacenterLocale.value))
+const statusText = computed(() => getDataContractCheckStatusText(datacenterLocale.value))
+const moduleText = computed(() => getDataContractCheckModuleText(datacenterLocale.value))
 
 const props = defineProps<{
   modelValue: boolean
@@ -174,19 +180,19 @@ const errorMessage = ref('')
 let loadSequence = 0
 
 const overallStatusText = computed(() => {
-  if (running.value) return '检查中'
-  if (!result.value) return '未检查'
-  return dataContractCheckStatusText[result.value.status]
+  if (running.value) return ui('检查中', 'Checking')
+  if (!result.value) return ui('未检查', 'Not Checked')
+  return statusText.value[result.value.status]
 })
 const checkedAtText = computed(() =>
-  result.value?.checkedAt ? formatTime(result.value.checkedAt) : '无检查时间',
+  result.value?.checkedAt ? formatTime(result.value.checkedAt) : ui('无检查时间', 'No check time'),
 )
 const summaryItems = computed(() => {
   const summary = result.value?.summary
   const statuses: ContractCheckStatus[] = ['failed', 'warning', 'pending', 'passed']
   return statuses.map((status) => ({
     status,
-    label: dataContractCheckStatusText[status],
+    label: statusText.value[status],
     count: Number(summary?.[status] || 0),
   }))
 })
@@ -194,7 +200,7 @@ const summaryItems = computed(() => {
 function formatTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(datacenterLocale.value === 'en' ? 'en-US' : 'zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -214,7 +220,7 @@ async function loadHistory(projectId: string, sequence: number) {
     historyPagination.value = page.pagination
   } catch (error) {
     if (sequence === loadSequence && !errorMessage.value) {
-      errorMessage.value = getApiErrorMessage(error, '加载契约检查历史失败')
+      errorMessage.value = getApiErrorMessage(error, ui('加载契约检查历史失败', 'Failed to load contract check history'))
     }
   } finally {
     if (sequence === loadSequence) historyLoading.value = false
@@ -228,7 +234,7 @@ async function loadLatest() {
   history.value = []
   errorMessage.value = ''
   if (!projectId) {
-    errorMessage.value = '缺少工程上下文，无法执行契约检查'
+    errorMessage.value = ui('缺少工程上下文，无法执行契约检查', 'Project context is missing. The contract check cannot run.')
     return
   }
   loading.value = true
@@ -239,7 +245,7 @@ async function loadLatest() {
     loadHistory(projectId, sequence),
   ])
   if (sequence === loadSequence && !result.value && !errorMessage.value) {
-    errorMessage.value = '加载最近契约检查结果失败'
+    errorMessage.value = ui('加载最近契约检查结果失败', 'Failed to load the latest contract check result')
   }
   if (sequence === loadSequence) loading.value = false
 }
@@ -257,7 +263,7 @@ async function handleRun() {
     await loadHistory(projectId, sequence)
   } catch (error) {
     if (sequence === loadSequence) {
-      errorMessage.value = getApiErrorMessage(error, '运行数据契约检查失败')
+      errorMessage.value = getApiErrorMessage(error, ui('运行数据契约检查失败', 'Failed to run data contract check'))
     }
   } finally {
     if (sequence === loadSequence) running.value = false
@@ -429,17 +435,17 @@ watch(
   font-weight: 700;
 }
 .contract-check-card--failed .contract-check-card__status {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 .contract-check-card--warning .contract-check-card__status,
 .contract-check-card--pending .contract-check-card__status {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 .contract-check-card--passed .contract-check-card__status {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 .contract-check-card__title-row {
   align-items: center;

@@ -2,8 +2,8 @@
   <section class="http-workbench">
     <aside class="http-workbench__sidebar">
       <WorkbenchSourceHeader
-        :title="connection.name || '未命名 HTTP 接入源'"
-        fallback-title="未命名 HTTP 接入源"
+        :title="connection.name || ui('未命名 HTTP 接入源', 'Unnamed HTTP Source')"
+        :fallback-title="ui('未命名 HTTP 接入源', 'Unnamed HTTP Source')"
         :meta="sourceMetaRows"
         @back="$emit('back')"
       >
@@ -13,14 +13,14 @@
             class="http-workbench__search"
             size="small"
             clearable
-            placeholder="搜索接口"
+            :placeholder="ui('搜索接口', 'Search endpoints')"
             @keyup.enter="loadRequests(1)"
           />
           <button
             type="button"
             class="workbench-source-header__icon-action is-primary"
-            title="新建接口"
-            aria-label="新建接口"
+            :title="ui('新建接口', 'New Endpoint')"
+            :aria-label="ui('新建接口', 'New Endpoint')"
             @click="createDraftRequest"
           >
             <IconTablerPlus />
@@ -28,8 +28,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action"
-            title="新建分组"
-            aria-label="新建分组"
+            :title="ui('新建分组', 'New Group')"
+            :aria-label="ui('新建分组', 'New Group')"
             @click="openGroupDialog()"
           >
             <IconTablerFolderPlus />
@@ -37,8 +37,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action"
-            title="刷新"
-            aria-label="刷新"
+            :title="ui('刷新', 'Refresh')"
+            :aria-label="ui('刷新', 'Refresh')"
             @click="reloadWorkbench"
           >
             <IconTablerRefresh />
@@ -49,7 +49,7 @@
       <div class="http-workbench__tree">
         <div v-if="loading" class="http-workbench__loading">
           <IconTablerLoader2 />
-          <span>加载接口...</span>
+          <span>{{ ui('加载接口...', 'Loading endpoints...') }}</span>
         </div>
         <template v-else>
           <HttpTreeNode
@@ -78,7 +78,7 @@
             <span class="http-workbench__request-name">{{ request.name }}</span>
           </button>
           <div v-if="requests.length === 0" class="http-workbench__empty">
-            {{ search ? '没有匹配的接口' : '暂无接口' }}
+            {{ search ? ui('没有匹配的接口', 'No matching endpoints') : ui('暂无接口', 'No endpoints') }}
           </div>
           <button
             v-if="requests.length < pagination.total"
@@ -87,7 +87,7 @@
             :disabled="loadingMore"
             @click="loadMoreRequests"
           >
-            {{ loadingMore ? '加载中...' : `加载更多（${requests.length}/${pagination.total}）` }}
+            {{ loadingMore ? ui('加载中...', 'Loading...') : ui(`加载更多（${requests.length}/${pagination.total}）`, `Load more (${requests.length}/${pagination.total})`) }}
           </button>
         </template>
       </div>
@@ -107,12 +107,12 @@
             {{ tab.draft.method }}
           </span>
           <el-tooltip
-            :content="tab.draft.name || '未命名接口'"
+            :content="tab.draft.name || ui('未命名接口', 'Unnamed Endpoint')"
             placement="top"
             :show-after="400"
             :disabled="(tab.draft.name || '').length <= 12"
           >
-            <span class="http-workbench__tab-name">{{ tab.draft.name || '未命名接口' }}</span>
+            <span class="http-workbench__tab-name">{{ tab.draft.name || ui('未命名接口', 'Unnamed Endpoint') }}</span>
           </el-tooltip>
           <i v-if="tab.dirty" />
           <IconTablerX @click.stop="closeTab(tab.id)" />
@@ -122,7 +122,7 @@
       <div v-if="activeTab" class="http-workbench__editor">
         <div class="http-workbench__crumb-row">
           <div class="http-workbench__crumb">
-            <span>HTTP 接入源</span>
+            <span>{{ ui('HTTP 接入源', 'HTTP Source') }}</span>
             <IconTablerChevronRight />
             <span>{{ groupName(activeTab.draft.groupId) }}</span>
             <IconTablerChevronRight />
@@ -130,22 +130,22 @@
               v-model="activeTab.draft.name"
               class="http-workbench__name-input"
               size="small"
-              placeholder="未命名接口"
+              :placeholder="ui('未命名接口', 'Unnamed Endpoint')"
               maxlength="64"
               @input="markDirty"
             />
           </div>
           <div class="http-workbench__actions">
             <span v-if="activeTab.draft.outputs.length" class="http-workbench__datapoint-path">
-              {{ activeTab.draft.outputs.length }} 个输出数据点
+              {{ outputCountLabel(activeTab.draft.outputs.length) }}
             </span>
-            <el-tooltip content="保存当前接口" placement="top" :show-after="400">
+            <el-tooltip :content="ui('保存当前接口', 'Save endpoint')" placement="top" :show-after="400">
               <el-button
                 size="small"
                 type="primary"
                 :loading="saving"
                 class="http-workbench__icon-btn"
-                aria-label="保存"
+                :aria-label="ui('保存', 'Save')"
                 @click="saveActive"
               >
                 <IconTablerDeviceFloppy />
@@ -175,13 +175,13 @@
             placeholder="https://api.example.com/device/status"
             @input="markDirty"
           />
-          <el-tooltip content="发送请求" placement="top" :show-after="400">
+          <el-tooltip :content="ui('发送请求', 'Send request')" placement="top" :show-after="400">
             <el-button
               size="small"
               type="primary"
               :loading="sending"
               class="http-workbench__icon-btn"
-              aria-label="发送"
+              :aria-label="ui('发送', 'Send')"
               @click="sendActive"
             >
               <IconTablerSend />
@@ -190,18 +190,18 @@
         </div>
 
         <el-tabs v-model="activeConfigTab" class="http-workbench__config-tabs">
-          <el-tab-pane label="参数" name="params">
+          <el-tab-pane :label="ui('参数', 'Parameters')" name="params">
             <HttpKeyValueEditor v-model="activeTab.draft.params" @change="markDirty" />
           </el-tab-pane>
-          <el-tab-pane label="认证" name="auth">
+          <el-tab-pane :label="ui('认证', 'Authorization')" name="auth">
             <el-form class="http-workbench__form" label-position="top" size="small" @submit.prevent>
-              <el-form-item label="认证方式">
+              <el-form-item :label="ui('认证方式', 'Authorization Type')">
                 <el-select
                   v-model="activeTab.draft.auth.type"
                   class="http-workbench__form-control"
                   @change="markDirty"
                 >
-                  <el-option label="无认证" value="none" />
+                  <el-option :label="ui('无认证', 'No Authorization')" value="none" />
                   <el-option label="Bearer Token" value="bearer" />
                   <el-option label="Basic Auth" value="basic" />
                 </el-select>
@@ -210,24 +210,24 @@
                 <el-input
                   v-model="activeTab.draft.auth.token"
                   class="http-workbench__form-control"
-                  placeholder="请输入 Token"
+                  :placeholder="ui('请输入 Token', 'Enter a token')"
                   @input="markDirty"
                 />
               </el-form-item>
               <template v-if="activeTab.draft.auth.type === 'basic'">
-                <el-form-item label="用户名">
+                <el-form-item :label="ui('用户名', 'Username')">
                   <el-input
                     v-model="activeTab.draft.auth.username"
                     class="http-workbench__form-control"
-                    placeholder="请输入用户名"
+                    :placeholder="ui('请输入用户名', 'Enter a username')"
                     @input="markDirty"
                   />
                 </el-form-item>
-                <el-form-item label="密码">
+                <el-form-item :label="ui('密码', 'Password')">
                   <el-input
                     v-model="activeTab.draft.auth.password"
                     class="http-workbench__form-control"
-                    placeholder="请输入密码"
+                    :placeholder="ui('请输入密码', 'Enter a password')"
                     show-password
                     @input="markDirty"
                   />
@@ -235,18 +235,18 @@
               </template>
             </el-form>
           </el-tab-pane>
-          <el-tab-pane label="请求头" name="headers">
+          <el-tab-pane :label="ui('请求头', 'Headers')" name="headers">
             <HttpKeyValueEditor v-model="activeTab.draft.headers" @change="markDirty" />
           </el-tab-pane>
-          <el-tab-pane label="请求体" name="body">
+          <el-tab-pane :label="ui('请求体', 'Body')" name="body">
             <div class="http-workbench__body-mode">
               <el-radio-group v-model="activeTab.draft.bodyType" size="small" @change="markDirty">
-                <el-radio-button label="none">无</el-radio-button>
+                <el-radio-button label="none">{{ ui('无', 'None') }}</el-radio-button>
                 <el-radio-button label="json"> <IconTablerBraces />json </el-radio-button>
-                <el-radio-button label="raw"> <IconTablerCode />原始 </el-radio-button>
-                <el-radio-button label="form-data"> <IconTablerForms />表单 </el-radio-button>
+                <el-radio-button label="raw"> <IconTablerCode />{{ ui('原始', 'Raw') }} </el-radio-button>
+                <el-radio-button label="form-data"> <IconTablerForms />{{ ui('表单', 'Form Data') }} </el-radio-button>
                 <el-radio-button label="x-www-form-urlencoded">
-                  <IconTablerBraces />表单编码
+                  <IconTablerBraces />{{ ui('表单编码', 'URL Encoded') }}
                 </el-radio-button>
               </el-radio-group>
             </div>
@@ -255,7 +255,7 @@
                 v-model="jsonBodyText"
                 language="json"
                 :height="'240px'"
-                :theme="'vs-dark'"
+                :theme="isDark ? 'vs-dark' : 'vs'"
                 :options="bodyEditorOptions"
                 @change="handleJsonBodyInput"
               />
@@ -265,7 +265,7 @@
                 v-model="activeTab.draft.body.raw"
                 language="plaintext"
                 :height="'240px'"
-                :theme="'vs-dark'"
+                :theme="isDark ? 'vs-dark' : 'vs'"
                 :options="bodyEditorOptions"
                 @change="markDirty"
               />
@@ -275,20 +275,20 @@
               v-model="formBodyRows"
               @change="handleFormBodyChange"
             />
-            <el-empty v-else description="该请求不发送 Body" />
+            <el-empty v-else :description="ui('该请求不发送 Body', 'This request does not send a body')" />
           </el-tab-pane>
-          <el-tab-pane label="输出映射" name="outputs">
+          <el-tab-pane :label="ui('输出映射', 'Output Mapping')" name="outputs">
             <SourceOutputEditor
               v-model="activeTab.draft.outputs"
-              title="响应输出"
+              :title="ui('响应输出', 'Response Output')"
               :sample="activeTab.response?.body"
               whole-data-type="object"
               @change="markDirty"
             />
           </el-tab-pane>
-          <el-tab-pane label="设置" name="settings">
+          <el-tab-pane :label="ui('设置', 'Settings')" name="settings">
             <el-form class="http-workbench__form" label-position="top" size="small" @submit.prevent>
-              <el-form-item label="超时（毫秒）">
+              <el-form-item :label="ui('超时（毫秒）', 'Timeout (ms)')">
                 <el-input-number
                   v-model="activeTab.draft.settings.timeoutMs"
                   :min="1000"
@@ -298,16 +298,16 @@
                   @change="markDirty"
                 />
               </el-form-item>
-              <el-form-item label="行为">
+              <el-form-item :label="ui('行为', 'Behavior')">
                 <div class="http-workbench__settings-checks">
                   <el-checkbox
                     v-model="activeTab.draft.settings.followRedirects"
                     @change="markDirty"
                   >
-                    跟随重定向
+                    {{ ui('跟随重定向', 'Follow Redirects') }}
                   </el-checkbox>
                   <el-checkbox v-model="activeTab.draft.settings.tlsVerify" @change="markDirty">
-                    TLS 校验
+                    {{ ui('TLS 校验', 'Verify TLS') }}
                   </el-checkbox>
                 </div>
               </el-form-item>
@@ -320,12 +320,12 @@
             class="http-workbench__response-resizer"
             role="separator"
             aria-orientation="horizontal"
-            title="拖拽调整响应区高度，双击恢复默认"
+            :title="ui('拖拽调整响应区高度，双击恢复默认', 'Drag to resize the response panel; double-click to reset')"
             @mousedown.prevent="startResponseResize"
             @dblclick="resetResponseHeight"
           />
           <div class="http-workbench__response-head">
-            <strong>响应</strong>
+            <strong>{{ ui('响应', 'Response') }}</strong>
             <div v-if="activeTab.response" class="http-workbench__response-meta">
               <WorkbenchStatusPill :label="responseStatusLabel" :tone="responseStatusTone" />
               <span>{{ activeTab.response.durationMs }} ms</span>
@@ -334,10 +334,10 @@
             </div>
           </div>
           <el-tabs v-if="activeTab.response" v-model="activeResponseTab">
-            <el-tab-pane label="响应体" name="body">
+            <el-tab-pane :label="ui('响应体', 'Body')" name="body">
               <pre>{{ formattedResponseBody }}</pre>
             </el-tab-pane>
-            <el-tab-pane label="响应头" name="headers">
+            <el-tab-pane :label="ui('响应头', 'Headers')" name="headers">
               <el-table :data="responseHeaders" size="small" class="http-workbench__response-table">
                 <el-table-column prop="key" label="Header" min-width="160" />
                 <el-table-column prop="value" label="Value" min-width="240" />
@@ -346,15 +346,15 @@
           </el-tabs>
           <div v-else class="http-workbench__response-empty">
             <IconTablerSend />
-            <span>点击 Send 按钮发起请求</span>
+            <span>{{ ui('点击发送按钮发起请求', 'Click Send to make a request') }}</span>
           </div>
         </section>
       </div>
 
       <div v-else class="http-workbench__placeholder">
         <IconTablerApiApp />
-        <strong>选择或新建接口</strong>
-        <span>每个接口可以把完整响应或样本字段映射为一个或多个强类型数据点。</span>
+        <strong>{{ ui('选择或新建接口', 'Select or Create an Endpoint') }}</strong>
+        <span>{{ ui('每个接口可以把完整响应或样本字段映射为一个或多个强类型数据点。', 'Map a complete response or sample fields to one or more strongly typed data points.') }}</span>
       </div>
     </main>
 
@@ -362,7 +362,7 @@
       ref="groupDialogRef"
       v-model="groupDialogVisible"
       :mode="groupForm.id ? 'edit' : 'create'"
-      :title="groupForm.id ? '编辑请求分组' : '新建请求分组'"
+      :title="groupForm.id ? ui('编辑请求分组', 'Edit Request Group') : ui('新建请求分组', 'New Request Group')"
       :group="editingGroup"
       :group-options="groupOptions"
       :initial-parent-id="groupForm.parentId"
@@ -372,19 +372,19 @@
 
     <DcDialog
       v-model="moveDialogVisible"
-      :title="moveTargetType === 'group' ? '移动分组' : '移动接口'"
+      :title="moveTargetType === 'group' ? ui('移动分组', 'Move Group') : ui('移动接口', 'Move Endpoint')"
       width="420px"
       :close-disabled="moveSaving"
     >
       <el-form label-position="top" class="http-workbench__move-form" @submit.prevent>
-        <el-form-item label="目标分组">
+        <el-form-item :label="ui('目标分组', 'Destination Group')">
           <el-select
             v-model="moveTargetGroupId"
             class="http-workbench__move-select"
             clearable
-            placeholder="根目录"
+            :placeholder="ui('根目录', 'Root')"
           >
-            <el-option label="根目录" :value="null" />
+            <el-option :label="ui('根目录', 'Root')" :value="null" />
             <el-option
               v-for="group in allGroupOptions"
               :key="group.id"
@@ -396,14 +396,14 @@
       </el-form>
       <template #footer>
         <div class="http-workbench__move-footer">
-          <el-button @click="moveDialogVisible = false">取消</el-button>
+          <el-button @click="moveDialogVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
           <el-button
             type="primary"
             :loading="moveSaving"
             :disabled="!canMoveTarget"
             @click="moveTarget"
           >
-            移动
+            {{ ui('移动', 'Move') }}
           </el-button>
         </div>
       </template>
@@ -427,7 +427,7 @@
             @click="emitContextAction('open')"
           >
             <IconTablerApi class="http-workbench__menu-icon" />
-            <span>打开接口</span>
+            <span>{{ ui('打开接口', 'Open Endpoint') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'request'"
@@ -435,7 +435,7 @@
             @click="emitContextAction('duplicate')"
           >
             <IconTablerCopy class="http-workbench__menu-icon" />
-            <span>复制接口</span>
+            <span>{{ ui('复制接口', 'Duplicate Endpoint') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'request'"
@@ -443,7 +443,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="http-workbench__menu-icon" />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -451,7 +451,7 @@
             @click="emitContextAction('create-child')"
           >
             <IconTablerFolderPlus class="http-workbench__menu-icon" />
-            <span>新建子分组</span>
+            <span>{{ ui('新建子分组', 'New Child Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -459,7 +459,7 @@
             @click="emitContextAction('edit')"
           >
             <IconTablerPencil class="http-workbench__menu-icon" />
-            <span>编辑分组</span>
+            <span>{{ ui('编辑分组', 'Edit Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -467,7 +467,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="http-workbench__menu-icon" />
-            <span>移动分组</span>
+            <span>{{ ui('移动分组', 'Move Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group'"
@@ -476,7 +476,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="http-workbench__menu-icon" />
-            <span>删除分组</span>
+            <span>{{ ui('删除分组', 'Delete Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'request'"
@@ -485,7 +485,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="http-workbench__menu-icon" />
-            <span>删除</span>
+            <span>{{ ui('删除', 'Delete') }}</span>
           </button>
         </div>
       </div>
@@ -543,6 +543,13 @@ import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { getApiErrorMessage } from '@/utils/request'
 import { useWorkbenchBottomPanelResize } from '@/composables/useWorkbenchBottomPanelResize'
+import { datacenterLocale } from '@/i18n/runtime'
+import { datacenterTheme } from '@/theme/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+const isDark = computed(() => datacenterTheme.value === 'dark')
+const outputCountLabel = (count: number) =>
+  ui(`${count} 个输出数据点`, `${count} output data point${count === 1 ? '' : 's'}`)
 
 type AccessSourceConnection = {
   id: string
@@ -663,8 +670,8 @@ let requestListSequence = 0
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 const sourceMetaRows = computed(() => [
-  { label: '类型', value: 'HTTP' },
-  { label: '接口', value: `${pagination.total || 0} 个` },
+  { label: ui('类型', 'Type'), value: 'HTTP' },
+  { label: ui('接口', 'Endpoints'), value: ui(`${pagination.total || 0} 个`, String(pagination.total || 0)) },
 ])
 
 const requestTree = computed(() => buildHttpRequestTree(groups.value, requests.value))
@@ -770,7 +777,7 @@ const reloadWorkbench = async () => {
     groups.value = groupRes.list || []
     await loadRequests(1)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载 HTTP 工作台失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载 HTTP 工作台失败', 'Failed to load HTTP workbench')))
   } finally {
     loading.value = false
   }
@@ -849,7 +856,7 @@ const activateTab = async (id: string) => {
 const isPristineNewDraft = (draft: RequestDraft): boolean => {
   if (draft.id) return false
   // 名字被用户改过就不再算"全新空白"，关闭时仍需提示
-  if (draft.name && !/^接口\s+\d+$/.test(draft.name)) return false
+  if (draft.name && !/^(?:接口\s+|Endpoint_)\d+$/.test(draft.name)) return false
   if (draft.url && draft.url !== 'https://') return false
   if (draft.params.length > 0) return false
   if (draft.headers.length > 0) return false
@@ -870,9 +877,9 @@ const closeTab = async (id: string) => {
   // 已保存过的接口有 dirty 改动：必须确认放弃；新建且未输入任何内容的空白草稿直接关闭
   if (tab.dirty && !isPristineNewDraft(tab.draft)) {
     try {
-      await ElMessageBox.confirm('当前接口有未保存改动，关闭后会丢失。', '关闭接口', {
-        confirmButtonText: '放弃',
-        cancelButtonText: '取消',
+      await ElMessageBox.confirm(ui('当前接口有未保存改动，关闭后会丢失。', 'This endpoint has unsaved changes that will be lost.'), ui('关闭接口', 'Close Endpoint'), {
+        confirmButtonText: ui('放弃', 'Discard'),
+        cancelButtonText: ui('取消', 'Cancel'),
         type: 'warning',
       })
     } catch {
@@ -903,10 +910,10 @@ const saveActive = async () => {
       tabs.value = [...tabs.value]
     }
     await loadRequests()
-    ElMessage.success('接口已保存')
+    ElMessage.success(ui('接口已保存', 'Endpoint saved'))
     return saved
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存接口失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存接口失败', 'Failed to save endpoint')))
     return null
   } finally {
     saving.value = false
@@ -936,7 +943,7 @@ const sendActive = async () => {
     activeResponseTab.value = 'body'
     await loadRequests()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '发送 HTTP 请求失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('发送 HTTP 请求失败', 'Failed to send HTTP request')))
   } finally {
     sending.value = false
   }
@@ -985,7 +992,7 @@ const openChildGroupDialog = (group: HttpRequestGroup) => {
 
 const saveGroup = async (payload: { name: string; parentId: string | null }) => {
   if (!payload.name.trim()) {
-    ElMessage.warning('分组名称不能为空')
+    ElMessage.warning(ui('分组名称不能为空', 'Group name is required'))
     return
   }
   groupSaving.value = true
@@ -1012,7 +1019,7 @@ const saveGroup = async (payload: { name: string; parentId: string | null }) => 
       expandedGroups.value = next
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存分组失败', 'Failed to save group')))
   } finally {
     groupSaving.value = false
   }
@@ -1096,9 +1103,9 @@ const emitContextAction = (
 
 const deleteRequest = async (requestId: string) => {
   try {
-    await ElMessageBox.confirm('删除接口后，对应数据点会标记为失效。', '删除接口', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(ui('删除接口后，对应数据点会标记为失效。', 'Deleting the endpoint marks its data points as invalid.'), ui('删除接口', 'Delete Endpoint'), {
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     })
     await dataAPI.deleteHttpRequest(props.projectId, requestId)
@@ -1109,7 +1116,7 @@ const deleteRequest = async (requestId: string) => {
     await loadRequests()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, '删除接口失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除接口失败', 'Failed to delete endpoint')))
     }
   }
 }
@@ -1147,7 +1154,7 @@ const moveRequest = async () => {
     openTab.draft.groupId = moveTargetGroupId.value || null
     activeTabId.value = openTab.id
     moveDialogVisible.value = false
-    ElMessage.info('已在未保存的接口中调整分组，保存接口后生效')
+    ElMessage.info(ui('已在未保存的接口中调整分组，保存接口后生效', 'Group changed in the draft; save the endpoint to apply'))
     return
   }
 
@@ -1164,9 +1171,9 @@ const moveRequest = async () => {
     moveDialogVisible.value = false
     movingRequest.value = null
     await loadRequests()
-    ElMessage.success('接口已移动')
+    ElMessage.success(ui('接口已移动', 'Endpoint moved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动接口失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动接口失败', 'Failed to move endpoint')))
   } finally {
     moveSaving.value = false
   }
@@ -1186,9 +1193,9 @@ const moveGroup = async () => {
     movingGroup.value = null
     const res = await dataAPI.getHttpRequestGroups(props.projectId, props.connection.id)
     groups.value = res.list || []
-    ElMessage.success('分组已移动')
+    ElMessage.success(ui('分组已移动', 'Group moved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动分组失败', 'Failed to move group')))
   } finally {
     moveSaving.value = false
   }
@@ -1197,11 +1204,11 @@ const moveGroup = async () => {
 const deleteGroup = async (group: HttpRequestGroupNode) => {
   try {
     await ElMessageBox.confirm(
-      `确认删除分组「${group.name}」？组内接口会回到根目录。`,
-      '删除分组',
+      ui(`确认删除分组「${group.name}」？组内接口会回到根目录。`, `Delete group “${group.name}”? Its endpoints will return to Root.`),
+      ui('删除分组', 'Delete Group'),
       {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
+        confirmButtonText: ui('删除', 'Delete'),
+        cancelButtonText: ui('取消', 'Cancel'),
         type: 'warning',
       },
     )
@@ -1209,17 +1216,17 @@ const deleteGroup = async (group: HttpRequestGroupNode) => {
     const groupRes = await dataAPI.getHttpRequestGroups(props.projectId, props.connection.id)
     groups.value = groupRes.list || []
     await loadRequests(1)
-    ElMessage.success('分组已删除')
+    ElMessage.success(ui('分组已删除', 'Group deleted'))
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除分组失败', 'Failed to delete group')))
     }
   }
 }
 
 const groupName = (groupId?: string | null) => {
-  if (!groupId) return '根目录'
-  return groups.value.find((group) => String(group.id) === String(groupId))?.name || '根目录'
+  if (!groupId) return ui('根目录', 'Root')
+  return groups.value.find((group) => String(group.id) === String(groupId))?.name || ui('根目录', 'Root')
 }
 
 // 把 HTTP 响应码映射为家族化 Pill 的 tone：
@@ -1246,9 +1253,9 @@ const formatTime = (value?: string | null) => {
 
 // 通用请求头默认值：仅在新建时预填，提示用户常见协商项，但不实际发送直到用户确认 value
 const DEFAULT_REQUEST_HEADERS: HttpKeyValueRow[] = [
-  { enabled: true, key: 'Accept', value: 'application/json', description: '期望的响应内容类型' },
-  { enabled: true, key: 'User-Agent', value: '', description: '客户端标识，可留空使用默认值' },
-  { enabled: true, key: 'Cache-Control', value: 'no-cache', description: '缓存策略' },
+  { enabled: true, key: 'Accept', value: 'application/json', description: ui('期望的响应内容类型', 'Expected response content type') },
+  { enabled: true, key: 'User-Agent', value: '', description: ui('客户端标识，可留空使用默认值', 'Client identifier; leave empty to use the default') },
+  { enabled: true, key: 'Cache-Control', value: 'no-cache', description: ui('缓存策略', 'Cache policy') },
 ]
 
 const replaceURLScheme = (rawUrl: string, scheme: string) => {
@@ -1259,7 +1266,7 @@ const replaceURLScheme = (rawUrl: string, scheme: string) => {
   return `${scheme}://${url}`
 }
 
-const createEmptyDraft = (name = 'New Request'): RequestDraft => ({
+const createEmptyDraft = (name = ui('新建接口', 'New Endpoint')): RequestDraft => ({
   name,
   method: 'GET',
   url: 'https://',
@@ -1272,7 +1279,7 @@ const createEmptyDraft = (name = 'New Request'): RequestDraft => ({
   enabled: true,
   sortOrder: 0,
   dataPointPath: '',
-  outputs: [createWholeSourceOutput('body', '完整响应', 'object')],
+  outputs: [createWholeSourceOutput('body', ui('完整响应', 'Complete Response'), 'object')],
 })
 
 // 生成新建接口的默认名称 "接口 N"：N 取所有 "接口 N" 形式名称中最大的编号 + 1，
@@ -1287,15 +1294,16 @@ const generateUniqueDraftName = (): string => {
   }
   let maxIndex = 0
   for (const name of taken) {
-    const match = /^接口\s+(\d+)$/.exec(name)
+    const match = /^(?:接口\s+|Endpoint_)(\d+)$/.exec(name)
     if (match) {
       const n = Number(match[1])
       if (Number.isFinite(n) && n > maxIndex) maxIndex = n
     }
   }
   let next = maxIndex + 1
-  while (taken.has(`接口 ${next}`)) next += 1
-  return `接口 ${next}`
+  const prefix = datacenterLocale.value === 'en' ? 'Endpoint_' : '接口 '
+  while (taken.has(`${prefix}${next}`)) next += 1
+  return `${prefix}${next}`
 }
 
 function buildHttpRequestTree(
@@ -1666,29 +1674,29 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   font-size: 11px;
   font-weight: 700;
   text-align: left;
-  color: #64748b;
+  color: var(--dc-text-muted);
 }
 
 .http-workbench__method.is-get {
-  color: #059669;
+  color: var(--dc-success);
 }
 
 .http-workbench__method.is-post {
-  color: #2563eb;
+  color: var(--dc-primary);
 }
 
 .http-workbench__method.is-put,
 .http-workbench__method.is-patch {
-  color: #b45309;
+  color: var(--dc-warning);
 }
 
 .http-workbench__method.is-delete {
-  color: #dc2626;
+  color: var(--dc-danger);
 }
 
 .http-workbench__pager {
   padding: 8px;
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid var(--dc-border);
   justify-content: center;
 }
 
@@ -1858,24 +1866,24 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   font-size: 11px;
   font-weight: 700;
   text-align: left;
-  color: #64748b;
+  color: var(--dc-text-muted);
 }
 
 .http-workbench__tree :deep(.http-workbench__method.is-get) {
-  color: #059669;
+  color: var(--dc-success);
 }
 
 .http-workbench__tree :deep(.http-workbench__method.is-post) {
-  color: #2563eb;
+  color: var(--dc-primary);
 }
 
 .http-workbench__tree :deep(.http-workbench__method.is-put),
 .http-workbench__tree :deep(.http-workbench__method.is-patch) {
-  color: #b45309;
+  color: var(--dc-warning);
 }
 
 .http-workbench__tree :deep(.http-workbench__method.is-delete) {
-  color: #dc2626;
+  color: var(--dc-danger);
 }
 
 .http-workbench__main {
@@ -1883,6 +1891,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--dc-surface-raised);
 }
 
 .http-workbench__tabs {
@@ -1891,8 +1900,8 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   align-items: end;
   gap: 2px;
   padding: 0 10px;
-  border-bottom: 1px solid #dfe3ea;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-muted);
   overflow-x: auto;
 }
 
@@ -1908,13 +1917,13 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   border-bottom: 0;
   background: transparent;
   border-radius: 6px 6px 0 0;
-  color: #475569;
+  color: var(--dc-text-secondary);
 }
 
 .http-workbench__tab.is-active {
-  background: #fff;
-  border-color: #dfe3ea;
-  color: #111827;
+  background: var(--dc-surface-raised);
+  border-color: var(--dc-border);
+  color: var(--dc-text);
 }
 
 .http-workbench__tab-name {
@@ -1930,7 +1939,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--dc-warning);
   flex-shrink: 0;
 }
 
@@ -1945,7 +1954,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--dc-surface-raised);
 }
 
 .http-workbench__crumb-row,
@@ -1955,7 +1964,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .http-workbench__crumb-row {
@@ -1968,7 +1977,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-size: 13px;
 }
 
@@ -1978,7 +1987,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 }
 
 .http-workbench__crumb strong {
-  color: #0f172a;
+  color: var(--dc-text);
 }
 
 .http-workbench__name-input {
@@ -1990,13 +1999,13 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   background: transparent;
   box-shadow: none;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--dc-text);
 }
 
 .http-workbench__name-input :deep(.el-input__wrapper:hover),
 .http-workbench__name-input :deep(.el-input__wrapper.is-focus) {
-  background: #f8fafc;
-  box-shadow: 0 0 0 1px #cbd5e1 inset;
+  background: var(--dc-surface-muted);
+  box-shadow: 0 0 0 1px var(--dc-border-strong) inset;
 }
 
 .http-workbench__actions {
@@ -2008,7 +2017,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 
 .http-workbench__datapoint-path {
   max-width: min(360px, 34vw);
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2130,8 +2139,8 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   min-height: 160px;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #dfe3ea;
-  background: #fbfcfe;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
 .http-workbench__response-resizer {
@@ -2152,12 +2161,12 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   width: 52px;
   height: 2px;
   border-radius: 999px;
-  background: color-mix(in oklch, #64748b 42%, transparent);
+  background: color-mix(in oklch, var(--dc-text-muted) 42%, transparent);
   transform: translateX(-50%);
 }
 
 .http-workbench__response-resizer:hover::before {
-  background: #04756f;
+  background: var(--dc-primary);
 }
 
 :global(body.http-workbench--resizing-panel) {
@@ -2172,7 +2181,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   align-items: center;
   justify-content: space-between;
   padding: 0 14px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .http-workbench__response-meta {
@@ -2180,19 +2189,19 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   align-items: center;
   gap: 14px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--dc-text-muted);
 }
 
 .http-workbench__response-meta .is-success {
-  color: #059669;
+  color: var(--dc-success);
 }
 
 .http-workbench__response-meta .is-warning {
-  color: #b45309;
+  color: var(--dc-warning);
 }
 
 .http-workbench__response-meta .is-danger {
-  color: #dc2626;
+  color: var(--dc-danger);
 }
 
 .http-workbench__response :deep(.el-tabs) {
@@ -2219,7 +2228,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   margin: 0;
   padding: 12px;
   overflow: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--dc-border);
   border-radius: 6px;
   background: #0f172a;
   color: #dbeafe;
@@ -2244,12 +2253,12 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #94a3b8;
+  color: var(--dc-text-muted);
 }
 
 .http-workbench__placeholder {
   flex: 1;
-  background: #fff;
+  background: var(--dc-surface-raised);
 }
 
 .http-workbench__placeholder svg,
@@ -2259,7 +2268,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 }
 
 .http-workbench__placeholder strong {
-  color: #334155;
+  color: var(--dc-text);
 }
 
 .http-kv-editor {
@@ -2275,9 +2284,9 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 .http-kv-editor__head button,
 .http-kv-editor table button {
   height: 24px;
-  border: 1px solid #d5dbe5;
+  border: 1px solid var(--dc-border);
   border-radius: 4px;
-  background: #fff;
+  background: var(--dc-surface-raised);
 }
 
 .http-kv-editor table {
@@ -2287,7 +2296,7 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 
 .http-kv-editor td {
   height: 34px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--dc-border);
 }
 
 .http-kv-editor td:first-child {

@@ -4,11 +4,11 @@
       <div class="mqtt-tag-list__actions">
         <el-button type="primary" size="small" @click="handleCreateTag">
           <IconTablerPlus class="mqtt-tag-list__button-icon" />
-          新建变量
+          {{ ui('新建变量', 'New Variable') }}
         </el-button>
         <el-button size="small" :loading="exporting" @click="handleBatchExport">
           <IconTablerDownload class="mqtt-tag-list__button-icon" />
-          导出结果
+          {{ ui('导出结果', 'Export Results') }}
         </el-button>
         <el-button
           class="mqtt-tag-list__live-action"
@@ -19,13 +19,13 @@
           @click="$emit('openMonitor')"
         >
           <IconTablerActivity class="mqtt-tag-list__button-icon" />
-          变量预览/监控
+          {{ ui('变量预览/监控', 'Variable Preview / Monitor') }}
         </el-button>
       </div>
       <div class="mqtt-tag-list__filters">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索变量名称或解析规则"
+          :placeholder="ui('搜索变量名称或解析规则', 'Search variable name or parse rule')"
           clearable
           size="small"
           @input="handleSearch"
@@ -65,7 +65,7 @@
         </button>
         <el-button size="small" :loading="loading" @click="handleRefresh">
           <IconTablerRefresh class="mqtt-tag-list__button-icon" />
-          刷新
+          {{ ui('刷新', 'Refresh') }}
         </el-button>
       </div>
     </div>
@@ -78,11 +78,11 @@
         :data="tags"
         height="100%"
         row-key="id"
-        empty-text="暂无变量"
+        :empty-text="ui('暂无变量', 'No variables')"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="42" reserve-selection />
-        <el-table-column label="变量名" min-width="170" show-overflow-tooltip>
+        <el-table-column :label="ui('变量名', 'Variable')" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="mqtt-tag-list__name">
               <strong>{{ row.name }}</strong>
@@ -90,38 +90,38 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="92">
+        <el-table-column :label="ui('类型', 'Type')" width="92">
           <template #default="{ row }">{{ getDataTypeLabel(row.dataType) }}</template>
         </el-table-column>
-        <el-table-column label="解析规则" min-width="160" show-overflow-tooltip>
+        <el-table-column :label="ui('解析规则', 'Parse Rule')" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="mqtt-tag-list__mono">{{ formatParseRule(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="数据点" min-width="190" show-overflow-tooltip>
+        <el-table-column :label="ui('数据点', 'Data Point')" min-width="190" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="mqtt-tag-list__mono">{{ row.datapointPath || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="最近值" min-width="120" show-overflow-tooltip>
+        <el-table-column :label="ui('最近值', 'Latest Value')" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="mqtt-tag-list__value">{{ formatLastValue(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="168">
+        <el-table-column :label="ui('创建时间', 'Created At')" width="168">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="96">
+        <el-table-column :label="ui('状态', 'Status')" width="96">
           <template #default="{ row }">
             <span class="mqtt-tag-list__status" :class="statusClass(row)">
               {{ statusLabel(row) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="104" fixed="right">
+        <el-table-column :label="ui('操作', 'Actions')" width="104" fixed="right">
           <template #default="{ row }">
             <div class="mqtt-tag-list__row-actions">
-              <el-tooltip content="查看" placement="top">
+              <el-tooltip :content="ui('查看', 'View')" placement="top">
                 <button
                   type="button"
                   class="mqtt-tag-list__icon-action"
@@ -130,7 +130,7 @@
                   <IconTablerEye />
                 </button>
               </el-tooltip>
-              <el-tooltip content="编辑" placement="top">
+              <el-tooltip :content="ui('编辑', 'Edit')" placement="top">
                 <button
                   type="button"
                   class="mqtt-tag-list__icon-action"
@@ -139,7 +139,7 @@
                   <IconTablerEdit />
                 </button>
               </el-tooltip>
-              <el-tooltip content="删除" placement="top">
+              <el-tooltip :content="ui('删除', 'Delete')" placement="top">
                 <button
                   type="button"
                   class="mqtt-tag-list__icon-action is-danger"
@@ -154,17 +154,17 @@
       </el-table>
       <BulkActionBar :selected-count="selectedTagCount" @clear="clearTagSelection">
         <button type="button" class="mqtt-tag-list__bulk-action-btn" @click="selectCurrentPage">
-          当前页
+          {{ ui('当前页', 'Current Page') }}
         </button>
         <button type="button" class="mqtt-tag-list__bulk-action-btn" @click="selectAllResults">
-          全部结果
+          {{ ui('全部结果', 'All Results') }}
         </button>
         <button
           type="button"
           class="mqtt-tag-list__bulk-action-btn is-danger"
           @click="handleBatchDeleteTags"
         >
-          删除选中
+          {{ ui('删除选中', 'Delete Selected') }}
         </button>
       </BulkActionBar>
       <div class="mqtt-tag-list__pagination">
@@ -224,6 +224,9 @@ import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv } from '@/utils/tabular-file'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps({
   projectId: {
@@ -261,15 +264,15 @@ const currentTag = ref<any | null>(null)
 
 const { notify: notifyTagChange } = useMqttTagSync(props.subscriptionId)
 const liveActionConnected = computed(() => Boolean(props.previewSessionId))
-const sortFieldOptions = [
-  { label: '创建时间', value: 'createdAt' },
-  { label: '名称', value: 'name' },
-] as const
+const sortFieldOptions = computed(() => [
+  { label: ui('创建时间', 'Created At'), value: 'createdAt' },
+  { label: ui('名称', 'Name'), value: 'name' },
+] as const)
 const LOADING_DELAY_MS = 180
 const currentSortFieldLabel = computed(
-  () => sortFieldOptions.find((option) => option.value === sortBy.value)?.label || '创建时间',
+  () => sortFieldOptions.value.find((option) => option.value === sortBy.value)?.label || ui('创建时间', 'Created At'),
 )
-const currentSortOrderLabel = computed(() => (sortOrder.value === 'desc' ? '降序' : '升序'))
+const currentSortOrderLabel = computed(() => (sortOrder.value === 'desc' ? ui('降序', 'Descending') : ui('升序', 'Ascending')))
 const selectedTagCount = computed(() =>
   allTagResultsSelected.value ? pagination.value.total : selectedTags.value.length,
 )
@@ -302,7 +305,7 @@ const loadTags = async (options: { silent?: boolean } = {}) => {
     await syncTagSelection()
   } catch (error) {
     debugLogger.error('Failed to load tags:', error)
-    ElMessage.error(getApiErrorMessage(error, '加载变量失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载变量失败', 'Failed to load variables')))
   } finally {
     if (loadingTimer) {
       window.clearTimeout(loadingTimer)
@@ -373,7 +376,7 @@ const loadTagDatapoints = async (tagList) => {
 
 const handleRefresh = async () => {
   await reloadAll()
-  ElMessage.success('刷新成功')
+  ElMessage.success(ui('刷新成功', 'Refreshed successfully'))
 }
 
 const handleSearch = () => {
@@ -445,37 +448,38 @@ const handleBatchExport = async () => {
         statusMap.set(item.sourceId, item)
       })
     }
-    const headers = [
-      '变量名',
-      '编码',
-      '描述',
-      '数据类型',
-      '解析类型',
-      '解析规则',
-      '单位',
-      '状态',
-      '数据点路径',
-      '创建时间',
-    ]
+    const columns = {
+      name: ui('变量名', 'Variable Name'),
+      code: ui('编码', 'Code'),
+      description: ui('描述', 'Description'),
+      dataType: ui('数据类型', 'Data Type'),
+      parseType: ui('解析类型', 'Parse Type'),
+      parseRule: ui('解析规则', 'Parse Rule'),
+      unit: ui('单位', 'Unit'),
+      status: ui('状态', 'Status'),
+      datapointPath: ui('数据点路径', 'Data Point Path'),
+      createdAt: ui('创建时间', 'Created At'),
+    }
+    const headers = Object.values(columns)
     const rows = exportedTags.map((tag) => {
       const datapoint = statusMap.get(tag.id)
       return {
-        变量名: tag.name,
-        编码: tag.code,
-        描述: tag.description || '',
-        数据类型: getDataTypeLabel(tag.dataType),
-        解析类型: getParseTypeLabel(tag.parseType),
-        解析规则: tag.parseRule || '',
-        单位: tag.unit || '',
-        状态: datapoint?.status === 'invalid' ? '失效' : datapoint?.path ? '活跃' : '未生成',
-        数据点路径: datapoint?.path || '',
-        创建时间: formatTime(tag.createdAt),
+        [columns.name]: tag.name,
+        [columns.code]: tag.code,
+        [columns.description]: tag.description || '',
+        [columns.dataType]: getDataTypeLabel(tag.dataType),
+        [columns.parseType]: getParseTypeLabel(tag.parseType),
+        [columns.parseRule]: tag.parseRule || '',
+        [columns.unit]: tag.unit || '',
+        [columns.status]: datapoint?.status === 'invalid' ? ui('失效', 'Invalid') : datapoint?.path ? ui('活跃', 'Active') : ui('未生成', 'Not Generated'),
+        [columns.datapointPath]: datapoint?.path || '',
+        [columns.createdAt]: formatTime(tag.createdAt),
       }
     })
     downloadCsv(`mqtt-variables-${dayjs().format('YYYYMMDD-HHmmss')}.csv`, headers, rows)
-    ElMessage.success(`已导出 ${rows.length} 条变量`)
+    ElMessage.success(ui(`已导出 ${rows.length} 条变量`, `Exported ${rows.length} variables`))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '导出变量失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('导出变量失败', 'Failed to export variables')))
   } finally {
     exporting.value = false
   }
@@ -501,20 +505,20 @@ const handleViewTag = (tag) => {
 
 const handleDeleteTag = async (tag) => {
   try {
-    await ElMessageBox.confirm(`确定要删除变量“${tag.name}”吗？`, '删除确认', {
+    await ElMessageBox.confirm(ui(`确定要删除变量“${tag.name}”吗？`, `Delete variable “${tag.name}”?`), ui('删除确认', 'Confirm Delete'), {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
     })
 
     await deleteMqttTag(props.projectId, tag.id)
-    ElMessage.success('删除成功')
+    ElMessage.success(ui('删除成功', 'Deleted successfully'))
     await reloadAfterMutation()
     notifyTagChange('deleted', { tagId: tag.id })
   } catch (error) {
     if (error !== 'cancel') {
       debugLogger.error('Failed to delete tag:', error)
-      ElMessage.error(getApiErrorMessage(error, '删除失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除失败', 'Failed to delete variable')))
     }
   }
 }
@@ -567,26 +571,26 @@ const handleBatchDeleteTags = async () => {
     if (deleteCount === 0) return
     try {
       await ElMessageBox.confirm(
-        `确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`,
-        '批量删除确认',
+        ui(`确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`, `Delete all ${deleteCount} variables in the current filtered results?`),
+        ui('批量删除确认', 'Confirm Bulk Delete'),
         {
           type: 'warning',
-          confirmButtonText: '删除',
-          cancelButtonText: '取消',
+          confirmButtonText: ui('删除', 'Delete'),
+          cancelButtonText: ui('取消', 'Cancel'),
         },
       )
       const response = await deleteMqttTagsByFilter(props.projectId, props.subscriptionId, {
         search: searchKeyword.value.trim(),
       })
       const deletedCount = response?.data?.deletedCount ?? 0
-      ElMessage.success(`已删除 ${deletedCount} 个变量`)
+      ElMessage.success(ui(`已删除 ${deletedCount} 个变量`, `Deleted ${deletedCount} variables`))
       clearTagSelection()
       await reloadAfterMutation()
       notifyTagChange('deleted', { filtered: true, deletedCount })
     } catch (error) {
       if (error !== 'cancel') {
         debugLogger.error('Failed to delete filtered tags:', error)
-        ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+        ElMessage.error(getApiErrorMessage(error, ui('批量删除失败', 'Bulk delete failed')))
       }
     }
     return
@@ -595,21 +599,21 @@ const handleBatchDeleteTags = async () => {
   if (tagIds.length === 0) return
 
   try {
-    await ElMessageBox.confirm(`确定要删除选中的 ${tagIds.length} 个变量吗？`, '批量删除确认', {
+    await ElMessageBox.confirm(ui(`确定要删除选中的 ${tagIds.length} 个变量吗？`, `Delete the ${tagIds.length} selected variables?`), ui('批量删除确认', 'Confirm Bulk Delete'), {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
     })
 
     await deleteMqttTagsBatch(props.projectId, tagIds)
-    ElMessage.success('批量删除成功')
+    ElMessage.success(ui('批量删除成功', 'Variables deleted successfully'))
     clearTagSelection()
     await reloadAfterMutation()
     notifyTagChange('deleted', { tagIds })
   } catch (error) {
     if (error !== 'cancel') {
       debugLogger.error('Failed to delete selected tags:', error)
-      ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('批量删除失败', 'Bulk delete failed')))
     }
   }
 }
@@ -618,7 +622,7 @@ const handleTagDialogSuccess = async () => {
   tagDialogVisible.value = false
   await reloadAfterMutation()
   const isCreate = tagDialogMode.value === 'create'
-  ElMessage.success(isCreate ? '创建成功' : '更新成功')
+  ElMessage.success(isCreate ? ui('创建成功', 'Created successfully') : ui('更新成功', 'Updated successfully'))
   notifyTagChange(isCreate ? 'created' : 'updated', {
     tagId: currentTag.value?.id,
   })
@@ -643,11 +647,11 @@ const applyTagValueUpdate = (value) => {
 
 const getDataTypeLabel = (dataType) => {
   const labels = {
-    string: '字符串',
-    float64: '数值',
-    bool: '布尔',
-    object: '对象',
-    array: '数组',
+    string: ui('字符串', 'String'),
+    float64: ui('数值', 'Number'),
+    bool: ui('布尔', 'Boolean'),
+    object: ui('对象', 'Object'),
+    array: ui('数组', 'Array'),
   }
   return labels[dataType] || dataType || '-'
 }
@@ -655,10 +659,10 @@ const getDataTypeLabel = (dataType) => {
 const getParseTypeLabel = (parseType) => {
   const labels = {
     jsonpath: 'JSONPath',
-    regex: '正则',
-    script: '脚本',
-    fixed: '固定值',
-    batch_jsonpath: '批量映射',
+    regex: ui('正则', 'Regex'),
+    script: ui('脚本', 'Script'),
+    fixed: ui('固定值', 'Fixed Value'),
+    batch_jsonpath: ui('批量映射', 'Batch Mapping'),
   }
   return labels[parseType] || parseType || '-'
 }
@@ -691,9 +695,9 @@ const formatTime = (value) => {
 }
 
 const statusLabel = (tag) => {
-  if (tag.datapointStatus === 'invalid') return '失效'
-  if (tag.datapointPath) return '活跃'
-  return '未生成'
+  if (tag.datapointStatus === 'invalid') return ui('失效', 'Invalid')
+  if (tag.datapointPath) return ui('活跃', 'Active')
+  return ui('未生成', 'Not Generated')
 }
 
 const statusClass = (tag) => {
@@ -916,8 +920,8 @@ defineExpose({
 }
 
 .mqtt-tag-list__status.is-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: color-mix(in oklch, var(--dc-warning) 14%, var(--dc-surface-raised));
+  color: var(--dc-warning);
 }
 
 .mqtt-tag-list__status.is-danger {

@@ -1,23 +1,23 @@
 <template>
-  <DcDialog v-model="visible" title="工程依赖" width="1080px" append-to-body>
+  <DcDialog v-model="visible" :title="ui('工程依赖', 'Project Dependencies')" width="1080px" append-to-body>
     <section class="dependency-manager">
       <div class="dependency-manager__head">
-        <p>工程内计算单元共用，代码中的导入语句会自动识别依赖。</p>
+        <p>{{ ui('工程内计算单元共用，代码中的导入语句会自动识别依赖。', 'Dependencies are shared by all compute units in the project and detected from import statements.') }}</p>
         <div class="dependency-manager__actions">
-          <button type="button" title="刷新" aria-label="刷新依赖" @click="load">
+          <button type="button" :title="ui('刷新', 'Refresh')" :aria-label="ui('刷新依赖', 'Refresh dependencies')" @click="load">
             <IconTablerRefresh />
           </button>
           <button type="button" class="is-primary" @click="installDialogVisible = true">
             <IconTablerDownload />
-            添加依赖
+            {{ ui('添加依赖', 'Add Dependency') }}
           </button>
         </div>
       </div>
 
       <div class="dependency-manager__filters">
-        <el-input v-model="keyword" clearable placeholder="搜索包名或导入名称" />
+        <el-input v-model="keyword" clearable :placeholder="ui('搜索包名或导入名称', 'Search package or import name')" />
         <el-segmented v-model="runtime" :options="runtimeOptions" />
-        <span>共 {{ filteredDependencies.length }} 项</span>
+        <span>{{ ui(`共 ${filteredDependencies.length} 项`, `${filteredDependencies.length} item${filteredDependencies.length === 1 ? '' : 's'}`) }}</span>
       </div>
 
       <div v-if="loading" class="dependency-manager__loading">
@@ -26,38 +26,38 @@
       <EmptyState
         v-else-if="!filteredDependencies.length"
         icon-name="compute"
-        title="暂无工程依赖"
-        description="在线安装或导入离线包后，计算单元可直接引用。"
+        :title="ui('暂无工程依赖', 'No Project Dependencies')"
+        :description="ui('在线安装或导入离线包后，计算单元可直接引用。', 'Install online or import an offline package to use it in compute units.')"
       />
       <el-table v-else :data="filteredDependencies" height="460" class="dependency-manager__table">
-        <el-table-column label="包名" min-width="190">
+        <el-table-column :label="ui('包名', 'Package')" min-width="190">
           <template #default="{ row }"
             ><strong>{{ row.name }}</strong></template
           >
         </el-table-column>
-        <el-table-column label="导入名" min-width="170">
+        <el-table-column :label="ui('导入名', 'Import Name')" min-width="170">
           <template #default="{ row }"
             ><code>{{ row.importName }}</code></template
           >
         </el-table-column>
-        <el-table-column label="语言" width="120">
+        <el-table-column :label="ui('语言', 'Language')" width="120">
           <template #default="{ row }">{{ runtimeLabel(row.runtime) }}</template>
         </el-table-column>
-        <el-table-column label="版本" width="150" prop="version" />
-        <el-table-column label="引用" width="110">
-          <template #default="{ row }">{{ row.referenceCount || 0 }} 个单元</template>
+        <el-table-column :label="ui('版本', 'Version')" width="150" prop="version" />
+        <el-table-column :label="ui('引用', 'References')" width="120">
+          <template #default="{ row }">{{ ui(`${row.referenceCount || 0} 个单元`, `${row.referenceCount || 0} unit${row.referenceCount === 1 ? '' : 's'}`) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default><StatusBadge tone="success" text="已安装" /></template>
+        <el-table-column :label="ui('状态', 'Status')" width="110">
+          <template #default><StatusBadge tone="success" :text="ui('已安装', 'Installed')" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="90" align="center">
+        <el-table-column :label="ui('操作', 'Actions')" width="90" align="center">
           <template #default="{ row }">
             <button
               type="button"
               class="dependency-manager__delete"
               :disabled="Boolean(row.referenceCount) || removingId === row.id"
-              :title="row.referenceCount ? '仍有计算单元引用，不能卸载' : '卸载依赖'"
-              :aria-label="`卸载 ${row.name}`"
+              :title="row.referenceCount ? ui('仍有计算单元引用，不能卸载', 'Cannot uninstall while compute units reference it') : ui('卸载依赖', 'Uninstall dependency')"
+              :aria-label="ui(`卸载 ${row.name}`, `Uninstall ${row.name}`)"
               @click="remove(row)"
             >
               <IconTablerTrash />
@@ -68,11 +68,11 @@
     </section>
 
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
+      <el-button @click="visible = false">{{ ui('关闭', 'Close') }}</el-button>
     </template>
   </DcDialog>
 
-  <DcDialog v-model="installDialogVisible" title="添加工程依赖" width="560px" append-to-body>
+  <DcDialog v-model="installDialogVisible" :title="ui('添加工程依赖', 'Add Project Dependency')" width="560px" append-to-body>
     <div class="dependency-install">
       <el-segmented v-model="installMode" :options="installModeOptions" />
 
@@ -82,56 +82,56 @@
         @submit.prevent="install"
       >
         <label>
-          <span>语言</span>
+          <span>{{ ui('语言', 'Language') }}</span>
           <el-select v-model="onlineForm.language">
             <el-option label="JavaScript" value="js" />
             <el-option label="Python" value="python" />
           </el-select>
         </label>
         <label>
-          <span>包名</span>
+          <span>{{ ui('包名', 'Package') }}</span>
           <el-input
             v-model="onlineForm.packageName"
-            :placeholder="onlineForm.language === 'js' ? '例如 dayjs' : '例如 humanize'"
+            :placeholder="onlineForm.language === 'js' ? ui('例如 dayjs', 'Example: dayjs') : ui('例如 humanize', 'Example: humanize')"
           />
         </label>
         <label>
-          <span>版本</span>
-          <el-input v-model="onlineForm.version" placeholder="可选，留空安装最新版本" />
+          <span>{{ ui('版本', 'Version') }}</span>
+          <el-input v-model="onlineForm.version" :placeholder="ui('可选，留空安装最新版本', 'Optional; leave blank for the latest version')" />
         </label>
       </form>
 
       <form v-else class="dependency-install__form" @submit.prevent="install">
         <label>
-          <span>语言</span>
+          <span>{{ ui('语言', 'Language') }}</span>
           <el-select v-model="offlineLanguage" @change="offlineFile = null">
             <el-option label="JavaScript" value="js" />
             <el-option label="Python" value="python" />
           </el-select>
         </label>
         <label class="dependency-install__file-row">
-          <span>离线包</span>
+          <span>{{ ui('离线包', 'Offline Package') }}</span>
           <span class="dependency-install__file">
             <input
               :key="offlineLanguage"
               type="file"
               :accept="offlineLanguage === 'js' ? '.tgz' : '.whl'"
-              aria-label="选择离线依赖文件"
+              :aria-label="ui('选择离线依赖文件', 'Select offline dependency file')"
               @change="selectOfflineFile"
             />
             <b>{{
-              offlineFile?.name || (offlineLanguage === 'js' ? '选择 .tgz 文件' : '选择 .whl 文件')
+              offlineFile?.name || (offlineLanguage === 'js' ? ui('选择 .tgz 文件', 'Select a .tgz file') : ui('选择 .whl 文件', 'Select a .whl file'))
             }}</b>
-            <small>最大 64 MB；自动识别包信息，依赖的其他包需分别导入</small>
+            <small>{{ ui('最大 64 MB；自动识别包信息，依赖的其他包需分别导入', 'Maximum 64 MB. Package metadata is detected automatically; import transitive packages separately.') }}</small>
           </span>
         </label>
       </form>
     </div>
 
     <template #footer>
-      <el-button @click="installDialogVisible = false">取消</el-button>
+      <el-button @click="installDialogVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
       <el-button type="primary" :loading="installing" @click="install">
-        {{ installMode === 'online' ? '在线安装' : '导入并安装' }}
+        {{ installMode === 'online' ? ui('在线安装', 'Install Online') : ui('导入并安装', 'Import and Install') }}
       </el-button>
     </template>
   </DcDialog>
@@ -154,6 +154,9 @@ import { getApiErrorMessage } from '@/utils/request'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{ projectId: string }>()
 const visible = defineModel<boolean>({ required: true })
@@ -169,15 +172,15 @@ const offlineLanguage = ref<'js' | 'python'>('js')
 const offlineFile = ref<File | null>(null)
 const keyword = ref('')
 const runtime = ref('all')
-const installModeOptions = [
-  { label: '在线安装', value: 'online' },
-  { label: '离线导入', value: 'offline' },
-]
-const runtimeOptions = [
-  { label: '全部', value: 'all' },
+const installModeOptions = computed(() => [
+  { label: ui('在线安装', 'Online Install'), value: 'online' },
+  { label: ui('离线导入', 'Offline Import'), value: 'offline' },
+])
+const runtimeOptions = computed(() => [
+  { label: ui('全部', 'All'), value: 'all' },
   { label: 'JavaScript', value: 'javascript' },
   { label: 'Python', value: 'python' },
-]
+])
 const onlineForm = reactive({
   language: 'js' as 'js' | 'python',
   packageName: '',
@@ -201,7 +204,7 @@ async function load() {
   try {
     dependencies.value = await getComputeDependencies(props.projectId)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载工程依赖失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载工程依赖失败', 'Failed to load project dependencies')))
   } finally {
     loading.value = false
   }
@@ -213,11 +216,11 @@ function selectOfflineFile(event: Event) {
 
 async function install() {
   if (installMode.value === 'online' && !onlineForm.packageName.trim()) {
-    ElMessage.warning('请输入包名')
+    ElMessage.warning(ui('请输入包名', 'Enter a package name'))
     return
   }
   if (installMode.value === 'offline' && !offlineFile.value) {
-    ElMessage.warning('请选择离线依赖文件')
+    ElMessage.warning(ui('请选择离线依赖文件', 'Select an offline dependency file'))
     return
   }
   installing.value = true
@@ -236,16 +239,16 @@ async function install() {
     installDialogVisible.value = false
     await load()
     emit('changed')
-    ElMessage.success(installMode.value === 'online' ? '依赖已安装' : '离线依赖已导入')
+    ElMessage.success(installMode.value === 'online' ? ui('依赖已安装', 'Dependency installed') : ui('离线依赖已导入', 'Offline dependency imported'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '添加依赖失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('添加依赖失败', 'Failed to add dependency')))
   } finally {
     installing.value = false
   }
 }
 
 async function remove(item: ComputeDependency) {
-  await ElMessageBox.confirm(`确定卸载 ${item.name}@${item.version || '-'}？`, '卸载依赖', {
+  await ElMessageBox.confirm(ui(`确定卸载 ${item.name}@${item.version || '-'}？`, `Uninstall ${item.name}@${item.version || '-'}?`), ui('卸载依赖', 'Uninstall Dependency'), {
     type: 'warning',
   })
   removingId.value = item.id
@@ -253,9 +256,9 @@ async function remove(item: ComputeDependency) {
     await uninstallComputeDependency(props.projectId, item.id)
     await load()
     emit('changed')
-    ElMessage.success('依赖已卸载')
+    ElMessage.success(ui('依赖已卸载', 'Dependency uninstalled'))
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(getApiErrorMessage(error, '卸载依赖失败'))
+    if (error !== 'cancel') ElMessage.error(getApiErrorMessage(error, ui('卸载依赖失败', 'Failed to uninstall dependency')))
   } finally {
     removingId.value = ''
   }

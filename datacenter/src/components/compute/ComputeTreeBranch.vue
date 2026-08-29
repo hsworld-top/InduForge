@@ -13,7 +13,7 @@
         v-if="canExpand"
         type="button"
         class="compute-tree-branch__toggle"
-        :aria-label="expanded ? `收起${node.name}` : `展开${node.name}`"
+        :aria-label="expanded ? ui(`收起${node.name}`, `Collapse ${node.name}`) : ui(`展开${node.name}`, `Expand ${node.name}`)"
         @click.stop="toggleExpanded"
       >
         <IconTablerChevronRight
@@ -32,15 +32,15 @@
         <IconTablerFolderOpen v-if="expanded" class="compute-tree-branch__icon" />
         <IconTablerFolder v-else class="compute-tree-branch__icon" />
         <span class="compute-tree-branch__folder-name">{{ node.name }}</span>
-        <span class="compute-tree-branch__count" :title="`${node.unitCount} 个计算单元`">{{
+        <span class="compute-tree-branch__count" :title="ui(`${node.unitCount} 个计算单元`, `${node.unitCount} compute unit${node.unitCount === 1 ? '' : 's'}`)">{{
           node.unitCount
         }}</span>
       </button>
       <button
         type="button"
         class="compute-tree-branch__more"
-        :aria-label="`${node.name}目录操作`"
-        title="目录操作"
+        :aria-label="ui(`${node.name}目录操作`, `Folder actions for ${node.name}`)"
+        :title="ui('目录操作', 'Folder Actions')"
         @click.stop="$emit('folderContextmenu', $event, node)"
       >
         <IconTablerDots />
@@ -74,8 +74,8 @@
         <button
           type="button"
           class="compute-tree-branch__more"
-          :aria-label="`${unit.name}操作`"
-          title="计算单元操作"
+          :aria-label="ui(`${unit.name}操作`, `Actions for ${unit.name}`)"
+          :title="ui('计算单元操作', 'Compute Unit Actions')"
           @click.stop="$emit('unitContextmenu', $event, unit)"
         >
           <IconTablerDots />
@@ -106,7 +106,7 @@
         :disabled="loadingFolderIds?.includes(node.id)"
         @click.stop="$emit('loadMoreFolder', node.id)"
       >
-        {{ loadingFolderIds?.includes(node.id) ? '加载中…' : '加载更多子目录' }}
+        {{ loadingFolderIds?.includes(node.id) ? ui('加载中…', 'Loading…') : ui('加载更多子目录', 'Load More Subfolders') }}
       </button>
     </div>
   </section>
@@ -120,9 +120,12 @@ import IconTablerFileCode from '~icons/tabler/file-code'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderOpen from '~icons/tabler/folder-open'
 import type { ComputeUnit } from '@/api/schemas/compute.schema'
+import { datacenterLocale } from '@/i18n/runtime'
 import type { ComputeFolderTreeNode } from './computeTreeModel'
 
 defineOptions({ name: 'ComputeTreeBranch' })
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   node: ComputeFolderTreeNode
@@ -180,13 +183,13 @@ watch(
 
 const statusText = (status?: string) => {
   const map: Record<string, string> = {
-    enabled: '启用',
-    idle: '空闲',
-    running: '运行中',
-    error: '异常',
-    disabled: '停用',
+    enabled: ui('启用', 'Enabled'),
+    idle: ui('空闲', 'Idle'),
+    running: ui('运行中', 'Running'),
+    error: ui('异常', 'Error'),
+    disabled: ui('停用', 'Disabled'),
   }
-  return map[status || ''] || '未知'
+  return map[status || ''] || ui('未知', 'Unknown')
 }
 
 const statusTone = (status?: string) => {
@@ -199,7 +202,7 @@ const statusTone = (status?: string) => {
 const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id))
 
 const unitStatusText = (unit: ComputeUnit) =>
-  isUnitDirty(unit) ? '未保存' : statusText(unit.status)
+  isUnitDirty(unit) ? ui('未保存', 'Unsaved') : statusText(unit.status)
 
 const unitStatusTone = (unit: ComputeUnit) =>
   isUnitDirty(unit) ? 'warning' : statusTone(unit.status)

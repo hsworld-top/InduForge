@@ -1,20 +1,20 @@
 <template>
   <TreePanel
     class="alarm-directories"
-    title="报警目录"
+    :title="t('alarm.alarmDirectory')"
     :search-text="searchText"
-    search-placeholder="搜索目录"
-    all-label="全部报警"
+    :search-placeholder="t('alarm.searchDirectory')"
+    :all-label="t('alarm.allAlarms')"
     :all-active="!selectedId"
     :loading="loading"
     @update:search-text="updateSearch"
     @select-all="emit('select', '')"
   >
     <template #actions>
-      <button type="button" class="is-primary" title="新建目录" @click="openCreate">
+      <button type="button" class="is-primary" :title="t('alarm.createDirectory')" @click="openCreate">
         <IconTablerFolderPlus />
       </button>
-      <button type="button" title="刷新目录" @click="load(true)">
+      <button type="button" :title="t('alarm.refreshDirectory')" @click="load(true)">
         <IconTablerRefresh />
       </button>
     </template>
@@ -44,23 +44,14 @@
         @delete="remove"
       />
     </template>
-    <el-empty v-if="!loading && groups.length === 0" :image-size="42" description="暂无目录" />
-    <button
-      v-if="groups.length < total"
-      type="button"
-      class="alarm-directories__load-more"
-      :disabled="loading"
-      @click="loadMore"
-    >
-      加载更多（{{ groups.length }}/{{ total }}）
-    </button>
+    <el-empty v-if="!loading && groups.length === 0" :image-size="42" :description="t('alarm.emptyDirectory')" />
   </TreePanel>
 
-  <DcDialog v-model="dialogVisible" :title="editing ? '编辑目录' : '新建目录'" width="440px">
+  <DcDialog v-model="dialogVisible" :title="editing ? t('alarm.editDirectory') : t('alarm.createDirectory')" width="440px">
     <div class="alarm-directories__form">
-      <label><span>名称</span><el-input v-model="draft.name" maxlength="100" /></label>
+      <label><span>{{ t('alarm.nameField') }}</span><el-input v-model="draft.name" maxlength="100" /></label>
       <label>
-        <span>上级目录</span>
+        <span>{{ t('alarm.parentDirectory') }}</span>
         <AlarmGroupSelect
           v-model="draft.parentId"
           :project-id="projectId"
@@ -69,9 +60,9 @@
       </label>
     </div>
     <template #footer>
-      <button type="button" class="dc-button" @click="dialogVisible = false">取消</button>
+      <button type="button" class="dc-button" @click="dialogVisible = false">{{ t('alarm.cancel') }}</button>
       <button type="button" class="dc-button dc-button--primary" :disabled="saving" @click="save">
-        保存
+        {{ t('alarm.save') }}
       </button>
     </template>
   </DcDialog>
@@ -96,6 +87,7 @@ import {
 import type { AlarmGroup } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
+import { t } from '@/i18n/runtime'
 
 const props = withDefaults(defineProps<{ projectId: string; selectedId?: string }>(), {
   selectedId: '',
@@ -103,8 +95,6 @@ const props = withDefaults(defineProps<{ projectId: string; selectedId?: string 
 const emit = defineEmits<{ select: [id: string] }>()
 const { confirm } = useConfirm()
 const groups = ref<AlarmGroup[]>([])
-const total = ref(0)
-const page = ref(0)
 const loading = ref(false)
 const searchText = ref('')
 const dialogVisible = ref(false)
@@ -123,34 +113,32 @@ async function load(reset = false) {
   if (!props.projectId || (loading.value && !reset)) return
   if (reset) {
     groups.value = []
-    page.value = 0
-    total.value = 0
   }
   const version = ++requestVersion
   loading.value = true
   try {
-    const nextPage = page.value + 1
-    const result = await listAlarmGroups(props.projectId, {
-      search: searchText.value.trim() || undefined,
-      page: nextPage,
-      pageSize: 50,
-    })
-    if (version !== requestVersion) return
-    groups.value.push(
-      ...result.list.filter((item) => !groups.value.some((old) => old.id === item.id)),
-    )
-    total.value = result.pagination.total
-    page.value = nextPage
+    const loaded: AlarmGroup[] = []
+    let page = 1
+    let totalPages = 1
+    do {
+      const result = await listAlarmGroups(props.projectId, {
+        search: searchText.value.trim() || undefined,
+        page,
+        pageSize: 100,
+      })
+      if (version !== requestVersion) return
+      loaded.push(...result.list)
+      totalPages = result.pagination.totalPages
+      page += 1
+    } while (page <= totalPages)
+    groups.value = Array.from(new Map(loaded.map((item) => [item.id, item])).values())
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载报警目录失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarm.loadDirectoryFailed')))
   } finally {
     if (version === requestVersion) loading.value = false
   }
 }
 
-function loadMore() {
-  void load(false)
-}
 function queueSearch() {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => void load(true), 250)
@@ -175,35 +163,35 @@ function openEdit(group: AlarmGroup) {
   dialogVisible.value = true
 }
 async function save() {
-  if (!draft.name.trim()) return ElMessage.warning('请填写目录名称')
+  if (!draft.name.trim()) return ElMessage.warning(t('alarm.directoryNameRequired'))
   saving.value = true
   try {
     const payload = { ...draft, name: draft.name.trim() }
     if (editing.value) await updateAlarmGroup(props.projectId, editing.value.id, payload)
     else await createAlarmGroup(props.projectId, payload)
     dialogVisible.value = false
-    ElMessage.success('目录已保存')
+    ElMessage.success(t('alarm.directorySaved'))
     await load(true)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存目录失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarm.saveDirectoryFailed')))
   } finally {
     saving.value = false
   }
 }
 async function remove(group: AlarmGroup) {
-  const accepted = await confirm(`确认删除目录「${group.name}」？非空目录不能删除。`, {
-    title: '删除目录',
-    confirmText: '删除',
+  const accepted = await confirm(t('alarm.deleteDirectoryConfirm', { name: group.name }), {
+    title: t('alarm.deleteDirectoryTitle'),
+    confirmText: t('alarm.delete'),
     type: 'warning',
   })
   if (!accepted) return
   try {
     await deleteAlarmGroup(props.projectId, group.id)
     if (props.selectedId === group.id) emit('select', '')
-    ElMessage.success('目录已删除')
+    ElMessage.success(t('alarm.directoryDeleted'))
     await load(true)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除目录失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarm.deleteDirectoryFailed')))
   }
 }
 
@@ -245,15 +233,6 @@ onMounted(() => void load(true))
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-}
-.alarm-directories__load-more {
-  width: 100%;
-  min-height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--dc-primary);
-  cursor: pointer;
-  font-size: 12px;
 }
 .alarm-directories__form {
   display: grid;

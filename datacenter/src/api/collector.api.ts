@@ -398,6 +398,33 @@ export async function commitCollectorPointImport(
   return z.object({ list: z.array(CollectorPointSchema) }).parse(response).list
 }
 
+export async function downloadCollectorPointImportTemplate(
+  driverId: string,
+  format: 'csv' | 'xlsx',
+): Promise<Blob> {
+  try {
+    return (await request({
+      url: `/data/collector/drivers/${driverId}/points/import-template`,
+      method: 'get',
+      responseType: 'blob',
+      params: { format },
+    })) as Blob
+  } catch (error) {
+    const response = (error as AxiosError<Blob>)?.response
+    if (response?.data instanceof Blob) {
+      const payload = await response.data.text()
+      let message = ''
+      try {
+        message = (JSON.parse(payload) as { msg?: string }).msg || ''
+      } catch {
+        message = ''
+      }
+      if (message) throw new Error(message)
+    }
+    throw error
+  }
+}
+
 export async function createCollectorTask(
   projectId: string,
   data: {

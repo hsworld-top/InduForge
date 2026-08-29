@@ -1,5 +1,5 @@
 <template>
-  <nav class="workbench-tabbar" aria-label="工作台标签页">
+  <nav class="workbench-tabbar" :aria-label="ui('工作台标签页', 'Workbench tabs')">
     <div
       v-for="tab in tabs"
       :key="tab.id"
@@ -14,7 +14,7 @@
         v-if="closable"
         type="button"
         class="workbench-tabbar__close"
-        :aria-label="`关闭 ${tab.title}`"
+        :aria-label="ui(`关闭 ${tab.title}`, `Close ${tab.title}`)"
         @click="$emit('close', tab.id)"
       >
         <IconTablerX />
@@ -26,6 +26,9 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import IconTablerX from '~icons/tabler/x'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 export type WorkbenchTabBarItem = {
   id: string

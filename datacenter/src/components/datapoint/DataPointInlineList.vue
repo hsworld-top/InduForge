@@ -2,33 +2,33 @@
   <div v-if="show" class="datapoint-inline">
     <div class="header flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <span class="title">自动生成的数据点</span>
+        <span class="title">{{ ui('自动生成的数据点', 'Generated Data Points') }}</span>
         <span class="count">{{ datapoints.length }}</span>
       </div>
-      <el-button size="small" @click="loadDataPoints">刷新</el-button>
+      <el-button size="small" @click="loadDataPoints">{{ ui('刷新', 'Refresh') }}</el-button>
     </div>
     <el-table :data="datapoints" size="small" stripe class="mt-2">
-      <el-table-column label="名称" width="180">
+      <el-table-column :label="ui('名称', 'Name')" width="180">
         <template #default="{ row }">
           <span class="text-xs text-gray-700 dark:text-gray-200">
             {{ row.name }}
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="数据点路径" min-width="240">
+      <el-table-column :label="ui('数据点路径', 'Data Point Path')" min-width="240">
         <template #default="{ row }">
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xs text-gray-500 dark:text-gray-300 truncate">
               {{ row.path }}
             </span>
-            <el-button link size="small" @click="copyPath(row.path)"> 复制 </el-button>
+            <el-button link size="small" @click="copyPath(row.path)">{{ ui('复制', 'Copy') }}</el-button>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column :label="ui('状态', 'Status')" width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="row.status === 'invalid' ? 'info' : 'success'">
-            {{ row.status === 'invalid' ? '失效' : '活跃' }}
+            {{ row.status === 'invalid' ? ui('失效', 'Invalid') : ui('活跃', 'Active') }}
           </el-tag>
         </template>
       </el-table-column>
@@ -41,6 +41,9 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps({
   projectId: {
@@ -77,7 +80,7 @@ const loadDataPoints = async () => {
     })
     datapoints.value = response.data?.datapoints || []
   } catch (error) {
-    ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载数据点失败', 'Failed to load data points')))
   } finally {
     loading.value = false
   }
@@ -91,9 +94,9 @@ const copyPath = async (path) => {
   if (!path) return
   try {
     await navigator.clipboard.writeText(path)
-    ElMessage.success('已复制数据点路径')
+    ElMessage.success(ui('已复制数据点路径', 'Data point path copied'))
   } catch {
-    ElMessage.error('复制失败，请手动复制')
+    ElMessage.error(ui('复制失败，请手动复制', 'Copy failed. Please copy manually.'))
   }
 }
 
@@ -110,12 +113,12 @@ watch(
 .datapoint-inline {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px dashed #e5e7eb;
+  border-top: 1px dashed var(--dc-border);
 }
 
 .header {
   font-size: 13px;
-  color: #374151;
+  color: var(--dc-text);
 }
 
 .title {
@@ -125,17 +128,17 @@ watch(
 .count {
   padding: 0 6px;
   border-radius: 999px;
-  background: #f3f4f6;
+  background: var(--dc-surface-subtle);
   font-size: 11px;
-  color: #6b7280;
+  color: var(--dc-text-secondary);
 }
 
 .dark .header {
-  color: #e5e7eb;
+  color: var(--dc-text);
 }
 
 .dark .count {
-  background: #1f2937;
-  color: #9ca3af;
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text-secondary);
 }
 </style>

@@ -2,22 +2,22 @@
   <div v-loading="loading" class="alarm-levels">
     <header class="alarm-levels__toolbar">
       <div>
-        <strong>报警级别</strong>
-        <span>顺序由低到高</span>
+        <strong>{{ t('alarmLevels.title') }}</strong>
+        <span>{{ t('alarmLevels.orderHint') }}</span>
       </div>
       <div class="alarm-levels__actions">
         <button type="button" class="alarm-levels__secondary" @click="addDefinition">
-          <IconTablerPlus />新增级别
+          <IconTablerPlus />{{ t('alarmLevels.addLevel') }}
         </button>
         <button type="button" class="alarm-levels__primary" :disabled="saving" @click="save">
-          <IconTablerDeviceFloppy />{{ saving ? '保存中' : '保存' }}
+          <IconTablerDeviceFloppy />{{ saving ? t('alarmLevels.saving') : t('alarmLevels.save') }}
         </button>
       </div>
     </header>
 
     <section class="alarm-levels__section">
       <div class="alarm-levels__level-head" aria-hidden="true">
-        <span>颜色</span><span>显示名称</span><span>标识</span><span>操作</span>
+        <span>{{ t('alarmLevels.color') }}</span><span>{{ t('alarmLevels.displayName') }}</span><span>{{ t('alarmLevels.key') }}</span><span>{{ t('alarmLevels.actions') }}</span>
       </div>
       <div
         v-for="(item, index) in draft.severityDefinitions"
@@ -28,14 +28,14 @@
           v-model="item.color"
           class="alarm-levels__color"
           type="color"
-          :aria-label="`${item.displayName}颜色`"
+          :aria-label="t('alarmLevels.colorLabel', { name: item.displayName })"
         />
         <el-input v-model="item.displayName" maxlength="20" />
         <el-input v-model="item.key" :disabled="item.isBuiltin" maxlength="30" />
         <div class="alarm-levels__row-actions">
           <button
             type="button"
-            title="上移"
+            :title="t('alarmLevels.moveUp')"
             :disabled="index === 0"
             @click="moveDefinition(index, -1)"
           >
@@ -43,7 +43,7 @@
           </button>
           <button
             type="button"
-            title="下移"
+            :title="t('alarmLevels.moveDown')"
             :disabled="index === draft.severityDefinitions.length - 1"
             @click="moveDefinition(index, 1)"
           >
@@ -52,7 +52,7 @@
           <button
             type="button"
             class="is-danger"
-            title="删除"
+            :title="t('alarmLevels.delete')"
             :disabled="item.isBuiltin"
             @click="removeDefinition(item.key)"
           >
@@ -63,14 +63,14 @@
     </section>
 
     <header class="alarm-levels__subhead">
-      <strong>报警升级</strong>
+      <strong>{{ t('alarmLevels.escalation') }}</strong>
       <button type="button" class="alarm-levels__secondary" @click="addRule">
-        <IconTablerPlus />新增规则
+        <IconTablerPlus />{{ t('alarmLevels.addRule') }}
       </button>
     </header>
     <section class="alarm-levels__section">
       <div class="alarm-levels__rule-head" aria-hidden="true">
-        <span>启用</span><span>当前级别</span><span>未确认持续（秒）</span><span>升级到</span
+        <span>{{ t('alarmLevels.enabled') }}</span><span>{{ t('alarmLevels.currentLevel') }}</span><span>{{ t('alarmLevels.unacknowledgedSeconds') }}</span><span>{{ t('alarmLevels.targetLevel') }}</span
         ><span></span>
       </div>
       <div v-for="rule in draft.escalationRules" :key="rule.id" class="alarm-levels__rule-row">
@@ -79,7 +79,7 @@
           <el-option
             v-for="item in sourceDefinitions"
             :key="item.key"
-            :label="item.displayName"
+            :label="levelLabel(item)"
             :value="item.key"
           />
         </el-select>
@@ -93,20 +93,20 @@
           <el-option
             v-for="item in targetDefinitions(rule.sourceSeverity)"
             :key="item.key"
-            :label="item.displayName"
+            :label="levelLabel(item)"
             :value="item.key"
           />
         </el-select>
         <button
           type="button"
           class="alarm-levels__remove"
-          title="删除升级规则"
+          :title="t('alarmLevels.deleteRule')"
           @click="removeRule(rule.id)"
         >
           <IconTablerTrash />
         </button>
       </div>
-      <el-empty v-if="!draft.escalationRules.length" :image-size="42" description="暂无升级规则" />
+      <el-empty v-if="!draft.escalationRules.length" :image-size="42" :description="t('alarmLevels.emptyRules')" />
     </section>
   </div>
 </template>
@@ -126,6 +126,7 @@ import type {
   AlarmSeverityDefinition,
 } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 
 const props = defineProps<{ projectId: string }>()
 const emit = defineEmits<{ changed: [settings: AlarmLevelSettings] }>()
@@ -139,6 +140,10 @@ const draft = reactive<{
   escalationRules: [],
 })
 const sourceDefinitions = computed(() => draft.severityDefinitions.slice(0, -1))
+const levelLabel = (item: AlarmSeverityDefinition) =>
+  ['info', 'warning', 'major', 'critical'].includes(item.key)
+    ? t(`alarm.severities.${item.key}`)
+    : item.displayName
 
 function applySettings(settings: AlarmLevelSettings) {
   draft.severityDefinitions = settings.severityDefinitions.map((item) => ({ ...item }))
@@ -152,7 +157,7 @@ async function load() {
   try {
     applySettings(await getAlarmLevelSettings(props.projectId))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载报警级别失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmLevels.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -168,7 +173,7 @@ function nextCustomKey() {
 function addDefinition() {
   draft.severityDefinitions.push({
     key: nextCustomKey(),
-    displayName: '自定义级别',
+    displayName: t('alarmLevels.customLevel'),
     color: '#8b5cf6',
     sortOrder: (draft.severityDefinitions.length + 1) * 10,
     isBuiltin: false,
@@ -236,9 +241,9 @@ async function save() {
       escalationRules: draft.escalationRules,
     })
     applySettings(result)
-    ElMessage.success('级别与升级配置已保存')
+    ElMessage.success(t('alarmLevels.saved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存级别与升级配置失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmLevels.saveFailed')))
   } finally {
     saving.value = false
   }

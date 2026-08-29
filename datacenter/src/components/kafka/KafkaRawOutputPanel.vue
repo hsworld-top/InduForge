@@ -2,9 +2,9 @@
   <section class="kafka-raw-output-panel">
     <section class="kafka-raw-output-panel__pullbar">
       <div class="kafka-raw-output-panel__pullbar-title">
-        <span>{{ mapping.rawDataPointPath || '未生成数据点' }}</span>
+        <span>{{ mapping.rawDataPointPath || ui('未生成数据点', 'No data point generated') }}</span>
       </div>
-      <el-tooltip content="点击测试 Broker 网络连通性" placement="top">
+      <el-tooltip :content="ui('点击测试 Broker 网络连通性', 'Click to test Broker connectivity')" placement="top">
         <WorkbenchStatusPill
           :label="networkStatusLabel"
           :tone="networkStatusTone"
@@ -19,14 +19,14 @@
           class="kafka-raw-output-panel__search"
           size="small"
           clearable
-          placeholder="搜索 Topic、Key 或 Payload"
+          :placeholder="ui('搜索 Topic、Key 或 Payload', 'Search Topic, Key, or Payload')"
         >
           <template #prefix>
             <IconTablerSearch />
           </template>
         </el-input>
         <label class="kafka-raw-output-panel__limit">
-          <span>拉取条数</span>
+          <span>{{ ui('拉取条数', 'Pull Count') }}</span>
           <el-input-number
             v-model="pullLimit"
             :min="1"
@@ -38,9 +38,9 @@
         </label>
         <el-button type="primary" size="small" :loading="loading" @click="pullSamples">
           <IconTablerDownload class="kafka-raw-output-panel__button-icon" />
-          拉取样本
+          {{ ui('拉取样本', 'Pull Samples') }}
         </el-button>
-        <el-tooltip :content="formatJson ? '关闭 JSON 格式化' : '开启 JSON 格式化'" placement="top">
+        <el-tooltip :content="formatJson ? ui('关闭 JSON 格式化', 'Disable JSON Formatting') : ui('开启 JSON 格式化', 'Enable JSON Formatting')" placement="top">
           <button
             type="button"
             class="kafka-raw-output-panel__icon-btn"
@@ -50,7 +50,7 @@
             <IconTablerBraces />
           </button>
         </el-tooltip>
-        <el-tooltip content="清空样本" placement="top">
+        <el-tooltip :content="ui('清空样本', 'Clear Samples')" placement="top">
           <button type="button" class="kafka-raw-output-panel__icon-btn" @click="clearSamples">
             <IconTablerTrash />
           </button>
@@ -61,8 +61,8 @@
       :messages="displayMessages"
       :loading="loading"
       :format-json="formatJson"
-      empty-text="暂无 Kafka 样本"
-      empty-hint="设置拉取条数后点击拉取样本"
+      :empty-text="ui('暂无 Kafka 样本', 'No Kafka samples')"
+      :empty-hint="ui('设置拉取条数后点击拉取样本', 'Set a pull count, then pull samples')"
       @copy="copyMessage"
     />
   </section>
@@ -78,8 +78,11 @@ import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
 import KafkaSampleMessageList from './KafkaSampleMessageList.vue'
 import type { KafkaPreview, KafkaPreviewSample, KafkaTopicMapping } from './types'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -109,10 +112,10 @@ const samples = ref<KafkaPreviewSample[]>([])
 const networkStatus = ref<'unknown' | 'testing' | 'available' | 'unavailable'>('unknown')
 
 const networkStatusLabel = computed(() => {
-  if (networkStatus.value === 'testing') return '测试中'
-  if (networkStatus.value === 'available') return '可用'
-  if (networkStatus.value === 'unavailable') return '不可用'
-  return '未测试'
+  if (networkStatus.value === 'testing') return ui('测试中', 'Testing')
+  if (networkStatus.value === 'available') return ui('可用', 'Available')
+  if (networkStatus.value === 'unavailable') return ui('不可用', 'Unavailable')
+  return ui('未测试', 'Not Tested')
 })
 const networkStatusTone = computed(() => {
   if (networkStatus.value === 'available') return 'success'
@@ -164,14 +167,14 @@ const pullSamples = async () => {
     samples.value = [...uniqueNextSamples, ...samples.value]
     emit('samples', { mappingId: String(props.mapping.id), samples: samples.value, preview })
     if (nextSamples.length === 0) {
-      ElMessage.warning('本次未拉取到样本，可调整起始位置、样本上限或超时后重试')
+      ElMessage.warning(ui('本次未拉取到样本，可调整起始位置、样本上限或超时后重试', 'No sample was returned. Adjust the start position, sample limit, or timeout and try again.'))
       return
     }
     ElMessage.success(
-      `本次拉取 ${nextSamples.length} 条样本，新增 ${uniqueNextSamples.length} 条，当前共 ${samples.value.length} 条`,
+      ui(`本次拉取 ${nextSamples.length} 条样本，新增 ${uniqueNextSamples.length} 条，当前共 ${samples.value.length} 条`, `Pulled ${nextSamples.length} samples, added ${uniqueNextSamples.length}; ${samples.value.length} total`),
     )
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, 'Kafka 样本拉取失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('Kafka 样本拉取失败', 'Failed to pull Kafka samples')))
   } finally {
     loading.value = false
   }
@@ -188,10 +191,10 @@ const testNetwork = async (notify = true) => {
       probe: true,
     })
     networkStatus.value = 'available'
-    if (notify) ElMessage.success('Kafka Broker 网络可用')
+    if (notify) ElMessage.success(ui('Kafka Broker 网络可用', 'Kafka Broker network is available'))
   } catch (error) {
     networkStatus.value = 'unavailable'
-    if (notify) ElMessage.error(getApiErrorMessage(error, 'Kafka Broker 网络不可用'))
+    if (notify) ElMessage.error(getApiErrorMessage(error, ui('Kafka Broker 网络不可用', 'Kafka Broker network is unavailable')))
   } finally {
     testingNetwork.value = false
   }
@@ -203,7 +206,7 @@ const clearSamples = () => {
 
 const copyMessage = async (message: { payload?: unknown }) => {
   await navigator.clipboard.writeText(formatPayload(message.payload))
-  ElMessage.success('Payload 已复制')
+  ElMessage.success(ui('Payload 已复制', 'Payload copied'))
 }
 
 const formatPayload = (value: unknown) => {

@@ -1,13 +1,13 @@
 <template>
   <div class="collector-group-tree" @contextmenu.prevent>
     <div class="collector-group-tree__head">
-      <strong>变量组织</strong>
-      <el-tooltip content="新建变量分组" placement="top">
+      <strong>{{ ui('变量组织', 'Point Groups') }}</strong>
+      <el-tooltip :content="ui('新建变量分组', 'New Point Group')" placement="top">
         <el-button
           text
           circle
           class="collector-group-tree__create"
-          aria-label="新建变量分组"
+          :aria-label="ui('新建变量分组', 'New Point Group')"
           @click="createGroup(null)"
         >
           <IconTablerFolderPlus />
@@ -20,7 +20,7 @@
       @click="emit('select', null)"
       @contextmenu.prevent="openMenu($event, null)"
     >
-      全部变量
+      {{ ui('全部变量', 'All Points') }}
     </button>
     <el-tree
       :key="treeVersion"
@@ -40,13 +40,13 @@
       @click.stop
     >
       <button type="button" @click="createGroup(menu.group?.id || null)">
-        {{ menu.group ? '新建子分组' : '新建顶级分组' }}
+        {{ menu.group ? ui('新建子分组', 'New Subgroup') : ui('新建顶级分组', 'New Top-level Group') }}
       </button>
-      <button type="button" @click="createPoint(menu.group?.id || null)">新建变量</button>
+      <button type="button" @click="createPoint(menu.group?.id || null)">{{ ui('新建变量', 'New Point') }}</button>
       <template v-if="menu.group">
         <span />
-        <button type="button" @click="renameGroup(menu.group)">重命名</button>
-        <button type="button" class="is-danger" @click="removeGroup(menu.group)">删除分组</button>
+        <button type="button" @click="renameGroup(menu.group)">{{ ui('重命名', 'Rename') }}</button>
+        <button type="button" class="is-danger" @click="removeGroup(menu.group)">{{ ui('删除分组', 'Delete Group') }}</button>
       </template>
     </div>
   </div>
@@ -63,6 +63,9 @@ import {
   updateCollectorPointGroup,
 } from '@/api/collector.api'
 import type { CollectorPointGroup } from '@/api/schemas/collector.schema'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{ projectId: string; connectionId: string }>()
 const emit = defineEmits<{
@@ -103,11 +106,11 @@ async function createGroup(parentId: string | null) {
   closeMenu()
   try {
     const result = await ElMessageBox.prompt(
-      '请输入分组名称',
-      parentId ? '新增子分组' : '新增变量分组',
+      ui('请输入分组名称', 'Enter a group name'),
+      parentId ? ui('新增子分组', 'New Subgroup') : ui('新增变量分组', 'New Point Group'),
       {
         inputPattern: /^.{1,100}$/,
-        inputErrorMessage: '分组名称长度必须为 1 到 100 个字符',
+        inputErrorMessage: ui('分组名称长度必须为 1 到 100 个字符', 'Group names must contain 1 to 100 characters'),
       },
     )
     await createCollectorPointGroup(props.projectId, props.connectionId, {
@@ -117,7 +120,7 @@ async function createGroup(parentId: string | null) {
       metadata: {},
     })
     refreshTree()
-    ElMessage.success('分组已创建')
+    ElMessage.success(ui('分组已创建', 'Group created'))
   } catch (error) {
     if (error !== 'cancel') throw error
   }
@@ -125,16 +128,16 @@ async function createGroup(parentId: string | null) {
 async function renameGroup(group: CollectorPointGroup) {
   closeMenu()
   try {
-    const result = await ElMessageBox.prompt('请输入新的分组名称', '重命名变量分组', {
+    const result = await ElMessageBox.prompt(ui('请输入新的分组名称', 'Enter a new group name'), ui('重命名变量分组', 'Rename Point Group'), {
       inputValue: group.name,
       inputPattern: /^.{1,100}$/,
-      inputErrorMessage: '分组名称长度必须为 1 到 100 个字符',
+      inputErrorMessage: ui('分组名称长度必须为 1 到 100 个字符', 'Group names must contain 1 to 100 characters'),
     })
     await updateCollectorPointGroup(props.projectId, props.connectionId, group.id, {
       name: result.value.trim(),
     })
     refreshTree()
-    ElMessage.success('分组已重命名')
+    ElMessage.success(ui('分组已重命名', 'Group renamed'))
   } catch (error) {
     if (error !== 'cancel') throw error
   }
@@ -143,14 +146,14 @@ async function removeGroup(group: CollectorPointGroup) {
   closeMenu()
   try {
     await ElMessageBox.confirm(
-      `确认删除分组“${group.name}”及其子分组？组内变量会移动到上级分组。`,
-      '删除变量分组',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+      ui(`确认删除分组“${group.name}”及其子分组？组内变量会移动到上级分组。`, `Delete “${group.name}” and its subgroups? Points will be moved to the parent group.`),
+      ui('删除变量分组', 'Delete Point Group'),
+      { type: 'warning', confirmButtonText: ui('删除', 'Delete'), cancelButtonText: ui('取消', 'Cancel') },
     )
     await deleteCollectorPointGroup(props.projectId, props.connectionId, group.id)
     emit('select', group.parentId)
     refreshTree()
-    ElMessage.success('分组已删除，变量已移动到上级分组')
+    ElMessage.success(ui('分组已删除，变量已移动到上级分组', 'Group deleted and points moved to the parent group'))
   } catch (error) {
     if (error !== 'cancel') throw error
   }

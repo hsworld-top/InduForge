@@ -12,6 +12,8 @@ import {
   formatCollectorAgentName,
   formatCollectorConnectionStatus,
   formatCollectorConnectionSummary,
+  formatCollectorSchemaFieldHint,
+  formatCollectorSchemaFieldLabel,
   filterCollectorBrowseNode,
   formatCollectorProtocolFamily,
   groupCollectorConnections,
@@ -187,14 +189,50 @@ describe('industrial collector workbench model', () => {
     expect(resolveCollectorDriverIconKey('plc', 'siemens.s7')).toBe('siemens')
     expect(resolveCollectorDriverIconKey('opcua', 'opcua.standard')).toBeNull()
   })
-  it('shows bilingual enum labels and falls back to raw values', () => {
+  it('uses concise enum labels without exposing lowercase contract values', () => {
     const property = {
       type: 'string' as const,
       enum: ['none', 'odd'],
       'x-induforge-enum-labels': { none: '无校验（none）' },
     }
-    expect(resolveCollectorEnumOptionLabel(property, 'none')).toBe('无校验（none）')
-    expect(resolveCollectorEnumOptionLabel(property, 'odd')).toBe('odd')
+    expect(resolveCollectorEnumOptionLabel(property, 'none')).toBe('无校验')
+    expect(resolveCollectorEnumOptionLabel(property, 'odd')).toBe('奇校验')
+    expect(
+      resolveCollectorEnumOptionLabel(
+        {
+          type: 'string',
+          enum: ['ABCD'],
+          'x-induforge-enum-labels': { ABCD: '大端顺序（ABCD）' },
+        },
+        'ABCD',
+      ),
+    ).toBe('大端顺序（ABCD）')
+  })
+  it('hides internal schema names and removes redundant connection hints', () => {
+    expect(
+      formatCollectorSchemaFieldLabel('portName', {
+        type: 'string',
+        title: '串口（portName）',
+      }),
+    ).toBe('串口名称')
+    expect(
+      formatCollectorSchemaFieldLabel('gct', {
+        type: 'integer',
+        title: '网关计数（GCT / gct）',
+      }),
+    ).toBe('网关计数')
+    expect(
+      formatCollectorSchemaFieldHint('host', {
+        type: 'string',
+        description: '请输入 Modbus TCP 设备的 IPv4、IPv6 或主机名',
+      }),
+    ).toBe('')
+    expect(
+      formatCollectorSchemaFieldHint('host', {
+        type: 'string',
+        description: '请输入 OPC UA 服务器的 IPv4、IPv6 或主机名，不包含 opc.tcp://',
+      }),
+    ).toBe('直接填写地址，不包含 opc.tcp:// 协议头。')
   })
   it('builds a protocol family and driver tree with bilingual labels', () => {
     const drivers = [

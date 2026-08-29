@@ -20,7 +20,7 @@
         :model-value="search"
         class="workbench-stream-toolbar__search"
         size="small"
-        placeholder="搜索 Topic 或 Payload"
+        :placeholder="ui('搜索 Topic 或 Payload', 'Search topic or payload')"
         clearable
         @update:model-value="$emit('update:search', $event)"
       >
@@ -30,7 +30,7 @@
       </el-input>
 
       <label class="workbench-stream-toolbar__limit">
-        <span>显示</span>
+        <span>{{ ui('显示', 'Show') }}</span>
         <el-input-number
           :model-value="limit"
           :min="10"
@@ -42,7 +42,7 @@
         />
       </label>
 
-      <el-tooltip content="刷新历史消息" placement="top">
+      <el-tooltip :content="ui('刷新历史消息', 'Refresh message history')" placement="top">
         <button
           type="button"
           class="workbench-stream-toolbar__icon-btn"
@@ -53,7 +53,7 @@
         </button>
       </el-tooltip>
 
-      <el-tooltip :content="formatJson ? '关闭 JSON 格式化' : '开启 JSON 格式化'" placement="top">
+      <el-tooltip :content="formatJson ? ui('关闭 JSON 格式化', 'Disable JSON formatting') : ui('开启 JSON 格式化', 'Enable JSON formatting')" placement="top">
         <button
           type="button"
           class="workbench-stream-toolbar__icon-btn"
@@ -64,7 +64,7 @@
         </button>
       </el-tooltip>
 
-      <el-tooltip :content="autoScroll ? '关闭自动滚动' : '开启自动滚动'" placement="top">
+      <el-tooltip :content="autoScroll ? ui('关闭自动滚动', 'Disable auto-scroll') : ui('开启自动滚动', 'Enable auto-scroll')" placement="top">
         <button
           type="button"
           class="workbench-stream-toolbar__icon-btn"
@@ -75,7 +75,7 @@
         </button>
       </el-tooltip>
 
-      <el-tooltip :content="showTimestamp ? '隐藏时间戳' : '显示时间戳'" placement="top">
+      <el-tooltip :content="showTimestamp ? ui('隐藏时间戳', 'Hide timestamps') : ui('显示时间戳', 'Show timestamps')" placement="top">
         <button
           type="button"
           class="workbench-stream-toolbar__icon-btn"
@@ -86,7 +86,7 @@
         </button>
       </el-tooltip>
 
-      <el-tooltip content="清空消息" placement="top">
+      <el-tooltip :content="ui('清空消息', 'Clear messages')" placement="top">
         <button type="button" class="workbench-stream-toolbar__icon-btn" @click="$emit('clear')">
           <IconTablerTrash />
         </button>
@@ -103,6 +103,9 @@ import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSearch from '~icons/tabler/search'
 import IconTablerTrash from '~icons/tabler/trash'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 withDefaults(
   defineProps<{

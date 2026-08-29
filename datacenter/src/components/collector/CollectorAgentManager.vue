@@ -3,26 +3,26 @@
     <div class="collector-agent-workspace">
       <header class="collector-agent-header">
         <div class="collector-agent-header__identity">
-          <h1>采集调试代理</h1>
+          <h1>{{ ui('采集调试代理', 'Collector Debug Agents') }}</h1>
         </div>
 
         <div class="collector-agent-header__actions">
           <div v-if="agents.length > 0" class="collector-agent-view-switcher">
-            <el-tooltip content="卡片视图" placement="top">
+            <el-tooltip :content="ui('卡片视图', 'Card View')" placement="top">
               <button
                 type="button"
                 :class="{ 'is-active': viewMode === 'card' }"
-                aria-label="切换到卡片视图"
+                :aria-label="ui('切换到卡片视图', 'Switch to card view')"
                 @click="viewMode = 'card'"
               >
                 <IconTablerLayoutGrid />
               </button>
             </el-tooltip>
-            <el-tooltip content="列表视图" placement="top">
+            <el-tooltip :content="ui('列表视图', 'List View')" placement="top">
               <button
                 type="button"
                 :class="{ 'is-active': viewMode === 'list' }"
-                aria-label="切换到列表视图"
+                :aria-label="ui('切换到列表视图', 'Switch to list view')"
                 @click="viewMode = 'list'"
               >
                 <IconTablerListDetails />
@@ -33,11 +33,11 @@
             type="button"
             class="collector-agent-action collector-agent-action--secondary"
             :disabled="loading"
-            aria-label="刷新采集调试代理"
+            :aria-label="ui('刷新采集调试代理', 'Refresh collector debug agents')"
             @click="loadAgents()"
           >
             <IconTablerRefresh :class="{ 'is-spinning': loading }" />
-            <span>刷新</span>
+            <span>{{ ui('刷新', 'Refresh') }}</span>
           </button>
           <button
             v-if="canManage"
@@ -46,7 +46,7 @@
             @click="createRegistrationCode"
           >
             <IconTablerKey />
-            <span>生成注册码</span>
+            <span>{{ ui('生成注册码', 'Generate Registration Code') }}</span>
           </button>
         </div>
       </header>
@@ -54,7 +54,7 @@
       <section class="collector-agent-content-panel">
         <div v-if="!canManage" class="collector-agent-notice">
           <IconTablerInfoCircle />
-          <span>当前账号可查看代理状态；生成注册码和移除代理需要系统管理员权限。</span>
+          <span>{{ ui('当前账号可查看代理状态；生成注册码和移除代理需要系统管理员权限。', 'This account can view agent status. Generating registration codes and removing agents require system administrator permission.') }}</span>
         </div>
 
         <div v-if="loadError" class="collector-agent-error" role="alert">
@@ -62,11 +62,11 @@
             <IconTablerAlertTriangle />
           </div>
           <div class="collector-agent-error__content">
-            <strong>代理状态加载失败</strong>
+            <strong>{{ ui('代理状态加载失败', 'Failed to Load Agent Status') }}</strong>
             <span>{{ loadError }}</span>
           </div>
           <button type="button" class="collector-agent-error__retry" @click="loadAgents()">
-            重新加载
+            {{ ui('重新加载', 'Reload') }}
           </button>
         </div>
 
@@ -81,9 +81,9 @@
                 <span><IconTablerPlugConnected /></span>
               </div>
               <div>
-                <p class="collector-agent-empty__eyebrow">尚未连接调试代理</p>
-                <h2>将采集节点接入中心</h2>
-                <p>采集调试代理作为独立进程运行，注册完成后即可承载开发态工业协议调试。</p>
+                <p class="collector-agent-empty__eyebrow">{{ ui('尚未连接调试代理', 'No Debug Agent Connected') }}</p>
+                <h2>{{ ui('将采集节点接入中心', 'Connect a Collector Node') }}</h2>
+                <p>{{ ui('采集调试代理作为独立进程运行，注册完成后即可承载开发态工业协议调试。', 'The collector debug agent runs as a separate process and provides development-time industrial protocol debugging after registration.') }}</p>
               </div>
             </div>
 
@@ -91,22 +91,22 @@
               <li>
                 <span class="collector-agent-step__number">1</span>
                 <div>
-                  <strong>生成一次性注册码</strong>
-                  <p>注册码仅用于首次注册，并在短时间后自动失效。</p>
+                  <strong>{{ ui('生成一次性注册码', 'Generate a One-time Registration Code') }}</strong>
+                  <p>{{ ui('注册码仅用于首次注册，并在短时间后自动失效。', 'The code is only used for initial registration and expires shortly afterward.') }}</p>
                 </div>
               </li>
               <li>
                 <span class="collector-agent-step__number">2</span>
                 <div>
-                  <strong>启动采集调试代理</strong>
-                  <p>在可访问设备网络的节点上运行代理程序。</p>
+                  <strong>{{ ui('启动采集调试代理', 'Start the Collector Debug Agent') }}</strong>
+                  <p>{{ ui('在可访问设备网络的节点上运行代理程序。', 'Run the agent on a node that can access the device network.') }}</p>
                 </div>
               </li>
               <li>
                 <span class="collector-agent-step__number">3</span>
                 <div>
-                  <strong>连接当前中心</strong>
-                  <p>填写中心地址和注册码，完成后代理会自动上报状态。</p>
+                  <strong>{{ ui('连接当前中心', 'Connect to This Center') }}</strong>
+                  <p>{{ ui('填写中心地址和注册码，完成后代理会自动上报状态。', 'Enter the center address and registration code. The agent will report its status automatically.') }}</p>
                 </div>
               </li>
             </ol>
@@ -118,7 +118,7 @@
                 @click="createRegistrationCode"
               >
                 <IconTablerKey />
-                <span>生成首个注册码</span>
+                <span>{{ ui('生成首个注册码', 'Generate First Registration Code') }}</span>
               </button>
             </div>
           </section>
@@ -153,29 +153,29 @@
 
               <dl class="collector-agent-card__details">
                 <div>
-                  <dt><IconTablerFingerprint />代理标识</dt>
+                  <dt><IconTablerFingerprint />{{ ui('代理标识', 'Agent ID') }}</dt>
                   <dd>{{ agent.id }}</dd>
                 </div>
                 <div>
-                  <dt><IconTablerNetwork />IP 地址</dt>
-                  <dd>{{ agent.ipAddress || '尚未上报' }}</dd>
+                  <dt><IconTablerNetwork />{{ ui('IP 地址', 'IP Address') }}</dt>
+                  <dd>{{ agent.ipAddress || ui('尚未上报', 'Not Reported') }}</dd>
                 </div>
                 <div>
-                  <dt><IconTablerClock />最后心跳</dt>
-                  <dd>{{ agent.lastSeenAt || '尚未上报' }}</dd>
+                  <dt><IconTablerClock />{{ ui('最后心跳', 'Last Heartbeat') }}</dt>
+                  <dd>{{ agent.lastSeenAt || ui('尚未上报', 'Not Reported') }}</dd>
                 </div>
               </dl>
 
               <div class="collector-agent-card__capabilities">
                 <div class="collector-agent-card__section-title">
-                  <span>协议能力</span>
-                  <small>{{ agent.capabilities.length }} 项</small>
+                  <span>{{ ui('协议能力', 'Protocol Capabilities') }}</span>
+                  <small>{{ ui(`${agent.capabilities.length} 项`, `${agent.capabilities.length}`) }}</small>
                 </div>
                 <div v-if="agent.capabilities.length > 0" class="collector-agent-capability-list">
                   <el-tooltip
                     v-for="capability in agent.capabilities"
                     :key="`${agent.id}-${capability.driverId}`"
-                    :content="capability.operations.join('、') || '未上报操作能力'"
+                    :content="capability.operations.join(datacenterLocale === 'en' ? ', ' : '、') || ui('未上报操作能力', 'No operations reported')"
                     placement="top"
                   >
                     <span class="collector-agent-capability">
@@ -184,7 +184,7 @@
                     </span>
                   </el-tooltip>
                 </div>
-                <span v-else class="collector-agent-card__empty-capability">暂未上报协议能力</span>
+                <span v-else class="collector-agent-card__empty-capability">{{ ui('暂未上报协议能力', 'No protocol capabilities reported') }}</span>
               </div>
 
               <footer
@@ -197,21 +197,21 @@
                   @click="removeAgent(agent)"
                 >
                   <IconTablerTrash />
-                  <span>移除代理</span>
+                  <span>{{ ui('移除代理', 'Remove Agent') }}</span>
                 </button>
               </footer>
               <footer
                 v-else-if="agent.status === 'invalid'"
                 class="collector-agent-card__footer collector-agent-card__invalid-note"
               >
-                需要使用新注册码重新激活
+                {{ ui('需要使用新注册码重新激活', 'A new registration code is required to reactivate') }}
               </footer>
             </article>
           </section>
 
           <section v-else-if="agents.length > 0" class="collector-agent-table-wrap">
             <el-table :data="agents" row-key="id" class="collector-agent-table">
-              <el-table-column label="代理" min-width="210">
+              <el-table-column :label="ui('代理', 'Agent')" min-width="210">
                 <template #default="{ row }">
                   <div class="collector-agent-table__machine">
                     <div class="collector-agent-table__device">
@@ -225,32 +225,32 @@
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="状态" width="88" align="center">
+              <el-table-column :label="ui('状态', 'Status')" width="88" align="center">
                 <template #default="{ row }">
                   <span class="collector-agent-card__status" :class="`is-${row.status}`">
                     {{ agentStatusText(row.status) }}
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column label="系统" min-width="130">
+              <el-table-column :label="ui('系统', 'System')" min-width="130">
                 <template #default="{ row }">{{ row.os }} / {{ row.arch }}</template>
               </el-table-column>
-              <el-table-column prop="ipAddress" label="IP 地址" width="140" />
-              <el-table-column prop="version" label="版本" min-width="180" show-overflow-tooltip />
-              <el-table-column label="协议能力" min-width="160">
+              <el-table-column prop="ipAddress" :label="ui('IP 地址', 'IP Address')" width="140" />
+              <el-table-column prop="version" :label="ui('版本', 'Version')" min-width="180" show-overflow-tooltip />
+              <el-table-column :label="ui('协议能力', 'Capabilities')" min-width="160">
                 <template #default="{ row }">
                   <div class="collector-agent-table__protocols">
                     <span v-for="capability in row.capabilities" :key="capability.driverId">
                       {{ capability.driverId.toUpperCase() }}
                     </span>
-                    <small v-if="row.capabilities.length === 0">未上报</small>
+                    <small v-if="row.capabilities.length === 0">{{ ui('未上报', 'Not Reported') }}</small>
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="最后心跳" width="170">
-                <template #default="{ row }">{{ row.lastSeenAt || '尚未上报' }}</template>
+              <el-table-column :label="ui('最后心跳', 'Last Heartbeat')" width="170">
+                <template #default="{ row }">{{ row.lastSeenAt || ui('尚未上报', 'Not Reported') }}</template>
               </el-table-column>
-              <el-table-column v-if="canManage" label="操作" width="90" align="right" fixed="right">
+              <el-table-column v-if="canManage" :label="ui('操作', 'Actions')" width="90" align="right" fixed="right">
                 <template #default="{ row }">
                   <button
                     v-if="row.status !== 'invalid'"
@@ -258,9 +258,9 @@
                     class="collector-agent-table__remove"
                     @click="removeAgent(row)"
                   >
-                    移除
+                    {{ ui('移除', 'Remove') }}
                   </button>
-                  <span v-else class="collector-agent-table__invalid">需重新注册</span>
+                  <span v-else class="collector-agent-table__invalid">{{ ui('需重新注册', 'Registration Required') }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -288,26 +288,26 @@
         <div class="registration-dialog-title">
           <span><IconTablerShieldLock /></span>
           <div>
-            <strong>一次性注册码</strong>
-            <small>用于采集调试代理首次连接当前租户</small>
+            <strong>{{ ui('一次性注册码', 'One-time Registration Code') }}</strong>
+            <small>{{ ui('用于采集调试代理首次连接当前租户', 'Used for the collector debug agent’s first connection to this tenant') }}</small>
           </div>
         </div>
       </template>
 
       <div class="registration-dialog-notice">
         <IconTablerAlertTriangle />
-        <span>注册码只展示本次，请勿发送给无关人员。</span>
+        <span>{{ ui('注册码只展示本次，请勿发送给无关人员。', 'This code is shown only once. Do not share it with unauthorized people.') }}</span>
       </div>
       <div class="registration-code-box">
         <code>{{ registrationCode?.code }}</code>
         <button type="button" @click="copyRegistrationCode">
           <IconTablerCopy />
-          <span>复制</span>
+          <span>{{ ui('复制', 'Copy') }}</span>
         </button>
       </div>
       <p class="registration-code-expiry">
         <IconTablerClock />
-        <span>有效期至 {{ registrationCode?.expiresAt }}</span>
+        <span>{{ ui('有效期至', 'Expires at') }} {{ registrationCode?.expiresAt }}</span>
       </p>
       <template #footer>
         <button
@@ -315,7 +315,7 @@
           class="collector-agent-action collector-agent-action--primary"
           @click="registrationDialogVisible = false"
         >
-          我已保存
+          {{ ui('我已保存', 'I Have Saved It') }}
         </button>
       </template>
     </el-dialog>
@@ -348,6 +348,9 @@ import type { CollectorAgent, CollectorRegistrationCode } from '@/api/schemas/co
 import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
 import { Storage } from '@/utils/storage'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const agents = ref<CollectorAgent[]>([])
 const viewMode = ref<'card' | 'list'>('card')
@@ -363,7 +366,9 @@ let refreshTimer: number | undefined
 let refreshRunning = false
 
 const agentStatusText = (status: CollectorAgent['status']) =>
-  ({ online: '在线', offline: '离线', invalid: '无效' })[status]
+  datacenterLocale.value === 'en'
+    ? ({ online: 'Online', offline: 'Offline', invalid: 'Invalid' })[status]
+    : ({ online: '在线', offline: '离线', invalid: '无效' })[status]
 
 const loadAgents = async (silent = false) => {
   if (refreshRunning) return
@@ -387,7 +392,7 @@ const loadAgents = async (silent = false) => {
     pagination.value = result.pagination
   } catch (error) {
     if (!silent) {
-      loadError.value = getApiErrorMessage(error, '无法连接数据服务，请确认服务已启动后重试。')
+      loadError.value = getApiErrorMessage(error, ui('无法连接数据服务，请确认服务已启动后重试。', 'Unable to connect to the data service. Confirm that it is running and try again.'))
     }
   } finally {
     refreshRunning = false
@@ -406,28 +411,28 @@ const createRegistrationCode = async () => {
     registrationCode.value = await createCollectorRegistrationCode()
     registrationDialogVisible.value = true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '生成注册码失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('生成注册码失败', 'Failed to generate registration code')))
   }
 }
 
 const copyRegistrationCode = async () => {
   if (!registrationCode.value) return
   await navigator.clipboard.writeText(registrationCode.value.code)
-  ElMessage.success('注册码已复制')
+  ElMessage.success(ui('注册码已复制', 'Registration code copied'))
 }
 
 const removeAgent = async (agent: CollectorAgent) => {
   await ElMessageBox.confirm(
-    `移除“${agent.name}”后，其本地 Token 将立即失效。`,
-    '移除采集调试代理',
-    { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' },
+    ui(`移除“${agent.name}”后，其本地 Token 将立即失效。`, `Removing “${agent.name}” immediately invalidates its local token.`),
+    ui('移除采集调试代理', 'Remove Collector Debug Agent'),
+    { type: 'warning', confirmButtonText: ui('移除', 'Remove'), cancelButtonText: ui('取消', 'Cancel') },
   )
   try {
     await deleteCollectorAgent(agent.id)
-    ElMessage.success('代理已移除')
+    ElMessage.success(ui('代理已移除', 'Agent removed'))
     await loadAgents()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移除代理失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移除代理失败', 'Failed to remove agent')))
   }
 }
 
@@ -617,9 +622,9 @@ onBeforeUnmount(() => {
 .collector-agent-notice {
   gap: 9px;
   padding: 10px 12px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border: 1px solid color-mix(in srgb, var(--dc-primary) 28%, var(--dc-border));
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
   font-size: 12px;
 }
 
@@ -632,8 +637,8 @@ onBeforeUnmount(() => {
 .collector-agent-error {
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid #fecaca;
-  background: #fff7f7;
+  border: 1px solid color-mix(in srgb, var(--dc-danger) 28%, var(--dc-border));
+  background: var(--dc-danger-soft);
 }
 
 .collector-agent-error__icon {
@@ -643,8 +648,8 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   border-radius: 9px;
-  background: #fee2e2;
-  color: #dc2626;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .collector-agent-error__icon svg {
@@ -676,7 +681,7 @@ onBeforeUnmount(() => {
   padding: 6px 11px;
   border: 1px solid #fca5a5;
   border-radius: var(--dc-radius-sm);
-  background: #fff;
+  background: var(--dc-surface-raised);
   color: #b91c1c;
   font-size: 12px;
   font-weight: 700;
@@ -693,7 +698,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
-  background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%);
+  background: linear-gradient(
+    180deg,
+    var(--dc-surface-raised) 0%,
+    var(--dc-surface-subtle) 100%
+  );
 }
 
 .collector-agent-empty__intro {
@@ -710,10 +719,10 @@ onBeforeUnmount(() => {
   height: 76px;
   display: grid;
   place-items: center;
-  border: 1px solid #bfdbfe;
+  border: 1px solid color-mix(in srgb, var(--dc-primary) 28%, var(--dc-border));
   border-radius: 20px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .collector-agent-empty__visual > svg {
@@ -729,7 +738,7 @@ onBeforeUnmount(() => {
   height: 30px;
   display: grid;
   place-items: center;
-  border: 3px solid #f8fafc;
+  border: 3px solid var(--dc-surface-subtle);
   border-radius: 50%;
   background: var(--dc-primary);
   color: #fff;
@@ -796,10 +805,10 @@ onBeforeUnmount(() => {
   height: 26px;
   display: grid;
   place-items: center;
-  border: 1px solid #bfdbfe;
+  border: 1px solid color-mix(in srgb, var(--dc-primary) 28%, var(--dc-border));
   border-radius: 50%;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
   font-size: 12px;
   font-weight: 800;
 }
@@ -821,7 +830,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   padding: 14px 28px;
   border-top: 1px solid var(--dc-border);
-  background: rgba(255, 255, 255, 0.78);
+  background: color-mix(in srgb, var(--dc-surface-raised) 92%, transparent);
 }
 
 .collector-agent-grid {
@@ -997,10 +1006,10 @@ onBeforeUnmount(() => {
 
 .collector-agent-table__protocols span {
   padding: 3px 6px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid color-mix(in srgb, var(--dc-primary) 28%, var(--dc-border));
   border-radius: 5px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
   font-size: 10px;
   font-weight: 700;
 }
@@ -1064,8 +1073,8 @@ onBeforeUnmount(() => {
 }
 
 .collector-agent-table__remove:hover {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .collector-agent-card__status {
@@ -1077,18 +1086,18 @@ onBeforeUnmount(() => {
 }
 
 .collector-agent-card__status.is-online {
-  background: #ecfdf3;
-  color: #15803d;
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .collector-agent-card__status.is-offline {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
 }
 
 .collector-agent-card__status.is-invalid {
-  background: #fff1f2;
-  color: #be123c;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .collector-agent-card.is-invalid {
@@ -1145,7 +1154,7 @@ onBeforeUnmount(() => {
 .collector-agent-card__capabilities {
   padding: 13px 18px 16px;
   border-top: 1px solid var(--dc-border);
-  background: #fbfcfe;
+  background: var(--dc-surface-subtle);
 }
 
 .collector-agent-card__section-title {
@@ -1177,10 +1186,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 5px 8px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid color-mix(in srgb, var(--dc-primary) 28%, var(--dc-border));
   border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
   font-size: 10px;
   font-weight: 700;
   cursor: default;
@@ -1190,7 +1199,7 @@ onBeforeUnmount(() => {
   min-width: 16px;
   padding: 1px 4px;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--dc-primary) 12%, transparent);
   text-align: center;
 }
 
@@ -1219,8 +1228,8 @@ onBeforeUnmount(() => {
 }
 
 .collector-agent-card__remove:hover {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .collector-agent-card__remove svg {
@@ -1270,10 +1279,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid #fed7aa;
+  border: 1px solid color-mix(in srgb, var(--dc-warning) 28%, var(--dc-border));
   border-radius: var(--dc-radius-sm);
-  background: #fff7ed;
-  color: #9a3412;
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
   font-size: 12px;
 }
 

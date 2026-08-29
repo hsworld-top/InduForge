@@ -2,7 +2,7 @@
   <DcDialog
     ref="dialogRef"
     :model-value="visible"
-    :title="`自定义属性：${datapointName || '-'}`"
+    :title="ui(`自定义属性：${datapointName || '-'}`, `Custom Attributes: ${datapointName || '-'}`)"
     width="min(680px, calc(100vw - 32px))"
     body-max-height="520px"
     destroy-on-close
@@ -12,14 +12,14 @@
   >
     <div class="attribute-dialog">
       <div class="attribute-dialog__toolbar">
-        <div class="attribute-dialog__label">属性默认值</div>
-        <el-button :icon="Plus" @click="appendRow">添加属性</el-button>
+        <div class="attribute-dialog__label">{{ ui('属性默认值', 'Attribute Defaults') }}</div>
+        <el-button :icon="Plus" @click="appendRow">{{ ui('添加属性', 'Add Attribute') }}</el-button>
       </div>
 
       <div v-if="rows.length" class="attribute-dialog__table">
         <div class="attribute-dialog__head">
-          <span>属性 Key</span>
-          <span>默认值</span>
+          <span>{{ ui('属性 Key', 'Attribute Key') }}</span>
+          <span>{{ ui('默认值', 'Default Value') }}</span>
           <span aria-hidden="true"></span>
         </div>
         <div v-for="row in rows" :key="row.id" class="attribute-dialog__row">
@@ -27,22 +27,22 @@
             v-model="row.key"
             class="attribute-dialog__key"
             maxlength="64"
-            placeholder="例如 asset_code"
+            :placeholder="ui('例如 asset_code', 'Example: asset_code')"
             @input="validationVisible = false"
           />
-          <el-input v-model="row.value" class="attribute-dialog__value" placeholder="可留空" />
+          <el-input v-model="row.value" class="attribute-dialog__value" :placeholder="ui('可留空', 'Optional')" />
           <el-button
             text
             circle
             :icon="Delete"
-            title="删除属性"
-            aria-label="删除属性"
+            :title="ui('删除属性', 'Delete Attribute')"
+            :aria-label="ui('删除属性', 'Delete Attribute')"
             @click="removeRow(row.id)"
           />
         </div>
       </div>
 
-      <el-empty v-else :image-size="56" description="暂无自定义属性" />
+      <el-empty v-else :image-size="56" :description="ui('暂无自定义属性', 'No custom attributes')" />
 
       <div v-if="validationVisible && validationError" class="attribute-dialog__error">
         {{ validationError }}
@@ -50,8 +50,8 @@
     </div>
 
     <template #footer>
-      <el-button :disabled="saving" @click="requestClose">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+      <el-button :disabled="saving" @click="requestClose">{{ ui('取消', 'Cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">{{ ui('保存', 'Save') }}</el-button>
     </template>
   </DcDialog>
 </template>
@@ -60,12 +60,15 @@
 import { computed, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
 import {
   buildDatapointAttributeDefaults,
   createDatapointAttributeRows,
   validateDatapointAttributeRows,
   type DatapointAttributeRow,
 } from '@/models/datapoint-custom-attributes'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -91,7 +94,16 @@ const validationVisible = ref(false)
 const payload = computed(() => buildDatapointAttributeDefaults(rows.value))
 const currentSnapshot = computed(() => JSON.stringify(payload.value))
 const isDirty = computed(() => props.visible && currentSnapshot.value !== initialSnapshot.value)
-const validationError = computed(() => validateDatapointAttributeRows(rows.value))
+const validationError = computed(() => {
+  const message = validateDatapointAttributeRows(rows.value)
+  if (!message || datacenterLocale.value !== 'en') return message
+  if (message === '属性 Key 不能为空') return 'Attribute Key is required'
+  const key = message.match(/“([^”]+)”/)?.[1] || ''
+  if (message.includes('已被内置属性占用')) return `Attribute Key “${key}” is reserved`
+  if (message.includes('格式无效')) return `Attribute Key “${key}” is invalid. Start with a lowercase letter and use lowercase letters, numbers, dots, hyphens, or underscores.`
+  if (message.includes('重复')) return `Duplicate Attribute Key “${key}”`
+  return message
+})
 
 watch(
   () => props.visible,

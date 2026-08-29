@@ -2,7 +2,7 @@
   <DcDialog
     :model-value="modelValue"
     class="collector-wizard-dialog"
-    title="新建工业连接"
+    :title="ui('新建工业连接', 'New Industrial Connection')"
     width="88vw"
     body-max-height="calc(90vh - 132px)"
     :confirm-on-dirty-close="false"
@@ -12,24 +12,24 @@
     <div class="collector-wizard">
       <aside class="collector-wizard__catalog">
         <div class="collector-wizard__catalog-head">
-          <strong>驱动目录</strong>
-          <span>{{ drivers.length }} 个可用驱动</span>
+          <strong>{{ ui('采集类型', 'Connection Type') }}</strong>
+          <span>{{ ui(`${drivers.length} 个可用类型`, `${drivers.length} available type${drivers.length === 1 ? '' : 's'}`) }}</span>
         </div>
         <el-input
           v-model="search"
           clearable
           :prefix-icon="IconTablerSearch"
-          placeholder="搜索设备、协议或驱动"
+          :placeholder="ui('搜索设备或协议', 'Search devices or protocols')"
         />
 
         <div v-loading="loadingDrivers" class="collector-wizard__tree-wrap">
           <el-result
             v-if="loadError"
             icon="warning"
-            title="驱动目录暂不可用"
+            :title="ui('采集类型暂不可用', 'Connection Types Unavailable')"
             :sub-title="loadError"
           >
-            <template #extra><el-button @click="loadDrivers">重新加载</el-button></template>
+            <template #extra><el-button @click="loadDrivers">{{ ui('重新加载', 'Reload') }}</el-button></template>
           </el-result>
           <el-tree
             v-else
@@ -38,7 +38,7 @@
             :current-node-key="driverId"
             :default-expanded-keys="expandedFamilyKeys"
             highlight-current
-            empty-text="没有匹配的驱动"
+            :empty-text="ui('没有匹配的采集类型', 'No matching connection types')"
             @node-click="handleNodeClick"
           >
             <template #default="{ data }">
@@ -49,7 +49,6 @@
                 />
                 <span>
                   <strong>{{ data.label }}</strong>
-                  <small v-if="data.type === 'driver'">{{ data.driver?.driverId }}</small>
                 </span>
                 <em v-if="data.type === 'family'">{{ data.children?.length || 0 }}</em>
               </div>
@@ -70,18 +69,14 @@
             <div>
               <small>{{ formatCollectorCategoryLabel(selectedDriver.category) }}</small>
               <h3>{{ formatCollectorDriverDisplayName(selectedDriver) }}</h3>
-              <p>{{ selectedDriver.driverId }}@{{ selectedDriver.driverVersion }}</p>
+              <p>{{ ui('驱动版本', 'Driver Version') }} {{ selectedDriver.driverVersion }}</p>
             </div>
           </header>
 
           <div v-loading="loadingDetail" class="collector-wizard__form-wrap">
             <el-form label-position="top">
-              <el-form-item label="连接名称" required>
-                <el-input
-                  v-model="name"
-                  maxlength="50"
-                  placeholder="仅支持文字、数字和空格，例如 1号产线 OPC UA"
-                />
+              <el-form-item :label="ui('连接名称', 'Connection Name')" required>
+                <el-input v-model="name" maxlength="50" :placeholder="ui('例如 1号产线 OPC UA', 'For example, Line 1 OPC UA')" />
               </el-form-item>
               <CollectorSchemaForm
                 v-if="driverDetail"
@@ -97,8 +92,8 @@
 
         <div v-else class="collector-wizard__empty">
           <span><IconTablerTopologyStar3 /></span>
-          <strong>从左侧选择一个工业驱动</strong>
-          <p>目录只展示平台已经完成 Manifest、Schema 和适配器登记的驱动。</p>
+          <strong>{{ ui('从左侧选择一个采集类型', 'Select a Connection Type') }}</strong>
+          <p>{{ ui('选择后填写设备连接参数。', 'Select a type on the left, then configure the device connection.') }}</p>
         </div>
       </main>
     </div>
@@ -106,11 +101,11 @@
     <template #footer>
       <div class="collector-wizard__footer">
         <span v-if="selectedDriver">
-          已选择 {{ formatCollectorDriverDisplayName(selectedDriver) }}
+          {{ ui('已选择', 'Selected') }} {{ formatCollectorDriverDisplayName(selectedDriver) }}
         </span>
-        <span v-else>请选择驱动后填写连接参数</span>
+        <span v-else>{{ ui('请选择采集类型后填写连接参数', 'Select a connection type to configure its parameters') }}</span>
         <div>
-          <el-button @click="emit('update:modelValue', false)">取消</el-button>
+          <el-button @click="emit('update:modelValue', false)">{{ ui('取消', 'Cancel') }}</el-button>
           <el-button
             data-test="save-connection"
             type="primary"
@@ -118,7 +113,7 @@
             :disabled="!name.trim() || !driverDetail"
             @click="save"
           >
-            创建连接
+            {{ ui('创建连接', 'Create Connection') }}
           </el-button>
         </div>
       </div>
@@ -153,6 +148,9 @@ import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{ modelValue: boolean; projectId: string; agent?: CollectorAgent }>()
 const emit = defineEmits<{
@@ -205,10 +203,10 @@ async function loadDrivers() {
   loadError.value = ''
   try {
     drivers.value = await listAllCollectorDrivers()
-    if (!drivers.value.length) loadError.value = '当前没有可用的工业采集驱动。'
+    if (!drivers.value.length) loadError.value = ui('当前没有可用的工业采集驱动。', 'No industrial collection drivers are available.')
   } catch (error) {
     drivers.value = []
-    loadError.value = getApiErrorMessage(error, '请确认 data_service 已启动并加载驱动目录。')
+    loadError.value = getApiErrorMessage(error, ui('无法加载采集类型，请稍后重试。', 'Failed to load connection types. Try again later.'))
   } finally {
     loadingDrivers.value = false
   }
@@ -250,9 +248,9 @@ async function save() {
     })
     emit('created', connection.id)
     emit('update:modelValue', false)
-    ElMessage.success('工业采集连接已创建')
+    ElMessage.success(ui('工业采集连接已创建', 'Industrial connection created'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '工业采集连接创建失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('工业采集连接创建失败', 'Failed to create the industrial connection')))
   } finally {
     saving.value = false
   }

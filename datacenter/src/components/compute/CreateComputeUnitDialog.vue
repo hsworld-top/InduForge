@@ -2,7 +2,7 @@
   <DcDialog
     ref="dialogRef"
     v-model="visible"
-    title="新建计算单元"
+    :title="ui('新建计算单元', 'New Compute Unit')"
     width="520px"
     body-max-height="420px"
     :dirty="isDirty"
@@ -10,30 +10,30 @@
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-create-dialog">
-      <el-form-item label="名称" required>
+      <el-form-item :label="ui('名称', 'Name')" required>
         <el-input
           v-model="form.name"
           maxlength="60"
           show-word-limit
-          placeholder="输入计算单元名称"
+          :placeholder="ui('输入计算单元名称', 'Enter a compute unit name')"
         />
       </el-form-item>
 
-      <el-form-item label="语言">
+      <el-form-item :label="ui('语言', 'Language')">
         <el-select v-model="form.lang" class="compute-create-dialog__select">
           <el-option label="JavaScript" value="javascript" />
           <el-option label="Python" value="python" />
         </el-select>
       </el-form-item>
 
-      <el-form-item label="文件夹">
+      <el-form-item :label="ui('文件夹', 'Folder')">
         <el-select
           v-model="form.folderId"
           class="compute-create-dialog__select"
           clearable
-          placeholder="根目录"
+          :placeholder="ui('根目录', 'Root')"
         >
-          <el-option label="根目录" value="" />
+          <el-option :label="ui('根目录', 'Root')" value="" />
           <el-option
             v-for="folder in folderOptions"
             :key="folder.id"
@@ -43,14 +43,14 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="描述">
+      <el-form-item :label="ui('描述', 'Description')">
         <el-input
           v-model="form.description"
           type="textarea"
           :rows="3"
           maxlength="200"
           show-word-limit
-          placeholder="可选"
+          :placeholder="ui('可选', 'Optional')"
         />
       </el-form-item>
 
@@ -59,9 +59,9 @@
 
     <template #footer>
       <div class="compute-create-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          创建
+          {{ ui('创建', 'Create') }}
         </el-button>
       </div>
     </template>
@@ -72,6 +72,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { ComputeFolder, ComputeUnitSave } from '@/api/schemas/compute.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

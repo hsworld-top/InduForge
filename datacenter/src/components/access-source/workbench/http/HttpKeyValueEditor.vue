@@ -1,7 +1,7 @@
 <template>
   <div class="http-kv-editor">
     <div class="http-kv-editor__head">
-      <el-button size="small" :icon="Plus" @click="addRow">添加</el-button>
+      <el-button size="small" :icon="Plus" @click="addRow">{{ ui('添加', 'Add') }}</el-button>
     </div>
     <el-table
       :data="rows"
@@ -9,47 +9,47 @@
       border
       stripe
       class="http-kv-editor__table"
-      empty-text="暂无键值对"
+      :empty-text="ui('暂无键值对', 'No key-value pairs')"
     >
-      <el-table-column label="键" min-width="160">
+      <el-table-column :label="ui('键', 'Key')" min-width="160">
         <template #default="{ row }">
           <el-input
             :model-value="row.key"
-            placeholder="键"
+            :placeholder="ui('键', 'Key')"
             size="small"
             @input="(value: string) => updateRow(row, 'key', value)"
           />
         </template>
       </el-table-column>
-      <el-table-column label="值" min-width="200">
+      <el-table-column :label="ui('值', 'Value')" min-width="200">
         <template #default="{ row }">
           <el-input
             :model-value="row.value"
-            placeholder="值"
+            :placeholder="ui('值', 'Value')"
             size="small"
             @input="(value: string) => updateRow(row, 'value', value)"
           />
         </template>
       </el-table-column>
-      <el-table-column label="说明" min-width="160">
+      <el-table-column :label="ui('说明', 'Description')" min-width="160">
         <template #default="{ row }">
           <el-input
             :model-value="row.description"
-            placeholder="说明"
+            :placeholder="ui('说明', 'Description')"
             size="small"
             @input="(value: string) => updateRow(row, 'description', value)"
           />
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="72" align="center">
+      <el-table-column :label="ui('操作', 'Actions')" width="72" align="center">
         <template #default="{ row }">
           <el-button
             size="small"
             circle
             plain
             :icon="IconTablerTrash"
-            title="删除该行"
-            aria-label="删除该行"
+            :title="ui('删除该行', 'Delete row')"
+            :aria-label="ui('删除该行', 'Delete row')"
             class="http-kv-editor__remove"
             @click="removeRow(row)"
           />
@@ -62,6 +62,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 import IconTablerTrash from '~icons/tabler/trash'
 import type { HttpKeyValueRow } from '@/api/schemas/http-workbench.schema'
 

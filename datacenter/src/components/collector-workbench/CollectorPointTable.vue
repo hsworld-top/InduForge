@@ -5,12 +5,12 @@
         <el-input
           v-model="search"
           clearable
-          placeholder="搜索变量名称、编码或地址"
+          :placeholder="ui('搜索变量名称、编码或地址', 'Search point names, codes, or addresses')"
           class="collector-point-table__search"
           @keyup.enter="load(1)"
           @clear="load(1)"
         />
-        <span>共 {{ total }} 个变量</span>
+        <span>{{ ui(`共 ${total} 个变量`, `${total} point${total === 1 ? '' : 's'}`) }}</span>
       </div>
       <div class="collector-point-table__actions">
         <el-tooltip
@@ -26,13 +26,13 @@
               @click="readCurrentPage"
             >
               <IconTablerDatabaseSearch />
-              {{ readCurrentPageLoading ? `正在获取 ${items.length} 项` : '获取当前页数据' }}
+              {{ readCurrentPageLoading ? ui(`正在获取 ${items.length} 项`, `Reading ${items.length} item${items.length === 1 ? '' : 's'}`) : ui('获取当前页数据', 'Read Current Page') }}
             </el-button>
           </span>
         </el-tooltip>
-        <el-button @click="emit('import')">批量导入</el-button>
-        <el-button @click="exportVisible = true">导出变量</el-button>
-        <el-button type="primary" @click="openCreate(groupId)">新建变量</el-button>
+        <el-button @click="emit('import')">{{ ui('批量导入', 'Import') }}</el-button>
+        <el-button @click="exportVisible = true">{{ ui('导出变量', 'Export Points') }}</el-button>
+        <el-button type="primary" @click="openCreate(groupId)">{{ ui('新建变量', 'New Point') }}</el-button>
       </div>
     </div>
 
@@ -48,7 +48,7 @@
         @selection-change="onSelectionChange"
       >
         <el-table-column type="selection" width="44" />
-        <el-table-column prop="name" label="变量名称" min-width="160">
+        <el-table-column prop="name" :label="ui('变量名称', 'Point Name')" min-width="160">
           <template #default="scope">
             <button
               type="button"
@@ -56,57 +56,44 @@
               @click="openDetail(scope.row)"
             >
               <strong :title="scope.row.name">{{ scope.row.name }}</strong>
+              <small>{{ scope.row.code }}</small>
             </button>
           </template>
         </el-table-column>
-        <el-table-column prop="addressText" label="变量地址" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="addressText" :label="ui('变量地址', 'Address')" min-width="180" show-overflow-tooltip>
           <template #default="scope"
             ><code>{{ scope.row.addressText }}</code></template
           >
         </el-table-column>
-        <el-table-column prop="dataType" label="数据类型" width="100" />
-        <el-table-column label="最近值" min-width="150">
+        <el-table-column prop="dataType" :label="ui('数据类型', 'Data Type')" width="100" />
+        <el-table-column :label="ui('数据点', 'Data Point')" min-width="230">
           <template #default="scope">
-            <div class="collector-point-table__debug-value">
-              <el-tooltip
-                :content="debugValue(scope.row)"
-                :disabled="!scope.row.latestDebugSnapshot"
-                placement="top"
+            <div class="collector-point-table__datapoint">
+              <button
+                v-if="scope.row.dataPointId"
+                type="button"
+                :title="scope.row.dataPointPath"
+                @click="emit('navigate-datapoint', scope.row.dataPointId)"
               >
-                <span>{{ debugValue(scope.row) }}</span>
-              </el-tooltip>
+                {{ scope.row.dataPointPath }}
+              </button>
+              <span v-else>{{ ui('未生成', 'Not Generated') }}</span>
+              <el-tag
+                v-if="scope.row.dataPointId"
+                :type="scope.row.dataPointDefaultValue !== null ? 'success' : 'info'"
+                size="small"
+                effect="plain"
+              >
+                {{ scope.row.dataPointDefaultValue !== null ? ui('已设默认值', 'Default Set') : ui('未设默认值', 'No Default') }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="质量" width="92" align="center">
-          <template #default="scope">
-            <el-tag
-              v-if="tableQuality(scope.row.latestDebugSnapshot?.quality)"
-              :type="
-                tableQuality(scope.row.latestDebugSnapshot?.quality) === 'Good'
-                  ? 'success'
-                  : 'danger'
-              "
-              size="small"
-              effect="light"
-            >
-              {{ tableQuality(scope.row.latestDebugSnapshot?.quality) }}
-            </el-tag>
-            <span v-else class="collector-point-table__empty-value">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="数据时间" width="160">
-          <template #default="scope">
-            <span class="collector-point-table__debug-time">{{
-              collectorDebugTime(scope.row.latestDebugSnapshot?.sourceTimestamp || null)
-            }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="showElementCount" prop="elementCount" label="元素" width="74" />
-        <el-table-column label="采集周期" width="104">
+        <el-table-column v-if="showElementCount" prop="elementCount" :label="ui('元素', 'Elements')" width="74" />
+        <el-table-column :label="ui('采集周期', 'Interval')" width="104">
           <template #default="scope">{{ formatAcquisitionInterval(scope.row) }}</template>
         </el-table-column>
-        <el-table-column label="启用" width="82" align="center">
+        <el-table-column :label="ui('启用', 'Enabled')" width="82" align="center">
           <template #default="scope">
             <el-switch
               :model-value="scope.row.enabled"
@@ -115,12 +102,12 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="144" fixed="right">
+        <el-table-column :label="ui('操作', 'Actions')" width="144" fixed="right">
           <template #default="scope">
             <div class="collector-point-table__row-actions">
-              <el-button link type="primary" @click="openDetail(scope.row)">查看</el-button>
-              <el-button link type="primary" @click="openEdit(scope.row)">编辑</el-button>
-              <el-button link type="danger" @click="removeOne(scope.row)">删除</el-button>
+              <el-button link type="primary" @click="openDetail(scope.row)">{{ ui('查看', 'View') }}</el-button>
+              <el-button link type="primary" @click="openEdit(scope.row)">{{ ui('编辑', 'Edit') }}</el-button>
+              <el-button link type="danger" @click="removeOne(scope.row)">{{ ui('删除', 'Delete') }}</el-button>
             </div>
           </template>
         </el-table-column>
@@ -138,15 +125,15 @@
     />
 
     <BulkActionBar :selected-count="selected.length" @clear="clearSelection">
-      <el-button size="small" @click="batchSetEnabled(true)">批量启用</el-button>
-      <el-button size="small" @click="batchSetEnabled(false)">批量停用</el-button>
-      <el-button size="small" @click="moveVisible = true">移动分组</el-button>
-      <el-button size="small" type="danger" plain @click="removeSelected">批量删除</el-button>
+      <el-button size="small" @click="batchSetEnabled(true)">{{ ui('批量启用', 'Enable Selected') }}</el-button>
+      <el-button size="small" @click="batchSetEnabled(false)">{{ ui('批量停用', 'Disable Selected') }}</el-button>
+      <el-button size="small" @click="moveVisible = true">{{ ui('移动分组', 'Move to Group') }}</el-button>
+      <el-button size="small" type="danger" plain @click="removeSelected">{{ ui('批量删除', 'Delete Selected') }}</el-button>
     </BulkActionBar>
 
-    <el-dialog v-model="moveVisible" title="批量移动分组" width="460px">
+    <el-dialog v-model="moveVisible" :title="ui('批量移动分组', 'Move Selected Points')" width="460px">
       <el-form label-position="top">
-        <el-form-item label="目标分组">
+        <el-form-item :label="ui('目标分组', 'Target Group')">
           <el-tree-select
             v-model="moveGroupId"
             :data="groups"
@@ -155,13 +142,13 @@
             check-strictly
             clearable
             default-expand-all
-            placeholder="未分组"
+            :placeholder="ui('未分组', 'Ungrouped')"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="moveVisible = false">取消</el-button>
-        <el-button type="primary" :loading="batchLoading" @click="moveSelected">确认移动</el-button>
+        <el-button @click="moveVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
+        <el-button type="primary" :loading="batchLoading" @click="moveSelected">{{ ui('确认移动', 'Move') }}</el-button>
       </template>
     </el-dialog>
 
@@ -214,11 +201,9 @@ import type { CollectorPointCreateDefaults } from './collector-workbench-model'
 import CollectorPointDrawer, { type CollectorPointGroupNode } from './CollectorPointDrawer.vue'
 import CollectorPointExportDialog from './CollectorPointExportDialog.vue'
 import IconTablerDatabaseSearch from '~icons/tabler/database-search'
-import {
-  collectorDebugTime,
-  formatCollectorDebugValue,
-  hasCollectorDebugSuccess,
-} from './collector-debug-snapshot'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   projectId: string
@@ -236,6 +221,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   import: []
   saved: []
+  'navigate-datapoint': [id: string]
   readCurrentPage: [points: Array<Pick<CollectorPoint, 'id' | 'name'>>]
 }>()
 const tableRef = ref<{
@@ -265,8 +251,8 @@ const moveGroupId = ref<string | null>(null)
 const exportVisible = ref(false)
 let restoringSelection = false
 const currentGroupName = computed(() => {
-  if (!props.groupId) return '全部变量'
-  return flattenGroups(groups.value).find((group) => group.id === props.groupId)?.name || '当前分组'
+  if (!props.groupId) return ui('全部变量', 'All Points')
+  return flattenGroups(groups.value).find((group) => group.id === props.groupId)?.name || ui('当前分组', 'Current Group')
 })
 
 function readCurrentPage() {
@@ -275,19 +261,6 @@ function readCurrentPage() {
     'readCurrentPage',
     items.value.map(({ id, name }) => ({ id, name })),
   )
-}
-
-function debugValue(point: CollectorPoint) {
-  const snapshot = point.latestDebugSnapshot
-  return snapshot && hasCollectorDebugSuccess(snapshot)
-    ? formatCollectorDebugValue(snapshot.value, snapshot.valueText)
-    : '—'
-}
-
-function tableQuality(quality: string | null | undefined): 'Good' | 'Bad' | null {
-  const normalized = quality?.trim().toLowerCase()
-  if (!normalized) return null
-  return normalized.startsWith('good') ? 'Good' : 'Bad'
 }
 
 function formatAcquisitionInterval(point: CollectorPoint) {
@@ -374,7 +347,8 @@ function pointPayload(point: CollectorPoint, overrides: Partial<CollectorPoint> 
     dataType: next.dataType,
     elementCount: next.elementCount,
     readOptions: next.readOptions,
-    acquisition: next.acquisition,
+    acquisitionMode: next.acquisitionMode,
+    acquisitionOverrides: next.acquisitionOverrides,
     enabled: next.enabled,
     sortOrder: next.sortOrder,
     metadata: next.metadata,
@@ -388,7 +362,7 @@ async function toggleEnabled(point: CollectorPoint, enabled: boolean) {
     ])
     const index = items.value.findIndex((item) => item.id === point.id)
     if (updated && index >= 0) items.value[index] = updated
-    ElMessage.success(enabled ? '变量已启用' : '变量已停用')
+    ElMessage.success(enabled ? ui('变量已启用', 'Point enabled') : ui('变量已停用', 'Point disabled'))
   } finally {
     const next = new Set(savingIds.value)
     next.delete(point.id)
@@ -404,21 +378,21 @@ async function batchSetEnabled(enabled: boolean) {
       props.connectionId,
       selected.value.map((point) => pointPayload(point, { enabled })),
     )
-    ElMessage.success(`已${enabled ? '启用' : '停用'} ${selected.value.length} 个变量`)
+    ElMessage.success(ui(`已${enabled ? '启用' : '停用'} ${selected.value.length} 个变量`, `${enabled ? 'Enabled' : 'Disabled'} ${selected.value.length} point${selected.value.length === 1 ? '' : 's'}`))
     await load()
   } finally {
     batchLoading.value = false
   }
 }
 async function removeOne(point: CollectorPoint) {
-  await ElMessageBox.confirm(`确认删除变量“${point.name}”？`, '删除变量', { type: 'warning' })
+  await ElMessageBox.confirm(ui(`确认删除变量“${point.name}”？`, `Delete point “${point.name}”?`), ui('删除变量', 'Delete Point'), { type: 'warning' })
   await deleteCollectorPointsBatch(props.projectId, props.connectionId, [point.id])
-  ElMessage.success('变量已删除')
+  ElMessage.success(ui('变量已删除', 'Point deleted'))
   await loadAfterDelete(1)
 }
 async function removeSelected() {
   if (!selected.value.length) return
-  await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 个变量？`, '批量删除变量', {
+  await ElMessageBox.confirm(ui(`确认删除选中的 ${selected.value.length} 个变量？`, `Delete the selected ${selected.value.length} point${selected.value.length === 1 ? '' : 's'}?`), ui('批量删除变量', 'Delete Selected Points'), {
     type: 'warning',
   })
   await deleteCollectorPointsBatch(
@@ -426,7 +400,7 @@ async function removeSelected() {
     props.connectionId,
     selected.value.map((item) => item.id),
   )
-  ElMessage.success('变量已批量删除')
+  ElMessage.success(ui('变量已批量删除', 'Selected points deleted'))
   await loadAfterDelete(selected.value.length)
 }
 async function loadAfterDelete(deletedCount: number) {
@@ -445,7 +419,7 @@ async function moveSelected() {
       moveGroupId.value,
     )
     moveVisible.value = false
-    ElMessage.success('变量已移动到目标分组')
+    ElMessage.success(ui('变量已移动到目标分组', 'Points moved to the target group'))
     await load()
   } finally {
     batchLoading.value = false
@@ -558,27 +532,14 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.collector-point-table__debug-value {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
+.collector-point-table__table :deep(.el-table-fixed-column--right) {
+  background: var(--dc-surface-raised);
 }
-.collector-point-table__debug-value > span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--dc-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.collector-point-table__table :deep(.el-table__row:hover .el-table-fixed-column--right) {
+  background: var(--el-table-row-hover-bg-color);
 }
-.collector-point-table__debug-value :deep(.el-tag) {
-  flex: 0 0 auto;
-}
-.collector-point-table__debug-time,
-.collector-point-table__empty-value {
-  color: var(--dc-text-muted);
-  font-size: 11px;
+.collector-point-table__table :deep(.el-table__body-wrapper .el-scrollbar__wrap) {
+  scroll-padding-right: 160px;
 }
 .collector-point-table__identity {
   display: block;
@@ -590,6 +551,42 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   color: inherit;
   cursor: pointer;
   text-align: left;
+}
+.collector-point-table__identity small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--dc-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collector-point-table__datapoint {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.collector-point-table__datapoint > button,
+.collector-point-table__datapoint > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-text-muted);
+  font-size: 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collector-point-table__datapoint > button {
+  color: var(--dc-primary);
+  cursor: pointer;
+}
+.collector-point-table__datapoint :deep(.el-tag) {
+  flex: 0 0 auto;
 }
 .collector-point-table__identity strong {
   display: block;
@@ -619,6 +616,12 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   overflow: hidden;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
+}
+@container collector-point-table (max-width: 900px) {
+  .collector-point-table__datapoint > button {
+    max-width: 72px;
+    flex: 0 1 72px;
+  }
 }
 @container collector-point-table (max-width: 760px) {
   .collector-point-table__toolbar {

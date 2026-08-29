@@ -2,8 +2,8 @@
   <section class="sql-workbench">
     <aside class="sql-workbench__explorer">
       <WorkbenchSourceHeader
-        :title="connection.name || '未命名接入源'"
-        fallback-title="未命名接入源"
+        :title="connection.name || ui('未命名接入源', 'Unnamed Source')"
+        :fallback-title="ui('未命名接入源', 'Unnamed Source')"
         :meta="sourceMetaRows"
         @back="$emit('back')"
       >
@@ -12,14 +12,14 @@
             v-model="filterText"
             class="sql-workbench__search"
             size="small"
-            placeholder="筛选表或查询"
+            :placeholder="ui('筛选表或查询', 'Filter tables or queries')"
             clearable
           />
           <button
             type="button"
             class="workbench-source-header__icon-action is-primary"
-            title="新建查询"
-            aria-label="新建查询"
+            :title="ui('新建查询', 'New Query')"
+            :aria-label="ui('新建查询', 'New Query')"
             @click="createQueryTab()"
           >
             <IconTablerPlus />
@@ -27,8 +27,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action"
-            title="刷新对象"
-            aria-label="刷新对象"
+            :title="ui('刷新对象', 'Refresh Objects')"
+            :aria-label="ui('刷新对象', 'Refresh Objects')"
             @click="reloadExplorer"
           >
             <IconTablerRefresh />
@@ -48,14 +48,14 @@
             <IconTablerChevronDown v-if="queriesExpanded" />
             <IconTablerChevronRight v-else />
             <IconTablerFileText class="sql-workbench__category-icon" />
-            <span>查询</span>
+            <span>{{ ui('查询', 'Queries') }}</span>
             <small>{{ queryPagination.total }}</small>
           </button>
 
           <div v-if="queriesExpanded" class="sql-workbench__tree-body">
             <div v-if="queriesLoading" class="sql-workbench__loading">
               <IconTablerLoader2 />
-              <span>加载查询...</span>
+              <span>{{ ui('加载查询...', 'Loading queries...') }}</span>
             </div>
             <template v-else>
               <div
@@ -95,11 +95,11 @@
                       v-if="queryHasGeneratedDatapoint(query)"
                       class="sql-workbench__datapoint-pill"
                     >
-                      数据点
+                      {{ ui('数据点', 'Data Point') }}
                     </small>
                   </button>
                   <div v-if="group.items.length === 0" class="sql-workbench__empty is-compact">
-                    暂无查询
+                    {{ ui('暂无查询', 'No queries') }}
                   </div>
                 </div>
               </div>
@@ -108,7 +108,7 @@
               v-if="!queriesLoading && filteredQueries.length === 0"
               class="sql-workbench__empty"
             >
-              暂无保存查询
+              {{ ui('暂无保存查询', 'No saved queries') }}
             </div>
             <button
               v-if="!queriesLoading && queries.length < queryPagination.total"
@@ -119,8 +119,11 @@
             >
               {{
                 queryLoadingMore
-                  ? '加载中...'
-                  : `加载更多（${queries.length}/${queryPagination.total}）`
+                  ? ui('加载中...', 'Loading...')
+                  : ui(
+                      `加载更多（${queries.length}/${queryPagination.total}）`,
+                      `Load more (${queries.length}/${queryPagination.total})`,
+                    )
               }}
             </button>
           </div>
@@ -137,14 +140,14 @@
             <IconTablerChevronDown v-if="tablesExpanded" />
             <IconTablerChevronRight v-else />
             <IconTablerTable class="sql-workbench__category-icon" />
-            <span>表</span>
+            <span>{{ ui('表', 'Tables') }}</span>
             <small>{{ isReadOnlySource ? tablePagination.total : filteredTables.length }}</small>
           </button>
 
           <div v-if="tablesExpanded" class="sql-workbench__tree-body">
             <div v-if="tablesLoading" class="sql-workbench__loading">
               <IconTablerLoader2 />
-              <span>加载表结构...</span>
+              <span>{{ ui('加载表结构...', 'Loading table schema...') }}</span>
             </div>
             <template v-else>
               <div
@@ -184,13 +187,13 @@
                     <small v-if="table.rows !== undefined">{{ table.rows }}</small>
                   </div>
                   <div v-if="group.items.length === 0" class="sql-workbench__empty is-compact">
-                    暂无表
+                    {{ ui('暂无表', 'No tables') }}
                   </div>
                 </div>
               </div>
             </template>
             <div v-if="!tablesLoading && filteredTables.length === 0" class="sql-workbench__empty">
-              暂无表
+              {{ ui('暂无表', 'No tables') }}
             </div>
             <button
               v-if="isReadOnlySource && !tablesLoading && tables.length < tablePagination.total"
@@ -201,8 +204,11 @@
             >
               {{
                 tableLoadingMore
-                  ? '加载中...'
-                  : `加载更多（${tables.length}/${tablePagination.total}）`
+                  ? ui('加载中...', 'Loading...')
+                  : ui(
+                      `加载更多（${tables.length}/${tablePagination.total}）`,
+                      `Load more (${tables.length}/${tablePagination.total})`,
+                    )
               }}
             </button>
           </div>
@@ -244,11 +250,13 @@
                 @click="inspectorOpen = true"
               >
                 <IconTablerLayoutSidebarRight class="sql-workbench__button-icon" />
-                输出配置
+                {{ ui('输出配置', 'Output Configuration') }}
               </el-button>
-              <el-button size="small" @click="formatActiveSql"> 格式化 </el-button>
+              <el-button size="small" @click="formatActiveSql">
+                {{ ui('格式化', 'Format') }}
+              </el-button>
               <el-button size="small" :loading="activeTab.saving" @click="saveActiveQuery">
-                保存
+                {{ ui('保存', 'Save') }}
               </el-button>
               <el-button
                 type="primary"
@@ -257,7 +265,7 @@
                 @click="executeActiveQuery"
               >
                 <IconTablerPlayerPlay class="sql-workbench__button-icon" />
-                运行
+                {{ ui('运行', 'Run') }}
               </el-button>
             </div>
           </div>
@@ -277,22 +285,31 @@
           <div class="sql-workbench__params">
             <div class="sql-workbench__params-head">
               <div>
-                <strong>值参数</strong>
+                <strong>{{ ui('值参数', 'Value Parameters') }}</strong>
                 <span v-if="activeTab.parameters.length > 0">
-                  {{ parameterHelpText }}；只允许绑定值，不能替代表名、列名或 SQL 片段。
+                  {{ parameterHelpText }}{{
+                    ui(
+                      '；只允许绑定值，不能替代表名、列名或 SQL 片段。',
+                      '; values only—table names, column names, and SQL fragments cannot be parameterized.',
+                    )
+                  }}
                 </span>
-                <span v-else>{{ parameterHelpText }}；测试值不会随查询保存。</span>
+                <span v-else>
+                  {{ parameterHelpText }}{{ ui('；测试值不会随查询保存。', '; test values are not saved with the query.') }}
+                </span>
               </div>
-              <el-button size="small" @click="insertSqlParameter">插入参数</el-button>
+              <el-button size="small" @click="insertSqlParameter">
+                {{ ui('插入参数', 'Insert Parameter') }}
+              </el-button>
             </div>
             <div v-if="activeTab.parameters.length > 0" class="sql-workbench__param-list">
               <label v-for="(parameter, index) in activeTab.parameters" :key="parameter.name">
-                <span>参数 {{ index + 1 }}</span>
-                <span class="sql-workbench__param-kind">值</span>
+                <span>{{ ui('参数', 'Parameter') }} {{ index + 1 }}</span>
+                <span class="sql-workbench__param-kind">{{ ui('值', 'Value') }}</span>
                 <el-input
                   v-model="parameter.value"
                   size="small"
-                  :placeholder="`对应 ${parameterToken(index)} 的测试值`"
+                  :placeholder="ui(`对应 ${parameterToken(index)} 的测试值`, `Test value for ${parameterToken(index)}`)"
                 />
               </label>
             </div>
@@ -304,20 +321,26 @@
               class="sql-workbench__result-resizer"
               role="separator"
               aria-orientation="horizontal"
-              title="拖拽调整编辑器和结果区高度"
+              :title="ui('拖拽调整编辑器和结果区高度', 'Drag to resize the editor and result area')"
               @mousedown.prevent="startResultResize($event, activeTab)"
               @dblclick="resetEditorHeight(activeTab)"
             />
             <div class="sql-workbench__result-head">
-              <strong>结果</strong>
+              <strong>{{ ui('结果', 'Result') }}</strong>
               <span v-if="activeTab.result">
                 {{
                   activeTab.result.columns.length > 0
-                    ? `${activeTab.result.rowCount} 行，${activeTab.result.executionTime}ms`
-                    : `命令执行成功，${activeTab.result.executionTime}ms`
+                    ? ui(
+                        `${activeTab.result.rowCount} 行，${activeTab.result.executionTime}ms`,
+                        `${activeTab.result.rowCount} rows, ${activeTab.result.executionTime}ms`,
+                      )
+                    : ui(
+                        `命令执行成功，${activeTab.result.executionTime}ms`,
+                        `Command completed, ${activeTab.result.executionTime}ms`,
+                      )
                 }}
               </span>
-              <span v-else>{{ activeTab.executionError ? '执行失败' : '尚未执行' }}</span>
+              <span v-else>{{ activeTab.executionError ? ui('执行失败', 'Failed') : ui('尚未执行', 'Not run') }}</span>
             </div>
             <el-alert
               v-if="activeTab.executionError"
@@ -335,10 +358,16 @@
               show-icon
               :title="
                 activeTab.result.truncatedBy === 'bytes'
-                  ? `结果超过 ${Math.round(activeTab.result.limits.maxBytes / 1024 / 1024)} MiB，仅显示已安全读取的 ${activeTab.result.rowCount} 行`
-                  : `结果超过 ${activeTab.result.limits.maxRows} 行，仅显示前 ${activeTab.result.rowCount} 行`
+                  ? ui(
+                      `结果超过 ${Math.round(activeTab.result.limits.maxBytes / 1024 / 1024)} MiB，仅显示已安全读取的 ${activeTab.result.rowCount} 行`,
+                      `Result exceeds ${Math.round(activeTab.result.limits.maxBytes / 1024 / 1024)} MiB; showing ${activeTab.result.rowCount} safely read rows`,
+                    )
+                  : ui(
+                      `结果超过 ${activeTab.result.limits.maxRows} 行，仅显示前 ${activeTab.result.rowCount} 行`,
+                      `Result exceeds ${activeTab.result.limits.maxRows} rows; showing the first ${activeTab.result.rowCount}`,
+                    )
               "
-              description="当前结果不完整，不会作为全量查询结果使用。需要全量数据请使用后续导出任务。"
+              :description="ui('当前结果不完整，不会作为全量查询结果使用。需要全量数据请使用后续导出任务。', 'This result is incomplete and will not be used as the full query result. Use an export task for the complete dataset.')"
             />
             <div class="sql-workbench__result-table">
               <template v-if="activeTab.result && activeTab.result.columns.length > 0">
@@ -376,10 +405,10 @@
                 </div>
               </template>
               <div v-else-if="activeTab.result" class="sql-workbench__empty-result">
-                命令执行成功，未返回结果集。
+                {{ ui('命令执行成功，未返回结果集。', 'Command completed without a result set.') }}
               </div>
               <div v-else class="sql-workbench__empty-result">
-                执行 SQL 后在这里查看结果集、耗时和行数。
+                {{ ui('执行 SQL 后在这里查看结果集、耗时和行数。', 'Run SQL to view the result set, duration, and row count.') }}
               </div>
             </div>
           </section>
@@ -390,29 +419,29 @@
             <div class="sql-workbench__structure-head">
               <div>
                 <strong>{{ activeTab.table }}</strong>
-                <span>表结构</span>
+                <span>{{ ui('表结构', 'Table Schema') }}</span>
               </div>
               <el-button size="small" @click="openTableData({ name: activeTab.table })">
-                查询数据
+                {{ ui('查询数据', 'Query Data') }}
               </el-button>
             </div>
             <div v-if="activeTab.loading" class="sql-workbench__loading is-structure">
               <IconTablerLoader2 />
-              <span>加载表结构...</span>
+              <span>{{ ui('加载表结构...', 'Loading table schema...') }}</span>
             </div>
             <el-tabs v-else v-model="activeTab.structureTab" class="sql-workbench__meta-tabs">
-              <el-tab-pane v-if="activeTab.structure.timeseries" label="时序信息" name="timeseries">
+              <el-tab-pane v-if="activeTab.structure.timeseries" :label="ui('时序信息', 'Time-series')" name="timeseries">
                 <dl class="sql-workbench__timeseries-facts">
                   <div>
-                    <dt>类型</dt>
+                    <dt>{{ ui('类型', 'Type') }}</dt>
                     <dd>TimescaleDB Hypertable</dd>
                   </div>
                   <div>
-                    <dt>时间分区字段</dt>
+                    <dt>{{ ui('时间分区字段', 'Time Partition Column') }}</dt>
                     <dd>{{ activeTab.structure.timeseries.timeColumn }}</dd>
                   </div>
                   <div>
-                    <dt>维度字段</dt>
+                    <dt>{{ ui('维度字段', 'Dimension Columns') }}</dt>
                     <dd>
                       {{
                         (activeTab.structure.timeseries.dimensionColumns || []).join(', ') || '-'
@@ -420,40 +449,40 @@
                     </dd>
                   </div>
                   <div>
-                    <dt>Chunk 间隔</dt>
+                    <dt>{{ ui('Chunk 间隔', 'Chunk Interval') }}</dt>
                     <dd>{{ activeTab.structure.timeseries.chunkInterval || '-' }}</dd>
                   </div>
                   <div>
-                    <dt>保留策略</dt>
+                    <dt>{{ ui('保留策略', 'Retention Policy') }}</dt>
                     <dd>
                       {{
                         activeTab.structure.timeseries.retentionDays
-                          ? `${activeTab.structure.timeseries.retentionDays} 天`
-                          : '未启用'
+                          ? ui(`${activeTab.structure.timeseries.retentionDays} 天`, `${activeTab.structure.timeseries.retentionDays} days`)
+                          : ui('未启用', 'Disabled')
                       }}
                     </dd>
                   </div>
                 </dl>
               </el-tab-pane>
-              <el-tab-pane label="字段" name="columns">
+              <el-tab-pane :label="ui('字段', 'Columns')" name="columns">
                 <el-table :data="activeTab.structure.columns" size="small" border height="100%">
-                  <el-table-column prop="name" label="字段" min-width="160" />
-                  <el-table-column prop="type" label="类型" width="140" />
-                  <el-table-column label="可空" width="80" align="center">
+                  <el-table-column prop="name" :label="ui('字段', 'Column')" min-width="160" />
+                  <el-table-column prop="type" :label="ui('类型', 'Type')" width="140" />
+                  <el-table-column :label="ui('可空', 'Nullable')" width="80" align="center">
                     <template #default="{ row }">
-                      {{ row.nullable ? '是' : '否' }}
+                      {{ row.nullable ? ui('是', 'Yes') : ui('否', 'No') }}
                     </template>
                   </el-table-column>
-                  <el-table-column prop="defaultValue" label="默认值" width="140" />
-                  <el-table-column prop="comment" label="备注" min-width="180" />
+                  <el-table-column prop="defaultValue" :label="ui('默认值', 'Default')" width="140" />
+                  <el-table-column prop="comment" :label="ui('备注', 'Comment')" min-width="180" />
                 </el-table>
               </el-tab-pane>
-              <el-tab-pane label="索引" name="indexes">
+              <el-tab-pane :label="ui('索引', 'Indexes')" name="indexes">
                 <el-table :data="activeTab.structure.indexes" size="small" border height="100%">
-                  <el-table-column prop="name" label="索引" min-width="180" />
-                  <el-table-column prop="type" label="类型" width="120" />
-                  <el-table-column prop="method" label="方法" width="120" />
-                  <el-table-column label="字段" min-width="220">
+                  <el-table-column prop="name" :label="ui('索引', 'Index')" min-width="180" />
+                  <el-table-column prop="type" :label="ui('类型', 'Type')" width="120" />
+                  <el-table-column prop="method" :label="ui('方法', 'Method')" width="120" />
+                  <el-table-column :label="ui('字段', 'Columns')" min-width="220">
                     <template #default="{ row }">
                       {{ (row.columns || []).join(', ') || '-' }}
                     </template>
@@ -467,15 +496,15 @@
 
       <div v-else class="sql-workbench__blank">
         <IconTablerFileSearch />
-        <strong>打开表或保存查询</strong>
-        <span>双击左侧表会生成 SELECT 查询，双击保存查询会打开 SQL 标签。</span>
+        <strong>{{ ui('打开表或保存查询', 'Open a Table or Saved Query') }}</strong>
+        <span>{{ ui('双击左侧表会生成 SELECT 查询，双击保存查询会打开 SQL 标签。', 'Double-click a table to create a SELECT query, or a saved query to open it in a SQL tab.') }}</span>
       </div>
     </main>
 
     <aside class="sql-workbench__inspector" :class="{ 'is-open': inspectorOpen }">
       <div class="sql-workbench__inspector-mobile-head">
-        <strong>{{ activeTab?.type === 'structure' ? '表结构' : '查询输出' }}</strong>
-        <button type="button" aria-label="关闭右侧面板" @click="inspectorOpen = false">
+        <strong>{{ activeTab?.type === 'structure' ? ui('表结构', 'Table Schema') : ui('查询输出', 'Query Output') }}</strong>
+        <button type="button" :aria-label="ui('关闭右侧面板', 'Close inspector')" @click="inspectorOpen = false">
           <IconTablerX />
         </button>
       </div>
@@ -486,7 +515,7 @@
             :class="{ 'is-active': inspectorView === 'outputs' }"
             @click="inspectorView = 'outputs'"
           >
-            输出配置
+            {{ ui('输出配置', 'Output Configuration') }}
           </button>
           <button
             type="button"
@@ -494,20 +523,20 @@
             :disabled="!activeTab.result && !activeTab.outputPreviewItems.length"
             @click="inspectorView = 'preview'"
           >
-            数据预览
+            {{ ui('数据预览', 'Data Preview') }}
           </button>
         </div>
 
         <section v-if="activeTab?.type === 'query' && inspectorView === 'outputs'">
           <SourceOutputEditor
             v-model="activeTab.outputs"
-            title="查询输出"
+            :title="ui('查询输出', 'Query Output')"
             :columns="activeTab.result?.columns || []"
             :column-types="activeTab.result?.columnTypes || {}"
             :sample="activeTab.displayRows?.[0]"
             whole-data-type="object"
             progressive
-            default-output-name="查询结果"
+            :default-output-name="ui('查询结果', 'Query Result')"
             :datapoints-generated="activeTab.datapointsGenerated"
             :output-modified="activeTab.outputModified"
             :generating="activeTab.generatingDatapoints"
@@ -527,7 +556,7 @@
         >
           <div class="sql-workbench__output-preview-head">
             <div>
-              <strong>结果预览</strong>
+              <strong>{{ ui('结果预览', 'Result Preview') }}</strong>
               <span>{{ outputPreviewDescription(activeTab) }}</span>
             </div>
             <div class="sql-workbench__output-preview-actions">
@@ -539,7 +568,7 @@
                 :loading="activeTab.outputPreviewLoading"
                 @click="refreshOutputPreview(activeTab)"
               >
-                刷新 GET
+                {{ ui('刷新 GET', 'Refresh GET') }}
               </el-button>
               <el-button
                 type="primary"
@@ -572,7 +601,7 @@
             <div class="sql-workbench__output-preview-meta">
               <strong>{{ item.displayName }}</strong>
               <el-tag v-if="item.quality" size="small" :type="previewQualityType(item.quality)">
-                {{ item.quality === 'preview' ? '配置预览' : item.quality }}
+                {{ item.quality === 'preview' ? ui('配置预览', 'Configuration Preview') : item.quality }}
               </el-tag>
             </div>
             <code v-if="item.path">GET {{ item.path }}</code>
@@ -583,10 +612,10 @@
 
         <section v-if="activeTab?.type === 'structure'">
           <template v-if="activeTab.structure.timeseries">
-            <div class="sql-workbench__panel-title">时序策略</div>
+            <div class="sql-workbench__panel-title">{{ ui('时序策略', 'Time-series Policy') }}</div>
             <dl class="sql-workbench__facts">
               <div>
-                <dt>时间字段</dt>
+                <dt>{{ ui('时间字段', 'Time Column') }}</dt>
                 <dd>{{ activeTab.structure.timeseries.timeColumn }}</dd>
               </div>
               <div>
@@ -595,7 +624,7 @@
               </div>
             </dl>
           </template>
-          <div class="sql-workbench__panel-title">字段摘要</div>
+          <div class="sql-workbench__panel-title">{{ ui('字段摘要', 'Column Summary') }}</div>
           <div
             v-for="column in activeTab.structure.columns.slice(0, 12)"
             :key="column.name"
@@ -608,8 +637,8 @@
       </div>
 
       <section class="sql-workbench__history-panel">
-        <div class="sql-workbench__panel-title">执行历史</div>
-        <div v-if="executionHistory.length === 0" class="sql-workbench__empty">暂无执行记录</div>
+        <div class="sql-workbench__panel-title">{{ ui('执行历史', 'Execution History') }}</div>
+        <div v-if="executionHistory.length === 0" class="sql-workbench__empty">{{ ui('暂无执行记录', 'No execution history') }}</div>
         <div v-else class="sql-workbench__history-list">
           <button
             v-for="record in executionHistory"
@@ -619,7 +648,7 @@
             @click="openHistory(record)"
           >
             <span>{{ record.title }}</span>
-            <small>{{ record.rowCount }} 行 / {{ record.executionTime }}ms</small>
+            <small>{{ ui(`${record.rowCount} 行`, `${record.rowCount} rows`) }} / {{ record.executionTime }}ms</small>
           </button>
         </div>
       </section>
@@ -666,7 +695,7 @@
             @click="openContextNewQuery"
           >
             <IconTablerPlus />
-            <span>新建查询</span>
+            <span>{{ ui('新建查询', 'New Query') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'query-category'"
@@ -674,11 +703,11 @@
             @click="refreshContextQueries"
           >
             <IconTablerRefresh />
-            <span>刷新查询</span>
+            <span>{{ ui('刷新查询', 'Refresh Queries') }}</span>
           </button>
           <button v-if="contextMenu.type === 'tab'" type="button" @click="closeContextTab">
             <IconTablerX />
-            <span>关闭当前</span>
+            <span>{{ ui('关闭当前', 'Close Current') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'tab'"
@@ -687,27 +716,27 @@
             @click="closeContextRightTabs"
           >
             <IconTablerChevronsRight />
-            <span>关闭右侧标签</span>
+            <span>{{ ui('关闭右侧标签', 'Close Tabs to the Right') }}</span>
           </button>
           <button v-if="contextMenu.type === 'tab'" type="button" @click="closeContextAllTabs">
             <IconTablerStack2 />
-            <span>关闭所有标签</span>
+            <span>{{ ui('关闭所有标签', 'Close All Tabs') }}</span>
           </button>
           <button v-if="contextMenu.type === 'query'" type="button" @click="openContextQuery">
             <IconTablerFileText />
-            <span>打开查询</span>
+            <span>{{ ui('打开查询', 'Open Query') }}</span>
           </button>
           <button v-if="contextMenu.type === 'query'" type="button" @click="renameContextQuery">
             <IconTablerEdit />
-            <span>重命名查询</span>
+            <span>{{ ui('重命名查询', 'Rename Query') }}</span>
           </button>
           <button v-if="contextMenu.type === 'query'" type="button" @click="moveContextQuery">
             <IconTablerFolder />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Group') }}</span>
           </button>
           <button v-if="contextMenu.type === 'query'" type="button" @click="deleteContextQuery">
             <IconTablerTrash />
-            <span>删除查询</span>
+            <span>{{ ui('删除查询', 'Delete Query') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table-category' && !isReadOnlySource"
@@ -715,7 +744,7 @@
             @click="openTableDesign"
           >
             <IconTablerPlus />
-            <span>新建表</span>
+            <span>{{ ui('新建表', 'New Table') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table-category'"
@@ -723,7 +752,7 @@
             @click="refreshContextTables"
           >
             <IconTablerRefresh />
-            <span>刷新表</span>
+            <span>{{ ui('刷新表', 'Refresh Tables') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'query-group' || contextMenu.type === 'table-group'"
@@ -731,7 +760,7 @@
             @click="createContextGroup"
           >
             <IconTablerPlus />
-            <span>新建分组</span>
+            <span>{{ ui('新建分组', 'New Group') }}</span>
           </button>
           <button
             v-if="
@@ -742,7 +771,7 @@
             @click="renameContextGroup"
           >
             <IconTablerEdit />
-            <span>重命名分组</span>
+            <span>{{ ui('重命名分组', 'Rename Group') }}</span>
           </button>
           <button
             v-if="
@@ -753,11 +782,11 @@
             @click="deleteContextGroup"
           >
             <IconTablerTrash />
-            <span>删除分组</span>
+            <span>{{ ui('删除分组', 'Delete Group') }}</span>
           </button>
           <button v-if="contextMenu.type === 'table'" type="button" @click="openContextStructure">
             <IconTablerColumns />
-            <span>查看表结构</span>
+            <span>{{ ui('查看表结构', 'View Table Schema') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && supportsTableStructureEdit"
@@ -765,11 +794,11 @@
             @click="editContextTableStructure"
           >
             <IconTablerEdit />
-            <span>修改表结构</span>
+            <span>{{ ui('修改表结构', 'Edit Table Schema') }}</span>
           </button>
           <button v-if="contextMenu.type === 'table'" type="button" @click="openContextData">
             <IconTablerTable />
-            <span>查询数据</span>
+            <span>{{ ui('查询数据', 'Query Data') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && !isReadOnlySource"
@@ -777,7 +806,7 @@
             @click="openContextInsert"
           >
             <IconTablerPlus />
-            <span>插入数据</span>
+            <span>{{ ui('插入数据', 'Insert Data') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && contextMenu.table?.kind === 'hypertable'"
@@ -785,7 +814,7 @@
             @click="openContextRecentTimeseries"
           >
             <IconTablerClock />
-            <span>查询最近时序</span>
+            <span>{{ ui('查询最近时序', 'Query Recent Series') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && contextMenu.table?.kind === 'hypertable'"
@@ -793,7 +822,7 @@
             @click="openContextTimeseriesAggregate"
           >
             <IconTablerChartLine />
-            <span>按时间聚合</span>
+            <span>{{ ui('按时间聚合', 'Aggregate by Time') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && contextMenu.table?.kind === 'hypertable'"
@@ -801,7 +830,7 @@
             @click="openContextTimeseriesQuality"
           >
             <IconTablerAlertTriangle />
-            <span>查询异常质量</span>
+            <span>{{ ui('查询异常质量', 'Query Abnormal Quality') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && !isReadOnlySource"
@@ -809,11 +838,11 @@
             @click="renameContextTable"
           >
             <IconTablerEdit />
-            <span>重命名表</span>
+            <span>{{ ui('重命名表', 'Rename Table') }}</span>
           </button>
           <button v-if="contextMenu.type === 'table'" type="button" @click="moveContextTable">
             <IconTablerFolder />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'table' && !isReadOnlySource"
@@ -821,7 +850,7 @@
             @click="deleteContextTable"
           >
             <IconTablerTrash />
-            <span>删除表</span>
+            <span>{{ ui('删除表', 'Delete Table') }}</span>
           </button>
         </div>
       </div>
@@ -862,6 +891,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import { sqlCodeForParameterDetection } from '@/utils/sqlParameterDetection'
 import SourceOutputEditor from '@/components/shared/SourceOutputEditor.vue'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import { datacenterLocale } from '@/i18n/runtime'
 import { generatedQueryCopyName, nextGeneratedQueryName } from './sqlQueryNaming'
 import {
   createSqlTreeActivationTracker,
@@ -895,6 +925,8 @@ type SqlTemplateParameter = {
   type: SqlTemplateParameterType
   value: string
 }
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const isValidWorkbenchDisplayName = (value: string) => {
   const length = Array.from(value).length
@@ -1019,13 +1051,13 @@ const parameterToken = (index: number) => {
   return '?'
 }
 const parameterHelpText = computed(() => {
-  if (parameterDialect.value === 'postgresql') return 'PostgreSQL 使用 $1、$2… 占位'
-  if (parameterDialect.value === 'sqlserver') return 'SQL Server 使用 @p1、@p2… 占位'
-  if (dbType.value === 'tdengine') return 'TDengine 使用 ? 占位，按出现顺序绑定'
-  return 'MySQL 使用 ? 占位，按出现顺序绑定'
+  if (parameterDialect.value === 'postgresql') return ui('PostgreSQL 使用 $1、$2… 占位', 'PostgreSQL uses $1, $2… placeholders')
+  if (parameterDialect.value === 'sqlserver') return ui('SQL Server 使用 @p1、@p2… 占位', 'SQL Server uses @p1, @p2… placeholders')
+  if (dbType.value === 'tdengine') return ui('TDengine 使用 ? 占位，按出现顺序绑定', 'TDengine uses ? placeholders bound in order')
+  return ui('MySQL 使用 ? 占位，按出现顺序绑定', 'MySQL uses ? placeholders bound in order')
 })
 const parameterExample = computed(
-  () => `示例：SELECT * FROM device_data WHERE id = ${parameterToken(0)}`,
+  () => ui(`示例：SELECT * FROM device_data WHERE id = ${parameterToken(0)}`, `Example: SELECT * FROM device_data WHERE id = ${parameterToken(0)}`),
 )
 const supportsHypertable = computed(() => props.connection.type === 'builtin.timeseries')
 const isReadOnlySource = computed(() => props.connection.type === 'tdengine')
@@ -1033,8 +1065,8 @@ const supportsTableStructureEdit = computed(() =>
   ['builtin.relation', 'builtin.timeseries'].includes(props.connection.type || ''),
 )
 const dbTypeLabel = computed(() => {
-  if (props.connection.type === 'builtin.relation') return 'IF关系库'
-  if (props.connection.type === 'builtin.timeseries') return 'IF时序库'
+  if (props.connection.type === 'builtin.relation') return ui('IF关系库', 'IF Relational Store')
+  if (props.connection.type === 'builtin.timeseries') return ui('IF时序库', 'IF Time-series Store')
   const labels: Record<string, string> = {
     mysql: 'MySQL',
     postgresql: 'PostgreSQL',
@@ -1044,17 +1076,17 @@ const dbTypeLabel = computed(() => {
   return labels[dbType.value] || dbType.value
 })
 const databaseLabel = computed(() => {
-  if (props.connection.type === 'builtin.relation') return '工程内置关系库'
-  if (props.connection.type === 'builtin.timeseries') return '工程内置时序库'
+  if (props.connection.type === 'builtin.relation') return ui('工程内置关系库', 'Built-in Relational Store')
+  if (props.connection.type === 'builtin.timeseries') return ui('工程内置时序库', 'Built-in Time-series Store')
   return (
-    dbConfig.value.databaseName || dbConfig.value.database || dbConfig.value.schema || '已配置库'
+    dbConfig.value.databaseName || dbConfig.value.database || dbConfig.value.schema || ui('已配置库', 'Configured Database')
   )
 })
 const sourceMetaRows = computed(() => {
   const rows = [
-    { label: '类型', value: dbTypeLabel.value },
+    { label: ui('类型', 'Type'), value: dbTypeLabel.value },
     {
-      label: props.connection.type?.startsWith('builtin.') ? '标识' : '库',
+      label: props.connection.type?.startsWith('builtin.') ? ui('标识', 'Identifier') : ui('库', 'Database'),
       value:
         props.connection.type?.startsWith('builtin.') && dbConfig.value.schema
           ? String(dbConfig.value.schema)
@@ -1063,10 +1095,10 @@ const sourceMetaRows = computed(() => {
   ]
   if (isReadOnlySource.value) {
     rows.push({
-      label: '地址',
+      label: ui('地址', 'Address'),
       value: `${dbConfig.value.protocol || 'ws'}://${dbConfig.value.host || '-'}:${dbConfig.value.port || 6041}`,
     })
-    rows.push({ label: '时区', value: dbConfig.value.timezone || '未设置' })
+    rows.push({ label: ui('时区', 'Timezone'), value: dbConfig.value.timezone || ui('未设置', 'Not set') })
   }
   return rows
 })
@@ -1135,7 +1167,7 @@ const tableGroupByName = computed(() =>
 const buildTreeGroups = (scope: WorkbenchScope, groups: WorkbenchGroup[], items: any[]) => {
   const ungrouped: WorkbenchGroup = {
     id: '__ungrouped__',
-    name: '未分组',
+    name: ui('未分组', 'Ungrouped'),
     scope,
     virtual: true,
     items: [],
@@ -1166,9 +1198,9 @@ const tableTreeGroups = computed(() => {
     return buildTreeGroups('table', tableGroups.value, filteredTables.value)
   }
   const definitions = [
-    { id: '__tdengine_stables__', name: '超级表', kinds: ['supertable'] },
-    { id: '__tdengine_tables__', name: '普通表', kinds: ['table'] },
-    { id: '__tdengine_children__', name: '子表', kinds: ['child_table'] },
+    { id: '__tdengine_stables__', name: ui('超级表', 'Supertables'), kinds: ['supertable'] },
+    { id: '__tdengine_tables__', name: ui('普通表', 'Tables'), kinds: ['table'] },
+    { id: '__tdengine_children__', name: ui('子表', 'Child Tables'), kinds: ['child_table'] },
   ]
   return definitions.map((definition) => ({
     id: definition.id,
@@ -1423,7 +1455,7 @@ const loadTables = async (page = 1, append = false) => {
       }
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载表列表失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载表列表失败', 'Failed to load tables')))
   } finally {
     tablesLoading.value = false
     tableLoadingMore.value = false
@@ -1477,7 +1509,7 @@ const loadQueries = async (page = 1, append = false) => {
     ) {
       return
     }
-    ElMessage.error(getApiErrorMessage(error, '加载保存查询失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载保存查询失败', 'Failed to load saved queries')))
   } finally {
     if (requestSequence === queryRequestSequence) {
       if (append) queryLoadingMore.value = false
@@ -1508,7 +1540,7 @@ const loadWorkbenchGroups = async () => {
     tableGroups.value = tableResponse.data?.groups || []
     tableGroupMembers.value = memberResponse.data?.members || []
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载工作台分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载工作台分组失败', 'Failed to load workbench groups')))
   }
 }
 
@@ -1551,7 +1583,7 @@ const createQueryTab = (initial: Record<string, any> = {}) => {
   const generatedTitle = nextGeneratedQueryName([
     ...tabs.value.map((tab) => String(tab.title || '')),
     ...queries.value.map((query) => String(query.name || '')),
-  ])
+  ], ui('查询', 'Query'))
 
   const tab = {
     id,
@@ -1564,7 +1596,7 @@ const createQueryTab = (initial: Record<string, any> = {}) => {
     parameters: extractParameters(initialSql, initial.parameters || []),
     outputs: initial.outputs?.length
       ? initial.outputs.slice(0, 1).map((output: any) => normalizeQueryEditorOutput(output))
-      : [createWholeSourceOutput('result', initial.title || '查询结果', 'object')],
+      : [createWholeSourceOutput('result', initial.title || ui('查询结果', 'Query Result'), 'object')],
     datapointsGenerated: Boolean(initial.outputs?.length),
     outputModified: false,
     generatingDatapoints: false,
@@ -1645,7 +1677,7 @@ const openTableStructure = async (table: any) => {
   const tab = {
     id,
     type: 'structure',
-    title: `${table.name} / 结构`,
+    title: `${table.name} / ${ui('结构', 'Schema')}`,
     icon: IconTablerColumns,
     table: table.name,
     structureTab: 'columns',
@@ -1675,7 +1707,7 @@ const openTableStructure = async (table: any) => {
       loading: false,
     })
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载表结构失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载表结构失败', 'Failed to load table schema')))
     patchTab({ loading: false })
   }
 }
@@ -1798,12 +1830,12 @@ const renameContextQuery = async () => {
   closeContextMenu()
   if (!query) return
   try {
-    const { value } = await ElMessageBox.prompt('请输入查询名称', '重命名查询', {
+    const { value } = await ElMessageBox.prompt(ui('请输入查询名称', 'Enter a query name'), ui('重命名查询', 'Rename Query'), {
       inputValue: query.name,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('保存', 'Save'),
+      cancelButtonText: ui('取消', 'Cancel'),
       inputValidator: isValidWorkbenchDisplayName,
-      inputErrorMessage: '名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符',
+      inputErrorMessage: ui('名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符', 'Name must be 1–100 characters with no leading/trailing spaces or control characters'),
     })
     const nextName = String(value || '').trim()
     await dataAPI.updateQuery(query.id, { name: nextName })
@@ -1814,10 +1846,10 @@ const renameContextQuery = async () => {
       }
     })
     await loadQueries()
-    ElMessage.success('查询已重命名')
+    ElMessage.success(ui('查询已重命名', 'Query renamed'))
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '重命名查询失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('重命名查询失败', 'Failed to rename query')))
     }
   }
 }
@@ -1827,18 +1859,18 @@ const deleteContextQuery = async () => {
   closeContextMenu()
   if (!query) return
   try {
-    await ElMessageBox.confirm(`确定删除查询“${query.name}”吗？`, '删除查询', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(ui(`确定删除查询“${query.name}”吗？`, `Delete query “${query.name}”?`), ui('删除查询', 'Delete Query'), {
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     })
     await dataAPI.deleteQuery(query.id)
     tabs.value.filter((tab) => tab.queryId === query.id).forEach((tab) => removeTab(tab.id))
     await loadQueries()
-    ElMessage.success('查询已删除')
+    ElMessage.success(ui('查询已删除', 'Query deleted'))
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '删除查询失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除查询失败', 'Failed to delete query')))
     }
   }
 }
@@ -1874,11 +1906,11 @@ const createContextGroup = async () => {
   const scope = group?.scope || (contextMenu.value.type === 'query-group' ? 'query' : 'table')
   closeContextMenu()
   try {
-    const { value } = await ElMessageBox.prompt('请输入分组名称', '新建分组', {
-      confirmButtonText: '创建',
-      cancelButtonText: '取消',
+    const { value } = await ElMessageBox.prompt(ui('请输入分组名称', 'Enter a group name'), ui('新建分组', 'New Group'), {
+      confirmButtonText: ui('创建', 'Create'),
+      cancelButtonText: ui('取消', 'Cancel'),
       inputValidator: isValidWorkbenchDisplayName,
-      inputErrorMessage: '分组名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符',
+      inputErrorMessage: ui('分组名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符', 'Group name must be 1–100 characters with no leading/trailing spaces or control characters'),
     })
     await dataAPI.createWorkbenchGroup(props.projectId, props.connection.id, {
       scope,
@@ -1887,7 +1919,7 @@ const createContextGroup = async () => {
     await loadWorkbenchGroups()
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '创建分组失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('创建分组失败', 'Failed to create group')))
     }
   }
 }
@@ -1897,12 +1929,12 @@ const renameContextGroup = async () => {
   closeContextMenu()
   if (!group || group.virtual) return
   try {
-    const { value } = await ElMessageBox.prompt('请输入分组名称', '重命名分组', {
+    const { value } = await ElMessageBox.prompt(ui('请输入分组名称', 'Enter a group name'), ui('重命名分组', 'Rename Group'), {
       inputValue: group.name,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('保存', 'Save'),
+      cancelButtonText: ui('取消', 'Cancel'),
       inputValidator: isValidWorkbenchDisplayName,
-      inputErrorMessage: '分组名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符',
+      inputErrorMessage: ui('分组名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符', 'Group name must be 1–100 characters with no leading/trailing spaces or control characters'),
     })
     await dataAPI.updateWorkbenchGroup(props.projectId, group.id, {
       name: String(value || '').trim(),
@@ -1910,7 +1942,7 @@ const renameContextGroup = async () => {
     await loadWorkbenchGroups()
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '重命名分组失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('重命名分组失败', 'Failed to rename group')))
     }
   }
 }
@@ -1920,16 +1952,16 @@ const deleteContextGroup = async () => {
   closeContextMenu()
   if (!group || group.virtual) return
   try {
-    await ElMessageBox.confirm('删除分组不会删除其中的对象，对象会回到未分组。', '删除分组', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(ui('删除分组不会删除其中的对象，对象会回到未分组。', 'Deleting a group does not delete its objects; they return to Ungrouped.'), ui('删除分组', 'Delete Group'), {
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     })
     await dataAPI.deleteWorkbenchGroup(props.projectId, group.id)
     await Promise.all([loadWorkbenchGroups(), loadQueries()])
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除分组失败', 'Failed to delete group')))
     }
   }
 }
@@ -1971,7 +2003,7 @@ const submitMoveGroup = async (groupID: string | null) => {
     moveGroupTarget.value = { scope: 'query', item: null }
   } catch (error) {
     ElMessage.error(
-      getApiErrorMessage(error, target.scope === 'query' ? '移动查询失败' : '移动表失败'),
+      getApiErrorMessage(error, target.scope === 'query' ? ui('移动查询失败', 'Failed to move query') : ui('移动表失败', 'Failed to move table')),
     )
   } finally {
     moveGroupSubmitting.value = false
@@ -1983,12 +2015,12 @@ const renameContextTable = async () => {
   closeContextMenu()
   if (!table) return
   try {
-    const { value } = await ElMessageBox.prompt('请输入新表名', '重命名表', {
+    const { value } = await ElMessageBox.prompt(ui('请输入新表名', 'Enter a new table name'), ui('重命名表', 'Rename Table'), {
       inputValue: table.name,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('保存', 'Save'),
+      cancelButtonText: ui('取消', 'Cancel'),
       inputPattern: /^[A-Za-z_][A-Za-z0-9_]{0,62}$/,
-      inputErrorMessage: '表名需为 1 到 63 个字符，只能包含字母、数字、下划线，且不能以数字开头',
+      inputErrorMessage: ui('表名需为 1 到 63 个字符，只能包含字母、数字、下划线，且不能以数字开头', 'Table name must be 1–63 letters, numbers, or underscores and cannot start with a number'),
     })
     const nextName = String(value || '').trim()
     await dataAPI.renameConnectionTable(props.projectId, props.connection.id, table.name, {
@@ -2003,10 +2035,10 @@ const renameContextTable = async () => {
     if (selectedTableName.value === table.name) selectedTableName.value = nextName
     selectedExplorerNode.value = `table:${nextName}`
     await Promise.all([loadTables(), loadWorkbenchGroups()])
-    ElMessage.success('表已重命名')
+    ElMessage.success(ui('表已重命名', 'Table renamed'))
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '重命名表失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('重命名表失败', 'Failed to rename table')))
     }
   }
 }
@@ -2017,11 +2049,11 @@ const deleteContextTable = async () => {
   if (!table) return
   try {
     await ElMessageBox.confirm(
-      `删除表“${table.name}”会删除真实数据库表，且不会级联删除依赖对象。确认继续？`,
-      '删除表',
+      ui(`删除表“${table.name}”会删除真实数据库表，且不会级联删除依赖对象。确认继续？`, `Deleting “${table.name}” removes the physical database table and does not cascade to dependent objects. Continue?`),
+      ui('删除表', 'Delete Table'),
       {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
+        confirmButtonText: ui('删除', 'Delete'),
+        cancelButtonText: ui('取消', 'Cancel'),
         type: 'warning',
       },
     )
@@ -2030,10 +2062,10 @@ const deleteContextTable = async () => {
     if (selectedTableName.value === table.name) selectedTableName.value = ''
     if (selectedExplorerNode.value === `table:${table.name}`) selectedExplorerNode.value = 'tables'
     await Promise.all([loadTables(), loadWorkbenchGroups()])
-    ElMessage.success('表已删除')
+    ElMessage.success(ui('表已删除', 'Table deleted'))
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '删除表失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除表失败', 'Failed to delete table')))
     }
   }
 }
@@ -2053,7 +2085,7 @@ const editContextTableStructure = async () => {
     editingTableStructure.value = response.data || { columns: [], indexes: [], foreignKeys: [] }
     tableDesignVisible.value = true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载表结构失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载表结构失败', 'Failed to load table schema')))
   }
 }
 
@@ -2081,16 +2113,16 @@ const openContextInsert = async () => {
     )
     const columns = response.data?.columns || []
     if (columns.length === 0) {
-      ElMessage.warning('未读取到表字段，无法生成插入模板')
+      ElMessage.warning(ui('未读取到表字段，无法生成插入模板', 'No table columns were found; cannot generate an INSERT template'))
       return
     }
     createQueryTab({
-      title: `${table.name} / 插入`,
+      title: `${table.name} / ${ui('插入', 'Insert')}`,
       table: table.name,
       sql: buildInsertSql(table.name, columns),
     })
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '生成插入模板失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('生成插入模板失败', 'Failed to generate INSERT template')))
   }
 }
 
@@ -2105,12 +2137,12 @@ const openContextRecentTimeseries = async () => {
       table.name,
     )
     createQueryTab({
-      title: `${table.name} / 最近时序`,
+      title: `${table.name} / ${ui('最近时序', 'Recent Series')}`,
       table: table.name,
       sql: buildRecentTimeseriesSql(table.name, response.data || {}),
     })
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '生成时序查询模板失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('生成时序查询模板失败', 'Failed to generate time-series query template')))
   }
 }
 
@@ -2126,12 +2158,12 @@ const openContextTimeseriesAggregate = async () => {
     )
     const structure = response.data || {}
     createQueryTab({
-      title: `${table.name} / 时间聚合`,
+      title: `${table.name} / ${ui('时间聚合', 'Time Aggregate')}`,
       table: table.name,
       sql: buildTimeseriesAggregateSql(table.name, structure, structure.columns || []),
     })
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '生成时序聚合模板失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('生成时序聚合模板失败', 'Failed to generate time-series aggregate template')))
   }
 }
 
@@ -2146,12 +2178,12 @@ const openContextTimeseriesQuality = async () => {
       table.name,
     )
     createQueryTab({
-      title: `${table.name} / 异常质量`,
+      title: `${table.name} / ${ui('异常质量', 'Abnormal Quality')}`,
       table: table.name,
       sql: buildTimeseriesQualitySql(table.name, response.data || {}),
     })
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '生成异常质量查询模板失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('生成异常质量查询模板失败', 'Failed to generate abnormal-quality query template')))
   }
 }
 
@@ -2185,9 +2217,9 @@ const closeTab = async (tabId: string) => {
   if (!tab) return
   if (tab.type === 'query' && tab.modified) {
     try {
-      await ElMessageBox.confirm(`查询“${tab.title}”有未保存修改，关闭前是否保存？`, '关闭查询', {
-        confirmButtonText: '保存后关闭',
-        cancelButtonText: '放弃修改',
+      await ElMessageBox.confirm(ui(`查询“${tab.title}”有未保存修改，关闭前是否保存？`, `Query “${tab.title}” has unsaved changes. Save before closing?`), ui('关闭查询', 'Close Query'), {
+        confirmButtonText: ui('保存后关闭', 'Save and Close'),
+        cancelButtonText: ui('放弃修改', 'Discard Changes'),
         distinguishCancelAndClose: true,
         type: 'warning',
       })
@@ -2207,11 +2239,11 @@ const closeTabSet = async (tabIds: string[], fallbackTabId = '') => {
   if (modifiedTabs.length > 0) {
     try {
       await ElMessageBox.confirm(
-        `将关闭 ${targetTabs.length} 个标签，其中 ${modifiedTabs.length} 个有未保存修改。`,
-        '批量关闭标签',
+        ui(`将关闭 ${targetTabs.length} 个标签，其中 ${modifiedTabs.length} 个有未保存修改。`, `${targetTabs.length} tabs will close; ${modifiedTabs.length} have unsaved changes.`),
+        ui('批量关闭标签', 'Close Multiple Tabs'),
         {
-          confirmButtonText: '保存后关闭',
-          cancelButtonText: '放弃修改并关闭',
+          confirmButtonText: ui('保存后关闭', 'Save and Close'),
+          cancelButtonText: ui('放弃修改并关闭', 'Discard and Close'),
           distinguishCancelAndClose: true,
           type: 'warning',
         },
@@ -2280,13 +2312,13 @@ const formatActiveSql = () => {
     })
     activeTab.value.modified = true
   } catch {
-    ElMessage.warning('当前 SQL 暂时无法格式化')
+    ElMessage.warning(ui('当前 SQL 暂时无法格式化', 'This SQL cannot be formatted'))
   }
 }
 
 const executeTab = async (tab: any) => {
   if (!tab?.sql?.trim()) {
-    ElMessage.warning('请先输入 SQL')
+    ElMessage.warning(ui('请先输入 SQL', 'Enter SQL first'))
     return
   }
   tab.outputPreviewItems = []
@@ -2314,7 +2346,7 @@ const executeTab = async (tab: any) => {
   } catch (error) {
     tab.result = null
     tab.displayRows = []
-    tab.executionError = getApiErrorMessage(error, '执行 SQL 失败')
+    tab.executionError = getApiErrorMessage(error, ui('执行 SQL 失败', 'Failed to execute SQL'))
     ElMessage.error(tab.executionError)
   } finally {
     tab.executing = false
@@ -2337,10 +2369,10 @@ const saveQueryTab = async (tab: any): Promise<boolean> => {
       })
       tab.modified = false
       await loadQueries()
-      ElMessage.success('查询已保存')
+      ElMessage.success(ui('查询已保存', 'Query saved'))
       return true
     } catch (error) {
-      ElMessage.error(getApiErrorMessage(error, '保存查询失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('保存查询失败', 'Failed to save query')))
       return false
     } finally {
       tab.saving = false
@@ -2348,11 +2380,11 @@ const saveQueryTab = async (tab: any): Promise<boolean> => {
   }
 
   try {
-    const { value } = await ElMessageBox.prompt('请输入查询名称', '保存查询', {
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+    const { value } = await ElMessageBox.prompt(ui('请输入查询名称', 'Enter a query name'), ui('保存查询', 'Save Query'), {
+      confirmButtonText: ui('保存', 'Save'),
+      cancelButtonText: ui('取消', 'Cancel'),
       inputValidator: isValidWorkbenchDisplayName,
-      inputErrorMessage: '名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符',
+      inputErrorMessage: ui('名称需为 1 到 100 个字符，且不能包含首尾空格或控制字符', 'Name must be 1–100 characters with no leading/trailing spaces or control characters'),
       inputValue: tab.table || tab.title,
     })
 
@@ -2367,11 +2399,11 @@ const saveQueryTab = async (tab: any): Promise<boolean> => {
     tab.queryId = response.data?.id
     tab.modified = false
     await loadQueries()
-    ElMessage.success('查询已保存')
+    ElMessage.success(ui('查询已保存', 'Query saved'))
     return true
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '保存查询失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('保存查询失败', 'Failed to save query')))
     }
     return false
   } finally {
@@ -2386,23 +2418,23 @@ const saveActiveQuery = async () => {
 }
 
 const datapointGenerationButtonText = (tab: any) => {
-  if (!tab.datapointsGenerated) return '保存并生成数据点'
-  if (tab.outputModified) return '保存并更新数据点'
-  return '数据点已生成'
+  if (!tab.datapointsGenerated) return ui('保存并生成数据点', 'Save and Generate Data Point')
+  if (tab.outputModified) return ui('保存并更新数据点', 'Save and Update Data Point')
+  return ui('数据点已生成', 'Data Point Generated')
 }
 
 const datapointGenerationButtonTitle = (tab: any) => {
-  if (!tab.queryId && !tab.result) return '请先运行 SQL，确认结果后再生成数据点'
-  if (!tab.queryId) return '输入查询名称，保存后直接生成数据点'
-  if (tab.datapointsGenerated && !tab.outputModified) return '提取配置和数据点已经同步保存'
-  return tab.datapointsGenerated ? '保存当前提取配置并更新数据点' : '保存当前配置并生成数据点'
+  if (!tab.queryId && !tab.result) return ui('请先运行 SQL，确认结果后再生成数据点', 'Run SQL and verify the result before generating a data point')
+  if (!tab.queryId) return ui('输入查询名称，保存后直接生成数据点', 'Enter a query name to save and generate a data point')
+  if (tab.datapointsGenerated && !tab.outputModified) return ui('提取配置和数据点已经同步保存', 'Extraction configuration and data point are synchronized')
+  return tab.datapointsGenerated ? ui('保存当前提取配置并更新数据点', 'Save extraction configuration and update data point') : ui('保存当前配置并生成数据点', 'Save configuration and generate data point')
 }
 
 const generateActiveQueryDatapoints = async () => {
   const tab = activeTab.value
   if (!tab || tab.type !== 'query') return
   if (!tab.queryId && !tab.result) {
-    ElMessage.warning('请先运行 SQL，确认结果后再生成数据点')
+    ElMessage.warning(ui('请先运行 SQL，确认结果后再生成数据点', 'Run SQL and verify the result before generating a data point'))
     return
   }
   tab.generatingDatapoints = true
@@ -2427,9 +2459,9 @@ const generateActiveQueryDatapoints = async () => {
     } else {
       inspectorView.value = 'outputs'
     }
-    ElMessage.success('数据点已生成')
+    ElMessage.success(ui('数据点已生成', 'Data point generated'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '生成数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('生成数据点失败', 'Failed to generate data point')))
   } finally {
     tab.generatingDatapoints = false
   }
@@ -2492,7 +2524,7 @@ const refreshOutputPreview = async (tab: any) => {
           path: output.datapointPath,
           quality: 'bad',
           value: null,
-          error: getApiErrorMessage(result.reason, '读取数据点失败'),
+          error: getApiErrorMessage(result.reason, ui('读取数据点失败', 'Failed to read data point')),
         }
       }
       const value = result.value?.data || result.value || {}
@@ -2505,10 +2537,10 @@ const refreshOutputPreview = async (tab: any) => {
       }
     })
     const failedCount = tab.outputPreviewItems.filter((item: any) => item.error).length
-    if (failedCount > 0) tab.outputPreviewError = `${failedCount} 个数据点读取失败`
+    if (failedCount > 0) tab.outputPreviewError = ui(`${failedCount} 个数据点读取失败`, `${failedCount} data point reads failed`)
   } catch (error) {
     if (requestSequence === tab.outputPreviewRequestSequence) {
-      tab.outputPreviewError = getApiErrorMessage(error, '读取数据点预览失败')
+      tab.outputPreviewError = getApiErrorMessage(error, ui('读取数据点预览失败', 'Failed to load data point preview'))
       tab.outputPreviewItems = generatedOutputs.map((output: any) => ({
         key: output.id || output.key,
         displayName: output.displayName || output.key,
@@ -2524,14 +2556,14 @@ const refreshOutputPreview = async (tab: any) => {
 }
 
 const outputPreviewDescription = (tab: any) => {
-  if (tab.outputPreviewLoading) return '正在读取数据点 GET 结果…'
+  if (tab.outputPreviewLoading) return ui('正在读取数据点 GET 结果…', 'Loading data point GET result…')
   if (tab.outputPreviewSource !== 'get') {
     if (tab.outputModified)
-      return '当前按本次 SQL 结果即时演算；点击“更新数据点”后自动切换为真实 GET 值。'
-    return '当前按本次 SQL 结果预览；生成数据点后自动切换为真实 GET 值。'
+      return ui('当前按本次 SQL 结果即时演算；点击“更新数据点”后自动切换为真实 GET 值。', 'Preview is calculated from the current SQL result; update the data point to switch to the real GET value.')
+    return ui('当前按本次 SQL 结果预览；生成数据点后自动切换为真实 GET 值。', 'Preview uses the current SQL result; generate the data point to switch to the real GET value.')
   }
-  if (tab.modified) return '当前 GET 使用已保存的 SQL，未保存的 SQL 修改尚未生效。'
-  return '以下内容来自数据点 GET 接口，可用于核对脚本实际读取结果。'
+  if (tab.modified) return ui('当前 GET 使用已保存的 SQL，未保存的 SQL 修改尚未生效。', 'GET uses the saved SQL; unsaved changes are not yet effective.')
+  return ui('以下内容来自数据点 GET 接口，可用于核对脚本实际读取结果。', 'The content below comes from the data point GET API and can be used to verify script reads.')
 }
 
 const previewQualityType = (quality: string) => {
@@ -2550,7 +2582,7 @@ const formatOutputPreview = (value: unknown) => {
   }
   if (text === undefined) text = String(value)
   const limit = 4000
-  return text.length > limit ? `${text.slice(0, limit)}\n…预览内容已截断` : text
+  return text.length > limit ? `${text.slice(0, limit)}\n${ui('…预览内容已截断', '…preview truncated')}` : text
 }
 
 const saveDirtyQueries = async (): Promise<boolean> => {
@@ -2562,7 +2594,7 @@ const saveDirtyQueries = async (): Promise<boolean> => {
 
 const openHistory = (record: any) => {
   createQueryTab({
-    title: generatedQueryCopyName(record.title),
+    title: generatedQueryCopyName(record.title, ui('副本', 'Copy')),
     sql: record.sql,
   })
 }

@@ -4,8 +4,8 @@
       <button
         type="button"
         class="history-config__close"
-        title="关闭"
-        aria-label="关闭历史存储设置"
+        :title="ui('关闭', 'Close')"
+        :aria-label="ui('关闭历史存储设置', 'Close history storage settings')"
         @click="visible = false"
       >
         <IconTablerX />
@@ -14,8 +14,8 @@
 
     <div class="history-config">
       <section class="history-config__mode-section">
-        <h3>保存方式</h3>
-        <div class="history-config__modes" role="radiogroup" aria-label="历史保存方式">
+        <h3>{{ ui('保存方式', 'Storage Mode') }}</h3>
+        <div class="history-config__modes" role="radiogroup" :aria-label="ui('历史保存方式', 'History storage mode')">
           <button
             v-if="allowInherit"
             type="button"
@@ -23,7 +23,7 @@
             @click="selectBehavior('inherit')"
           >
             <IconTablerArrowBackUp />
-            <span><strong>沿用来源设置</strong><small>跟随所属来源</small></span>
+            <span><strong>{{ ui('沿用来源设置', 'Inherit Source Settings') }}</strong><small>{{ ui('跟随所属来源', 'Follow the parent source') }}</small></span>
           </button>
           <button
             type="button"
@@ -31,7 +31,7 @@
             @click="selectBehavior('off')"
           >
             <IconTablerHistoryOff />
-            <span><strong>不保存历史</strong><small>停止新增历史记录</small></span>
+            <span><strong>{{ ui('不保存历史', 'Do Not Store History') }}</strong><small>{{ ui('停止新增历史记录', 'Stop creating history records') }}</small></span>
           </button>
           <button
             v-for="mode in modeOptions"
@@ -51,22 +51,22 @@
 
       <template v-if="draft.behavior === 'custom'">
         <section class="history-config__section">
-          <h3>基本设置</h3>
+          <h3>{{ ui('基本设置', 'Basic Settings') }}</h3>
           <label
             v-if="draft.writeMode === 'interval_latest' || draft.writeMode === 'periodic_snapshot'"
             class="history-config__field"
           >
-            <span>保存间隔</span>
+            <span>{{ ui('保存间隔', 'Storage Interval') }}</span>
             <div class="history-config__number-unit">
               <el-input-number v-model="intervalMinutes" :min="1" :controls="false" />
-              <span>分钟</span>
+              <span>{{ ui('分钟', 'minutes') }}</span>
             </div>
           </label>
 
           <div class="history-config__target-row">
             <label class="history-config__field">
-              <span>主存储目标</span>
-              <el-select v-model="primaryTarget.connectionId" placeholder="请选择存储目标">
+              <span>{{ ui('主存储目标', 'Primary Target') }}</span>
+              <el-select v-model="primaryTarget.connectionId" :placeholder="ui('请选择存储目标', 'Select a storage target')">
                 <el-option
                   v-for="target in availableTargetsFor(0)"
                   :key="target.id"
@@ -85,17 +85,17 @@
             class="history-config__advanced-trigger"
             @click="advancedVisible = !advancedVisible"
           >
-            <span>高级设置</span>
+            <span>{{ ui('高级设置', 'Advanced Settings') }}</span>
             <IconTablerChevronDown :class="{ 'is-open': advancedVisible }" />
           </button>
 
           <div v-if="advancedVisible" class="history-config__advanced">
             <label v-if="draft.writeMode === 'on_change'" class="history-config__field">
-              <span>绝对值死区</span>
+              <span>{{ ui('绝对值死区', 'Absolute Deadband') }}</span>
               <el-input-number v-model="draft.deadband" :min="0" :controls="false" />
             </label>
             <label v-if="draft.writeMode === 'on_change'" class="history-config__field">
-              <span>最长静默</span>
+              <span>{{ ui('最长静默', 'Maximum Silence') }}</span>
               <div class="history-config__number-unit">
                 <el-input-number
                   v-model="maxSilenceMinutes"
@@ -103,28 +103,28 @@
                   :controls="false"
                   :disabled="maxSilenceUnset"
                 />
-                <span>分钟</span>
+                <span>{{ ui('分钟', 'minutes') }}</span>
               </div>
-              <el-checkbox v-model="maxSilenceUnset">不设置最长静默</el-checkbox>
+              <el-checkbox v-model="maxSilenceUnset">{{ ui('不设置最长静默', 'No maximum silence') }}</el-checkbox>
             </label>
             <label v-if="draft.writeMode === 'periodic_snapshot'" class="history-config__field">
-              <span>离线时</span>
+              <span>{{ ui('离线时', 'When Offline') }}</span>
               <el-select v-model="draft.offlineBehavior">
-                <el-option label="继续保存并标记异常" value="store_stale" />
-                <el-option label="停止保存" value="skip" />
+                <el-option :label="ui('继续保存并标记异常', 'Continue and mark as stale')" value="store_stale" />
+                <el-option :label="ui('停止保存', 'Stop storing')" value="skip" />
               </el-select>
             </label>
 
             <div class="history-config__additional-head">
-              <span>附加目标</span>
-              <button type="button" @click="addTarget"><IconTablerPlus /> 添加</button>
+              <span>{{ ui('附加目标', 'Additional Targets') }}</span>
+              <button type="button" @click="addTarget"><IconTablerPlus /> {{ ui('添加', 'Add') }}</button>
             </div>
             <div
               v-for="(target, index) in draft.targets.slice(1)"
               :key="index + 1"
               class="history-config__target-row is-additional"
             >
-              <el-select v-model="target.connectionId" placeholder="请选择存储目标">
+              <el-select v-model="target.connectionId" :placeholder="ui('请选择存储目标', 'Select a storage target')">
                 <el-option
                   v-for="option in availableTargetsFor(index + 1)"
                   :key="option.id"
@@ -137,7 +137,7 @@
                 <button
                   type="button"
                   :disabled="index === 0"
-                  title="上移"
+                  :title="ui('上移', 'Move Up')"
                   @click="moveTarget(index + 1, -1)"
                 >
                   <IconTablerArrowUp />
@@ -145,12 +145,12 @@
                 <button
                   type="button"
                   :disabled="index === draft.targets.length - 2"
-                  title="下移"
+                  :title="ui('下移', 'Move Down')"
                   @click="moveTarget(index + 1, 1)"
                 >
                   <IconTablerArrowDown />
                 </button>
-                <button type="button" title="删除" @click="removeTarget(index + 1)">
+                <button type="button" :title="ui('删除', 'Delete')" @click="removeTarget(index + 1)">
                   <IconTablerTrash />
                 </button>
               </div>
@@ -169,10 +169,10 @@
 
       <p v-if="errorMessage" class="history-config__error">{{ errorMessage }}</p>
       <footer class="history-config__footer">
-        <button type="button" class="history-config__cancel" @click="visible = false">取消</button>
+        <button type="button" class="history-config__cancel" @click="visible = false">{{ ui('取消', 'Cancel') }}</button>
         <button type="button" class="history-config__save" :disabled="saving" @click="submit">
           <IconTablerDeviceFloppy />
-          {{ saving ? '保存中' : '保存' }}
+          {{ saving ? ui('保存中', 'Saving') : ui('保存', 'Save') }}
         </button>
       </footer>
     </div>
@@ -210,6 +210,9 @@ import type {
   HistoryStorageWriteMode,
 } from '@/api/schemas/history-storage.schema'
 import type { HistoryStorageSavePayload } from '@/api/history-storage.api'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -252,9 +255,9 @@ async function requestClose() {
     return
   }
   const discard = await ElMessageBox.confirm(
-    '历史存储设置有未保存修改，确认放弃这些修改？',
-    '关闭历史存储设置',
-    { confirmButtonText: '放弃修改', cancelButtonText: '继续编辑', type: 'warning' },
+    ui('历史存储设置有未保存修改，确认放弃这些修改？', 'History storage settings contain unsaved changes. Discard them?'),
+    ui('关闭历史存储设置', 'Close History Storage Settings'),
+    { confirmButtonText: ui('放弃修改', 'Discard'), cancelButtonText: ui('继续编辑', 'Keep Editing'), type: 'warning' },
   )
     .then(() => true)
     .catch(() => false)
@@ -273,37 +276,37 @@ watch(
   { deep: true },
 )
 
-const modeOptions: Array<{
+const modeOptions = computed<Array<{
   value: HistoryStorageWriteMode
   label: string
   hint: string
   icon: unknown
-}> = [
+}>>(() => [
   {
     value: 'on_change',
-    label: '变化时保存',
-    hint: '值或质量变化时记录',
+    label: ui('变化时保存', 'On Change'),
+    hint: ui('值或质量变化时记录', 'Record value or quality changes'),
     icon: IconTablerRefreshDot,
   },
   {
     value: 'interval_latest',
-    label: '按间隔保存',
-    hint: '每个时间窗口记录最后值',
+    label: ui('按间隔保存', 'At Intervals'),
+    hint: ui('每个时间窗口记录最后值', 'Record the latest value in each interval'),
     icon: IconTablerClock,
   },
   {
     value: 'periodic_snapshot',
-    label: '按周期保存',
-    hint: '定时记录当前最新值',
+    label: ui('按周期保存', 'Periodic Snapshot'),
+    hint: ui('定时记录当前最新值', 'Record the current latest value periodically'),
     icon: IconTablerRepeat,
   },
   {
     value: 'every_sample',
-    label: '保存每次采样',
-    hint: '记录收到的每一个样本',
+    label: ui('保存每次采样', 'Every Sample'),
+    hint: ui('记录收到的每一个样本', 'Record every received sample'),
     icon: IconTablerListDetails,
   },
-]
+])
 
 const primaryTarget = computed(() => draft.value.targets[0]!)
 const intervalMinutes = computed({
@@ -325,11 +328,11 @@ const selectedTargetOptions = computed(
       .filter(Boolean) as HistoryStorageTargetOption[],
 )
 const riskMessage = computed(() => {
-  if (draft.value.writeMode === 'every_sample') return '保存每次采样可能产生较大的历史数据量。'
+  if (draft.value.writeMode === 'every_sample') return ui('保存每次采样可能产生较大的历史数据量。', 'Storing every sample may generate a large amount of history data.')
   if (draft.value.targets.some((target) => target.retentionDays === null))
-    return '永久保留会持续占用存储空间；以后关闭或删除配置，也不会立即删除目标库已有表和数据。'
+    return ui('永久保留会持续占用存储空间；以后关闭或删除配置，也不会立即删除目标库已有表和数据。', 'Permanent retention continuously consumes storage. Disabling or deleting this configuration does not immediately remove existing target tables or data.')
   if (selectedTargetOptions.value.some((target) => target.lastTestStatus !== 'succeeded'))
-    return '所选目标尚未通过最近连接测试；目标不可达时不会自动切换主备。'
+    return ui('所选目标尚未通过最近连接测试；目标不可达时不会自动切换主备。', 'A selected target has not passed its latest connection test. Targets do not automatically fail over when unavailable.')
   return ''
 })
 
@@ -345,13 +348,13 @@ function selectMode(mode: HistoryStorageWriteMode) {
 }
 
 function targetLabel(target: HistoryStorageTargetOption) {
-  const type = target.type === 'builtin.timeseries' ? 'IF时序库' : 'TDengine'
+  const type = target.type === 'builtin.timeseries' ? ui('IF时序库', 'IF Time-series Database') : 'TDengine'
   const status =
     target.lastTestStatus === 'succeeded'
-      ? ' · 测试成功'
+      ? ui(' · 测试成功', ' · Test Succeeded')
       : target.lastTestStatus === 'failed'
-        ? ' · 测试失败'
-        : ' · 未测试'
+        ? ui(' · 测试失败', ' · Test Failed')
+        : ui(' · 未测试', ' · Not Tested')
   return `${target.name} · ${type}${status}`
 }
 
@@ -380,7 +383,16 @@ function moveTarget(index: number, direction: number) {
 function submit() {
   const validation = validateHistoryStorageDraft(draft.value)
   if (validation) {
-    errorMessage.value = validation
+    const validationLabels: Record<string, string> = {
+      请选择主存储目标: 'Select a primary storage target',
+      请选择所有附加目标: 'Select every additional target',
+      存储目标不能重复: 'Storage targets cannot be duplicated',
+      保存间隔必须大于0: 'The storage interval must be greater than 0',
+      死区不能小于0: 'The deadband cannot be less than 0',
+      最长静默必须大于0: 'Maximum silence must be greater than 0',
+      保留天数必须为正整数: 'Retention days must be a positive integer',
+    }
+    errorMessage.value = datacenterLocale.value === 'en' ? validationLabels[validation.replaceAll(' ', '')] || validation : validation
     return
   }
   emit('save', buildHistoryStoragePayload(draft.value))

@@ -1,14 +1,14 @@
 <template>
   <DcDialog v-model="visible" :title="title" width="420px" :close-disabled="loading">
     <el-form label-position="top">
-      <el-form-item label="目标分组">
+      <el-form-item :label="ui('目标分组', 'Target Group')">
         <el-select
           v-model="targetGroupId"
           class="kafka-topic-move-dialog__select"
           clearable
-          placeholder="根目录"
+          :placeholder="ui('根目录', 'Root')"
         >
-          <el-option label="根目录" :value="null" />
+          <el-option :label="ui('根目录', 'Root')" :value="null" />
           <el-option
             v-for="group in groupOptions"
             :key="group.id"
@@ -20,8 +20,8 @@
     </el-form>
     <template #footer>
       <div class="kafka-topic-move-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="submit">移动</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
+        <el-button type="primary" :loading="loading" @click="submit">{{ ui('移动', 'Move') }}</el-button>
       </div>
     </template>
   </DcDialog>
@@ -32,6 +32,9 @@ import { computed, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import type { KafkaTopicGroup, KafkaTopicGroupNode, KafkaTopicMapping } from './types'
 import { flattenKafkaTopicGroups } from './kafkaTopicTreeModel'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -63,7 +66,7 @@ const blockedIds = computed(() =>
   props.targetType === 'group' && props.group ? collectGroupIds(props.group) : new Set<string>(),
 )
 const groupOptions = computed(() => flattenKafkaTopicGroups(props.groups, blockedIds.value))
-const title = computed(() => (props.targetType === 'group' ? '移动分组' : '移动消费规则'))
+const title = computed(() => (props.targetType === 'group' ? ui('移动分组', 'Move Group') : ui('移动消费规则', 'Move Consumer Rule')))
 
 function submit() {
   emit('submit', targetGroupId.value || null)

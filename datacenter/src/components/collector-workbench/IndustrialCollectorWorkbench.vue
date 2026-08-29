@@ -3,23 +3,12 @@
     <header class="industrial-workbench__toolbar">
       <div class="industrial-workbench__title">
         <span class="industrial-workbench__title-icon"><IconTablerCpu /></span>
-        <h1>工业采集</h1>
+        <h1>{{ ui('工业采集', 'Industrial Collection') }}</h1>
       </div>
       <div class="industrial-workbench__toolbar-actions">
-        <div class="industrial-workbench__agent">
-          <span
-            ><i :class="{ 'is-online': selectedAgent?.status === 'online' }" />采集调试代理</span
-          >
-          <CollectorAgentSelector
-            ref="agentSelector"
-            v-model="agentId"
-            :project-id="projectId"
-            @change="selectedAgent = $event"
-          />
-        </div>
-        <el-button @click="connectionList?.reload(1)">刷新</el-button>
+        <el-button @click="connectionList?.reload()">{{ ui('刷新', 'Refresh') }}</el-button>
         <el-button type="primary" @click="wizardVisible = true">
-          <IconTablerPlus />新建工业连接
+          <IconTablerPlus />{{ ui('新建工业连接', 'New Industrial Connection') }}
         </el-button>
       </div>
     </header>
@@ -47,8 +36,8 @@
                 v-if="connectionListCollapsed"
                 type="button"
                 class="industrial-workbench__sidebar-toggle"
-                aria-label="展开连接列表"
-                title="展开连接列表"
+                :aria-label="ui('展开连接列表', 'Expand Connection List')"
+                :title="ui('展开连接列表', 'Expand Connection List')"
                 @click="connectionListCollapsed = false"
               >
                 <IconTablerLayoutSidebarLeftExpand />
@@ -68,46 +57,19 @@
                     <span>{{
                       formatCollectorProtocolFamily(activeConnection.protocolFamily)
                     }}</span>
-                    <span
-                      >{{ activeConnection.driverId }}@{{ activeConnection.driverVersion }}</span
-                    >
-                    <span>{{
-                      selectedAgent ? formatCollectorAgentName(selectedAgent) : '未选择调试代理'
+                    <span v-if="activeDriver">{{
+                      formatCollectorDriverDisplayName(activeDriver)
                     }}</span>
+                    <span>{{ ui('驱动版本', 'Driver Version') }} {{ activeConnection.driverVersion }}</span>
                   </p>
                 </div>
               </div>
-            </div>
-            <div class="industrial-workbench__connection-actions">
-              <div
-                class="industrial-workbench__connection-state"
-                :class="`is-${connectionStatus.tone}`"
-              >
-                <strong><i />{{ connectionStatus.label }}</strong>
-                <time v-if="connectionSessionTime">连接时间：{{ connectionSessionTime }}</time>
-              </div>
-              <el-tooltip
-                :disabled="!connectionDisabledReason"
-                :content="connectionDisabledReason"
-                placement="bottom"
-              >
-                <span>
-                  <el-button
-                    :type="activeSessionState.status === 'connected' ? 'default' : 'primary'"
-                    :disabled="!canManageConnection || connectionSessionBusy"
-                    :loading="connectionSessionBusy"
-                    @click="toggleActiveConnection"
-                  >
-                    {{ connectionActionLabel }}
-                  </el-button>
-                </span>
-              </el-tooltip>
             </div>
           </header>
 
           <section class="industrial-workbench__content">
             <el-tabs v-model="activeTab" class="industrial-workbench__tabs">
-              <el-tab-pane label="连接配置" name="config">
+              <el-tab-pane :label="ui('连接配置', 'Connection')" name="config">
                 <CollectorConnectionEditor
                   :project-id="projectId"
                   :connection="activeConnection"
@@ -116,7 +78,7 @@
                   @refresh-agent="refreshAgentResources"
                 />
               </el-tab-pane>
-              <el-tab-pane label="变量配置" name="points">
+              <el-tab-pane :label="ui('变量建模', 'Point Modeling')" name="points">
                 <div class="industrial-workbench__points">
                   <CollectorPointGroupTree
                     :key="activeConnection.id"
@@ -140,30 +102,79 @@
                     :read-current-page-disabled-reason="pointReadDisabledReason"
                     @read-current-page="readCurrentPage"
                     @import="importVisible = true"
+                    @navigate-datapoint="
+                      emit('navigate', { module: 'datapoint', objectId: $event })
+                    "
                     @saved="discoveryPanel?.refreshExisting()"
                   />
                 </div>
               </el-tab-pane>
-              <el-tab-pane v-if="supportsDeviceBrowse" label="设备浏览" name="discovery">
-                <CollectorDiscoveryPanel
-                  ref="discoveryPanel"
-                  :project-id="projectId"
-                  :connection-id="activeConnection.id"
-                  :protocol-family="activeConnection.protocolFamily"
-                  :agent-id="agentId"
-                  :workspace-session-id="workspaceSessionId"
-                  :enabled="canBrowse"
-                  :batch-loading="discoveryBatchLoading"
-                  @points="createDiscoveredPoints"
-                  @create-point="openDiscoveredPoint"
-                  @session-error="markActiveSessionError"
-                />
-              </el-tab-pane>
-              <el-tab-pane label="连接诊断" name="diagnostic">
-                <CollectorDiagnosticPanel
-                  :project-id="projectId"
-                  :connection-id="activeConnection.id"
-                />
+              <el-tab-pane :label="ui('在线验证', 'Online Validation')" name="validation">
+                <div class="industrial-workbench__validation">
+                  <header class="industrial-workbench__validation-head">
+                    <div class="industrial-workbench__agent">
+                      <span>
+                        <i :class="{ 'is-online': selectedAgent?.status === 'online' }" />{{ ui('调试代理', 'Debug Agent') }}
+                      </span>
+                      <CollectorAgentSelector
+                        ref="agentSelector"
+                        v-model="agentId"
+                        :project-id="projectId"
+                        @change="selectedAgent = $event"
+                      />
+                    </div>
+                    <div class="industrial-workbench__connection-actions">
+                      <div
+                        class="industrial-workbench__connection-state"
+                        :class="`is-${connectionStatus.tone}`"
+                      >
+                        <strong><i />{{ connectionStatus.label }}</strong>
+                        <time v-if="connectionSessionTime">{{ connectionSessionTime }}</time>
+                      </div>
+                      <el-tooltip
+                        :disabled="!connectionDisabledReason"
+                        :content="connectionDisabledReason"
+                        placement="bottom"
+                      >
+                        <span>
+                          <el-button
+                            :type="
+                              activeSessionState.status === 'connected' ? 'default' : 'primary'
+                            "
+                            :disabled="!canManageConnection || connectionSessionBusy"
+                            :loading="connectionSessionBusy"
+                            @click="toggleActiveConnection"
+                          >
+                            {{ connectionActionLabel }}
+                          </el-button>
+                        </span>
+                      </el-tooltip>
+                    </div>
+                  </header>
+                  <el-tabs v-model="validationTab" class="industrial-workbench__validation-tabs">
+                    <el-tab-pane v-if="supportsDeviceBrowse" :label="ui('设备浏览', 'Device Browse')" name="discovery">
+                      <CollectorDiscoveryPanel
+                        ref="discoveryPanel"
+                        :project-id="projectId"
+                        :connection-id="activeConnection.id"
+                        :protocol-family="activeConnection.protocolFamily"
+                        :agent-id="agentId"
+                        :workspace-session-id="workspaceSessionId"
+                        :enabled="canBrowse"
+                        :batch-loading="discoveryBatchLoading"
+                        @points="createDiscoveredPoints"
+                        @create-point="openDiscoveredPoint"
+                        @session-error="markActiveSessionError"
+                      />
+                    </el-tab-pane>
+                    <el-tab-pane :label="ui('连接诊断', 'Diagnostics')" name="diagnostic">
+                      <CollectorDiagnosticPanel
+                        :project-id="projectId"
+                        :connection-id="activeConnection.id"
+                      />
+                    </el-tab-pane>
+                  </el-tabs>
+                </div>
               </el-tab-pane>
             </el-tabs>
           </section>
@@ -177,8 +188,8 @@
             <button
               type="button"
               class="industrial-workbench__sidebar-toggle"
-              aria-label="展开连接列表"
-              title="展开连接列表"
+              :aria-label="ui('展开连接列表', 'Expand Connection List')"
+              :title="ui('展开连接列表', 'Expand Connection List')"
               @click="connectionListCollapsed = false"
             >
               <IconTablerLayoutSidebarLeftExpand />
@@ -186,9 +197,9 @@
           </header>
           <section class="industrial-workbench__empty">
             <span><IconTablerTopologyStar3 /></span>
-            <strong>建立第一条工业采集连接</strong>
-            <p>无需调试代理也可以先完成协议配置和变量建模，连接测试与设备浏览可稍后执行。</p>
-            <el-button type="primary" @click="wizardVisible = true">创建工业采集连接</el-button>
+            <strong>{{ ui('建立第一条工业采集连接', 'Create Your First Industrial Connection') }}</strong>
+            <p>{{ ui('无需调试代理也可以先完成协议配置和变量建模，连接测试与设备浏览可稍后执行。', 'Configure the protocol and model points without a debug agent. Connection tests and device browsing can be done later.') }}</p>
+            <el-button type="primary" @click="wizardVisible = true">{{ ui('创建工业采集连接', 'Create Industrial Connection') }}</el-button>
           </section>
         </template>
       </main>
@@ -206,6 +217,7 @@
       v-model="importVisible"
       :project-id="projectId"
       :connection-id="activeConnection.id"
+      :driver-id="activeConnection.driverId"
       @committed="pointTable?.reload()"
     />
     <CollectorBatchResultDialog
@@ -241,7 +253,7 @@ import {
   agentSupportsOperation,
   collectorDriverFeatures,
   collectorDriverSupportsFeature,
-  formatCollectorAgentName,
+  formatCollectorDriverDisplayName,
   formatCollectorProtocolFamily,
   type CollectorDebugConnectionState,
   type CollectorPointCreateDefaults,
@@ -265,10 +277,16 @@ import {
   currentPageCollectorPointIds,
   summarizeCollectorPointRead,
 } from './collector-debug-snapshot'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   projectId: string
   connection?: { id: string }
+}>()
+const emit = defineEmits<{
+  navigate: [payload: { module: 'datapoint'; objectId: string }]
 }>()
 const workspaceSessionId = crypto.randomUUID()
 const selectedId = ref(props.connection?.id || '')
@@ -277,10 +295,11 @@ const activeDriver = ref<CollectorDriverDetail | null>(null)
 const agentId = ref('')
 const selectedAgent = ref<CollectorAgent>()
 const activeTab = ref('config')
+const validationTab = ref('diagnostic')
 const wizardVisible = ref(false)
 const importVisible = ref(false)
 const batchResultVisible = ref(false)
-const batchResultTitle = ref('批量新增结果')
+const batchResultTitle = ref(ui('批量新增结果', 'Batch Create Results'))
 const batchSuccessCount = ref(0)
 const batchFailures = ref<CollectorPointBatchFailure[]>([])
 const groupId = ref<string | null>(null)
@@ -302,17 +321,17 @@ const connectionSessionBusy = computed(() =>
 )
 const connectionStatus = computed(() => {
   const status = activeSessionState.value.status
-  if (status === 'connected') return { label: '已连接', tone: 'success' as const }
-  if (status === 'connecting') return { label: '连接中', tone: 'primary' as const }
-  if (status === 'disconnecting') return { label: '断开中', tone: 'primary' as const }
-  if (status === 'error') return { label: '连接异常', tone: 'danger' as const }
-  return { label: '未连接', tone: 'warning' as const }
+  if (status === 'connected') return { label: ui('已连接', 'Connected'), tone: 'success' as const }
+  if (status === 'connecting') return { label: ui('连接中', 'Connecting'), tone: 'primary' as const }
+  if (status === 'disconnecting') return { label: ui('断开中', 'Disconnecting'), tone: 'primary' as const }
+  if (status === 'error') return { label: ui('连接异常', 'Connection Error'), tone: 'danger' as const }
+  return { label: ui('未连接', 'Disconnected'), tone: 'warning' as const }
 })
 const connectionSessionTime = computed(() => activeSessionState.value.connectedAt || '')
 const connectionActionLabel = computed(() => {
-  if (activeSessionState.value.status === 'connected') return '断开'
-  if (activeSessionState.value.status === 'error') return '重新连接'
-  return '连接'
+  if (activeSessionState.value.status === 'connected') return ui('断开', 'Disconnect')
+  if (activeSessionState.value.status === 'error') return ui('重新连接', 'Reconnect')
+  return ui('连接', 'Connect')
 })
 
 const canManageConnection = computed(() =>
@@ -334,9 +353,9 @@ const canManageConnection = computed(() =>
     : false,
 )
 const connectionDisabledReason = computed(() => {
-  if (!selectedAgent.value) return '请先选择采集调试代理'
-  if (selectedAgent.value.status !== 'online') return '所选采集调试代理当前离线'
-  if (!canManageConnection.value) return '代理缺少当前驱动、版本或 Schema 能力'
+  if (!selectedAgent.value) return ui('请先选择采集调试代理', 'Select a collector debug agent first')
+  if (selectedAgent.value.status !== 'online') return ui('所选采集调试代理当前离线', 'The selected debug agent is offline')
+  if (!canManageConnection.value) return ui('代理缺少当前驱动、版本或 Schema 能力', 'The agent does not support the current driver, version, or schema')
   return ''
 })
 
@@ -376,10 +395,10 @@ const canRead = computed(() =>
     : false,
 )
 const pointReadDisabledReason = computed(() => {
-  if (!selectedAgent.value) return '请先选择采集调试代理'
-  if (selectedAgent.value.status !== 'online') return '所选采集调试代理当前离线'
-  if (activeSessionState.value.status !== 'connected') return '请先连接设备'
-  if (!canRead.value) return '代理缺少当前驱动、版本、Schema 或变量读取能力'
+  if (!selectedAgent.value) return ui('请先选择采集调试代理', 'Select a collector debug agent first')
+  if (selectedAgent.value.status !== 'online') return ui('所选采集调试代理当前离线', 'The selected debug agent is offline')
+  if (activeSessionState.value.status !== 'connected') return ui('请先连接设备', 'Connect to the device first')
+  if (!canRead.value) return ui('代理缺少当前驱动、版本、Schema 或变量读取能力', 'The agent cannot read points with the current driver, version, or schema')
   return ''
 })
 
@@ -417,7 +436,7 @@ async function connectConnection(connection: CollectorConnection) {
       'connection.open',
     )
   ) {
-    ElMessage.warning('当前调试代理不支持该驱动的长连接')
+    ElMessage.warning(ui('当前调试代理不支持该驱动的长连接', 'The selected debug agent does not support persistent connections for this driver'))
     return
   }
 
@@ -430,13 +449,13 @@ async function connectConnection(connection: CollectorConnection) {
       input: { workspaceSessionId },
       timeoutSeconds: 120,
     })
-    const completed = await waitTaskCompletion(task, '建立调试长连接超时')
+    const completed = await waitTaskCompletion(task, ui('建立调试长连接超时', 'Timed out while opening the debug connection'))
     const result = completed.result as {
       connected?: boolean
       serverName?: string
       connectedAt?: string
     } | null
-    if (result?.connected !== true) throw new Error('调试长连接未进入已连接状态')
+    if (result?.connected !== true) throw new Error(ui('调试长连接未进入已连接状态', 'The debug connection did not enter the connected state'))
     updateConnectionSession(connection.id, {
       status: 'connected',
       connectedAt: result.connectedAt
@@ -444,9 +463,9 @@ async function connectConnection(connection: CollectorConnection) {
         : dayjs().format('YYYY-MM-DD HH:mm:ss'),
       serverName: result.serverName || undefined,
     })
-    ElMessage.success(`“${connection.name}”已连接`)
+    ElMessage.success(ui(`“${connection.name}”已连接`, `“${connection.name}” connected`))
   } catch (error) {
-    const message = error instanceof Error ? error.message : '建立调试长连接失败'
+    const message = error instanceof Error ? error.message : ui('建立调试长连接失败', 'Failed to open the debug connection')
     updateConnectionSession(connection.id, { status: 'error', message })
     ElMessage.error(message)
   }
@@ -471,11 +490,11 @@ async function disconnectConnection(
       operation: 'connection.close',
       input: { workspaceSessionId },
     })
-    if (!options.silent) await waitTaskCompletion(task, '断开调试长连接超时')
+    if (!options.silent) await waitTaskCompletion(task, ui('断开调试长连接超时', 'Timed out while closing the debug connection'))
     updateConnectionSession(connection.id, { status: 'disconnected' })
-    if (!options.silent) ElMessage.success(`“${connection.name}”已断开`)
+    if (!options.silent) ElMessage.success(ui(`“${connection.name}”已断开`, `“${connection.name}” disconnected`))
   } catch (error) {
-    const message = error instanceof Error ? error.message : '断开调试长连接失败'
+    const message = error instanceof Error ? error.message : ui('断开调试长连接失败', 'Failed to close the debug connection')
     updateConnectionSession(
       connection.id,
       options.silent ? { status: 'disconnected' } : { status: 'error', message },
@@ -538,7 +557,7 @@ function onConnectionDeleted(id: string) {
 }
 
 async function onCreated(id: string) {
-  await connectionList.value?.reload(1)
+  await connectionList.value?.reload()
   await selectConnection(id)
 }
 async function onConnectionSaved(connection: CollectorConnection) {
@@ -554,7 +573,7 @@ async function reloadPointTableAfterRead(connectionId: string) {
   try {
     await pointTable.value?.reload()
   } catch {
-    ElMessage.warning('调试结果已保存，但刷新当前页失败')
+    ElMessage.warning(ui('调试结果已保存，但刷新当前页失败', 'The debug result was saved, but the current page could not be refreshed'))
   }
 }
 
@@ -579,23 +598,23 @@ async function readCurrentPage(points: Array<Pick<CollectorPoint, 'id' | 'name'>
       operation: 'point.read',
       input: { workspaceSessionId, pointIds: currentPageCollectorPointIds(points) },
     })
-    const completed = await waitTaskCompletion(task, '获取当前页数据超时')
+    const completed = await waitTaskCompletion(task, ui('获取当前页数据超时', 'Timed out while reading the current page'))
     const result = CollectorPointReadResultSchema.parse(completed.result)
     await reloadPointTableAfterRead(connection.id)
 
     const { successCount, failures } = summarizeCollectorPointRead(points, result)
     if (failures.length === 0) {
-      ElMessage.success(`已获取当前页 ${successCount} 个变量`)
+      ElMessage.success(ui(`已获取当前页 ${successCount} 个变量`, `Read ${successCount} point${successCount === 1 ? '' : 's'} on the current page`))
       return
     }
-    batchResultTitle.value = '当前页数据获取结果'
+    batchResultTitle.value = ui('当前页数据获取结果', 'Current Page Read Results')
     batchSuccessCount.value = successCount
     batchFailures.value = failures
     batchResultVisible.value = true
   } catch (error) {
-    const message = error instanceof Error ? error.message : '获取当前页数据失败'
+    const message = error instanceof Error ? error.message : ui('获取当前页数据失败', 'Failed to read the current page')
     await reloadPointTableAfterRead(connection.id)
-    batchResultTitle.value = '当前页数据获取结果'
+    batchResultTitle.value = ui('当前页数据获取结果', 'Current Page Read Results')
     batchSuccessCount.value = 0
     batchFailures.value = points.map((point, index) => ({
       index,
@@ -632,9 +651,9 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
     discoveryPanel.value?.markSelectedCreated(createdIndexes)
     if (result.list.length > 0) await pointTable.value?.reload(1)
     if (result.failed.length === 0) {
-      ElMessage.success(`已新增 ${result.list.length} 个变量`)
+      ElMessage.success(ui(`已新增 ${result.list.length} 个变量`, `Created ${result.list.length} point${result.list.length === 1 ? '' : 's'}`))
     } else {
-      batchResultTitle.value = '批量新增结果'
+      batchResultTitle.value = ui('批量新增结果', 'Batch Create Results')
       batchSuccessCount.value = result.list.length
       batchFailures.value = result.failed
       batchResultVisible.value = true
@@ -945,6 +964,45 @@ onBeforeUnmount(() => closeAllPageSessions())
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
   padding: 16px;
+}
+.industrial-workbench__validation {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+.industrial-workbench__validation-head {
+  display: flex;
+  min-height: 54px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--dc-border);
+}
+.industrial-workbench__validation-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.industrial-workbench__validation-tabs :deep(.el-tabs__header) {
+  flex: 0 0 42px;
+  padding: 0;
+  border-bottom: 1px solid var(--dc-border);
+}
+.industrial-workbench__validation-tabs :deep(.el-tabs__content) {
+  min-height: 0;
+  flex: 1;
+  padding: 12px 0 0;
+}
+.industrial-workbench__validation-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  border: 0;
 }
 
 .industrial-workbench__points {

@@ -2,19 +2,19 @@
   <div v-if="supportsStructuredAddress" class="collector-address-helper">
     <div class="collector-address-helper__head">
       <strong>{{ title }}</strong>
-      <span>生成后仍会由服务端按驱动规则重新校验</span>
+      <span>{{ ui('生成后仍会由服务端按驱动规则重新校验', 'The server validates the generated address against the driver rules') }}</span>
     </div>
 
     <div v-if="helper === 'melsec'" class="collector-address-helper__fields">
-      <el-select v-model="draft.area" placeholder="设备区">
+      <el-select v-model="draft.area" :placeholder="ui('设备区', 'Device Area')">
         <el-option v-for="area in melsecAreas" :key="area" :label="area" :value="area" />
       </el-select>
-      <el-input v-model="draft.offset" placeholder="地址，如 100 或 A0" />
-      <el-input-number v-model="draft.bit" :min="0" :max="15" placeholder="位（可选）" />
+      <el-input v-model="draft.offset" :placeholder="ui('地址，如 100 或 A0', 'Address, such as 100 or A0')" />
+      <el-input-number v-model="draft.bit" :min="0" :max="15" :placeholder="ui('位（可选）', 'Bit (optional)')" />
     </div>
 
     <div v-else-if="helper === 'omron'" class="collector-address-helper__fields">
-      <el-select v-model="draft.area" placeholder="内存区">
+      <el-select v-model="draft.area" :placeholder="ui('内存区', 'Memory Area')">
         <el-option v-for="area in omronAreas" :key="area" :label="area" :value="area" />
       </el-select>
       <el-input-number
@@ -24,28 +24,28 @@
         :max="255"
         placeholder="EM Bank"
       />
-      <el-input-number v-model="draft.word" :min="0" placeholder="字地址" />
-      <el-input-number v-model="draft.bit" :min="0" :max="15" placeholder="位（可选）" />
+      <el-input-number v-model="draft.word" :min="0" :placeholder="ui('字地址', 'Word Address')" />
+      <el-input-number v-model="draft.bit" :min="0" :max="15" :placeholder="ui('位（可选）', 'Bit (optional)')" />
     </div>
 
     <div v-else-if="helper === 'allen_bradley'" class="collector-address-helper__fields is-wide">
-      <el-select v-model="draft.scope" placeholder="作用域">
-        <el-option label="控制器" value="controller" />
+      <el-select v-model="draft.scope" :placeholder="ui('作用域', 'Scope')">
+        <el-option :label="ui('控制器', 'Controller')" value="controller" />
         <el-option label="Program" value="program" />
       </el-select>
       <el-input
         v-if="draft.scope === 'program'"
         v-model="draft.program"
-        placeholder="Program 名称"
+        :placeholder="ui('Program 名称', 'Program Name')"
       />
-      <el-input v-model="draft.tag" placeholder="标签名，如 Motor.Speed" />
-      <el-input-number v-model="draft.index" :min="0" placeholder="数组索引（可选）" />
+      <el-input v-model="draft.tag" :placeholder="ui('标签名，如 Motor.Speed', 'Tag name, such as Motor.Speed')" />
+      <el-input-number v-model="draft.index" :min="0" :placeholder="ui('数组索引（可选）', 'Array Index (optional)')" />
     </div>
 
     <div class="collector-address-helper__actions">
-      <code>{{ generatedAddress || '请先填写地址字段' }}</code>
+      <code>{{ generatedAddress || ui('请先填写地址字段', 'Complete the address fields') }}</code>
       <el-button size="small" type="primary" :disabled="!generatedAddress" @click="applyAddress">
-        应用结构化地址
+        {{ ui('应用结构化地址', 'Apply Address') }}
       </el-button>
     </div>
   </div>
@@ -53,6 +53,9 @@
 
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   modelValue: Record<string, unknown>
@@ -84,11 +87,11 @@ const title = computed(
   () =>
     (
       ({
-        melsec: '三菱设备地址',
-        omron: '欧姆龙内存地址',
-        allen_bradley: '罗克韦尔标签地址',
+        melsec: ui('三菱设备地址', 'Mitsubishi Device Address'),
+        omron: ui('欧姆龙内存地址', 'Omron Memory Address'),
+        allen_bradley: ui('罗克韦尔标签地址', 'Allen-Bradley Tag Address'),
       }) as Record<string, string>
-    )[props.helper] || '地址助手',
+    )[props.helper] || ui('地址助手', 'Address Helper'),
 )
 const generatedAddress = computed(() => {
   if (props.helper === 'melsec') {

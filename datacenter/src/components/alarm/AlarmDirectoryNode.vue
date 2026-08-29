@@ -5,7 +5,7 @@
         type="button"
         class="alarm-directory-node__toggle"
         :disabled="!group.hasChildren"
-        :title="expanded ? '收起子目录' : '展开子目录'"
+        :title="expanded ? t('alarm.collapseChildren') : t('alarm.expandChildren')"
         @click="toggle"
       >
         <IconTablerChevronRight :class="{ 'is-expanded': expanded }" />
@@ -16,13 +16,13 @@
         <span :title="group.fullPath || group.name">{{ group.name }}</span>
       </button>
       <el-dropdown trigger="click" @command="handleCommand">
-        <button type="button" class="alarm-directory-node__more" title="目录操作" @click.stop>
+        <button type="button" class="alarm-directory-node__more" :title="t('alarm.directoryActions')" @click.stop>
           <IconTablerDots />
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="edit">编辑</el-dropdown-item>
-            <el-dropdown-item command="delete">删除</el-dropdown-item>
+            <el-dropdown-item command="edit">{{ t('alarm.edit') }}</el-dropdown-item>
+            <el-dropdown-item command="delete">{{ t('alarm.delete') }}</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -38,16 +38,7 @@
         @edit="emit('edit', $event)"
         @delete="emit('delete', $event)"
       />
-      <button
-        v-if="children.length < total"
-        type="button"
-        class="alarm-directory-node__load-more"
-        :disabled="loading"
-        @click="loadMore"
-      >
-        {{ loading ? '加载中…' : `加载更多（${children.length}/${total}）` }}
-      </button>
-      <span v-else-if="loading" class="alarm-directory-node__loading">加载中…</span>
+      <span v-if="loading" class="alarm-directory-node__loading">{{ t('common.loading') }}</span>
     </div>
   </div>
 </template>
@@ -62,6 +53,7 @@ import IconTablerFolderOpen from '~icons/tabler/folder-open'
 import { listAlarmGroups } from '@/api/alarm.api'
 import type { AlarmGroup } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 
 defineOptions({ name: 'AlarmDirectoryNode' })
 const props = defineProps<{ projectId: string; group: AlarmGroup; selectedId?: string }>()
@@ -73,32 +65,37 @@ const emit = defineEmits<{
 const expanded = ref(false)
 const loading = ref(false)
 const children = ref<AlarmGroup[]>([])
-const total = ref(0)
-const page = ref(0)
+const loaded = ref(false)
 
 async function toggle() {
   if (!props.group.hasChildren) return
   expanded.value = !expanded.value
-  if (expanded.value && page.value === 0) await loadMore()
+  if (expanded.value && !loaded.value) await loadChildren()
 }
 
-async function loadMore() {
+async function loadChildren() {
   if (loading.value) return
   loading.value = true
   try {
-    const nextPage = page.value + 1
-    const result = await listAlarmGroups(props.projectId, {
-      parentId: props.group.id,
-      page: nextPage,
-      pageSize: 50,
-    })
-    children.value.push(
-      ...result.list.filter((item) => !children.value.some((old) => old.id === item.id)),
+    const nextChildren: AlarmGroup[] = []
+    let page = 1
+    let totalPages = 1
+    do {
+      const result = await listAlarmGroups(props.projectId, {
+        parentId: props.group.id,
+        page,
+        pageSize: 100,
+      })
+      nextChildren.push(...result.list)
+      totalPages = result.pagination.totalPages
+      page += 1
+    } while (page <= totalPages)
+    children.value = Array.from(
+      new Map(nextChildren.map((item) => [item.id, item])).values(),
     )
-    total.value = result.pagination.total
-    page.value = nextPage
+    loaded.value = true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载子目录失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarm.loadChildrenFailed')))
   } finally {
     loading.value = false
   }
@@ -128,8 +125,7 @@ function handleCommand(command: string) {
 }
 .alarm-directory-node__toggle,
 .alarm-directory-node__more,
-.alarm-directory-node__select,
-.alarm-directory-node__load-more {
+.alarm-directory-node__select {
   border: 0;
   background: transparent;
   color: inherit;
@@ -180,7 +176,6 @@ function handleCommand(command: string) {
   padding-left: 6px;
   border-left: 1px solid var(--dc-border);
 }
-.alarm-directory-node__load-more,
 .alarm-directory-node__loading {
   min-height: 30px;
   padding: 0 10px;

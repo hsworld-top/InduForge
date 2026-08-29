@@ -1,6 +1,6 @@
 <template>
   <div class="retention-field">
-    <span>保留时间</span>
+    <span>{{ ui('保留时间', 'Retention') }}</span>
     <div class="retention-field__control">
       <el-input-number
         v-if="modelValue !== null"
@@ -9,13 +9,16 @@
         :controls="false"
         @update:model-value="updateDays"
       />
-      <span v-if="modelValue !== null">天</span>
-      <el-checkbox :model-value="modelValue === null" @change="toggleForever">永久</el-checkbox>
+      <span v-if="modelValue !== null">{{ ui('天', 'days') }}</span>
+      <el-checkbox :model-value="modelValue === null" @change="toggleForever">{{ ui('永久', 'Forever') }}</el-checkbox>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 const props = defineProps<{ modelValue: number | null }>()
 const emit = defineEmits<{ (event: 'update:modelValue', value: number | null): void }>()
 function updateDays(value: number | undefined) {

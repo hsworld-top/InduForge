@@ -3,8 +3,8 @@
     <div class="mqtt-tag-monitor__body">
       <div v-if="totalTags === 0" class="mqtt-tag-monitor__empty">
         <IconTablerFile />
-        <div>暂无变量</div>
-        <small>请先在订阅的变量配置中创建变量</small>
+        <div>{{ ui('暂无变量', 'No variables') }}</div>
+        <small>{{ ui('请先在订阅的变量配置中创建变量', 'Create variables in the subscription configuration first') }}</small>
       </div>
 
       <div v-else-if="viewMode === 'card'" v-loading="loading" class="tag-card-grid">
@@ -30,7 +30,7 @@
           </div>
 
           <div v-if="showQualityFields" class="tag-card__time">
-            <span>更新时间</span>
+            <span>{{ ui('更新时间', 'Updated At') }}</span>
             <strong>{{
               tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-'
             }}</strong>
@@ -40,11 +40,11 @@
 
       <div v-else v-loading="loading" class="tag-row-list">
         <div class="tag-row tag-row-header" :class="{ 'is-single': !showQualityFields }">
-          <span>变量名</span>
-          <span>类型</span>
-          <span>当前值</span>
-          <span v-if="showQualityFields">时间戳</span>
-          <span v-if="showQualityFields">质量</span>
+          <span>{{ ui('变量名', 'Variable') }}</span>
+          <span>{{ ui('类型', 'Type') }}</span>
+          <span>{{ ui('当前值', 'Current Value') }}</span>
+          <span v-if="showQualityFields">{{ ui('时间戳', 'Timestamp') }}</span>
+          <span v-if="showQualityFields">{{ ui('质量', 'Quality') }}</span>
         </div>
         <div
           v-for="tag in tags"
@@ -95,6 +95,9 @@ import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import IconTablerFile from '~icons/tabler/file'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps({
   projectId: {
@@ -170,7 +173,7 @@ const fetchTags = async () => {
     pagination.total = Number(pageInfo.total) || 0
     normalizePage()
   } catch (error) {
-    ElMessage.error(`获取变量列表失败: ${error.message}`)
+    ElMessage.error(ui('获取变量列表失败：', 'Failed to load variables: ') + (error instanceof Error ? error.message : String(error)))
   } finally {
     loading.value = false
   }
@@ -247,21 +250,21 @@ const formatTimestamp = (timestamp) => {
 
 const getDataTypeLabel = (dataType) => {
   const labels = {
-    string: '字符串',
-    float64: '数值',
-    bool: '布尔',
-    object: '对象',
-    array: '数组',
+    string: ui('字符串', 'String'),
+    float64: ui('数值', 'Number'),
+    bool: ui('布尔', 'Boolean'),
+    object: ui('对象', 'Object'),
+    array: ui('数组', 'Array'),
   }
   return labels[dataType] || dataType
 }
 
 const getQualityLabel = (quality) => {
   const labels = {
-    good: '良好',
-    bad: '错误',
-    uncertain: '不确定',
-    unknown: '未知',
+    good: ui('良好', 'Good'),
+    bad: ui('错误', 'Bad'),
+    uncertain: ui('不确定', 'Uncertain'),
+    unknown: ui('未知', 'Unknown'),
   }
   return labels[quality] || quality
 }

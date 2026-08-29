@@ -13,15 +13,15 @@
             class="realtime-store__search"
             size="small"
             clearable
-            placeholder="搜索 Key"
+            :placeholder="ui('搜索 Key', 'Search keys')"
             @keyup.enter="loadKeys"
           />
           <button
             v-if="showBatchCreateFilteredButton"
             type="button"
             class="workbench-source-header__icon-action"
-            title="为筛选结果创建数据点"
-            aria-label="为筛选结果创建数据点"
+            :title="ui('为筛选结果创建数据点', 'Create data points for filtered results')"
+            :aria-label="ui('为筛选结果创建数据点', 'Create data points for filtered results')"
             @click="batchCreateFilteredDatapoints"
           >
             <IconTablerDatabasePlus />
@@ -29,8 +29,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action is-primary"
-            title="新建 Key"
-            aria-label="新建 Key"
+            :title="ui('新建 Key', 'New Key')"
+            :aria-label="ui('新建 Key', 'New Key')"
             @click="createDraftKey"
           >
             <IconTablerPlus />
@@ -38,8 +38,8 @@
           <button
             type="button"
             class="workbench-source-header__icon-action"
-            title="刷新"
-            aria-label="刷新"
+            :title="ui('刷新', 'Refresh')"
+            :aria-label="ui('刷新', 'Refresh')"
             @click="loadKeys"
           >
             <IconTablerRefresh />
@@ -81,7 +81,7 @@
         </button>
         <el-empty
           v-if="!loadingKeys && visibleTreeNodes.length === 0"
-          description="暂无 Key"
+          :description="ui('暂无 Key', 'No keys')"
           :image-size="72"
         />
       </div>
@@ -92,7 +92,7 @@
         :disabled="loadingKeys || keyLimit >= 10000"
         @click="loadMoreKeys"
       >
-        {{ keyLimit >= 10000 ? '已显示前 10000 个 Key' : '加载更多 Key' }}
+        {{ keyLimit >= 10000 ? ui('已显示前 10000 个 Key', 'Showing the first 10,000 keys') : ui('加载更多 Key', 'Load More Keys') }}
       </button>
     </aside>
 
@@ -101,7 +101,7 @@
         <button
           type="button"
           class="realtime-store__tab-arrow"
-          title="向左滚动"
+          :title="ui('向左滚动', 'Scroll left')"
           :disabled="tabs.length <= 1"
           @click="scrollTabs(-1)"
         >
@@ -127,7 +127,7 @@
         <button
           type="button"
           class="realtime-store__tab-arrow"
-          title="向右滚动"
+          :title="ui('向右滚动', 'Scroll right')"
           :disabled="tabs.length <= 1"
           @click="scrollTabs(1)"
         >
@@ -149,8 +149,8 @@
             <el-button
               v-if="activeTab.draft.originalKey"
               class="realtime-store__rename"
-              title="重命名 Key"
-              aria-label="重命名 Key"
+              :title="ui('重命名 Key', 'Rename Key')"
+              :aria-label="ui('重命名 Key', 'Rename Key')"
               @click="openActiveRenameDialog"
             >
               <IconTablerEdit />
@@ -158,7 +158,7 @@
             <el-select
               v-model="activeTab.draft.type"
               class="realtime-store__type"
-              aria-label="Key 类型"
+              :aria-label="ui('Key 类型', 'Key type')"
               :disabled="activeTab.draft.type === 'stream'"
               @change="handleTypeChange"
             >
@@ -166,11 +166,11 @@
               <el-option v-if="activeTab.draft.type === 'stream'" label="stream" value="stream" />
             </el-select>
             <label class="realtime-store__ttl-field">
-              <span>TTL（秒）</span>
+              <span>{{ ui('TTL（秒）', 'TTL (seconds)') }}</span>
               <el-input-number
                 v-model="activeTab.draft.ttlSeconds"
                 class="realtime-store__ttl"
-                aria-label="TTL 秒数，0 表示不过期"
+                :aria-label="ui('TTL 秒数，0 表示不过期', 'TTL seconds; 0 means no expiration')"
                 :min="0"
                 controls-position="right"
                 @change="handleTtlChange"
@@ -178,12 +178,12 @@
             </label>
           </div>
           <div class="realtime-store__actions">
-            <el-button title="刷新" :loading="loadingValue" @click="reloadActive">
+            <el-button :title="ui('刷新', 'Refresh')" :loading="loadingValue" @click="reloadActive">
               <IconTablerRefresh />
             </el-button>
             <el-button
               type="primary"
-              title="保存"
+              :title="ui('保存', 'Save')"
               :disabled="activeTab.draft.type === 'stream'"
               :loading="saving"
               @click="saveActive"
@@ -197,9 +197,9 @@
           <span>{{ providerLabel }}</span>
           <span>TTL {{ formatTTL(activeTab.draft.ttlSeconds) }}</span>
           <span v-if="activeTab.draft.dataPointPath"
-            >数据点 {{ activeTab.draft.dataPointPath }}</span
+            >{{ ui('数据点', 'Data Point') }} {{ activeTab.draft.dataPointPath }}</span
           >
-          <span v-else>未创建数据点</span>
+          <span v-else>{{ ui('未创建数据点', 'No data point') }}</span>
         </div>
 
         <div class="realtime-store__content">
@@ -231,9 +231,9 @@
                   :disabled="!activeStringCanFormat"
                   @click="formatActiveString"
                 >
-                  格式化
+                  {{ ui('格式化', 'Format') }}
                 </el-button>
-                <el-button size="small" title="复制" @click="copyText(activeTab.draft.stringValue)">
+                <el-button size="small" :title="ui('复制', 'Copy')" @click="copyText(activeTab.draft.stringValue)">
                   <IconTablerCopy />
                 </el-button>
               </div>
@@ -242,7 +242,7 @@
               v-model="activeTab.draft.stringValue"
               class="realtime-store__monaco"
               :language="activeStringLanguage"
-              theme="vs"
+              :theme="isDark ? 'vs-dark' : 'vs'"
               height="100%"
               :options="monacoOptions"
               @change="markDirty"
@@ -254,7 +254,7 @@
             <header class="realtime-store__panel-header">
               <div>
                 <strong>Hash Fields</strong>
-                <span>{{ activeTab.draft.rows.length }} 项</span>
+                <span>{{ ui(`${activeTab.draft.rows.length} 项`, `${activeTab.draft.rows.length} items`) }}</span>
               </div>
               <div class="realtime-store__panel-actions">
                 <el-input
@@ -262,7 +262,7 @@
                   class="realtime-store__row-search"
                   size="small"
                   clearable
-                  placeholder="搜索 field / value"
+                  :placeholder="ui('搜索 field / value', 'Search field / value')"
                 >
                   <template #prefix>
                     <IconTablerSearch />
@@ -270,7 +270,7 @@
                 </el-input>
                 <el-button size="small" type="primary" @click="addRow">
                   <IconTablerPlus />
-                  新增行
+                  {{ ui('新增行', 'Add Row') }}
                 </el-button>
               </div>
             </header>
@@ -285,12 +285,12 @@
                   <el-input v-model="row.value" size="small" @input="markDirty" />
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="112" align="center">
+              <el-table-column :label="ui('操作', 'Actions')" width="112" align="center">
                 <template #default="{ row }">
-                  <el-button link type="primary" title="源码查看" @click="openRowSource(row)">
+                  <el-button link type="primary" :title="ui('源码查看', 'View Source')" @click="openRowSource(row)">
                     <IconTablerCode />
                   </el-button>
-                  <el-button link type="danger" title="删除" @click="removeRow(row)">
+                  <el-button link type="danger" :title="ui('删除', 'Delete')" @click="removeRow(row)">
                     <IconTablerTrash />
                   </el-button>
                 </template>
@@ -307,7 +307,7 @@
                 <strong>{{
                   activeTab.draft.type === 'list' ? 'List Items' : 'Set Members'
                 }}</strong>
-                <span>{{ activeTab.draft.rows.length }} 项</span>
+                <span>{{ ui(`${activeTab.draft.rows.length} 项`, `${activeTab.draft.rows.length} items`) }}</span>
               </div>
               <div class="realtime-store__panel-actions">
                 <el-input
@@ -315,7 +315,7 @@
                   class="realtime-store__row-search"
                   size="small"
                   clearable
-                  placeholder="搜索 value"
+                  :placeholder="ui('搜索 value', 'Search values')"
                 >
                   <template #prefix>
                     <IconTablerSearch />
@@ -323,7 +323,7 @@
                 </el-input>
                 <el-button size="small" type="primary" @click="addRow">
                   <IconTablerPlus />
-                  新增行
+                  {{ ui('新增行', 'Add Row') }}
                 </el-button>
               </div>
             </header>
@@ -336,12 +336,12 @@
                   <el-input v-model="row.value" size="small" @input="markDirty" />
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="112" align="center">
+              <el-table-column :label="ui('操作', 'Actions')" width="112" align="center">
                 <template #default="{ row }">
-                  <el-button link type="primary" title="源码查看" @click="openRowSource(row)">
+                  <el-button link type="primary" :title="ui('源码查看', 'View Source')" @click="openRowSource(row)">
                     <IconTablerCode />
                   </el-button>
-                  <el-button link type="danger" title="删除" @click="removeRow(row)">
+                  <el-button link type="danger" :title="ui('删除', 'Delete')" @click="removeRow(row)">
                     <IconTablerTrash />
                   </el-button>
                 </template>
@@ -353,7 +353,7 @@
             <header class="realtime-store__panel-header">
               <div>
                 <strong>ZSet Members</strong>
-                <span>{{ activeTab.draft.rows.length }} 项</span>
+                <span>{{ ui(`${activeTab.draft.rows.length} 项`, `${activeTab.draft.rows.length} items`) }}</span>
               </div>
               <div class="realtime-store__panel-actions">
                 <el-input
@@ -361,7 +361,7 @@
                   class="realtime-store__row-search"
                   size="small"
                   clearable
-                  placeholder="搜索 member / score"
+                  :placeholder="ui('搜索 member / score', 'Search member / score')"
                 >
                   <template #prefix>
                     <IconTablerSearch />
@@ -369,7 +369,7 @@
                 </el-input>
                 <el-button size="small" type="primary" @click="addRow">
                   <IconTablerPlus />
-                  新增行
+                  {{ ui('新增行', 'Add Row') }}
                 </el-button>
               </div>
             </header>
@@ -389,12 +389,12 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="112" align="center">
+              <el-table-column :label="ui('操作', 'Actions')" width="112" align="center">
                 <template #default="{ row }">
-                  <el-button link type="primary" title="源码查看" @click="openRowSource(row)">
+                  <el-button link type="primary" :title="ui('源码查看', 'View Source')" @click="openRowSource(row)">
                     <IconTablerCode />
                   </el-button>
-                  <el-button link type="danger" title="删除" @click="removeRow(row)">
+                  <el-button link type="danger" :title="ui('删除', 'Delete')" @click="removeRow(row)">
                     <IconTablerTrash />
                   </el-button>
                 </template>
@@ -406,25 +406,25 @@
         </div>
       </section>
 
-      <el-empty v-else class="realtime-store__empty-main" description="选择或新建一个 Key" />
+      <el-empty v-else class="realtime-store__empty-main" :description="ui('选择或新建一个 Key', 'Select or create a key')" />
     </main>
 
-    <el-dialog v-model="renameDialog.visible" title="重命名 Key" width="420px">
-      <el-input v-model="renameDialog.newKey" placeholder="新的 Key 名称" />
+    <el-dialog v-model="renameDialog.visible" :title="ui('重命名 Key', 'Rename Key')" width="420px">
+      <el-input v-model="renameDialog.newKey" :placeholder="ui('新的 Key 名称', 'New key name')" />
       <template #footer>
-        <el-button @click="renameDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="confirmRename">确定</el-button>
+        <el-button @click="renameDialog.visible = false">{{ ui('取消', 'Cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="confirmRename">{{ ui('确定', 'Confirm') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="datapointDialog.visible" title="创建数据点" width="420px">
+    <el-dialog v-model="datapointDialog.visible" :title="ui('创建数据点', 'Create Data Point')" width="420px">
       <p class="realtime-store__dialog-tip">
-        数据点类型会根据 Key 类型和值自动推断；String 的 JSON 内容会识别为对象或数组。
+        {{ ui('数据点类型会根据 Key 类型和值自动推断；String 的 JSON 内容会识别为对象或数组。', 'The data point type is inferred from the key type and value; JSON strings are recognized as objects or arrays.') }}
       </p>
       <template #footer>
-        <el-button @click="datapointDialog.visible = false">取消</el-button>
+        <el-button @click="datapointDialog.visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="saving" @click="confirmCreateDatapoint">
-          创建
+          {{ ui('创建', 'Create') }}
         </el-button>
       </template>
     </el-dialog>
@@ -434,15 +434,15 @@
         <MonacoEditor
           v-model="sourceDialog.content"
           :language="sourceDialog.language"
-          theme="vs"
+          :theme="isDark ? 'vs-dark' : 'vs'"
           height="360px"
           :read-only="sourceDialog.readOnly"
           :options="sourceMonacoOptions"
         />
       </div>
       <template #footer>
-        <el-button @click="copyText(sourceDialog.content)">复制</el-button>
-        <el-button type="primary" @click="sourceDialog.visible = false">关闭</el-button>
+        <el-button @click="copyText(sourceDialog.content)">{{ ui('复制', 'Copy') }}</el-button>
+        <el-button type="primary" @click="sourceDialog.visible = false">{{ ui('关闭', 'Close') }}</el-button>
       </template>
     </el-dialog>
 
@@ -464,7 +464,7 @@
             @click="openContextKeyInNewTab"
           >
             <IconTablerKey />
-            <span>打开 Key</span>
+            <span>{{ ui('打开 Key', 'Open Key') }}</span>
           </button>
           <button
             v-if="keyContextMenu.kind === 'key'"
@@ -472,15 +472,15 @@
             @click="createContextKeyDatapoint"
           >
             <IconTablerDatabasePlus />
-            <span>创建数据点</span>
+            <span>{{ ui('创建数据点', 'Create Data Point') }}</span>
           </button>
           <button v-if="keyContextMenu.kind === 'key'" type="button" @click="renameContextKey">
             <IconTablerEdit />
-            <span>重命名 Key</span>
+            <span>{{ ui('重命名 Key', 'Rename Key') }}</span>
           </button>
           <button v-if="keyContextMenu.kind === 'key'" type="button" @click="deleteContextKey">
             <IconTablerTrash />
-            <span>删除 Key</span>
+            <span>{{ ui('删除 Key', 'Delete Key') }}</span>
           </button>
           <button
             v-if="keyContextMenu.kind === 'folder'"
@@ -488,7 +488,7 @@
             @click="batchCreateContextGroupDatapoints"
           >
             <IconTablerFolder />
-            <span>为该分组创建数据点</span>
+            <span>{{ ui('为该分组创建数据点', 'Create Data Points for Group') }}</span>
           </button>
         </div>
       </div>
@@ -504,6 +504,7 @@ import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import { datacenterLocale } from '@/i18n/runtime'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronLeft from '~icons/tabler/chevron-left'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
@@ -583,6 +584,8 @@ type KeyTab = {
   draft: KeyDraft
 }
 
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+
 const props = defineProps<{
   connection: AccessSourceConnection
   projectId: string
@@ -596,14 +599,14 @@ const editableTypes = ['string', 'hash', 'list', 'set', 'zset']
 const writableKeyPattern = /^[\p{L}\p{N}_:-]+$/u
 const utf8Length = (value: string) => new TextEncoder().encode(value).length
 const validateWritableKey = (value: string): string => {
-  if (!value) return 'Key 不能为空'
-  if (value !== value.trim()) return 'Key 不能包含首尾空格'
-  if (utf8Length(value) > 256) return 'Key 长度不能超过 256 字节'
+  if (!value) return ui('Key 不能为空', 'Key is required')
+  if (value !== value.trim()) return ui('Key 不能包含首尾空格', 'Key cannot have leading or trailing spaces')
+  if (utf8Length(value) > 256) return ui('Key 长度不能超过 256 字节', 'Key cannot exceed 256 bytes')
   if (value.startsWith(':') || value.endsWith(':') || value.includes('::')) {
-    return 'Key 的层级分隔符 : 之间不能为空'
+    return ui('Key 的层级分隔符 : 之间不能为空', 'Segments between key separators (:) cannot be empty')
   }
   if (!writableKeyPattern.test(value)) {
-    return 'Key 只能包含中文、字母、数字、冒号、下划线和短横线'
+    return ui('Key 只能包含中文、字母、数字、冒号、下划线和短横线', 'Key may contain letters, numbers, colons, underscores, hyphens, and CJK characters')
   }
   return ''
 }
@@ -649,7 +652,7 @@ const keyContextMenu = reactive({
 })
 const sourceDialog = reactive({
   visible: false,
-  title: '源码查看',
+  title: ui('源码查看', 'View Source'),
   content: '',
   language: 'plaintext',
   readOnly: false,
@@ -669,18 +672,18 @@ const sourceMonacoOptions = {
 
 const config = computed(() => props.connection.config || {})
 const isBuiltin = computed(() => props.connection.type === 'builtin.realtime')
-const titleFallback = computed(() => (isBuiltin.value ? 'IF实时库' : 'Redis'))
-const providerLabel = computed(() => (isBuiltin.value ? 'IF 实时库' : 'Redis'))
+const titleFallback = computed(() => (isBuiltin.value ? ui('IF实时库', 'IF Realtime Store') : 'Redis'))
+const providerLabel = computed(() => (isBuiltin.value ? ui('IF 实时库', 'IF Realtime Store') : 'Redis'))
 const sourceMetaRows = computed(() => {
   if (isBuiltin.value) {
     return [
-      { label: '类型', value: 'IF实时库' },
-      { label: '命名空间', value: String(config.value.runtimeKey || props.connection.id) },
+      { label: ui('类型', 'Type'), value: ui('IF实时库', 'IF Realtime Store') },
+      { label: ui('命名空间', 'Namespace'), value: String(config.value.runtimeKey || props.connection.id) },
     ]
   }
   return [
-    { label: '类型', value: 'Redis' },
-    { label: '地址', value: String(config.value.address || '-') },
+    { label: ui('类型', 'Type'), value: 'Redis' },
+    { label: ui('地址', 'Address'), value: String(config.value.address || '-') },
     { label: 'DB', value: String(config.value.db ?? config.value.database ?? 0) },
   ]
 })
@@ -698,6 +701,7 @@ const showBatchCreateFilteredButton = computed(
 )
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.key === activeTabKey.value) || null)
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
 const formattedReadonlyValue = computed(() =>
   JSON.stringify(activeTab.value?.draft.readonlyValue ?? null, null, 2),
 )
@@ -735,7 +739,7 @@ const loadKeys = async () => {
     hasMoreKeys.value = Boolean(response?.data?.hasMore)
     syncExpandedTreeNodeIds()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载实时库 Key 失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载实时库 Key 失败', 'Failed to load realtime-store keys')))
   } finally {
     loadingKeys.value = false
   }
@@ -816,13 +820,13 @@ const batchCreateContextGroupDatapoints = async () => {
   keyContextMenu.visible = false
   const node = findTreeNode(keyTree.value, nodeId)
   if (!node) return
-  await batchCreateDatapoints(collectLeafKeys(node.children), '该分组')
+  await batchCreateDatapoints(collectLeafKeys(node.children), ui('该分组', 'This group: '))
 }
 
 const batchCreateFilteredDatapoints = async () => {
   await batchCreateDatapoints(
     filteredKeys.value.map((item) => item.key),
-    '筛选结果',
+    ui('筛选结果', 'Filtered results: '),
   )
 }
 
@@ -879,7 +883,7 @@ const openKey = async (key: string) => {
     activeTabKey.value = key
     scrollActiveTabIntoView()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '读取实时库 Key 失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('读取实时库 Key 失败', 'Failed to read realtime-store key')))
   } finally {
     loadingValue.value = false
   }
@@ -905,7 +909,7 @@ const openOrReplaceKey = async (key: string) => {
       scrollActiveTabIntoView()
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '刷新实时库 Key 失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('刷新实时库 Key 失败', 'Failed to refresh realtime-store key')))
   } finally {
     loadingValue.value = false
   }
@@ -922,7 +926,7 @@ const saveActive = async () => {
   saving.value = true
   try {
     if (tab.draft.originalKey && tab.draft.key !== tab.draft.originalKey) {
-      ElMessage.warning('已存在 Key 请使用重命名操作')
+      ElMessage.warning(ui('已存在 Key 请使用重命名操作', 'Use Rename for an existing key'))
       return false
     }
     const payload = {
@@ -949,7 +953,7 @@ const saveActive = async () => {
         )
         draft.dataPointPath = datapointResponse?.data?.dataPointPath || ''
       } catch (error) {
-        autoDatapointError = getApiErrorMessage(error, '自动生成数据点失败')
+        autoDatapointError = getApiErrorMessage(error, ui('自动生成数据点失败', 'Failed to generate data point automatically'))
       }
     }
     tab.draft = draft
@@ -959,13 +963,13 @@ const saveActive = async () => {
     scrollActiveTabIntoView()
     await loadKeys()
     if (autoDatapointError) {
-      ElMessage.warning(`Key 已保存，但${autoDatapointError}`)
+      ElMessage.warning(ui(`Key 已保存，但${autoDatapointError}`, `Key saved, but ${autoDatapointError}`))
     } else {
-      ElMessage.success(draft.dataPointPath ? 'Key 已保存，数据点已生成' : 'Key 已保存')
+      ElMessage.success(draft.dataPointPath ? ui('Key 已保存，数据点已生成', 'Key saved and data point generated') : ui('Key 已保存', 'Key saved'))
     }
     return true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存实时库 Key 失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存实时库 Key 失败', 'Failed to save realtime-store key')))
     return false
   } finally {
     saving.value = false
@@ -984,7 +988,7 @@ const saveDirtyTabs = async (): Promise<boolean> => {
 const closeTab = async (key: string) => {
   const tab = tabs.value.find((item) => item.key === key)
   if (tab?.dirty) {
-    await ElMessageBox.confirm('当前 Key 有未保存改动，关闭后会丢失。', '关闭 Key', {
+    await ElMessageBox.confirm(ui('当前 Key 有未保存改动，关闭后会丢失。', 'This key has unsaved changes that will be lost.'), ui('关闭 Key', 'Close Key'), {
       type: 'warning',
     })
   }
@@ -1033,7 +1037,7 @@ const confirmRename = async () => {
     scrollActiveTabIntoView()
     await loadKeys()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '重命名 Key 失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('重命名 Key 失败', 'Failed to rename key')))
   } finally {
     saving.value = false
   }
@@ -1068,9 +1072,9 @@ const createSingleDatapoint = async (key: string, options: { silent?: boolean } 
     }
     datapointDialog.visible = false
     await loadKeys()
-    if (!options.silent) ElMessage.success('数据点已创建')
+    if (!options.silent) ElMessage.success(ui('数据点已创建', 'Data point created'))
   } catch (error) {
-    if (!options.silent) ElMessage.error(getApiErrorMessage(error, '创建数据点失败'))
+    if (!options.silent) ElMessage.error(getApiErrorMessage(error, ui('创建数据点失败', 'Failed to create data point')))
   } finally {
     saving.value = false
   }
@@ -1079,7 +1083,7 @@ const createSingleDatapoint = async (key: string, options: { silent?: boolean } 
 const batchCreateDatapoints = async (targetKeys: string[], label: string) => {
   const dedupedKeys = [...new Set(targetKeys)].filter((key) => key.trim() !== '')
   if (dedupedKeys.length === 0) {
-    ElMessage.warning('没有可创建数据点的 Key')
+    ElMessage.warning(ui('没有可创建数据点的 Key', 'No keys are available for data point creation'))
     return
   }
   saving.value = true
@@ -1094,17 +1098,17 @@ const batchCreateDatapoints = async (targetKeys: string[], label: string) => {
     const data = response?.data || {}
     await loadKeys()
     ElMessage.success(
-      `${label}数据点创建完成：新建 ${data.created || 0} 个，已存在 ${data.exists || 0} 个，失败 ${data.failed || 0} 个`,
+      ui(`${label}数据点创建完成：新建 ${data.created || 0} 个，已存在 ${data.exists || 0} 个，失败 ${data.failed || 0} 个`, `${label}data point creation complete: ${data.created || 0} created, ${data.exists || 0} existing, ${data.failed || 0} failed`),
     )
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '批量创建数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('批量创建数据点失败', 'Failed to create data points in batch')))
   } finally {
     saving.value = false
   }
 }
 
 const deleteKey = async (key: string, tabKey?: string) => {
-  await ElMessageBox.confirm('删除 Key 后，对应数据点会标记为失效。', '删除 Key', {
+  await ElMessageBox.confirm(ui('删除 Key 后，对应数据点会标记为失效。', 'Deleting the key marks its data point as invalid.'), ui('删除 Key', 'Delete Key'), {
     type: 'warning',
   })
   saving.value = true
@@ -1113,9 +1117,9 @@ const deleteKey = async (key: string, tabKey?: string) => {
     tabs.value = tabs.value.filter((item) => item.key !== (tabKey || key) && item.draft.key !== key)
     if (activeTabKey.value === (tabKey || key)) activeTabKey.value = tabs.value.at(-1)?.key || ''
     await loadKeys()
-    ElMessage.success('Key 已删除')
+    ElMessage.success(ui('Key 已删除', 'Key deleted'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除 Key 失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除 Key 失败', 'Failed to delete key')))
   } finally {
     saving.value = false
   }
@@ -1152,7 +1156,7 @@ const scrollTabs = (direction: number) => {
 }
 
 const formatTabTitle = (tab: KeyTab) => {
-  return getKeyDisplayName(tab.draft.key || '新建 Key')
+  return getKeyDisplayName(tab.draft.key || ui('新建 Key', 'New Key'))
 }
 
 const getKeyDisplayName = (key: string) => {
@@ -1210,7 +1214,7 @@ const getRowIndex = (row: EditorRow) => {
 
 const openRowSource = (row: EditorRow) => {
   const source = row.value ?? row.member ?? ''
-  sourceDialog.title = row.key ? `Field: ${row.key}` : '源码查看'
+  sourceDialog.title = row.key ? `Field: ${row.key}` : ui('源码查看', 'View Source')
   sourceDialog.content = formatSourceText(source)
   sourceDialog.language = isJsonText(source) ? 'json' : 'plaintext'
   sourceDialog.readOnly = false
@@ -1230,9 +1234,9 @@ const formatActiveString = () => {
 const copyText = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text || '')
-    ElMessage.success('已复制')
+    ElMessage.success(ui('已复制', 'Copied'))
   } catch {
-    ElMessage.error('复制失败')
+    ElMessage.error(ui('复制失败', 'Copy failed'))
   }
 }
 
@@ -1330,7 +1334,7 @@ const formatByteSize = (value: string) => {
 }
 
 const formatTTL = (ttl: number) => {
-  if (ttl <= 0) return '不过期'
+  if (ttl <= 0) return ui('不过期', 'Never expires')
   return `${ttl}s`
 }
 
@@ -1492,8 +1496,8 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   overflow: hidden;
-  background: #f6f8fb;
-  color: #172033;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-primary);
 }
 
 .realtime-store__sidebar {
@@ -1502,8 +1506,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid #dfe5ee;
-  background: #fff;
+  border-right: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
 .realtime-store__search {
@@ -1531,14 +1535,14 @@ onBeforeUnmount(() => {
   height: 36px;
   flex: 0 0 36px;
   border: 0;
-  border-top: 1px solid #e5ebf3;
-  background: #fff;
-  color: #2563eb;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-primary);
   cursor: pointer;
 }
 
 .realtime-store__load-more:hover:not(:disabled) {
-  background: #f7faff;
+  background: var(--dc-surface-muted);
 }
 
 .realtime-store__load-more:disabled {
@@ -1555,7 +1559,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 0 6px 0 calc(4px + var(--tree-depth, 0) * 18px);
   border-radius: 4px;
-  color: #4c5b70;
+  color: var(--dc-text-secondary);
   text-align: left;
 }
 
@@ -1571,7 +1575,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #6b7688;
+  color: var(--dc-text-muted);
 }
 
 .realtime-store__tree-toggle svg {
@@ -1582,7 +1586,7 @@ onBeforeUnmount(() => {
 .realtime-store__tree-icon {
   width: 15px;
   height: 15px;
-  color: #7a8594;
+  color: var(--dc-text-muted);
 }
 
 .realtime-store__tree-label,
@@ -1594,13 +1598,13 @@ onBeforeUnmount(() => {
 
 .realtime-store__tree-node em {
   font-style: normal;
-  color: #7f8ca3;
+  color: var(--dc-text-muted);
   font-size: 12px;
 }
 
 .realtime-store__tree-node small {
   justify-self: end;
-  color: #8a95a5;
+  color: var(--dc-text-muted);
   font-size: 11px;
 }
 
@@ -1612,15 +1616,15 @@ onBeforeUnmount(() => {
 
 .realtime-store__tree-node:hover,
 .realtime-store__tree-node.is-active {
-  background: #eef2f7;
+  background: var(--dc-surface-muted);
 }
 
 .realtime-store__tree-node.is-active {
-  color: #1d4ed8;
+  color: var(--dc-primary);
 }
 
 .realtime-store__tree-node.is-active .realtime-store__tree-icon {
-  color: #1d4ed8;
+  color: var(--dc-primary);
 }
 
 .realtime-store__main {
@@ -1635,8 +1639,8 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   align-items: stretch;
-  border-bottom: 1px solid #dfe5ee;
-  background: #fff;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
 .realtime-store__tabs {
@@ -1659,18 +1663,18 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid #e5ebf3;
-  color: #9aa6b5;
+  border-right: 1px solid var(--dc-border);
+  color: var(--dc-text-muted);
 }
 
 .realtime-store__tab-arrow:last-child {
   border-right: 0;
-  border-left: 1px solid #e5ebf3;
+  border-left: 1px solid var(--dc-border);
 }
 
 .realtime-store__tab-arrow:hover:not(:disabled) {
-  color: #1d4ed8;
-  background: #f7faff;
+  color: var(--dc-primary);
+  background: var(--dc-surface-muted);
 }
 
 .realtime-store__tab-arrow:disabled {
@@ -1687,13 +1691,13 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 7px;
   padding: 0 9px;
-  border-right: 1px solid #dfe5ee;
-  color: #344054;
+  border-right: 1px solid var(--dc-border);
+  color: var(--dc-text-secondary);
 }
 
 .realtime-store__tab.is-active {
-  background: #f7faff;
-  color: #2684ff;
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
   font-weight: 600;
 }
 
@@ -1707,11 +1711,11 @@ onBeforeUnmount(() => {
 }
 
 .realtime-store__tab-close {
-  color: #97a3b4;
+  color: var(--dc-text-muted);
 }
 
 .realtime-store__tab:hover .realtime-store__tab-close {
-  color: #64748b;
+  color: var(--dc-text-secondary);
 }
 
 .realtime-store__tab i {
@@ -1737,9 +1741,9 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  border: 1px solid #dfe5ee;
+  border: 1px solid var(--dc-border);
   border-radius: 6px 6px 0 0;
-  background: #fff;
+  background: var(--dc-surface-raised);
 }
 
 .realtime-store__identity {
@@ -1770,10 +1774,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 0 10px;
-  border: 1px solid #cfd8e6;
+  border: 1px solid var(--dc-border);
   border-radius: 4px;
-  background: #f8fafc;
-  color: #1f3b57;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-primary);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1789,7 +1793,7 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   align-items: center;
   gap: 6px;
-  color: #697589;
+  color: var(--dc-text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -1813,7 +1817,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-  color: #697589;
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
@@ -1827,14 +1831,14 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid #dfe5ee;
+  border: 1px solid var(--dc-border);
   border-radius: 0 0 6px 6px;
-  background: #fff;
+  background: var(--dc-surface-raised);
   overflow: hidden;
 }
 
 .realtime-store__value-panel--editor {
-  background: #fbfcfe;
+  background: var(--dc-surface);
 }
 
 .realtime-store__panel-header {
@@ -1844,8 +1848,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 6px 10px;
-  border-bottom: 1px solid #e4e9f1;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-muted);
 }
 
 .realtime-store__panel-header > div:first-child {
@@ -1856,12 +1860,12 @@ onBeforeUnmount(() => {
 }
 
 .realtime-store__panel-header strong {
-  color: #172033;
+  color: var(--dc-text-primary);
   font-size: 13px;
 }
 
 .realtime-store__panel-header span {
-  color: #728097;
+  color: var(--dc-text-muted);
   font-size: 12px;
 }
 
@@ -1896,7 +1900,7 @@ onBeforeUnmount(() => {
 .realtime-store__value-panel :deep(.el-input__wrapper),
 .realtime-store__toolbar :deep(.el-input__wrapper),
 .realtime-store__toolbar :deep(.el-select__wrapper) {
-  box-shadow: 0 0 0 1px #d8e0eb inset;
+  box-shadow: 0 0 0 1px var(--dc-border) inset;
 }
 
 .realtime-store__monaco {
@@ -1911,7 +1915,7 @@ onBeforeUnmount(() => {
 
 .realtime-store__source-viewer {
   height: 360px;
-  border: 1px solid #dfe5ee;
+  border: 1px solid var(--dc-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1960,7 +1964,7 @@ onBeforeUnmount(() => {
 
 .realtime-store__dialog-tip {
   margin: 0;
-  color: #4b5565;
+  color: var(--dc-text-secondary);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -1970,10 +1974,10 @@ onBeforeUnmount(() => {
   overflow: auto;
   margin: 0;
   padding: 12px;
-  border: 1px solid #dfe5ee;
+  border: 1px solid var(--dc-border);
   border-radius: 6px;
-  background: #fff;
-  color: #263244;
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
 }

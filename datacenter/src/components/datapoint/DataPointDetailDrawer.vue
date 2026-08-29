@@ -20,11 +20,11 @@
           </div>
           <div class="dpd__header-right">
             <!-- 关闭按钮 -->
-            <el-tooltip content="关闭" placement="bottom">
+            <el-tooltip :content="ui('关闭', 'Close')" placement="bottom">
               <button
                 type="button"
                 class="dpd__icon-btn"
-                aria-label="关闭详情抽屉"
+                :aria-label="ui('关闭详情抽屉', 'Close details drawer')"
                 @click="handleClose"
               >
                 <Close />
@@ -36,11 +36,11 @@
         <!-- 路径行 -->
         <div class="dpd__path-row">
           <span class="dpd__path">{{ datapoint?.path || '-' }}</span>
-          <el-tooltip content="复制路径" placement="bottom">
+          <el-tooltip :content="ui('复制路径', 'Copy Path')" placement="bottom">
             <button
               type="button"
               class="dpd__icon-btn"
-              aria-label="复制数据点路径"
+              :aria-label="ui('复制数据点路径', 'Copy data point path')"
               @click="copyPath"
             >
               <CopyDocument />
@@ -50,48 +50,64 @@
 
         <!-- 区块 1：基础属性 -->
         <section class="dpd__section">
-          <h4 class="dpd__section-title">基础属性</h4>
+          <h4 class="dpd__section-title">{{ ui('基础属性', 'Basic Properties') }}</h4>
           <dl class="dpd__grid">
             <div>
-              <dt>来源类型</dt>
+              <dt>{{ ui('来源类型', 'Source Type') }}</dt>
               <dd>{{ formatSourceType(datapoint?.sourceType) }}</dd>
             </div>
             <div>
-              <dt>数据类型</dt>
+              <dt>{{ ui('数据类型', 'Data Type') }}</dt>
               <dd class="dpd__mono">{{ datapoint?.dataType || '-' }}</dd>
             </div>
             <div>
-              <dt>单位</dt>
+              <dt>{{ ui('单位', 'Unit') }}</dt>
               <dd>{{ datapoint?.unit || '-' }}</dd>
             </div>
             <div>
-              <dt>精度</dt>
+              <dt>{{ ui('精度', 'Precision') }}</dt>
               <dd>{{ (datapoint as DataPointExtended)?.precision ?? '-' }}</dd>
             </div>
             <div class="dpd__grid-full">
-              <dt>更新时间</dt>
+              <dt>{{ ui('更新时间', 'Updated At') }}</dt>
               <dd class="dpd__mono">{{ formatTime(getUpdatedAt(datapoint)) }}</dd>
             </div>
           </dl>
         </section>
 
         <section class="dpd__section">
-          <h4 class="dpd__section-title">开发态当前值</h4>
+          <div class="dpd__section-header">
+            <h4 class="dpd__section-title">{{ ui('开发态当前值', 'Development Current Value') }}</h4>
+            <button
+              type="button"
+              class="dpd__edit-btn"
+              :disabled="isInvalid"
+              :title="isInvalid ? invalidUsageHint : ui('设置开发态默认值', 'Set Development Default Value')"
+              :aria-label="ui('设置开发态默认值', 'Set Development Default Value')"
+              @click="openDefaultValueDialog"
+            >
+              {{ ui('设置默认值', 'Set Default') }}
+            </button>
+          </div>
           <dl class="dpd__grid">
             <div class="dpd__grid-full">
-              <dt>值</dt>
+              <dt>{{ ui('值', 'Value') }}</dt>
               <dd class="dpd__mono">{{ formatCurrentValue(datapoint?.currentValue?.value) }}</dd>
             </div>
             <div>
-              <dt>质量</dt>
+              <dt>{{ ui('质量', 'Quality') }}</dt>
               <dd>{{ datapoint?.currentValue?.quality || 'unknown' }}</dd>
             </div>
             <div>
-              <dt>值来源</dt>
-              <dd>{{ datapoint?.currentValue?.originLabel || '不可用' }}</dd>
+              <dt>{{ ui('值来源', 'Value Origin') }}</dt>
+              <dd>{{ formatOriginLabel(datapoint?.currentValue?.originLabel) }}</dd>
+            </div>
+            <div class="dpd__grid-full">
+              <dt>{{ ui('默认值', 'Default Value') }}</dt>
+              <dd class="dpd__mono">{{ formatStoredDefaultValue(datapoint?.defaultValue) }}</dd>
             </div>
             <div>
-              <dt>观测时间</dt>
+              <dt>{{ ui('观测时间', 'Observed At') }}</dt>
               <dd class="dpd__mono">
                 {{
                   formatTime(
@@ -101,7 +117,7 @@
               </dd>
             </div>
             <div>
-              <dt>源时间</dt>
+              <dt>{{ ui('源时间', 'Source Time') }}</dt>
               <dd class="dpd__mono">{{ formatTime(datapoint?.currentValue?.sourceTimestamp) }}</dd>
             </div>
           </dl>
@@ -110,16 +126,16 @@
         <!-- 区块 2：标签 -->
         <section class="dpd__section">
           <div class="dpd__section-header">
-            <h4 class="dpd__section-title">标签</h4>
+            <h4 class="dpd__section-title">{{ ui('标签', 'Tags') }}</h4>
             <button
               type="button"
               class="dpd__edit-btn"
               :disabled="isInvalid"
-              :title="isInvalid ? invalidUsageHint : '编辑标签'"
-              aria-label="编辑标签"
+              :title="isInvalid ? invalidUsageHint : ui('编辑标签', 'Edit Tags')"
+              :aria-label="ui('编辑标签', 'Edit Tags')"
               @click="openTagDialog"
             >
-              编辑
+              {{ ui('编辑', 'Edit') }}
             </button>
           </div>
           <div class="dpd__tags">
@@ -133,7 +149,7 @@
               {{ tag }}
             </el-tag>
             <span v-if="normalizeTags(datapoint?.tags).length === 0" class="dpd__muted">
-              未设置
+              {{ ui('未设置', 'Not Set') }}
             </span>
           </div>
         </section>
@@ -141,7 +157,7 @@
         <!-- 区块 3：来源 -->
         <section class="dpd__section">
           <div class="dpd__section-header">
-            <h4 class="dpd__section-title">来源</h4>
+            <h4 class="dpd__section-title">{{ ui('来源', 'Source') }}</h4>
           </div>
 
           <!-- 来源 LinkChip -->
@@ -154,15 +170,15 @@
             />
           </div>
           <p v-else-if="collectorSourceName" class="dpd__muted">
-            工业采集 · {{ collectorSourceName }}
+            {{ ui('工业采集', 'Industrial Collection') }} · {{ collectorSourceName }}
           </p>
-          <p v-else class="dpd__muted">无来源信息</p>
+          <p v-else class="dpd__muted">{{ ui('无来源信息', 'No source information') }}</p>
 
           <!-- 失效原因（仅 invalid 时显示；无 invalidReason 时给兜底文案） -->
           <div v-if="datapoint?.status === 'invalid'" class="dpd__invalid-reason">
-            <span class="dpd__invalid-label">失效原因：</span>
+            <span class="dpd__invalid-label">{{ ui('失效原因：', 'Invalid Reason: ') }}</span>
             {{
-              (datapoint as DataPointExtended)?.invalidReason || '该数据点已失效，但后端未提供原因'
+              (datapoint as DataPointExtended)?.invalidReason || ui('该数据点已失效，但后端未提供原因', 'This data point is invalid, but no reason was provided.')
             }}
           </div>
 
@@ -173,7 +189,7 @@
               class="dpd__collapse-trigger"
               @click="configExpanded = !configExpanded"
             >
-              <span>来源配置</span>
+              <span>{{ ui('来源配置', 'Source Configuration') }}</span>
               <ArrowDown :class="{ 'is-expanded': configExpanded }" class="dpd__collapse-icon" />
             </button>
             <pre v-if="configExpanded" class="dpd__code">{{
@@ -184,42 +200,42 @@
 
         <section class="dpd__section">
           <div class="dpd__section-header">
-            <h4 class="dpd__section-title">历史存储</h4>
+            <h4 class="dpd__section-title">{{ ui('历史存储', 'History Storage') }}</h4>
             <button
               type="button"
               class="dpd__edit-btn"
               :disabled="isInvalid"
-              :title="isInvalid ? invalidUsageHint : '编辑历史存储'"
-              aria-label="编辑历史存储"
+              :title="isInvalid ? invalidUsageHint : ui('编辑历史存储', 'Edit History Storage')"
+              :aria-label="ui('编辑历史存储', 'Edit History Storage')"
               @click="openHistoryStorage"
             >
-              编辑
+              {{ ui('编辑', 'Edit') }}
             </button>
           </div>
           <div class="dpd__perm-summary">
-            <span class="dpd__perm-label">保存方式：</span>
+            <span class="dpd__perm-label">{{ ui('保存方式：', 'Storage Mode: ') }}</span>
             <span class="dpd__perm-value">{{ historyStorageSummaryText }}</span>
           </div>
           <p v-if="historyStorageDetail?.source" class="dpd__muted">
-            来源：{{ historyStorageDetail.source.name || '所属来源' }}
+            {{ ui('来源：', 'Source: ') }}{{ historyStorageDetail.source.name || ui('所属来源', 'Owning Source') }}
           </p>
         </section>
 
         <section class="dpd__section">
           <div class="dpd__section-header">
-            <h4 class="dpd__section-title">报警设置</h4>
+            <h4 class="dpd__section-title">{{ ui('报警设置', 'Alarm Settings') }}</h4>
             <button
               type="button"
               class="dpd__edit-btn"
-              aria-label="前往报警单元"
+              :aria-label="ui('前往报警单元', 'Go to Alarm Units')"
               @click="openAlarmWorkspace"
             >
-              前往报警单元
+              {{ ui('前往报警单元', 'Go to Alarm Units') }}
             </button>
           </div>
           <div class="dpd__perm-summary">
-            <span class="dpd__perm-label">有效报警：</span>
-            <span class="dpd__perm-value">{{ alarmSummary?.count || 0 }} 条</span>
+            <span class="dpd__perm-label">{{ ui('有效报警：', 'Active Alarms: ') }}</span>
+            <span class="dpd__perm-value">{{ ui(`${alarmSummary?.count || 0} 条`, `${alarmSummary?.count || 0}`) }}</span>
           </div>
           <div v-if="alarmSummary?.items.length" class="dpd__usage-chips">
             <LinkChip
@@ -231,12 +247,12 @@
               @click="handleLinkChipClick"
             />
           </div>
-          <p v-else class="dpd__muted">当前数据点尚未配置报警</p>
+          <p v-else class="dpd__muted">{{ ui('当前数据点尚未配置报警', 'No alarms configured for this data point') }}</p>
         </section>
 
         <!-- 区块 4：引用 -->
         <section v-if="usages.length > 0" class="dpd__section">
-          <h4 class="dpd__section-title">引用</h4>
+          <h4 class="dpd__section-title">{{ ui('引用', 'References') }}</h4>
           <div v-for="group in usageGroups" :key="group.module" class="dpd__usage-group">
             <p class="dpd__usage-group-label">{{ group.label }}</p>
             <div class="dpd__usage-chips">
@@ -255,20 +271,20 @@
         <!-- 区块 5：运行态权限 -->
         <section class="dpd__section">
           <div class="dpd__section-header">
-            <h4 class="dpd__section-title">运行态权限</h4>
+            <h4 class="dpd__section-title">{{ ui('运行态权限', 'Runtime Permissions') }}</h4>
             <button
               type="button"
               class="dpd__edit-btn"
               :disabled="isInvalid"
-              :title="isInvalid ? invalidUsageHint : '编辑运行态权限'"
-              aria-label="编辑运行态权限"
+              :title="isInvalid ? invalidUsageHint : ui('编辑运行态权限', 'Edit Runtime Permissions')"
+              :aria-label="ui('编辑运行态权限', 'Edit Runtime Permissions')"
               @click="openPermissionDialog"
             >
-              编辑
+              {{ ui('编辑', 'Edit') }}
             </button>
           </div>
           <div class="dpd__perm-summary">
-            <span class="dpd__perm-label">写权限摘要：</span>
+            <span class="dpd__perm-label">{{ ui('写权限摘要：', 'Write Permission: ') }}</span>
             <span class="dpd__perm-value">{{ writeSummary }}</span>
           </div>
           <div class="dpd__perm-badges">
@@ -311,7 +327,7 @@
 
   <HistoryStorageConfigDrawer
     v-model="historyStorageDrawerVisible"
-    title="数据点历史存储"
+    :title="ui('数据点历史存储', 'Data Point History Storage')"
     allow-inherit
     :behavior="historyStorageDetail?.behavior || 'inherit'"
     :configuration="historyStorageDetail?.configuration"
@@ -319,6 +335,38 @@
     :saving="historyStorageSaving"
     @save="saveHistoryStorage"
   />
+
+  <el-dialog
+    v-model="defaultValueDialogVisible"
+    :title="ui('设置开发态默认值', 'Set Development Default Value')"
+    width="520px"
+    append-to-body
+  >
+    <p class="dpd__dialog-hint">{{ ui('未连接运行态数据时，计算调试和页面预览会使用该值。', 'Compute debugging and page previews use this value when runtime data is unavailable.') }}</p>
+    <el-select
+      v-if="defaultValueEditorKind === 'boolean'"
+      v-model="defaultValueDraft"
+      :placeholder="ui('请选择', 'Select')"
+    >
+      <el-option label="true" value="true" />
+      <el-option label="false" value="false" />
+    </el-select>
+    <el-input
+      v-else-if="defaultValueEditorKind === 'json'"
+      v-model="defaultValueDraft"
+      type="textarea"
+      :rows="8"
+      :placeholder="ui('请输入合法 JSON', 'Enter valid JSON')"
+    />
+    <el-input v-else v-model="defaultValueDraft" :placeholder="defaultValuePlaceholder" />
+    <template #footer>
+      <el-button :loading="defaultValueSaving" @click="clearDefaultValue">{{ ui('清除默认值', 'Clear Default') }}</el-button>
+      <el-button @click="defaultValueDialogVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
+      <el-button type="primary" :loading="defaultValueSaving" @click="saveDefaultValue"
+        >{{ ui('保存', 'Save') }}</el-button
+      >
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -353,6 +401,9 @@ import { historyStorageModeLabels } from '@/models/history-storage'
 import { getDatapointAlarmSummary } from '@/api/alarm.api'
 import type { AlarmDatapointSummary } from '@/api/schemas/alarm.schema'
 import { resolveDatapointSourceNavigation } from '@/models/datapoint-source'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 // 扩展类型：除 schema 核心字段外，允许后端额外字段（passthrough）
 interface DataPointExtended {
@@ -363,6 +414,7 @@ interface DataPointExtended {
   sourceType?: string
   sourceId?: string | null
   dataType?: string
+  defaultValue?: string | null
   unit?: string | null
   precision?: number | string | null
   tags?: unknown[]
@@ -441,6 +493,9 @@ const historyStorageDrawerVisible = ref(false)
 const historyStorageLoading = ref(false)
 const historyStorageSaving = ref(false)
 const alarmSummary = ref<AlarmDatapointSummary | null>(null)
+const defaultValueDialogVisible = ref(false)
+const defaultValueDraft = ref('')
+const defaultValueSaving = ref(false)
 let detailRequestSeq = 0
 
 const visible = computed({
@@ -451,7 +506,7 @@ const visible = computed({
   },
 })
 const isInvalid = computed(() => props.datapoint?.status === 'invalid')
-const invalidUsageHint = '该数据点已失效，仅可查看或清理'
+const invalidUsageHint = computed(() => ui('该数据点已失效，仅可查看或清理', 'This data point is invalid and can only be viewed or cleaned up'))
 
 // 折叠重置（切换数据点时）
 watch(
@@ -468,13 +523,13 @@ watch(
 )
 
 const historyStorageSummaryText = computed(() => {
-  if (historyStorageLoading.value) return '加载中'
+  if (historyStorageLoading.value) return ui('加载中', 'Loading')
   const detail = historyStorageDetail.value
-  if (!detail) return '未保存'
-  if (detail.behavior === 'off') return '不保存'
-  if (!detail.effectiveEnabled || !detail.configuration) return '沿用来源 · 未保存'
-  const mode = historyStorageModeLabels[detail.configuration.writeMode]
-  return detail.behavior === 'custom' ? `单独设置 · ${mode}` : `沿用来源 · ${mode}`
+  if (!detail) return ui('未保存', 'Not Stored')
+  if (detail.behavior === 'off') return ui('不保存', 'Disabled')
+  if (!detail.effectiveEnabled || !detail.configuration) return ui('沿用来源 · 未保存', 'Inherited · Not Stored')
+  const mode = ui(historyStorageModeLabels[detail.configuration.writeMode], historyStorageModeEnglish(detail.configuration.writeMode))
+  return detail.behavior === 'custom' ? ui(`单独设置 · ${mode}`, `Custom · ${mode}`) : ui(`沿用来源 · ${mode}`, `Inherited · ${mode}`)
 })
 
 // ── 来源配置相关 ──────────────────────────────────────────────────────────
@@ -487,7 +542,7 @@ const hasSourceConfig = computed(() => {
 const sourceNavigation = computed(() => resolveDatapointSourceNavigation(props.datapoint))
 const collectorSourceName = computed(() => {
   const source = historyStorageDetail.value?.source
-  return source?.type === 'collector_connection' ? source.name || '所属采集连接' : ''
+  return source?.type === 'collector_connection' ? source.name || ui('所属采集连接', 'Owning Collector Connection') : ''
 })
 
 function formatSourceConfig(value?: Record<string, unknown>): string {
@@ -504,13 +559,13 @@ function formatSourceConfig(value?: Record<string, unknown>): string {
 const usages = computed<UsageItem[]>(() => (props.datapoint as DataPointExtended)?.usages ?? [])
 
 // 按模块分组
-const MODULE_LABELS: Record<string, string> = {
-  'access-source': '接入源',
-  'industrial-collector': '工业采集连接',
-  compute: '计算单元',
-  alarm: '报警项',
-  datapoint: '数据点',
-}
+const moduleLabel = (module: string) => ({
+  'access-source': ui('接入源', 'Access Source'),
+  'industrial-collector': ui('工业采集连接', 'Industrial Collector'),
+  compute: ui('计算单元', 'Compute Unit'),
+  alarm: ui('报警项', 'Alarm Item'),
+  datapoint: ui('数据点', 'Data Point'),
+}[module] || module)
 
 const usageGroups = computed(() => {
   const groupMap = new Map<string, { module: LinkChipModule; label: string; items: UsageItem[] }>()
@@ -518,7 +573,7 @@ const usageGroups = computed(() => {
     if (!groupMap.has(item.module)) {
       groupMap.set(item.module, {
         module: item.module,
-        label: MODULE_LABELS[item.module] || item.module,
+        label: moduleLabel(item.module),
         items: [],
       })
     }
@@ -537,7 +592,7 @@ const writeSummary = computed(() => {
   const grant = normalizeRuntimeGrantPayload(
     rp?.write || rpg?.write || dp.writePermission || dp.runtimeGrant || {},
   )
-  return summarizeRuntimeGrant(grant)
+  return summarizeRuntimeGrant(grant, datacenterLocale.value)
 })
 
 const capabilityBadges = computed(() => {
@@ -545,19 +600,19 @@ const capabilityBadges = computed(() => {
   return [
     {
       key: 'get',
-      text: '可读',
+      text: ui('可读', 'Readable'),
       enabled: capabilities?.get?.enabled === true,
       reason: capabilities?.get?.reason,
     },
     {
       key: 'sub',
-      text: '可订阅',
+      text: ui('可订阅', 'Subscribable'),
       enabled: capabilities?.sub?.enabled === true,
       reason: capabilities?.sub?.reason,
     },
     {
       key: 'set',
-      text: '可写',
+      text: ui('可写', 'Writable'),
       enabled: capabilities?.set?.enabled === true,
       reason: capabilities?.set?.reason,
     },
@@ -574,6 +629,42 @@ function formatCurrentValue(value: unknown): string {
     }
   }
   return String(value)
+}
+
+function formatOriginLabel(label?: string) {
+  if (!label) return ui('不可用', 'Unavailable')
+  if (datacenterLocale.value !== 'en') return label
+  return {
+    当前值不可用: 'Current value unavailable',
+    开发态默认值: 'Development default value',
+    运行态当前值: 'Runtime current value',
+    来源默认值: 'Source default value',
+  }[label] || label
+}
+
+function formatStoredDefaultValue(value?: string | null) {
+  if (value === undefined || value === null) return ui('未设置', 'Not Set')
+  return value === '' ? ui('空字符串', 'Empty String') : value
+}
+
+const defaultValueEditorKind = computed<'boolean' | 'number' | 'json' | 'string'>(() => {
+  const type = String(props.datapoint?.dataType || '').toLowerCase()
+  if (['bool', 'boolean'].includes(type)) return 'boolean'
+  if (/(int|uint|float|double|decimal|number)/.test(type)) return 'number'
+  if (/(object|json|array|list|map)/.test(type)) return 'json'
+  return 'string'
+})
+const defaultValuePlaceholder = computed(() =>
+  defaultValueEditorKind.value === 'number' ? ui('请输入数字', 'Enter a number') : ui('请输入默认值', 'Enter a default value'),
+)
+
+function historyStorageModeEnglish(mode: string) {
+  return {
+    on_change: 'On Change',
+    interval_latest: 'Latest per Interval',
+    periodic_snapshot: 'Periodic Snapshot',
+    every_sample: 'Every Sample',
+  }[mode] || mode
 }
 
 // ── 格式化工具 ────────────────────────────────────────────────────────────
@@ -594,35 +685,35 @@ function resolveStatusTone(status?: string): 'success' | 'danger' | 'warning' | 
 function formatStatus(status?: string): string {
   switch (status) {
     case 'active':
-      return '活跃'
+      return ui('活跃', 'Active')
     case 'invalid':
-      return '失效'
+      return ui('失效', 'Invalid')
     case 'error':
-      return '错误'
+      return ui('错误', 'Error')
     case 'inactive':
-      return '停用'
+      return ui('停用', 'Inactive')
     default:
-      return '未知'
+      return ui('未知', 'Unknown')
   }
 }
 
-const sourceTypeLabels: Record<string, string> = {
-  'db.query': '数据库查询',
-  'mqtt.tag': 'MQTT 变量',
-  'mqtt.subscription': 'MQTT 订阅',
-  'http.request': 'HTTP 请求',
-  'websocket.session': 'WebSocket 会话',
-  'realtime.key': '实时库 Key',
-  'kafka.field': 'Kafka 字段',
-  'kafka.raw': 'Kafka 整包',
-  'calc.output': '计算输出',
-  'static.var': '静态变量',
-  'collector.point': '工业采集点',
-}
+const sourceTypeLabel = (sourceType: string) => ({
+  'db.query': ui('数据库查询', 'Database Query'),
+  'mqtt.tag': ui('MQTT 变量', 'MQTT Variable'),
+  'mqtt.subscription': ui('MQTT 订阅', 'MQTT Subscription'),
+  'http.request': ui('HTTP 请求', 'HTTP Request'),
+  'websocket.session': ui('WebSocket 会话', 'WebSocket Session'),
+  'realtime.key': ui('实时库 Key', 'Realtime Key'),
+  'kafka.field': ui('Kafka 字段', 'Kafka Field'),
+  'kafka.raw': ui('Kafka 整包', 'Kafka Raw Message'),
+  'calc.output': ui('计算输出', 'Compute Output'),
+  'static.var': ui('静态变量', 'Static Variable'),
+  'collector.point': ui('工业采集点', 'Industrial Collection Point'),
+}[sourceType] || sourceType)
 
 function formatSourceType(sourceType?: string): string {
   if (!sourceType) return '-'
-  return sourceTypeLabels[sourceType] || sourceType
+  return sourceTypeLabel(sourceType)
 }
 
 function formatTime(value?: string | null): string {
@@ -663,9 +754,73 @@ async function copyPath() {
   if (!path) return
   try {
     await navigator.clipboard.writeText(path)
-    ElMessage.success('已复制数据点路径')
+    ElMessage.success(ui('已复制数据点路径', 'Data point path copied'))
   } catch {
-    ElMessage.error('复制失败，请手动复制')
+    ElMessage.error(ui('复制失败，请手动复制', 'Copy failed; copy the path manually'))
+  }
+}
+
+function openDefaultValueDialog() {
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint.value)
+  defaultValueDraft.value = props.datapoint?.defaultValue ?? ''
+  defaultValueDialogVisible.value = true
+}
+
+function normalizeDefaultValueDraft(): string | null {
+  const raw = defaultValueDraft.value
+  if (defaultValueEditorKind.value === 'boolean') {
+    return raw === 'true' || raw === 'false' ? raw : null
+  }
+  if (defaultValueEditorKind.value === 'number') {
+    const value = Number(raw)
+    return raw.trim() && Number.isFinite(value) ? raw.trim() : null
+  }
+  if (defaultValueEditorKind.value === 'json') {
+    try {
+      const value = JSON.parse(raw)
+      if (value === null || typeof value !== 'object') return null
+      return JSON.stringify(value)
+    } catch {
+      return null
+    }
+  }
+  return raw
+}
+
+async function saveDefaultValue() {
+  if (!props.datapoint) return
+  const value = normalizeDefaultValueDraft()
+  if (value === null) {
+    ElMessage.warning(
+      defaultValueEditorKind.value === 'json' ? ui('请输入合法的对象或数组 JSON', 'Enter valid object or array JSON') : ui('默认值格式无效', 'Invalid default value'),
+    )
+    return
+  }
+  defaultValueSaving.value = true
+  try {
+    await updateDatapoint(props.projectId, String(props.datapoint.id), { defaultValue: value })
+    defaultValueDialogVisible.value = false
+    ElMessage.success(ui('开发态默认值已保存', 'Development default value saved'))
+    emit('updated')
+  } catch {
+    ElMessage.error(ui('保存开发态默认值失败', 'Failed to save development default value'))
+  } finally {
+    defaultValueSaving.value = false
+  }
+}
+
+async function clearDefaultValue() {
+  if (!props.datapoint) return
+  defaultValueSaving.value = true
+  try {
+    await updateDatapoint(props.projectId, String(props.datapoint.id), { defaultValue: null })
+    defaultValueDialogVisible.value = false
+    ElMessage.success(ui('开发态默认值已清除', 'Development default value cleared'))
+    emit('updated')
+  } catch {
+    ElMessage.error(ui('清除开发态默认值失败', 'Failed to clear development default value'))
+  } finally {
+    defaultValueSaving.value = false
   }
 }
 
@@ -683,7 +838,7 @@ async function loadHistoryStorage(datapointId: string) {
 }
 
 async function openHistoryStorage() {
-  if (isInvalid.value) return ElMessage.warning(invalidUsageHint)
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint.value)
   const datapointId = props.datapoint?.id
   if (!datapointId) return
   try {
@@ -697,7 +852,7 @@ async function openHistoryStorage() {
     historyStorageTargets.value = targets
     historyStorageDrawerVisible.value = true
   } catch {
-    ElMessage.error('加载历史存储设置失败')
+    ElMessage.error(ui('加载历史存储设置失败', 'Failed to load history storage settings'))
   }
 }
 
@@ -712,10 +867,10 @@ async function saveHistoryStorage(payload: HistoryStorageSavePayload) {
       payload,
     )
     historyStorageDrawerVisible.value = false
-    ElMessage.success('历史存储设置已保存')
+    ElMessage.success(ui('历史存储设置已保存', 'History storage settings saved'))
     emit('updated')
   } catch {
-    ElMessage.error('保存历史存储设置失败')
+    ElMessage.error(ui('保存历史存储设置失败', 'Failed to save history storage settings'))
   } finally {
     historyStorageSaving.value = false
   }
@@ -738,7 +893,7 @@ function openAlarmWorkspace() {
 // ── 标签 dialog ────────────────────────────────────────────────────────────
 
 function openTagDialog() {
-  if (isInvalid.value) return ElMessage.warning(invalidUsageHint)
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint.value)
   if (!props.datapoint) return
   tagDialogDatapoint.value = props.datapoint
   tagDialogVisible.value = true
@@ -749,11 +904,11 @@ async function handleTagSubmit(tags: string[]) {
   tagSaving.value = true
   try {
     await updateDatapoint(props.projectId, String(props.datapoint.id), { tags } as never)
-    ElMessage.success('标签已保存')
+    ElMessage.success(ui('标签已保存', 'Tags saved'))
     tagDialogVisible.value = false
     emit('updated')
   } catch {
-    ElMessage.error('保存标签失败')
+    ElMessage.error(ui('保存标签失败', 'Failed to save tags'))
   } finally {
     tagSaving.value = false
   }
@@ -762,7 +917,7 @@ async function handleTagSubmit(tags: string[]) {
 // ── 权限 dialog ────────────────────────────────────────────────────────────
 
 function openPermissionDialog() {
-  if (isInvalid.value) return ElMessage.warning(invalidUsageHint)
+  if (isInvalid.value) return ElMessage.warning(invalidUsageHint.value)
   if (!props.datapoint) return
   permDialogDatapoint.value = props.datapoint
   permDialogVisible.value = true
@@ -773,11 +928,11 @@ async function handlePermSubmit(grant: Record<string, unknown>) {
   permSaving.value = true
   try {
     await updateDatapointRuntimeGrant(props.projectId, String(props.datapoint.id), { write: grant })
-    ElMessage.success('写权限已保存')
+    ElMessage.success(ui('写权限已保存', 'Write permission saved'))
     permDialogVisible.value = false
     emit('updated')
   } catch {
-    ElMessage.error('保存运行态权限失败')
+    ElMessage.error(ui('保存运行态权限失败', 'Failed to save runtime permissions'))
   } finally {
     permSaving.value = false
   }
@@ -798,6 +953,12 @@ function handleLinkChipClick(payload: { module: LinkChipModule; objectId: string
   gap: 0;
   height: 100%;
   overflow-y: auto;
+}
+
+.dpd__dialog-hint {
+  margin: 0 0 12px;
+  color: var(--dc-text-muted);
+  font-size: 13px;
 }
 
 /* ── 头部 ── */

@@ -2,7 +2,7 @@
   <div class="alarm-notifications">
     <section class="alarm-notifications__settings">
       <header class="alarm-notifications__head">
-        <h3>工程默认通知</h3>
+        <h3>{{ t('alarmNotifications.defaults') }}</h3>
         <button
           type="button"
           class="alarm-notifications__primary"
@@ -10,16 +10,16 @@
           @click="saveSettings"
         >
           <IconTablerDeviceFloppy />
-          保存设置
+          {{ t('alarmNotifications.saveSettings') }}
         </button>
       </header>
       <div v-loading="loading" class="alarm-notifications__form">
         <div class="alarm-notifications__checks">
-          <el-checkbox v-model="settings.notifyOnRaise">报警触发时通知</el-checkbox>
-          <el-checkbox v-model="settings.notifyOnClear">报警恢复时通知</el-checkbox>
+          <el-checkbox v-model="settings.notifyOnRaise">{{ t('alarmNotifications.notifyRaise') }}</el-checkbox>
+          <el-checkbox v-model="settings.notifyOnClear">{{ t('alarmNotifications.notifyClear') }}</el-checkbox>
         </div>
         <label>
-          <span>重复提醒</span>
+          <span>{{ t('alarmNotifications.repeat') }}</span>
           <div class="alarm-notifications__repeat">
             <el-switch v-model="repeatEnabled" />
             <el-input-number
@@ -28,22 +28,22 @@
               :min="1"
               controls-position="right"
             />
-            <span v-if="repeatEnabled">秒</span>
+            <span v-if="repeatEnabled">{{ t('common.seconds') }}</span>
           </div>
         </label>
         <label>
-          <span>默认渠道</span>
-          <el-select v-model="settings.defaultChannelIds" multiple placeholder="选择通知渠道">
+          <span>{{ t('alarmNotifications.defaultChannels') }}</span>
+          <el-select v-model="settings.defaultChannelIds" multiple :placeholder="t('alarmNotifications.selectChannels')">
             <el-option
               v-for="channel in enabledChannels"
               :key="channel.id"
-              :label="channel.name"
+              :label="channelName(channel)"
               :value="channel.id"
             />
           </el-select>
         </label>
         <label class="is-wide">
-          <span>默认消息模板</span>
+          <span>{{ t('alarmNotifications.defaultTemplate') }}</span>
           <el-input v-model="settings.defaultMessageTemplate" type="textarea" :rows="3" />
           <div class="alarm-notifications__variables">
             <button
@@ -61,20 +61,22 @@
 
     <section class="alarm-notifications__channels">
       <header class="alarm-notifications__head">
-        <h3>通知渠道</h3>
+        <h3>{{ t('alarmNotifications.channels') }}</h3>
         <button type="button" class="alarm-notifications__secondary" @click="openCreate">
-          <IconTablerPlus />新增渠道
+          <IconTablerPlus />{{ t('alarmNotifications.addChannel') }}
         </button>
       </header>
       <el-table v-loading="channelsLoading" :data="channels" class="alarm-notifications__table">
-        <el-table-column label="名称" min-width="180" prop="name" />
-        <el-table-column label="类型" width="130">
+        <el-table-column :label="t('alarmNotifications.name')" min-width="180">
+          <template #default="{ row }">{{ channelName(row) }}</template>
+        </el-table-column>
+        <el-table-column :label="t('alarmNotifications.type')" width="130">
           <template #default="{ row }">{{ channelTypeLabel(row.channelType) }}</template>
         </el-table-column>
-        <el-table-column label="密钥" min-width="150">
+        <el-table-column :label="t('alarmNotifications.secret')" min-width="150">
           <template #default="{ row }">{{ secretSummary(row) }}</template>
         </el-table-column>
-        <el-table-column label="最近测试" min-width="180">
+        <el-table-column :label="t('alarmNotifications.lastTest')" min-width="180">
           <template #default="{ row }">
             <el-tooltip
               :content="row.lastTestMessage || testStatusText(row.lastTestStatus)"
@@ -88,20 +90,20 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column :label="t('alarmNotifications.status')" width="100">
           <template #default="{ row }"
             ><StatusBadge
               :tone="row.isEnabled ? 'success' : 'muted'"
-              :text="row.isEnabled ? '启用' : '停用'"
+              :text="row.isEnabled ? t('alarmNotifications.enabled') : t('alarmNotifications.disabled')"
           /></template>
         </el-table-column>
-        <el-table-column label="操作" width="132" align="right">
+        <el-table-column :label="t('alarmNotifications.actions')" width="132" align="right">
           <template #default="{ row }">
             <button
               v-if="row.id !== 'runtime_inapp'"
               type="button"
               class="alarm-notifications__icon"
-              title="发送固定脱敏测试消息"
+              :title="t('alarmNotifications.sendTest')"
               :disabled="channelTestingId === row.id"
               @click="runChannelTest(row)"
             >
@@ -111,7 +113,7 @@
               v-if="row.id !== 'runtime_inapp'"
               type="button"
               class="alarm-notifications__icon"
-              title="编辑渠道"
+              :title="t('alarmNotifications.editChannel')"
               @click="openEdit(row)"
             >
               <IconTablerEdit />
@@ -120,7 +122,7 @@
               v-if="row.id !== 'runtime_inapp'"
               type="button"
               class="alarm-notifications__icon is-danger"
-              title="删除渠道"
+              :title="t('alarmNotifications.deleteChannel')"
               @click="removeChannel(row)"
             >
               <IconTablerTrash />
@@ -128,43 +130,43 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty :image-size="48" description="暂无通知渠道" />
+          <el-empty :image-size="48" :description="t('alarmNotifications.emptyChannels')" />
         </template>
       </el-table>
     </section>
 
     <DcDialog
       v-model="dialogVisible"
-      :title="editingChannel ? '编辑通知渠道' : '新增通知渠道'"
+      :title="editingChannel ? t('alarmNotifications.editChannel') : t('alarmNotifications.createChannel')"
       width="520px"
     >
       <div class="alarm-channel-form">
         <label
-          ><span>名称</span><el-input v-model="channelDraft.name" placeholder="例如：生产值班群"
+          ><span>{{ t('alarmNotifications.name') }}</span><el-input v-model="channelDraft.name" :placeholder="t('alarmNotifications.nameExample')"
         /></label>
         <label
-          ><span>类型</span
+          ><span>{{ t('alarmNotifications.type') }}</span
           ><el-select v-model="channelDraft.channelType" :disabled="!!editingChannel"
             ><el-option label="Webhook" value="webhook" /><el-option
-              label="钉钉"
-              value="dingtalk" /><el-option label="企业微信" value="wecom" /></el-select
+              :label="t('alarmNotifications.channelTypes.dingtalk')"
+              value="dingtalk" /><el-option :label="t('alarmNotifications.channelTypes.wecom')" value="wecom" /></el-select
         ></label>
         <label class="is-wide"
-          ><span>Webhook 地址</span><el-input v-model="webhookUrl" placeholder="https://..."
+          ><span>{{ t('alarmNotifications.webhookUrl') }}</span><el-input v-model="webhookUrl" placeholder="https://..."
         /></label>
         <label class="is-wide"
-          ><span>签名密钥（留空保持原值）</span
+          ><span>{{ t('alarmNotifications.signingSecret') }}</span
           ><el-input
             v-model="secretValue"
             type="password"
             show-password
             autocomplete="new-password"
         /></label>
-        <label><span>启用</span><el-switch v-model="channelDraft.isEnabled" /></label>
+        <label><span>{{ t('alarmNotifications.enabled') }}</span><el-switch v-model="channelDraft.isEnabled" /></label>
       </div>
       <template #footer>
         <button type="button" class="alarm-notifications__secondary" @click="dialogVisible = false">
-          取消
+          {{ t('alarmNotifications.cancel') }}
         </button>
         <button
           type="button"
@@ -172,7 +174,7 @@
           :disabled="channelSaving"
           @click="saveChannel"
         >
-          保存
+          {{ t('alarmNotifications.save') }}
         </button>
       </template>
     </DcDialog>
@@ -205,6 +207,7 @@ import type {
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
 import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-item'
+import { datacenterLocale, t } from '@/i18n/runtime'
 
 const props = defineProps<{ projectId: string }>()
 const emit = defineEmits<{ changed: [channels: AlarmNotificationChannel[]] }>()
@@ -218,7 +221,10 @@ const settings = reactive({
   notifyOnRaise: true,
   notifyOnClear: true,
   repeatIntervalSeconds: 300 as number | null,
-  defaultMessageTemplate: '{{pointName}} 当前值 {{value}}，触发 {{conditionLabel}}',
+  defaultMessageTemplate:
+    datacenterLocale.value === 'en'
+      ? '{{pointName}} current value {{value}}, triggered {{conditionLabel}}'
+      : '{{pointName}} 当前值 {{value}}，触发 {{conditionLabel}}',
   defaultChannelIds: ['runtime_inapp'] as string[],
 })
 const dialogVisible = ref(false)
@@ -235,14 +241,16 @@ const channelDraft = reactive<AlarmNotificationChannelSave>({
 })
 const webhookUrl = ref('')
 const secretValue = ref('')
-const templateVariables = [
-  { label: '点位名称', value: '{{pointName}}' },
-  { label: '当前值', value: '{{value}}' },
-  { label: '报警条件', value: '{{conditionLabel}}' },
-  { label: '报警等级', value: '{{severity}}' },
-  { label: '触发时间', value: '{{occurredAt}}' },
-]
+const templateVariables = computed(() => [
+  { label: t('alarmNotifications.variables.pointName'), value: '{{pointName}}' },
+  { label: t('alarmNotifications.variables.value'), value: '{{value}}' },
+  { label: t('alarmNotifications.variables.condition'), value: '{{conditionLabel}}' },
+  { label: t('alarmNotifications.variables.severity'), value: '{{severity}}' },
+  { label: t('alarmNotifications.variables.occurredAt'), value: '{{occurredAt}}' },
+])
 const enabledChannels = computed(() => channels.value.filter((item) => item.isEnabled))
+const channelName = (channel: AlarmNotificationChannel) =>
+  channel.id === 'runtime_inapp' ? t('alarmNotifications.builtinChannelName') : channel.name
 
 onMounted(() => void load())
 let loadRequestSeq = 0
@@ -261,10 +269,10 @@ async function load() {
     Object.assign(settings, data)
     repeatEnabled.value = data.repeatIntervalSeconds != null
   } else {
-    ElMessage.error(getApiErrorMessage(settingsResult.reason, '加载通知设置失败'))
+    ElMessage.error(getApiErrorMessage(settingsResult.reason, t('alarmNotifications.loadSettingsFailed')))
   }
   if (channelsResult.status === 'rejected') {
-    ElMessage.error(getApiErrorMessage(channelsResult.reason, '加载通知渠道失败'))
+    ElMessage.error(getApiErrorMessage(channelsResult.reason, t('alarmNotifications.loadChannelsFailed')))
   }
   channels.value = ensureBuiltinAlarmNotificationChannel(
     props.projectId,
@@ -286,9 +294,9 @@ async function saveSettings() {
       defaultChannelIds: settings.defaultChannelIds,
     })
     Object.assign(settings, saved)
-    ElMessage.success('工程通知设置已保存')
+    ElMessage.success(t('alarmNotifications.settingsSaved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存通知设置失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmNotifications.saveSettingsFailed')))
   } finally {
     saving.value = false
   }
@@ -345,10 +353,10 @@ async function saveChannel() {
       await updateAlarmChannel(props.projectId, editingChannel.value.id, payload)
     else await createAlarmChannel(props.projectId, payload)
     dialogVisible.value = false
-    ElMessage.success('通知渠道已保存')
+    ElMessage.success(t('alarmNotifications.channelSaved'))
     await load()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存通知渠道失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmNotifications.saveChannelFailed')))
   } finally {
     channelSaving.value = false
   }
@@ -356,19 +364,19 @@ async function saveChannel() {
 
 async function removeChannel(channel: AlarmNotificationChannel) {
   if (
-    !(await confirm(`确认删除通知渠道「${channel.name}」？`, {
-      title: '删除通知渠道',
-      confirmText: '删除',
+    !(await confirm(t('alarmNotifications.deleteConfirm', { name: channel.name }), {
+      title: t('alarmNotifications.deleteTitle'),
+      confirmText: t('alarm.delete'),
       type: 'warning',
     }))
   )
     return
   try {
     await deleteAlarmChannel(props.projectId, channel.id)
-    ElMessage.success('通知渠道已删除')
+    ElMessage.success(t('alarmNotifications.channelDeleted'))
     await load()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除通知渠道失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmNotifications.deleteFailed')))
   }
 }
 
@@ -376,9 +384,9 @@ async function runChannelTest(channel: AlarmNotificationChannel) {
   channelTestingId.value = channel.id
   try {
     await testAlarmChannel(props.projectId, channel.id)
-    ElMessage.success('测试消息已发送')
+    ElMessage.success(t('alarmNotifications.testSent'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '通知渠道测试失败'))
+    ElMessage.error(getApiErrorMessage(error, t('alarmNotifications.testFailed')))
   } finally {
     channelTestingId.value = ''
     await load()
@@ -387,9 +395,9 @@ async function runChannelTest(channel: AlarmNotificationChannel) {
 
 function testStatusText(status: string) {
   return (
-    ({ not_tested: '未测试', succeeded: '测试成功', failed: '测试失败' } as Record<string, string>)[
+    ({ not_tested: t('alarmNotifications.testStatuses.not_tested'), succeeded: t('alarmNotifications.testStatuses.succeeded'), failed: t('alarmNotifications.testStatuses.failed') } as Record<string, string>)[
       status
-    ] || '未测试'
+    ] || t('alarmNotifications.testStatuses.not_tested')
   )
 }
 
@@ -403,10 +411,10 @@ function channelTypeLabel(value: string) {
   return (
     (
       {
-        runtime_inapp: '站内通知',
+        runtime_inapp: t('alarmNotifications.channelTypes.runtime_inapp'),
         webhook: 'Webhook',
-        dingtalk: '钉钉',
-        wecom: '企业微信',
+        dingtalk: t('alarmNotifications.channelTypes.dingtalk'),
+        wecom: t('alarmNotifications.channelTypes.wecom'),
       } as Record<string, string>
     )[value] || value
   )
@@ -414,7 +422,11 @@ function channelTypeLabel(value: string) {
 
 function secretSummary(channel: AlarmNotificationChannel) {
   const count = Object.values(channel.secretStatus).filter(Boolean).length
-  return channel.id === 'runtime_inapp' ? '无需密钥' : count ? `已配置 ${count} 项` : '未配置'
+  return channel.id === 'runtime_inapp'
+    ? t('alarmNotifications.noSecret')
+    : count
+      ? t('alarmNotifications.configuredSecrets', { count })
+      : t('alarmNotifications.notConfigured')
 }
 </script>
 

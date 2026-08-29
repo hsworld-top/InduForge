@@ -10,7 +10,7 @@
             class="access-source-workspace__search"
             size="small"
             clearable
-            placeholder="搜索名称"
+            :placeholder="t('accessSources.search')"
             :prefix-icon="SearchIcon"
             @input="handleSearchInput"
             @clear="handleSearchClear"
@@ -43,21 +43,21 @@
           </el-popover>
 
           <div class="access-source-workspace__view-switcher">
-            <el-tooltip content="卡片视图" placement="top">
+            <el-tooltip :content="t('accessSources.cardView')" placement="top">
               <button
                 type="button"
                 :class="{ 'is-active': viewMode === 'card' }"
-                aria-label="切换到卡片视图"
+                :aria-label="t('accessSources.switchCard')"
                 @click="viewMode = 'card'"
               >
                 <IconTablerLayoutGrid />
               </button>
             </el-tooltip>
-            <el-tooltip content="列表视图" placement="top">
+            <el-tooltip :content="t('accessSources.listView')" placement="top">
               <button
                 type="button"
                 :class="{ 'is-active': viewMode === 'list' }"
-                aria-label="切换到列表视图"
+                :aria-label="t('accessSources.switchList')"
                 @click="viewMode = 'list'"
               >
                 <IconTablerListDetails />
@@ -69,7 +69,7 @@
           <button
             type="button"
             class="access-source-workspace__icon-btn"
-            title="刷新"
+            :title="t('accessSources.refresh')"
             @click="$emit('refresh')"
           >
             <IconTablerRefresh class="access-source-workspace__icon-btn-icon" />
@@ -77,13 +77,13 @@
 
           <!-- 概览数字：只展示接入源总数，连接态进入工作台后由用户手动触发 -->
           <div class="access-source-workspace__overview">
-            <span class="access-source-workspace__overview-text">共 {{ overviewTotal }}</span>
+            <span class="access-source-workspace__overview-text">{{ t('accessSources.total', { count: overviewTotal }) }}</span>
           </div>
 
           <template #actions>
             <button type="button" class="access-source-workspace__primary" @click="$emit('create')">
               <IconTablerPlus class="access-source-workspace__action-icon" />
-              <span>新增连接</span>
+              <span>{{ t('accessSources.create') }}</span>
             </button>
           </template>
         </FilterToolbar>
@@ -113,7 +113,7 @@
                 row-key="id"
                 class="access-source-workspace__table"
               >
-                <el-table-column label="名称" min-width="220">
+                <el-table-column :label="t('accessSources.name')" min-width="220">
                   <template #default="{ row }">
                     <div class="access-source-workspace__source-identity">
                       <span
@@ -127,12 +127,12 @@
                         class="access-source-workspace__name-button"
                         @click="handleOpen(row)"
                       >
-                        {{ row.name || '未命名连接' }}
+                        {{ row.name || t('accessSources.unnamed') }}
                       </button>
                     </div>
                   </template>
                 </el-table-column>
-                <el-table-column label="类型" width="150">
+                <el-table-column :label="t('accessSources.type')" width="150">
                   <template #default="{ row }">
                     <span
                       class="access-source-workspace__type-badge"
@@ -142,7 +142,7 @@
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="连接地址" min-width="260" show-overflow-tooltip>
+                <el-table-column :label="t('accessSources.endpoint')" min-width="260" show-overflow-tooltip>
                   <template #default="{ row }">
                     <span
                       class="access-source-workspace__endpoint"
@@ -152,7 +152,7 @@
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="数据点" width="92" align="center">
+                <el-table-column :label="t('accessSources.datapoints')" width="104" align="center">
                   <template #default="{ row }">
                     <span
                       class="access-source-workspace__point-count"
@@ -162,7 +162,7 @@
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="状态" width="138">
+                <el-table-column :label="t('accessSources.status')" width="138">
                   <template #default="{ row }">
                     <span
                       class="access-source-workspace__state"
@@ -173,11 +173,11 @@
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="184" align="right" fixed="right">
+                <el-table-column :label="t('accessSources.actions')" width="184" align="right" fixed="right">
                   <template #default="{ row }">
                     <div class="access-source-workspace__table-actions">
                       <button type="button" class="is-workbench" @click="handleOpen(row)">
-                        <span>工作台</span>
+                        <span>{{ t('accessSources.workbench') }}</span>
                         <IconTablerArrowRight />
                       </button>
                       <button
@@ -185,8 +185,8 @@
                         type="button"
                         class="is-icon"
                         :disabled="testingConnectionId === row.id"
-                        title="测试已保存连接"
-                        aria-label="测试接入源"
+                        :title="t('accessSources.testSaved')"
+                        :aria-label="t('accessSources.testSource')"
                         @click="handleTestConnection(row)"
                       >
                         <IconTablerLoader2
@@ -203,8 +203,8 @@
                       <button
                         type="button"
                         class="is-icon"
-                        title="编辑"
-                        aria-label="编辑接入源"
+                        :title="t('accessSources.edit')"
+                        :aria-label="t('accessSources.editSource')"
                         @click="handleEdit(row)"
                       >
                         <IconTablerSettings />
@@ -212,8 +212,8 @@
                       <button
                         type="button"
                         class="is-icon is-danger"
-                        title="删除"
-                        aria-label="删除接入源"
+                        :title="t('accessSources.delete')"
+                        :aria-label="t('accessSources.deleteSource')"
                         @click="handleDeleteConnection(row)"
                       >
                         <IconTablerTrash />
@@ -267,6 +267,7 @@ import TableScroll from '@/components/shared/TableScroll.vue'
 import { isBuiltinStoreType } from './workbench/builtin-store'
 import { resolveAccessSourceVisual } from './access-source-visual'
 import type { Connection as AccessSourceConnection } from '@/api/schemas/connection.schema'
+import { t } from '@/i18n/runtime'
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
 const SearchIcon = Search
@@ -348,16 +349,16 @@ function syncQuery() {
 }
 
 /* ── 类型筛选选项 ── */
-const typeOptions = [
-  { label: '全部', value: 'all' },
-  { label: '内置运行库', value: 'builtin' },
-  { label: '数据库', value: 'database' },
-  { label: '消息/流', value: 'stream' },
-]
+const typeOptions = computed(() => [
+  { label: t('accessSources.all'), value: 'all' },
+  { label: t('accessSources.builtin'), value: 'builtin' },
+  { label: t('accessSources.database'), value: 'database' },
+  { label: t('accessSources.stream'), value: 'stream' },
+])
 
 const typeLabel = computed(() => {
-  const found = typeOptions.find((o) => o.value === filterType.value)
-  return found ? (filterType.value === 'all' ? '类型' : found.label) : '类型'
+  const found = typeOptions.value.find((o) => o.value === filterType.value)
+  return found ? (filterType.value === 'all' ? t('accessSources.type') : found.label) : t('accessSources.type')
 })
 
 const selectType = (val: string) => {
@@ -394,11 +395,11 @@ const resolveCategory = (connection: AccessSourceConnection) => {
 
 const resolveConnectionTypeLabel = (connection: AccessSourceConnection) => {
   const labels: Record<string, string> = {
-    'builtin.relation': 'IF关系库',
-    'builtin.timeseries': 'IF时序库',
-    'builtin.realtime': 'IF实时库',
-    'builtin.message': 'IF消息库',
-    relational: String(connection.relationalConfig?.dbType || '数据库'),
+    'builtin.relation': t('accessSources.builtinTypes.relation'),
+    'builtin.timeseries': t('accessSources.builtinTypes.timeseries'),
+    'builtin.realtime': t('accessSources.builtinTypes.realtime'),
+    'builtin.message': t('accessSources.builtinTypes.message'),
+    relational: String(connection.relationalConfig?.dbType || t('accessSources.database')),
     mqtt: 'MQTT',
     kafka: 'Kafka',
     websocket: 'WebSocket',
@@ -406,23 +407,23 @@ const resolveConnectionTypeLabel = (connection: AccessSourceConnection) => {
     redis: 'Redis',
     tdengine: 'TDengine',
   }
-  return labels[connection.type || ''] || connection.type || '未知类型'
+  return labels[connection.type || ''] || connection.type || t('accessSources.unknownType')
 }
 
 const resolveConnectionIcon = (connection: AccessSourceConnection) =>
   resolveAccessSourceVisual(connection.type).icon
 
 const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
-  if (isBuiltinStoreType(connection.type || '')) return '工程内置运行库'
+  if (isBuiltinStoreType(connection.type || '')) return t('accessSources.builtinStore')
   if (connection.type === 'relational') {
     const config = connection.relationalConfig
     const address = [config?.host, config?.port].filter(Boolean).join(':')
-    return [address, config?.database].filter(Boolean).join(' / ') || '未配置数据库地址'
+    return [address, config?.database].filter(Boolean).join(' / ') || t('accessSources.notConfiguredDbAddress')
   }
   if (connection.type === 'mqtt') {
     const config = connection.mqttConfig
     return (
-      [config?.brokerUrl || config?.host, config?.port].filter(Boolean).join(':') || '未配置 Broker'
+      [config?.brokerUrl || config?.host, config?.port].filter(Boolean).join(':') || t('accessSources.notConfiguredBroker')
     )
   }
   const config = connection.config || {}
@@ -434,39 +435,39 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
       config['brokers'] ||
       config['host'] ||
       config['serverProgId'] ||
-      '等待接入配置',
+      t('accessSources.pendingConfig'),
   )
 }
 
 const resolveDatapointCount = (connection: AccessSourceConnection) => connection.variableCount
 
 const resolveConnectionState = (connection: AccessSourceConnection) => {
-  if (!connection.enabled) return { label: '已停用', tone: 'muted', detail: '配置已停用' }
+  if (!connection.enabled) return { label: t('accessSources.disabled'), tone: 'muted', detail: t('accessSources.disabledDetail') }
   if (connection.configurationState === 'incomplete') {
-    return { label: '配置不完整', tone: 'warning', detail: '请补齐接入源必填配置' }
+    return { label: t('accessSources.incomplete'), tone: 'warning', detail: t('accessSources.incompleteDetail') }
   }
   if (connection.testCapability.status === 'unsupported') {
     return {
-      label: '正常',
+      label: t('accessSources.normal'),
       tone: 'success',
-      detail: connection.testCapability.reason || '请在所属工作台测试具体请求或会话',
+      detail: connection.testCapability.reason || t('accessSources.workspaceTestHint'),
     }
   }
   if (connection.lastTest.status === 'succeeded') {
     return {
-      label: '正常',
+      label: t('accessSources.normal'),
       tone: 'success',
-      detail: connection.lastTest.message || '最近测试成功',
+      detail: connection.lastTest.message || t('accessSources.testSucceeded'),
     }
   }
   if (connection.lastTest.status === 'failed') {
     return {
-      label: '异常',
+      label: t('accessSources.abnormal'),
       tone: 'danger',
-      detail: connection.lastTest.message || '最近测试失败',
+      detail: connection.lastTest.message || t('accessSources.testFailed'),
     }
   }
-  return { label: '未测试', tone: 'muted', detail: '尚未测试已保存配置' }
+  return { label: t('accessSources.notTested'), tone: 'muted', detail: t('accessSources.notTestedDetail') }
 }
 
 const isConnectionEndpointPending = (connection: AccessSourceConnection) => {
@@ -521,11 +522,11 @@ const handleTestConnection = async (connection: AccessSourceConnection) => {
   testingConnectionId.value = connection.id
   try {
     const result = await testSavedConnection(String(props.projectId), connection.id)
-    if (result.connected) ElMessage.success(result.message || '连接测试成功')
-    else ElMessage.warning(result.message || '连接测试未通过')
+    if (result.connected) ElMessage.success(result.message || t('accessSources.testSuccess'))
+    else ElMessage.warning(result.message || t('accessSources.testRejected'))
     emit('refresh')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '连接测试失败'))
+    ElMessage.error(getApiErrorMessage(error, t('accessSources.testError')))
   } finally {
     testingConnectionId.value = ''
   }
@@ -539,11 +540,11 @@ const handleReorderConnections = async (connectionIds: string[]) => {
   hasLocalConnectionOrder.value = true
   try {
     await updateConnectionOrder(String(props.projectId), connectionIds)
-    ElMessage.success('接入源顺序已保存')
+    ElMessage.success(t('accessSources.orderSaved'))
   } catch (err) {
     connectionOrder.value = previousOrder
     hasLocalConnectionOrder.value = previousHasLocalOrder
-    ElMessage.error(getApiErrorMessage(err, '保存接入源顺序失败'))
+    ElMessage.error(getApiErrorMessage(err, t('accessSources.orderSaveFailed')))
   }
 }
 
@@ -554,38 +555,38 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   try {
     impact = await getConnectionDeleteImpact(String(props.projectId), connection.id)
   } catch (err) {
-    ElMessage.error(getApiErrorMessage(err, '读取删除影响失败'))
+    ElMessage.error(getApiErrorMessage(err, t('accessSources.impactFailed')))
     return
   }
   if (!impact.canDelete) {
     const blockers = impact.blockingUsages
       .map(
         (item) =>
-          `${item.label || item.type} ${item.count} 项${item.examples.length ? `（${item.examples.map((example) => example.name).join('、')}）` : ''}`,
+          t('accessSources.impactItem', { label: item.label || item.type, count: item.count, examples: item.examples.length ? ` (${item.examples.map((example) => example.name).join(', ')})` : '' }),
       )
       .join('\n')
     await ElMessageBox.alert(
-      `当前接入源仍被以下配置引用，请先解除引用：\n${blockers}`,
-      '无法删除接入源',
+      t('accessSources.cannotDelete', { blockers }),
+      t('accessSources.cannotDeleteTitle'),
       {
         type: 'warning',
-        confirmButtonText: '知道了',
+        confirmButtonText: t('accessSources.understood'),
       },
     )
     return
   }
   const owned = impact.ownedResources.reduce((sum, item) => sum + item.count, 0)
   const ok = await confirm(
-    `将删除接入源「${connection.name || connection.id}」及 ${owned} 个来源内配置；${impact.generatedDatapoints.count} 个已生成数据点会保留并标记为无效。`,
-    { title: '删除接入源', confirmText: '删除', type: 'error' },
+    t('accessSources.deleteConfirm', { name: connection.name || connection.id, owned, points: impact.generatedDatapoints.count }),
+    { title: t('accessSources.deleteTitle'), confirmText: t('accessSources.delete'), type: 'error' },
   )
   if (!ok) return
   try {
     await deleteConnection(String(props.projectId), connection.id)
-    ElMessage.success('接入源已删除')
+    ElMessage.success(t('accessSources.deleted'))
     emit('refresh')
   } catch (err) {
-    ElMessage.error(getApiErrorMessage(err, '删除失败'))
+    ElMessage.error(getApiErrorMessage(err, t('accessSources.deleteFailed')))
   }
 }
 </script>
@@ -718,7 +719,7 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   border: 1px solid var(--dc-primary);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-primary);
-  color: var(--dc-surface-raised);
+  color: var(--dc-on-primary);
   font-size: 13px;
   font-weight: 700;
   transition:
@@ -826,15 +827,15 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 }
 
 .access-source-workspace__source-icon.is-database {
-  border-color: #d1fae5;
-  background: #ecfdf5;
-  color: #047857;
+  border-color: color-mix(in srgb, var(--dc-success) 28%, var(--dc-border));
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-workspace__source-icon.is-stream {
-  border-color: #ffedd5;
-  background: #fff7ed;
-  color: #c2410c;
+  border-color: color-mix(in srgb, var(--dc-warning) 28%, var(--dc-border));
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 
 .access-source-workspace__source-icon svg {
@@ -881,15 +882,15 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 }
 
 .access-source-workspace__type-badge.is-database {
-  border-color: #d1fae5;
-  background: #ecfdf5;
-  color: #047857;
+  border-color: color-mix(in srgb, var(--dc-success) 28%, var(--dc-border));
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-workspace__type-badge.is-stream {
-  border-color: #ffedd5;
-  background: #fff7ed;
-  color: #c2410c;
+  border-color: color-mix(in srgb, var(--dc-warning) 28%, var(--dc-border));
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 
 .access-source-workspace__endpoint {
@@ -906,8 +907,8 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 .access-source-workspace__endpoint.is-pending {
   padding: 3px 8px;
   border-radius: 5px;
-  background: #fff7ed;
-  color: #9a5b13;
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
   font-family: inherit;
 }
 
@@ -944,18 +945,18 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 }
 
 .access-source-workspace__state.is-success {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-workspace__state.is-warning {
-  background: #fff7ed;
-  color: #c2410c;
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 
 .access-source-workspace__state.is-danger {
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .access-source-workspace__table-actions {
@@ -1012,8 +1013,8 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 }
 
 .access-source-workspace__table-actions button.is-danger:hover {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .access-source-workspace__table-actions svg {

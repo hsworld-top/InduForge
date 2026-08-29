@@ -1,7 +1,7 @@
 <template>
   <DcDialog
     v-model="visible"
-    title="重命名计算单元"
+    :title="ui('重命名计算单元', 'Rename Compute Unit')"
     width="420px"
     body-max-height="220px"
     :dirty="isDirty"
@@ -9,12 +9,12 @@
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-rename-dialog">
-      <el-form-item label="名称" required>
+      <el-form-item :label="ui('名称', 'Name')" required>
         <el-input
           v-model="name"
           maxlength="60"
           show-word-limit
-          placeholder="输入计算单元名称"
+          :placeholder="ui('输入计算单元名称', 'Enter a compute unit name')"
           @keyup.enter="submit"
         />
       </el-form-item>
@@ -22,9 +22,9 @@
 
     <template #footer>
       <div class="compute-rename-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          保存
+          {{ ui('保存', 'Save') }}
         </el-button>
       </div>
     </template>
@@ -35,6 +35,9 @@
 import { computed, ref, watch } from 'vue'
 import type { ComputeUnit } from '@/api/schemas/compute.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

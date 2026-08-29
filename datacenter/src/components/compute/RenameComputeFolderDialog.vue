@@ -1,7 +1,7 @@
 <template>
   <DcDialog
     v-model="visible"
-    title="重命名分组"
+    :title="ui('重命名分组', 'Rename Folder')"
     width="420px"
     body-max-height="220px"
     :dirty="isDirty"
@@ -9,12 +9,12 @@
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-folder-rename-dialog">
-      <el-form-item label="名称" required>
+      <el-form-item :label="ui('名称', 'Name')" required>
         <el-input
           v-model="name"
           maxlength="60"
           show-word-limit
-          placeholder="输入分组名称"
+          :placeholder="ui('输入分组名称', 'Enter a folder name')"
           @keyup.enter="submit"
         />
       </el-form-item>
@@ -22,9 +22,9 @@
 
     <template #footer>
       <div class="compute-folder-rename-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          保存
+          {{ ui('保存', 'Save') }}
         </el-button>
       </div>
     </template>
@@ -34,7 +34,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
 import type { ComputeFolderTreeNode } from './computeTreeModel'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

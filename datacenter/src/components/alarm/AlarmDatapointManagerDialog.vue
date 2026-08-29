@@ -9,7 +9,7 @@
   >
     <template #warning="{ points }">
       <span v-if="mode === 'point' && !compatible(points)" class="alarm-point-picker__warning">
-        所选数据点类型不兼容
+        {{ t('datapointPicker.incompatible') }}
       </span>
     </template>
   </DatapointPickerDialog>
@@ -22,6 +22,7 @@ import DatapointPickerDialog, {
 } from '@/components/shared/DatapointPickerDialog.vue'
 import type { AlarmItemMode } from '@/api/schemas/alarm.schema'
 import { compatibleAlarmPoints, type AlarmPointSelection } from '@/models/alarm-item'
+import { t } from '@/i18n/runtime'
 
 const props = withDefaults(
   defineProps<{
@@ -40,7 +41,11 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
-const title = computed(() => (props.mode === 'derived' ? '管理组合输入点' : '选择报警数据点'))
+const title = computed(() =>
+  props.mode === 'derived'
+    ? t('datapointPicker.derivedManageTitle')
+    : t('datapointPicker.alarmSelectTitle'),
+)
 const initialSelection = computed<DatapointPickerSelection[]>(() =>
   props.points.map((point) => ({
     id: point.datapointId,

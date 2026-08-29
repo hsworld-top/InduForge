@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
 // import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import router from './router'
 import App from './App.vue'
@@ -10,11 +11,13 @@ import { configureElementPlusPopper } from './config/element-plus'
 import { setDatacenterLocale } from './i18n/runtime'
 import { Storage } from './utils/storage'
 import { initializeWujieContext } from './runtime/wujie-context'
+import { applyDatacenterTheme } from './theme/runtime'
 
 configureElementPlusPopper()
 
 const microAppContext = initializeWujieContext()
 setDatacenterLocale(microAppContext?.locale ?? Storage.getLanguage())
+applyDatacenterTheme(microAppContext?.theme ?? Storage.getTheme())
 
 const app = createApp(App)
 

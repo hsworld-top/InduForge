@@ -12,16 +12,16 @@
     <div class="table-design">
       <section class="table-design__meta">
         <label>
-          <span>表名</span>
+          <span>{{ ui('表名', 'Table Name') }}</span>
           <el-input
             v-model="draft.name"
             size="small"
-            placeholder="例如 device_data"
+            :placeholder="ui('例如 device_data', 'For example, device_data')"
             :disabled="isEditMode"
           />
         </label>
         <label>
-          <span>表类型</span>
+          <span>{{ ui('表类型', 'Table Type') }}</span>
           <el-dropdown
             v-if="supportsTableKindDropdown"
             placement="bottom"
@@ -52,36 +52,36 @@
 
       <section v-if="props.supportsHypertable && !isEditMode" class="table-design__template">
         <div>
-          <strong>采集数据模板</strong>
-          <span>按 ts、point_name、quality、value 创建常见采集数据时序表。</span>
+          <strong>{{ ui('采集数据模板', 'Collection Data Template') }}</strong>
+          <span>{{ ui('按 ts、point_name、quality、value 创建常见采集数据时序表。', 'Create a common collection time-series table with ts, point_name, quality, and value.') }}</span>
         </div>
-        <el-button size="small" @click="applyCollectionTemplate">使用模板</el-button>
+        <el-button size="small" @click="applyCollectionTemplate">{{ ui('使用模板', 'Use Template') }}</el-button>
       </section>
 
       <el-tabs v-model="activeTab" class="table-design__tabs">
-        <el-tab-pane label="字段" name="columns">
+        <el-tab-pane :label="ui('字段', 'Columns')" name="columns">
           <div class="table-design__toolbar">
             <button type="button" @click="addColumn">
               <IconTablerPlus />
-              <span>添加字段</span>
+              <span>{{ ui('添加字段', 'Add Column') }}</span>
             </button>
           </div>
           <div class="table-design__scroll">
             <div class="table-design__grid is-columns">
-              <div class="table-design__head">字段名</div>
-              <div class="table-design__head">类型</div>
-              <div class="table-design__head">长度</div>
-              <div class="table-design__head">数值精度</div>
-              <div class="table-design__head">标记</div>
-              <div class="table-design__head">默认值</div>
-              <div class="table-design__head">备注</div>
+              <div class="table-design__head">{{ ui('字段名', 'Column Name') }}</div>
+              <div class="table-design__head">{{ ui('类型', 'Type') }}</div>
+              <div class="table-design__head">{{ ui('长度', 'Length') }}</div>
+              <div class="table-design__head">{{ ui('数值精度', 'Numeric Precision') }}</div>
+              <div class="table-design__head">{{ ui('标记', 'Flags') }}</div>
+              <div class="table-design__head">{{ ui('默认值', 'Default') }}</div>
+              <div class="table-design__head">{{ ui('备注', 'Comment') }}</div>
               <div class="table-design__head"></div>
 
               <template v-for="(column, index) in draft.columns" :key="column.localId">
                 <el-input
                   v-model="column.name"
                   size="small"
-                  placeholder="字段名"
+                  :placeholder="ui('字段名', 'Column name')"
                   :disabled="isEditMode && column.persisted"
                 />
                 <el-select
@@ -112,7 +112,7 @@
                     :min="1"
                     :max="65"
                     controls-position="right"
-                    placeholder="总位数"
+                    :placeholder="ui('总位数', 'Precision')"
                     :disabled="!supportsPrecision(column.type) || (isEditMode && column.persisted)"
                   />
                   <el-input-number
@@ -121,31 +121,31 @@
                     :min="0"
                     :max="30"
                     controls-position="right"
-                    placeholder="小数位"
+                    :placeholder="ui('小数位', 'Scale')"
                     :disabled="!supportsPrecision(column.type) || (isEditMode && column.persisted)"
                   />
                 </div>
                 <div class="table-design__checks">
                   <el-checkbox v-model="column.primary" :disabled="isEditMode && column.persisted">
-                    主键
+                    {{ ui('主键', 'Primary Key') }}
                   </el-checkbox>
-                  <el-checkbox v-model="column.nullable">可空</el-checkbox>
+                  <el-checkbox v-model="column.nullable">{{ ui('可空', 'Nullable') }}</el-checkbox>
                   <el-checkbox
                     v-model="column.autoIncrement"
                     :disabled="
                       !supportsAutoIncrement(column.type) || (isEditMode && column.persisted)
                     "
                   >
-                    自增
+                    {{ ui('自增', 'Auto Increment') }}
                   </el-checkbox>
                 </div>
                 <el-input
                   v-model="column.defaultValue"
                   size="small"
-                  placeholder="默认值"
+                  :placeholder="ui('默认值', 'Default value')"
                   :disabled="isEditMode && column.persisted"
                 />
-                <el-input v-model="column.comment" size="small" placeholder="备注" />
+                <el-input v-model="column.comment" size="small" :placeholder="ui('备注', 'Comment')" />
                 <button
                   type="button"
                   class="table-design__icon"
@@ -159,24 +159,24 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="索引" name="indexes">
+        <el-tab-pane :label="ui('索引', 'Indexes')" name="indexes">
           <div class="table-design__toolbar">
             <button type="button" @click="addIndex">
               <IconTablerPlus />
-              <span>添加索引</span>
+              <span>{{ ui('添加索引', 'Add Index') }}</span>
             </button>
           </div>
           <div class="table-design__grid is-indexes">
-            <div class="table-design__head">索引名</div>
-            <div class="table-design__head">类型</div>
-            <div class="table-design__head">字段</div>
+            <div class="table-design__head">{{ ui('索引名', 'Index Name') }}</div>
+            <div class="table-design__head">{{ ui('类型', 'Type') }}</div>
+            <div class="table-design__head">{{ ui('字段', 'Columns') }}</div>
             <div class="table-design__head"></div>
 
             <template v-for="(index, rowIndex) in draft.indexes" :key="index.localId">
               <el-input v-model="index.name" size="small" placeholder="idx_name" />
               <el-select v-model="index.type" size="small">
-                <el-option label="普通索引" value="index" />
-                <el-option label="唯一索引" value="unique" />
+                <el-option :label="ui('普通索引', 'Index')" value="index" />
+                <el-option :label="ui('唯一索引', 'Unique Index')" value="unique" />
               </el-select>
               <el-select
                 v-model="index.columns"
@@ -184,7 +184,7 @@
                 multiple
                 collapse-tags
                 collapse-tags-tooltip
-                placeholder="选择字段"
+                :placeholder="ui('选择字段', 'Select columns')"
               >
                 <el-option
                   v-for="column in selectableColumns"
@@ -198,25 +198,25 @@
               </button>
             </template>
           </div>
-          <div v-if="draft.indexes.length === 0" class="table-design__empty">暂无索引</div>
+          <div v-if="draft.indexes.length === 0" class="table-design__empty">{{ ui('暂无索引', 'No indexes') }}</div>
         </el-tab-pane>
 
-        <el-tab-pane v-if="draft.kind === 'hypertable'" label="维度字段" name="dimensions">
+        <el-tab-pane v-if="draft.kind === 'hypertable'" :label="ui('维度字段', 'Dimension Columns')" name="dimensions">
           <div class="table-design__toolbar">
             <button type="button" @click="addTag">
               <IconTablerPlus />
-              <span>添加维度字段</span>
+              <span>{{ ui('添加维度字段', 'Add Dimension Column') }}</span>
             </button>
           </div>
           <div class="table-design__grid is-dimensions">
-            <div class="table-design__head">字段名</div>
-            <div class="table-design__head">类型</div>
-            <div class="table-design__head">长度</div>
-            <div class="table-design__head">备注</div>
+            <div class="table-design__head">{{ ui('字段名', 'Column Name') }}</div>
+            <div class="table-design__head">{{ ui('类型', 'Type') }}</div>
+            <div class="table-design__head">{{ ui('长度', 'Length') }}</div>
+            <div class="table-design__head">{{ ui('备注', 'Comment') }}</div>
             <div class="table-design__head"></div>
 
             <template v-for="(tag, index) in draft.tags" :key="tag.localId">
-              <el-input v-model="tag.name" size="small" placeholder="例如 device_id" />
+              <el-input v-model="tag.name" size="small" :placeholder="ui('例如 device_id', 'For example, device_id')" />
               <el-select v-model="tag.type" size="small">
                 <el-option
                   v-for="item in tagTypeOptions"
@@ -232,20 +232,20 @@
                 :max="65535"
                 controls-position="right"
               />
-              <el-input v-model="tag.comment" size="small" placeholder="备注" />
+              <el-input v-model="tag.comment" size="small" :placeholder="ui('备注', 'Comment')" />
               <button type="button" class="table-design__icon" @click="removeTag(index)">
                 <IconTablerTrash />
               </button>
             </template>
           </div>
-          <div v-if="draft.tags.length === 0" class="table-design__empty">暂无维度字段</div>
+          <div v-if="draft.tags.length === 0" class="table-design__empty">{{ ui('暂无维度字段', 'No dimension columns') }}</div>
         </el-tab-pane>
 
-        <el-tab-pane v-if="draft.kind === 'hypertable'" label="时序策略" name="timeseries">
+        <el-tab-pane v-if="draft.kind === 'hypertable'" :label="ui('时序策略', 'Time-series Policy')" name="timeseries">
           <div class="table-design__policy">
             <label>
-              <span>时间分区字段</span>
-              <el-select v-model="draft.timeColumn" size="small" placeholder="选择时间字段">
+              <span>{{ ui('时间分区字段', 'Time Partition Column') }}</span>
+              <el-select v-model="draft.timeColumn" size="small" :placeholder="ui('选择时间字段', 'Select a time column')">
                 <el-option
                   v-for="column in timeColumnOptions"
                   :key="column.name"
@@ -256,26 +256,26 @@
             </label>
             <label>
               <span class="table-design__label-line">
-                Chunk 时间间隔
+                {{ ui('Chunk 时间间隔', 'Chunk Interval') }}
                 <el-tooltip
-                  content="建议按采集频率选择：高频数据可用 1 hour 或 6 hours，普通趋势推荐 1 day，低频长期数据可用 7 days。"
+                  :content="ui('建议按采集频率选择：高频数据可用 1 hour 或 6 hours，普通趋势推荐 1 day，低频长期数据可用 7 days。', 'Choose by collection frequency: 1 or 6 hours for high-frequency data, 1 day for regular trends, and 7 days for low-frequency long-term data.')"
                   placement="top"
                 >
                   <IconTablerInfoCircle />
                 </el-tooltip>
               </span>
-              <el-input v-model="draft.chunkInterval" size="small" placeholder="例如 1 day" />
+              <el-input v-model="draft.chunkInterval" size="small" :placeholder="ui('例如 1 day', 'For example, 1 day')" />
             </label>
             <label class="table-design__policy-switch">
               <span class="table-design__label-line">
                 <el-checkbox
                   v-model="draft.retentionEnabled"
                   class="table-design__policy-checkbox"
-                  aria-label="启用数据保留策略"
+                  :aria-label="ui('启用数据保留策略', 'Enable data retention policy')"
                 />
-                启用数据保留策略
+                {{ ui('启用数据保留策略', 'Enable Data Retention Policy') }}
                 <el-tooltip
-                  content="开启后 TimescaleDB 会自动清理超过保留天数的历史数据；关闭则长期保留，需要自行清理。"
+                  :content="ui('开启后 TimescaleDB 会自动清理超过保留天数的历史数据；关闭则长期保留，需要自行清理。', 'When enabled, TimescaleDB automatically removes data older than the retention period; otherwise data is retained until manually removed.')"
                   placement="top"
                 >
                   <IconTablerInfoCircle />
@@ -283,7 +283,7 @@
               </span>
             </label>
             <label v-if="draft.retentionEnabled">
-              <span>保留天数</span>
+              <span>{{ ui('保留天数', 'Retention Days') }}</span>
               <el-input-number
                 v-model="draft.retentionDays"
                 size="small"
@@ -298,7 +298,7 @@
     </div>
 
     <template #footer>
-      <el-button @click="requestClose">取消</el-button>
+      <el-button @click="requestClose">{{ ui('取消', 'Cancel') }}</el-button>
       <el-button type="primary" :loading="submitting" @click="submit">{{ submitLabel }}</el-button>
     </template>
   </DcDialog>
@@ -314,6 +314,9 @@ import IconTablerTrash from '~icons/tabler/trash'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import { createConnectionTable, updateConnectionTableStructure } from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type DraftColumn = {
   localId: string
@@ -361,20 +364,20 @@ const initialSnapshot = ref('')
 const draft = ref(createDraft())
 const isEditMode = computed(() => props.mode === 'edit')
 const dialogTitle = computed(() =>
-  isEditMode.value ? `修改表结构 - ${props.tableName || draft.value.name}` : '新建表',
+  isEditMode.value ? ui(`修改表结构 - ${props.tableName || draft.value.name}`, `Edit Table Schema - ${props.tableName || draft.value.name}`) : ui('新建表', 'New Table'),
 )
-const submitLabel = computed(() => (isEditMode.value ? '保存修改' : '创建'))
+const submitLabel = computed(() => (isEditMode.value ? ui('保存修改', 'Save Changes') : ui('创建', 'Create')))
 
 const tableKindOptions = computed(() => {
-  const options = [{ label: '普通表', value: 'table' }]
+  const options = [{ label: ui('普通表', 'Table'), value: 'table' }]
   if (props.supportsHypertable && !isEditMode.value) {
-    options.push({ label: '时序超表', value: 'hypertable' })
+    options.push({ label: ui('时序超表', 'Time-series Hypertable'), value: 'hypertable' })
   }
   return options
 })
 const supportsTableKindDropdown = computed(() => props.supportsHypertable && !isEditMode.value)
 const tableKindLabel = computed(
-  () => tableKindOptions.value.find((item) => item.value === draft.value.kind)?.label || '普通表',
+  () => tableKindOptions.value.find((item) => item.value === draft.value.kind)?.label || ui('普通表', 'Table'),
 )
 
 const columnTypeOptions = computed(() => {
@@ -539,11 +542,11 @@ async function applyCollectionTemplate() {
   if (!isDefaultCreateDraft()) {
     try {
       await ElMessageBox.confirm(
-        '采集数据模板会替换当前字段、维度字段和时序策略，是否继续？',
-        '使用采集数据模板',
+        ui('采集数据模板会替换当前字段、维度字段和时序策略，是否继续？', 'The collection template replaces current columns, dimension columns, and time-series policy. Continue?'),
+        ui('使用采集数据模板', 'Use Collection Template'),
         {
-          confirmButtonText: '使用模板',
-          cancelButtonText: '取消',
+          confirmButtonText: ui('使用模板', 'Use Template'),
+          cancelButtonText: ui('取消', 'Cancel'),
           type: 'warning',
         },
       )
@@ -562,9 +565,9 @@ async function applyCollectionTemplate() {
         name: 'quality',
         type: 'int',
         nullable: false,
-        comment: '质量码，常见约定 192=GOOD',
+        comment: ui('质量码，常见约定 192=GOOD', 'Quality code; 192 commonly means GOOD'),
       }),
-      createColumn({ name: 'value', type: 'double', nullable: true, comment: '采集值' }),
+      createColumn({ name: 'value', type: 'double', nullable: true, comment: ui('采集值', 'Collected value') }),
     ],
     indexes: [
       {
@@ -580,7 +583,7 @@ async function applyCollectionTemplate() {
         type: 'varchar',
         length: 128,
         nullable: false,
-        comment: '变量名或点位标识',
+        comment: ui('变量名或点位标识', 'Variable name or point identifier'),
       }),
     ],
     timeColumn: 'ts',
@@ -665,30 +668,30 @@ function removeTag(index: number) {
 }
 
 function validateDraft() {
-  if (!draft.value.name.trim()) return '请输入表名'
+  if (!draft.value.name.trim()) return ui('请输入表名', 'Enter a table name')
   const names = new Set<string>()
   for (const column of draft.value.columns) {
     const name = column.name.trim()
-    if (!name) return '字段名不能为空'
-    if (names.has(name)) return `字段名重复：${name}`
+    if (!name) return ui('字段名不能为空', 'Column name is required')
+    if (names.has(name)) return ui(`字段名重复：${name}`, `Duplicate column name: ${name}`)
     names.add(name)
   }
   if (!draft.value.columns.some((column) => column.primary) && draft.value.kind === 'table') {
-    return '普通表至少需要一个主键字段'
+    return ui('普通表至少需要一个主键字段', 'A table requires at least one primary key column')
   }
   for (const index of draft.value.indexes) {
-    if (!index.name.trim()) return '索引名不能为空'
-    if (index.columns.length === 0) return `索引 ${index.name || ''} 需要选择字段`
+    if (!index.name.trim()) return ui('索引名不能为空', 'Index name is required')
+    if (index.columns.length === 0) return ui(`索引 ${index.name || ''} 需要选择字段`, `Select columns for index ${index.name || ''}`)
   }
   if (draft.value.kind === 'hypertable') {
-    if (!draft.value.timeColumn) return '请选择时间分区字段'
-    if (!draft.value.chunkInterval.trim()) return '请输入 Chunk 时间间隔'
+    if (!draft.value.timeColumn) return ui('请选择时间分区字段', 'Select a time partition column')
+    if (!draft.value.chunkInterval.trim()) return ui('请输入 Chunk 时间间隔', 'Enter a chunk interval')
     const tagNames = new Set<string>()
     for (const tag of draft.value.tags) {
       const name = tag.name.trim()
-      if (!name) return '维度字段名不能为空'
-      if (names.has(name)) return `维度字段不能与数据字段重名：${name}`
-      if (tagNames.has(name)) return `维度字段名重复：${name}`
+      if (!name) return ui('维度字段名不能为空', 'Dimension column name is required')
+      if (names.has(name)) return ui(`维度字段不能与数据字段重名：${name}`, `Dimension column duplicates a data column: ${name}`)
+      if (tagNames.has(name)) return ui(`维度字段名重复：${name}`, `Duplicate dimension column: ${name}`)
       tagNames.add(name)
     }
   }
@@ -753,19 +756,19 @@ async function submit() {
         columns: payload.columns,
         indexes: payload.indexes,
       })
-      ElMessage.success('表结构已修改')
+      ElMessage.success(ui('表结构已修改', 'Table schema updated'))
       initialSnapshot.value = snapshot.value
       emit('updated', payload.name)
       dialogRef.value?.closeSilently()
       return
     }
     await createConnectionTable(props.projectId, props.connectionId, payload)
-    ElMessage.success('表已创建')
+    ElMessage.success(ui('表已创建', 'Table created'))
     initialSnapshot.value = snapshot.value
     emit('created', payload.name)
     dialogRef.value?.closeSilently()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '创建表失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('创建表失败', 'Failed to create table')))
   } finally {
     submitting.value = false
   }

@@ -5,11 +5,11 @@
         <div class="mqtt-batch-mapping__header-actions">
           <el-button type="primary" size="small" @click="addMappingRow">
             <IconTablerPlus class="mqtt-batch-mapping__button-icon" />
-            新增
+            {{ ui('新增', 'Add') }}
           </el-button>
           <el-button size="small" @click="openBatchGenerateDialog">
             <IconTablerWand class="mqtt-batch-mapping__button-icon" />
-            批量生成
+            {{ ui('批量生成', 'Batch Generate') }}
           </el-button>
           <el-button
             class="mqtt-batch-mapping__live-action"
@@ -21,17 +21,17 @@
             @click="$emit('openMonitor')"
           >
             <IconTablerActivity class="mqtt-batch-mapping__button-icon" />
-            变量预览/监控
+            {{ ui('变量预览/监控', 'Variable Preview / Monitor') }}
           </el-button>
           <el-button type="primary" size="small" :loading="saving" @click="saveMappings">
             <IconTablerDeviceFloppy class="mqtt-batch-mapping__button-icon" />
-            保存映射
+            {{ ui('保存映射', 'Save Mappings') }}
           </el-button>
         </div>
         <div class="mqtt-batch-mapping__filters">
           <el-input
             v-model="searchKeyword"
-            placeholder="搜索变量名或标识"
+            :placeholder="ui('搜索变量名或标识', 'Search variable name or identifier')"
             clearable
             size="small"
             @input="handleSearch"
@@ -74,7 +74,7 @@
           </button>
           <el-button size="small" :loading="loading" @click="() => loadTags()">
             <IconTablerRefresh class="mqtt-batch-mapping__button-icon" />
-            刷新
+            {{ ui('刷新', 'Refresh') }}
           </el-button>
         </div>
       </div>
@@ -87,14 +87,14 @@
     >
       <div class="mqtt-batch-mapping__result">
         <div class="mqtt-batch-mapping__section-title">
-          <strong>变量映射清单</strong>
+          <strong>{{ ui('变量映射清单', 'Variable Mappings') }}</strong>
           <div class="mqtt-batch-mapping__result-meta">
-            <span>本页 {{ visibleMappings.length }} / 共 {{ mappingDisplayTotal }} 个变量</span>
+            <span>{{ ui(`本页 ${visibleMappings.length} / 共 ${mappingDisplayTotal} 个变量`, `${visibleMappings.length} on this page / ${mappingDisplayTotal} total`) }}</span>
             <span v-if="runtimeInfoLoading" class="mqtt-batch-mapping__runtime-loading">
-              正在补充最近值和状态...
+              {{ ui('正在补充最近值和状态...', 'Loading latest values and status...') }}
             </span>
             <el-tooltip
-              :content="configCollapsed ? '展开样例消息和拆分规则' : '收起样例消息和拆分规则'"
+              :content="configCollapsed ? ui('展开样例消息和拆分规则', 'Show sample message and split rules') : ui('收起样例消息和拆分规则', 'Hide sample message and split rules')"
               placement="top"
             >
               <button
@@ -112,16 +112,16 @@
           ref="mappingTableRef"
           class="mqtt-batch-mapping__table"
           v-loading="loading"
-          element-loading-text="加载变量映射..."
+          :element-loading-text="ui('加载变量映射...', 'Loading variable mappings...')"
           :data="visibleMappings"
           height="100%"
           row-key="matchName"
-          empty-text="填写样例消息后点击解析预览，或手动新增变量"
+          :empty-text="ui('填写样例消息后点击解析预览，或手动新增变量', 'Enter a sample message and parse it, or add a variable manually')"
           @select-all="handleMappingSelectAll"
           @selection-change="handleMappingSelectionChange"
         >
           <el-table-column type="selection" width="42" reserve-selection />
-          <el-table-column label="变量名" min-width="150">
+          <el-table-column :label="ui('变量名', 'Variable')" min-width="150">
             <template #default="{ row }">
               <el-input
                 v-if="isEditingMappingCell(row, 'name')"
@@ -140,7 +140,7 @@
               </button>
             </template>
           </el-table-column>
-          <el-table-column label="数据类型" width="120">
+          <el-table-column :label="ui('数据类型', 'Data Type')" width="120">
             <template #default="{ row }">
               <el-select
                 v-if="isEditingMappingCell(row, 'dataType')"
@@ -149,11 +149,11 @@
                 @change="stopEditingMappingCell"
                 @visible-change="(visible) => !visible && stopEditingMappingCell()"
               >
-                <el-option label="字符串" value="string" />
-                <el-option label="数值（float64）" value="float64" />
-                <el-option label="布尔" value="bool" />
-                <el-option label="对象" value="object" />
-                <el-option label="数组" value="array" />
+                <el-option :label="ui('字符串', 'String')" value="string" />
+                <el-option :label="ui('数值（float64）', 'Number (float64)')" value="float64" />
+                <el-option :label="ui('布尔', 'Boolean')" value="bool" />
+                <el-option :label="ui('对象', 'Object')" value="object" />
+                <el-option :label="ui('数组', 'Array')" value="array" />
               </el-select>
               <button
                 v-else
@@ -165,37 +165,37 @@
               </button>
             </template>
           </el-table-column>
-          <el-table-column label="最近值" min-width="150" show-overflow-tooltip>
+          <el-table-column :label="ui('最近值', 'Latest Value')" min-width="150" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="mqtt-batch-mapping__value">{{ formatLastValue(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="质量" width="92" show-overflow-tooltip>
+          <el-table-column :label="ui('质量', 'Quality')" width="92" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="mqtt-batch-mapping__mono">{{ formatQualityLabel(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="时间" min-width="150" show-overflow-tooltip>
+          <el-table-column :label="ui('时间', 'Time')" min-width="150" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="mqtt-batch-mapping__mono">{{ formatLastTime(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="92">
+          <el-table-column :label="ui('状态', 'Status')" width="92">
             <template #default="{ row }">
               <span class="mqtt-batch-mapping__status" :class="statusClass(row)">
                 {{ statusLabel(row) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="创建时间" width="168">
+          <el-table-column :label="ui('创建时间', 'Created At')" width="168">
             <template #default="{ row }">
               <span class="mqtt-batch-mapping__mono">{{ formatDisplayTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="124" fixed="right">
+          <el-table-column :label="ui('操作', 'Actions')" width="124" fixed="right">
             <template #default="{ row }">
               <div class="mqtt-batch-mapping__row-actions">
-                <el-tooltip content="解析规则" placement="top">
+                <el-tooltip :content="ui('解析规则', 'Parse Rule')" placement="top">
                   <button
                     type="button"
                     class="mqtt-batch-mapping__icon-action"
@@ -204,7 +204,7 @@
                     <IconTablerBraces />
                   </button>
                 </el-tooltip>
-                <el-tooltip content="复制" placement="top">
+                <el-tooltip :content="ui('复制', 'Duplicate')" placement="top">
                   <button
                     type="button"
                     class="mqtt-batch-mapping__icon-action"
@@ -213,7 +213,7 @@
                     <IconTablerCopy />
                   </button>
                 </el-tooltip>
-                <el-tooltip content="删除" placement="top">
+                <el-tooltip :content="ui('删除', 'Delete')" placement="top">
                   <button
                     type="button"
                     class="mqtt-batch-mapping__icon-action is-danger"
@@ -232,21 +232,21 @@
             class="mqtt-batch-mapping__bulk-action-btn"
             @click="selectCurrentMappingPage"
           >
-            当前页
+            {{ ui('当前页', 'Current Page') }}
           </button>
           <button
             type="button"
             class="mqtt-batch-mapping__bulk-action-btn"
             @click="selectAllMappingResults"
           >
-            全部结果
+            {{ ui('全部结果', 'All Results') }}
           </button>
           <button
             type="button"
             class="mqtt-batch-mapping__bulk-action-btn is-danger"
             @click="removeSelectedMappings"
           >
-            删除选中
+            {{ ui('删除选中', 'Delete Selected') }}
           </button>
         </BulkActionBar>
         <div class="mqtt-batch-mapping__pagination">
@@ -271,14 +271,14 @@
       <div v-if="!configCollapsed" class="mqtt-batch-mapping__config">
         <div class="mqtt-batch-mapping__sample">
           <div class="mqtt-batch-mapping__section-title">
-            <strong>样例消息</strong>
-            <el-button text size="small" @click="fillDefaultSample">填入示例</el-button>
+            <strong>{{ ui('样例消息', 'Sample Message') }}</strong>
+            <el-button text size="small" @click="fillDefaultSample">{{ ui('填入示例', 'Use Example') }}</el-button>
           </div>
           <MonacoEditor
             v-model="samplePayload"
             class="mqtt-batch-mapping__sample-input"
             language="json"
-            theme="vs"
+            :theme="isDark ? 'vs-dark' : 'vs'"
             height="100%"
             :options="sampleEditorOptions"
           />
@@ -286,42 +286,42 @@
 
         <div class="mqtt-batch-mapping__rules">
           <div class="mqtt-batch-mapping__section-title">
-            <strong>拆分规则</strong>
+            <strong>{{ ui('拆分规则', 'Split Rules') }}</strong>
           </div>
           <el-form label-position="top" class="mqtt-batch-mapping__form">
-            <el-form-item label="变量数组路径">
-              <el-input v-model="ruleForm.arrayPath" placeholder="$ 或 $.items" />
+            <el-form-item :label="ui('变量数组路径', 'Variable Array Path')">
+              <el-input v-model="ruleForm.arrayPath" :placeholder="ui('$ 或 $.items', '$ or $.items')" />
             </el-form-item>
-            <el-form-item label="变量名字段路径">
+            <el-form-item :label="ui('变量名字段路径', 'Variable Name Field Path')">
               <el-input v-model="ruleForm.namePath" placeholder="N" />
             </el-form-item>
-            <el-form-item label="值字段路径">
+            <el-form-item :label="ui('值字段路径', 'Value Field Path')">
               <el-input v-model="ruleForm.valuePath" placeholder="V" />
             </el-form-item>
-            <el-form-item label="质量字段路径">
+            <el-form-item :label="ui('质量字段路径', 'Quality Field Path')">
               <el-input v-model="ruleForm.qualityPath" placeholder="Q" />
             </el-form-item>
-            <el-form-item label="时间字段路径">
+            <el-form-item :label="ui('时间字段路径', 'Time Field Path')">
               <el-input v-model="ruleForm.timePath" placeholder="T" />
             </el-form-item>
           </el-form>
           <div class="mqtt-batch-mapping__rule-actions">
             <el-tooltip
-              content="根据样例消息和拆分规则生成或更新右侧变量映射清单；这里只预览并整理清单，点击保存映射后才会创建或更新变量。"
+              :content="ui('根据样例消息和拆分规则生成或更新右侧变量映射清单；这里只预览并整理清单，点击保存映射后才会创建或更新变量。', 'Generate or update the mapping list from the sample and split rules. Variables are created or updated only after saving mappings.')"
               placement="top"
             >
               <el-button type="primary" plain size="small" @click="parseSample">
                 <IconTablerWand class="mqtt-batch-mapping__button-icon" />
-                解析预览
+                {{ ui('解析预览', 'Parse Preview') }}
               </el-button>
             </el-tooltip>
             <el-tooltip
-              content="保存当前拆分规则为本订阅的默认建点规则；之后新建的变量会按这套规则写入变量解析规则。"
+              :content="ui('保存当前拆分规则为本订阅的默认建点规则；之后新建的变量会按这套规则写入变量解析规则。', 'Save these split rules as the subscription default for newly created variables.')"
               placement="top"
             >
               <el-button size="small" :loading="defaultRuleSaving" @click="saveDefaultRule">
                 <IconTablerDeviceFloppy class="mqtt-batch-mapping__button-icon" />
-                保存规则
+                {{ ui('保存规则', 'Save Rules') }}
               </el-button>
             </el-tooltip>
           </div>
@@ -331,72 +331,72 @@
 
     <DcDialog
       v-model="batchGenerateVisible"
-      title="批量生成变量"
+      :title="ui('批量生成变量', 'Batch Generate Variables')"
       width="460px"
       @close="resetBatchGenerateForm"
     >
       <el-form label-width="92px" class="mqtt-batch-mapping__generate-form">
-        <el-form-item label="变量前缀">
-          <el-input v-model="batchGenerateForm.prefix" placeholder="例如 tag" />
+        <el-form-item :label="ui('变量前缀', 'Variable Prefix')">
+          <el-input v-model="batchGenerateForm.prefix" :placeholder="ui('例如 tag', 'For example: tag')" />
         </el-form-item>
-        <el-form-item label="起始序号">
+        <el-form-item :label="ui('起始序号', 'Start Index')">
           <el-input-number v-model="batchGenerateForm.start" :min="0" :precision="0" />
         </el-form-item>
-        <el-form-item label="结束序号">
+        <el-form-item :label="ui('结束序号', 'End Index')">
           <el-input-number v-model="batchGenerateForm.end" :min="0" :precision="0" />
         </el-form-item>
-        <el-form-item label="数据类型">
+        <el-form-item :label="ui('数据类型', 'Data Type')">
           <el-select v-model="batchGenerateForm.dataType">
-            <el-option label="字符串" value="string" />
-            <el-option label="数值（float64）" value="float64" />
-            <el-option label="布尔" value="bool" />
-            <el-option label="对象" value="object" />
-            <el-option label="数组" value="array" />
+            <el-option :label="ui('字符串', 'String')" value="string" />
+            <el-option :label="ui('数值（float64）', 'Number (float64)')" value="float64" />
+            <el-option :label="ui('布尔', 'Boolean')" value="bool" />
+            <el-option :label="ui('对象', 'Object')" value="object" />
+            <el-option :label="ui('数组', 'Array')" value="array" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="batchGenerateVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyBatchGenerate">生成</el-button>
+        <el-button @click="batchGenerateVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
+        <el-button type="primary" @click="applyBatchGenerate">{{ ui('生成', 'Generate') }}</el-button>
       </template>
     </DcDialog>
 
     <DcDialog
       v-model="ruleDialogVisible"
-      :title="`编辑解析规则 - ${ruleDialogForm.name || '-'}`"
+      :title="ui(`编辑解析规则 - ${ruleDialogForm.name || '-'}`, `Edit Parse Rule - ${ruleDialogForm.name || '-'}`)"
       width="680px"
       @close="resetRuleDialog"
     >
       <el-form label-position="top" class="mqtt-batch-mapping__rule-dialog-form">
         <div class="mqtt-batch-mapping__rule-dialog-summary">
-          <span>变量名：{{ ruleDialogForm.name || '-' }}</span>
-          <span>解析类型：批量映射</span>
+          <span>{{ ui('变量名：', 'Variable: ') }}{{ ruleDialogForm.name || '-' }}</span>
+          <span>{{ ui('解析类型：批量映射', 'Parse Type: Batch Mapping') }}</span>
         </div>
         <div class="mqtt-batch-mapping__rule-dialog-grid">
-          <el-form-item label="变量数组路径">
-            <el-input v-model="ruleDialogForm.arrayPath" placeholder="$ 或 $.data.data" />
+          <el-form-item :label="ui('变量数组路径', 'Variable Array Path')">
+            <el-input v-model="ruleDialogForm.arrayPath" :placeholder="ui('$ 或 $.data.data', '$ or $.data.data')" />
           </el-form-item>
-          <el-form-item label="变量名字段路径">
+          <el-form-item :label="ui('变量名字段路径', 'Variable Name Field Path')">
             <el-input v-model="ruleDialogForm.namePath" placeholder="N" />
           </el-form-item>
-          <el-form-item label="匹配变量名">
-            <el-input v-model="ruleDialogForm.matchName" placeholder="例如 tag1" />
+          <el-form-item :label="ui('匹配变量名', 'Matched Variable Name')">
+            <el-input v-model="ruleDialogForm.matchName" :placeholder="ui('例如 tag1', 'For example: tag1')" />
           </el-form-item>
-          <el-form-item label="值字段路径">
+          <el-form-item :label="ui('值字段路径', 'Value Field Path')">
             <el-input v-model="ruleDialogForm.valuePath" placeholder="V" />
           </el-form-item>
-          <el-form-item label="质量字段路径">
+          <el-form-item :label="ui('质量字段路径', 'Quality Field Path')">
             <el-input v-model="ruleDialogForm.qualityPath" placeholder="Q" />
           </el-form-item>
-          <el-form-item label="时间字段路径">
+          <el-form-item :label="ui('时间字段路径', 'Time Field Path')">
             <el-input v-model="ruleDialogForm.timePath" placeholder="T" />
           </el-form-item>
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="ruleDialogVisible = false">取消</el-button>
+        <el-button @click="ruleDialogVisible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="ruleDialogSaving" @click="saveRuleDialog">
-          保存规则
+          {{ ui('保存规则', 'Save Rule') }}
         </el-button>
       </template>
     </DcDialog>
@@ -426,6 +426,8 @@ import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import dayjs from 'dayjs'
 import IconTablerActivity from '~icons/tabler/activity'
+import { datacenterLocale } from '@/i18n/runtime'
+import { datacenterTheme } from '@/theme/runtime'
 import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
@@ -437,6 +439,9 @@ import IconTablerSortAscending from '~icons/tabler/sort-ascending'
 import IconTablerSortDescending from '~icons/tabler/sort-descending'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerWand from '~icons/tabler/wand'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+const isDark = computed(() => datacenterTheme.value === 'dark')
 
 type MqttSubscription = {
   id: string
@@ -581,14 +586,14 @@ const bodyGridStyle = computed(() => ({
     : `minmax(420px, 1fr) 6px ${configPanelWidth.value}px`,
 }))
 const isCompactLayout = computed(() => windowWidth.value <= 1180)
-const sortFieldOptions = [
-  { label: '创建时间', value: 'createdAt' },
-  { label: '名称', value: 'name' },
-] as const
+const sortFieldOptions = computed(() => [
+  { label: ui('创建时间', 'Created At'), value: 'createdAt' },
+  { label: ui('名称', 'Name'), value: 'name' },
+] as const)
 const currentSortFieldLabel = computed(
-  () => sortFieldOptions.find((option) => option.value === sortBy.value)?.label || '创建时间',
+  () => sortFieldOptions.value.find((option) => option.value === sortBy.value)?.label || ui('创建时间', 'Created At'),
 )
-const currentSortOrderLabel = computed(() => (sortOrder.value === 'desc' ? '降序' : '升序'))
+const currentSortOrderLabel = computed(() => (sortOrder.value === 'desc' ? ui('降序', 'Descending') : ui('升序', 'Ascending')))
 const pendingDeletedCount = computed(() => pendingDeletedTagIds.value.size)
 const hasUnsavedMappingChanges = computed(
   () =>
@@ -794,9 +799,9 @@ const saveDefaultRule = async () => {
     }
     savedDefaultRule.value = updatedSubscription.defaultBatchParseRule || rule
     emit('subscriptionUpdated', updatedSubscription)
-    ElMessage.success('拆分规则已保存，之后新建变量会使用这套规则')
+    ElMessage.success(ui('拆分规则已保存，之后新建变量会使用这套规则', 'Split rules saved and will be used for new variables'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存拆分规则失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存拆分规则失败', 'Failed to save split rules')))
   } finally {
     defaultRuleSaving.value = false
   }
@@ -820,11 +825,11 @@ const normalizeBatchRuleObject = (
 
 const getDataTypeLabel = (dataType?: BatchMappingRow['dataType']) => {
   const labels = {
-    string: '字符串',
-    float64: '数值',
-    bool: '布尔',
-    object: '对象',
-    array: '数组',
+    string: ui('字符串', 'String'),
+    float64: ui('数值', 'Number'),
+    bool: ui('布尔', 'Boolean'),
+    object: ui('对象', 'Object'),
+    array: ui('数组', 'Array'),
   }
   return dataType ? labels[dataType] || dataType : '-'
 }
@@ -874,7 +879,7 @@ const loadTags = async (options: { loadValues?: boolean; silent?: boolean } = {}
     // 变量清单是首屏核心内容；最近值和数据点状态属于补充信息，放到后台加载，避免 1000+ 变量时被分片请求卡住首屏。
     void loadMappingRuntimeInfo(options, requestSeq)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载变量映射失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载变量映射失败', 'Failed to load variable mappings')))
   } finally {
     if (loadingTimer) {
       window.clearTimeout(loadingTimer)
@@ -894,13 +899,13 @@ const parseSample = () => {
   try {
     parsed = JSON.parse(samplePayload.value)
   } catch {
-    ElMessage.error('样例消息不是合法 JSON')
+    ElMessage.error(ui('样例消息不是合法 JSON', 'Sample message is not valid JSON'))
     return
   }
 
   const arrayValue = resolvePath(parsed, ruleForm.arrayPath)
   if (!Array.isArray(arrayValue)) {
-    ElMessage.error('变量数组路径没有命中数组')
+    ElMessage.error(ui('变量数组路径没有命中数组', 'The variable array path did not resolve to an array'))
     return
   }
 
@@ -960,7 +965,7 @@ const mergeSampleRows = (rows: BatchMappingRow[]) => {
 const saveMappings = async () => {
   const deletedTagIds = Array.from(pendingDeletedTagIds.value)
   if (mappings.value.length === 0 && deletedTagIds.length === 0) {
-    ElMessage.info('请先解析出变量映射')
+    ElMessage.info(ui('请先解析出变量映射', 'Parse variable mappings first'))
     return
   }
 
@@ -985,14 +990,14 @@ const saveMappings = async () => {
       ),
     )
     ElMessage.success(
-      `映射已保存：新建 ${createRows.length} 个，更新 ${updateRows.length} 个，删除 ${deletedTagIds.length} 个`,
+      ui(`映射已保存：新建 ${createRows.length} 个，更新 ${updateRows.length} 个，删除 ${deletedTagIds.length} 个`, `Mappings saved: ${createRows.length} created, ${updateRows.length} updated, ${deletedTagIds.length} deleted`),
     )
     pendingDeletedTagIds.value = new Set()
     await loadTags({ loadValues: false })
     clearAllMappingSelection()
     notifyTagRefresh()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存批量变量映射失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存批量变量映射失败', 'Failed to save variable mappings')))
   } finally {
     saving.value = false
   }
@@ -1109,7 +1114,7 @@ const buildRuleDialogParseRule = (): BatchParseRule => ({
 const saveRuleDialog = async () => {
   const nextRule = buildRuleDialogParseRule()
   if (!nextRule.matchName) {
-    ElMessage.warning('匹配变量名不能为空')
+    ElMessage.warning(ui('匹配变量名不能为空', 'Matched variable name is required'))
     return
   }
 
@@ -1117,13 +1122,13 @@ const saveRuleDialog = async () => {
     (item) => item.matchName !== ruleDialogForm.rowKey && item.matchName === nextRule.matchName,
   )
   if (duplicated) {
-    ElMessage.warning(`变量 ${nextRule.matchName} 已存在，请更换匹配变量名`)
+    ElMessage.warning(ui(`变量 ${nextRule.matchName} 已存在，请更换匹配变量名`, `Variable ${nextRule.matchName} already exists; choose another matched name`))
     return
   }
 
   const row = mappings.value.find((item) => item.matchName === ruleDialogForm.rowKey)
   if (!row) {
-    ElMessage.warning('变量行不存在，请刷新后重试')
+    ElMessage.warning(ui('变量行不存在，请刷新后重试', 'Variable row no longer exists; refresh and try again'))
     return
   }
 
@@ -1133,7 +1138,7 @@ const saveRuleDialog = async () => {
     row.name = ruleDialogForm.name || nextRule.matchName
     row.customRule = nextRule
     ruleDialogVisible.value = false
-    ElMessage.success('解析规则已更新，保存映射后生效')
+    ElMessage.success(ui('解析规则已更新，保存映射后生效', 'Parse rule updated and will take effect after mappings are saved'))
     return
   }
 
@@ -1162,10 +1167,10 @@ const saveRuleDialog = async () => {
     row.dataType = ruleDialogForm.dataType
     row.customRule = nextRule
     ruleDialogVisible.value = false
-    ElMessage.success('解析规则已保存')
+    ElMessage.success(ui('解析规则已保存', 'Parse rule saved'))
     notifyTagRefresh()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存解析规则失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存解析规则失败', 'Failed to save parse rule')))
   } finally {
     ruleDialogSaving.value = false
   }
@@ -1308,7 +1313,7 @@ const removeSelectedMappings = async () => {
       mappings.value = mappings.value.filter((row) => !selectedKeys.has(row.matchName))
       clearAllMappingSelection()
       normalizeMappingPage()
-      ElMessage.success(`已从清单移除 ${removedCount} 个变量，保存后生效`)
+      ElMessage.success(ui(`已从清单移除 ${removedCount} 个变量，保存后生效`, `Removed ${removedCount} variables from the list; save to apply`))
       return
     }
 
@@ -1316,25 +1321,25 @@ const removeSelectedMappings = async () => {
     if (deleteCount === 0) return
     try {
       await ElMessageBox.confirm(
-        `确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`,
-        '批量删除确认',
+        ui(`确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`, `Delete all ${deleteCount} variables in the current filtered results?`),
+        ui('批量删除确认', 'Confirm Bulk Delete'),
         {
           type: 'warning',
-          confirmButtonText: '删除',
-          cancelButtonText: '取消',
+          confirmButtonText: ui('删除', 'Delete'),
+          cancelButtonText: ui('取消', 'Cancel'),
         },
       )
       const response = await deleteMqttTagsByFilter(props.projectId, props.subscription.id, {
         search: searchKeyword.value.trim(),
       })
       const deletedCount = response?.data?.deletedCount ?? 0
-      ElMessage.success(`已删除 ${deletedCount} 个变量`)
+      ElMessage.success(ui(`已删除 ${deletedCount} 个变量`, `Deleted ${deletedCount} variables`))
       clearAllMappingSelection()
       await loadTags({ loadValues: false })
       notifyTagRefresh()
     } catch (error) {
       if (error !== 'cancel') {
-        ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+        ElMessage.error(getApiErrorMessage(error, ui('批量删除失败', 'Bulk delete failed')))
       }
     }
     return
@@ -1351,7 +1356,7 @@ const removeSelectedMappings = async () => {
   mappings.value = mappings.value.filter((row) => !selectedKeys.has(row.matchName))
   clearAllMappingSelection()
   normalizeMappingPage()
-  ElMessage.success(`已从清单移除 ${removedCount} 个变量，保存后生效`)
+  ElMessage.success(ui(`已从清单移除 ${removedCount} 个变量，保存后生效`, `Removed ${removedCount} variables from the list; save to apply`))
 }
 
 const removeSelectedMappingKeys = (keys: string[]) => {
@@ -1438,16 +1443,16 @@ const resetBatchGenerateForm = () => {
 const applyBatchGenerate = () => {
   const prefix = batchGenerateForm.prefix.trim()
   if (!prefix) {
-    ElMessage.warning('变量前缀不能为空')
+    ElMessage.warning(ui('变量前缀不能为空', 'Variable prefix is required'))
     return
   }
   if (batchGenerateForm.end < batchGenerateForm.start) {
-    ElMessage.warning('结束序号不能小于起始序号')
+    ElMessage.warning(ui('结束序号不能小于起始序号', 'End index cannot be less than start index'))
     return
   }
   const count = batchGenerateForm.end - batchGenerateForm.start + 1
   if (count > 1000) {
-    ElMessage.warning('单次最多生成 1000 个变量')
+    ElMessage.warning(ui('单次最多生成 1000 个变量', 'A maximum of 1,000 variables can be generated at once'))
     return
   }
 
@@ -1702,10 +1707,10 @@ const formatQualityLabel = (row: BatchMappingRow) => {
   if (!hasReceivedTagValue(row.currentValue)) return '-'
   const quality = row.currentValue?.quality || 'unknown'
   const labels = {
-    good: '良好',
-    bad: '错误',
-    uncertain: '不确定',
-    unknown: '未知',
+    good: ui('良好', 'Good'),
+    bad: ui('错误', 'Bad'),
+    uncertain: ui('不确定', 'Uncertain'),
+    unknown: ui('未知', 'Unknown'),
   }
   const label = labels[quality] || quality
   const qualityCode = row.currentValue?.qualityCode
@@ -1754,9 +1759,9 @@ const normalizeNumericTimestamp = (value: number) => {
 }
 
 const statusLabel = (row: BatchMappingRow) => {
-  if (row.datapointStatus === 'invalid') return '失效'
-  if (row.datapointPath) return '活跃'
-  return '未生成'
+  if (row.datapointStatus === 'invalid') return ui('失效', 'Invalid')
+  if (row.datapointPath) return ui('活跃', 'Active')
+  return ui('未生成', 'Not Generated')
 }
 
 const statusClass = (row: BatchMappingRow) => {
@@ -2148,8 +2153,8 @@ defineExpose({
   justify-content: center;
   padding: 0 7px;
   border-radius: var(--dc-radius-sm);
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: color-mix(in oklch, var(--dc-warning) 14%, var(--dc-surface-raised));
+  color: var(--dc-warning);
   font-size: 11px;
   font-weight: 800;
 }
@@ -2160,8 +2165,8 @@ defineExpose({
 }
 
 .mqtt-batch-mapping__status.is-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: color-mix(in oklch, var(--dc-warning) 14%, var(--dc-surface-raised));
+  color: var(--dc-warning);
 }
 
 .mqtt-batch-mapping__status.is-danger {

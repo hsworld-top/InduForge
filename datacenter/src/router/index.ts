@@ -8,6 +8,7 @@ import DataCenter from '../views/DataCenterNew.vue' // 重构版本
 import { resolveDatacenterDebugProjectMeta } from './debug-project'
 import { createDatacenterRoutes } from './route-config'
 import { getMicroAppContext, isWujieMicroApp } from '../runtime/wujie-context'
+import { applyDatacenterTheme } from '@/theme/runtime'
 
 const routes = createDatacenterRoutes({
   DataCenterComponent: DataCenter,
@@ -29,7 +30,7 @@ export function registerDatacenterBeforeEachGuard(
 ) {
   return targetRouter.beforeEach(async (to, from, next) => {
     document.title = `${getDatacenterRouteTitle(to.name)} - ProjectIDE`
-    document.documentElement.classList.toggle('dark', Storage.getTheme() === 'dark')
+    applyDatacenterTheme(getMicroAppContext()?.theme ?? Storage.getTheme())
 
     const isDebugRoute = to.meta.requiresAuth === false
 

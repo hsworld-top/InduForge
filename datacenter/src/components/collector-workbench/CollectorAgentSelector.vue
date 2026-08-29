@@ -2,7 +2,7 @@
   <el-select
     :model-value="modelValue"
     clearable
-    placeholder="选择调试代理"
+    :placeholder="ui('选择调试代理', 'Select Debug Agent')"
     style="width: 240px"
     @update:model-value="selectAgent"
   >
@@ -14,7 +14,7 @@
       :disabled="agent.status !== 'online'"
     >
       <span>{{ formatCollectorAgentName(agent) }}</span>
-      <span class="collector-agent-option">{{ agent.status === 'online' ? '在线' : '离线' }}</span>
+      <span class="collector-agent-option">{{ agent.status === 'online' ? ui('在线', 'Online') : ui('离线', 'Offline') }}</span>
     </el-option>
   </el-select>
 </template>
@@ -24,6 +24,9 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCollectorAgents } from '@/api/collector-dev.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import { collectorAgentStorageKey, formatCollectorAgentName } from './collector-workbench-model'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{ modelValue?: string; projectId: string }>()
 const emit = defineEmits<{

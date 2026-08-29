@@ -1,51 +1,51 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="导出变量"
+    :title="ui('导出变量', 'Export Points')"
     width="620px"
     @close="emit('update:modelValue', false)"
   >
     <div class="collector-export">
       <el-radio-group v-model="scope" class="collector-export__scopes">
         <label class="collector-export__scope">
-          <el-radio value="current_page">当前页</el-radio>
-          <span>第 {{ page }} 页，共 {{ currentPageCount }} 个变量</span>
+          <el-radio value="current_page">{{ ui('当前页', 'Current Page') }}</el-radio>
+          <span>{{ ui(`第 ${page} 页，共 ${currentPageCount} 个变量`, `Page ${page}, ${currentPageCount} point${currentPageCount === 1 ? '' : 's'}`) }}</span>
         </label>
         <label class="collector-export__scope">
-          <el-radio value="group">整个分组</el-radio>
+          <el-radio value="group">{{ ui('整个分组', 'Entire Group') }}</el-radio>
           <span>{{ groupName }}</span>
           <el-checkbox
             v-model="includeChildren"
             :disabled="scope !== 'group' || !groupId"
             @click.stop
           >
-            包含子分组
+            {{ ui('包含子分组', 'Include Subgroups') }}
           </el-checkbox>
         </label>
         <label class="collector-export__scope" :class="{ 'is-disabled': selectedIds.length === 0 }">
-          <el-radio value="selected" :disabled="selectedIds.length === 0">勾选变量</el-radio>
-          <span>已跨页勾选 {{ selectedIds.length }} 个变量</span>
+          <el-radio value="selected" :disabled="selectedIds.length === 0">{{ ui('勾选变量', 'Selected Points') }}</el-radio>
+          <span>{{ ui(`已跨页勾选 ${selectedIds.length} 个变量`, `${selectedIds.length} point${selectedIds.length === 1 ? '' : 's'} selected across pages`) }}</span>
         </label>
         <label class="collector-export__scope">
-          <el-radio value="pages">指定页面</el-radio>
-          <span>支持输入 1,3-5,8</span>
+          <el-radio value="pages">{{ ui('指定页面', 'Specific Pages') }}</el-radio>
+          <span>{{ ui('支持输入 1,3-5,8', 'Enter values such as 1,3-5,8') }}</span>
           <el-input
             v-if="scope === 'pages'"
             v-model="pageExpression"
-            placeholder="例如：1,3-5,8"
+            :placeholder="ui('例如：1,3-5,8', 'For example: 1,3-5,8')"
             @click.stop
           />
         </label>
       </el-radio-group>
       <div class="collector-export__summary">
-        <span>文件格式</span><strong>CSV</strong> <span>导出范围</span
+        <span>{{ ui('文件格式', 'File Format') }}</span><strong>CSV</strong> <span>{{ ui('导出范围', 'Export Scope') }}</span
         ><strong>{{ scopeSummary }}</strong>
       </div>
       <el-alert v-if="validationError" :title="validationError" type="error" show-icon />
     </div>
     <template #footer>
-      <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="exporting" @click="submit">开始导出</el-button>
+      <el-button @click="emit('update:modelValue', false)">{{ ui('取消', 'Cancel') }}</el-button>
+      <el-button type="primary" :loading="exporting" @click="submit">{{ ui('开始导出', 'Export') }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -58,6 +58,9 @@ import { exportCollectorPoints } from '@/api/collector.api'
 import { getApiErrorMessage } from '@/utils/request'
 import { downloadBlob } from '@/utils/tabular-file'
 import { estimateCollectorExportRows, parseCollectorExportPages } from './collector-export'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   modelValue: boolean
@@ -80,16 +83,23 @@ const pageExpression = ref('')
 const exporting = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
 const parsedPages = computed(() =>
-  parseCollectorExportPages(pageExpression.value, totalPages.value),
+  parseCollectorExportPages(pageExpression.value, totalPages.value, {
+    required: ui('请输入要导出的页码', 'Enter the pages to export'),
+    invalidFormat: (token) => ui(`页码格式无效：${token}`, `Invalid page format: ${token}`),
+    invalidRange: (token) => ui(`页码范围无效：${token}`, `Invalid page range: ${token}`),
+    tooMany: ui('单次最多指定 200 页', 'Up to 200 pages can be exported at once'),
+    outOfRange: (page) => ui(`第 ${page} 页超出当前总页数`, `Page ${page} exceeds the available page range`),
+  }),
 )
 const validationError = computed(() => (scope.value === 'pages' ? parsedPages.value.error : ''))
 const scopeSummary = computed(() => {
-  if (scope.value === 'current_page') return `${props.currentPageCount} 个变量`
-  if (scope.value === 'selected') return `${props.selectedIds.length} 个变量`
+  if (scope.value === 'current_page') return ui(`${props.currentPageCount} 个变量`, `${props.currentPageCount} point${props.currentPageCount === 1 ? '' : 's'}`)
+  if (scope.value === 'selected') return ui(`${props.selectedIds.length} 个变量`, `${props.selectedIds.length} point${props.selectedIds.length === 1 ? '' : 's'}`)
   if (scope.value === 'group')
-    return includeChildren.value ? `${props.groupName}及子分组` : props.groupName
-  if (parsedPages.value.error) return '等待输入有效页码'
-  return `${parsedPages.value.pages.length} 页，预计 ${estimateCollectorExportRows(parsedPages.value.pages, props.pageSize, props.total)} 个变量`
+    return includeChildren.value ? ui(`${props.groupName}及子分组`, `${props.groupName} and subgroups`) : props.groupName
+  if (parsedPages.value.error) return ui('等待输入有效页码', 'Waiting for valid page numbers')
+  const rows = estimateCollectorExportRows(parsedPages.value.pages, props.pageSize, props.total)
+  return ui(`${parsedPages.value.pages.length} 页，预计 ${rows} 个变量`, `${parsedPages.value.pages.length} page${parsedPages.value.pages.length === 1 ? '' : 's'}, approximately ${rows} point${rows === 1 ? '' : 's'}`)
 })
 
 watch(
@@ -120,20 +130,20 @@ async function submit() {
       pointIds: scope.value === 'selected' ? props.selectedIds : undefined,
     })
     downloadBlob(
-      `${safeFileName(props.connectionName)}-变量-${dayjs().format('YYYYMMDDHHmmss')}.csv`,
+      `${safeFileName(props.connectionName)}-${ui('变量', 'points')}-${dayjs().format('YYYYMMDDHHmmss')}.csv`,
       blob,
     )
-    ElMessage.success('变量导出完成')
+    ElMessage.success(ui('变量导出完成', 'Points exported'))
     emit('update:modelValue', false)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '变量导出失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('变量导出失败', 'Failed to export points')))
   } finally {
     exporting.value = false
   }
 }
 
 function safeFileName(value: string) {
-  return (value.trim() || '工业连接').replace(/[\\/:*?"<>|]/g, '_')
+  return (value.trim() || ui('工业连接', 'industrial-connection')).replace(/[\\/:*?"<>|]/g, '_')
 }
 </script>
 

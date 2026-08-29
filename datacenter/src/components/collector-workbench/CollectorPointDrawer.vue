@@ -11,31 +11,31 @@
       <div class="collector-point-drawer__hero">
         <div>
           <h3>{{ point.name }}</h3>
-          <p>{{ point.description || '暂无变量说明' }}</p>
+          <p>{{ point.description || ui('暂无变量说明', 'No point description') }}</p>
         </div>
         <el-tag :type="point.enabled ? 'success' : 'info'">
-          {{ point.enabled ? '已启用' : '已停用' }}
+          {{ point.enabled ? ui('已启用', 'Enabled') : ui('已停用', 'Disabled') }}
         </el-tag>
       </div>
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="所属分组">{{
+        <el-descriptions-item :label="ui('所属分组', 'Group')">{{
           groupLabel(point.groupId)
         }}</el-descriptions-item>
-        <el-descriptions-item label="变量编码">
+        <el-descriptions-item :label="ui('变量编码', 'Point Code')">
           <code>{{ point.code }}</code>
         </el-descriptions-item>
-        <el-descriptions-item label="变量地址"
+        <el-descriptions-item :label="ui('变量地址', 'Address')"
           ><code>{{ point.addressText }}</code></el-descriptions-item
         >
-        <el-descriptions-item label="数据类型">{{ point.dataType }}</el-descriptions-item>
-        <el-descriptions-item v-if="supportsElementCount" label="元素数量">{{
+        <el-descriptions-item :label="ui('数据类型', 'Data Type')">{{ point.dataType }}</el-descriptions-item>
+        <el-descriptions-item v-if="supportsElementCount" :label="ui('元素数量', 'Element Count')">{{
           point.elementCount
         }}</el-descriptions-item>
-        <el-descriptions-item label="采集周期">{{ intervalLabel(point) }}</el-descriptions-item>
+        <el-descriptions-item :label="ui('采集周期', 'Interval')">{{ intervalLabel(point) }}</el-descriptions-item>
       </el-descriptions>
       <section class="collector-point-drawer__debug">
         <div class="collector-point-drawer__section-title">
-          <span>最近调试结果</span>
+          <span>{{ ui('最近调试结果', 'Latest Debug Result') }}</span>
         </div>
         <template v-if="point.latestDebugSnapshot">
           <el-alert
@@ -46,7 +46,7 @@
             :closable="false"
           />
           <div class="collector-point-drawer__debug-value">
-            <span>最近成功值</span>
+            <span>{{ ui('最近成功值', 'Latest Successful Value') }}</span>
             <pre>{{
               hasCollectorDebugSuccess(point.latestDebugSnapshot)
                 ? formatCollectorDebugValue(
@@ -57,7 +57,7 @@
             }}</pre>
           </div>
           <el-descriptions :column="1" border>
-            <el-descriptions-item label="质量">
+            <el-descriptions-item :label="ui('质量', 'Quality')">
               <el-tag
                 v-if="point.latestDebugSnapshot.quality"
                 :type="collectorDebugQualityTone(point.latestDebugSnapshot.quality)"
@@ -67,28 +67,28 @@
               </el-tag>
               <span v-else>—</span>
             </el-descriptions-item>
-            <el-descriptions-item label="实际数据类型">{{
+            <el-descriptions-item :label="ui('实际数据类型', 'Actual Data Type')">{{
               point.latestDebugSnapshot.dataType || '—'
             }}</el-descriptions-item>
-            <el-descriptions-item label="数据时间">{{
+            <el-descriptions-item :label="ui('数据时间', 'Source Time')">{{
               collectorDebugTime(point.latestDebugSnapshot.sourceTimestamp)
             }}</el-descriptions-item>
-            <el-descriptions-item label="服务端时间">{{
+            <el-descriptions-item :label="ui('服务端时间', 'Server Time')">{{
               collectorDebugTime(point.latestDebugSnapshot.serverTimestamp)
             }}</el-descriptions-item>
-            <el-descriptions-item label="平台获取时间">{{
+            <el-descriptions-item :label="ui('平台获取时间', 'Read Time')">{{
               collectorDebugTime(point.latestDebugSnapshot.readAt)
             }}</el-descriptions-item>
-            <el-descriptions-item label="最近尝试">
-              {{ point.latestDebugSnapshot.lastAttemptStatus === 'succeeded' ? '成功' : '失败' }}
+            <el-descriptions-item :label="ui('最近尝试', 'Latest Attempt')">
+              {{ point.latestDebugSnapshot.lastAttemptStatus === 'succeeded' ? ui('成功', 'Succeeded') : ui('失败', 'Failed') }}
               · {{ point.latestDebugSnapshot.lastAttemptAt }}
             </el-descriptions-item>
           </el-descriptions>
         </template>
-        <el-empty v-else description="暂未获取调试数据" :image-size="72" />
+        <el-empty v-else :description="ui('暂未获取调试数据', 'No debug data yet')" :image-size="72" />
       </section>
       <section class="collector-point-drawer__json">
-        <span>协议地址参数</span>
+        <span>{{ ui('协议地址参数', 'Protocol Address Parameters') }}</span>
         <pre>{{ formatJson(point.address) }}</pre>
       </section>
     </div>
@@ -96,13 +96,13 @@
     <el-form v-else label-position="top" class="collector-point-drawer__form">
       <section class="collector-point-drawer__section">
         <div class="collector-point-drawer__section-title">
-          <span>基础信息</span>
+          <span>{{ ui('基础信息', 'Basic Information') }}</span>
         </div>
         <div class="collector-point-drawer__grid">
-          <el-form-item label="变量名称" required>
-            <el-input v-model="draft.name" maxlength="200" placeholder="例如 入口温度" />
+          <el-form-item :label="ui('变量名称', 'Point Name')" required>
+            <el-input v-model="draft.name" maxlength="200" :placeholder="ui('例如 入口温度', 'For example, Inlet Temperature')" />
           </el-form-item>
-          <el-form-item label="所属分组">
+          <el-form-item :label="ui('所属分组', 'Group')">
             <el-tree-select
               v-model="draft.groupId"
               :data="groups"
@@ -111,68 +111,54 @@
               check-strictly
               clearable
               default-expand-all
-              placeholder="未分组"
+              :placeholder="ui('未分组', 'Ungrouped')"
             />
           </el-form-item>
-          <el-form-item label="数据类型" required>
+          <el-form-item :label="ui('数据类型', 'Data Type')" required>
             <el-select v-model="draft.dataType" :disabled="sourceLocked" filterable>
               <el-option v-for="item in dataTypes" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
-          <el-form-item label="类型转换（暂未开放）">
-            <el-select model-value="none" disabled>
-              <el-option label="保持源类型" value="none" />
-            </el-select>
-          </el-form-item>
-          <el-form-item v-if="supportsElementCount" label="元素数量" required>
+          <el-form-item v-if="supportsElementCount" :label="ui('元素数量', 'Element Count')" required>
             <el-input-number v-model="draft.elementCount" :min="1" :max="65535" />
           </el-form-item>
         </div>
-        <el-form-item label="变量说明">
+        <el-form-item :label="ui('变量说明', 'Description')">
           <el-input v-model="draft.description" type="textarea" :rows="3" maxlength="500" />
         </el-form-item>
       </section>
 
       <section class="collector-point-drawer__section">
-        <div class="collector-point-drawer__section-title"><span>采集参数</span></div>
+        <div class="collector-point-drawer__section-title"><span>{{ ui('采集参数', 'Acquisition') }}</span></div>
         <el-radio-group v-model="draft.acquisitionMode">
-          <el-radio-button value="inherit">继承连接默认</el-radio-button>
-          <el-radio-button value="override">单独覆盖</el-radio-button>
+          <el-radio-button value="inherit">{{ ui('继承连接默认', 'Use Connection Defaults') }}</el-radio-button>
+          <el-radio-button value="override">{{ ui('单独覆盖', 'Override') }}</el-radio-button>
         </el-radio-group>
         <p class="collector-point-drawer__inherit-hint">
           {{
             draft.acquisitionMode === 'inherit'
-              ? `当前继承：${acquisitionSummary(defaultAcquisition)}`
-              : '只保存与连接默认不同的字段'
+              ? ui(`当前继承：${acquisitionSummary(defaultAcquisition)}`, `Inherited: ${acquisitionSummary(defaultAcquisition)}`)
+              : ui('只保存与连接默认不同的字段', 'Only values different from the connection defaults are saved')
           }}
         </p>
         <div v-if="draft.acquisitionMode === 'override'" class="collector-point-drawer__grid">
-          <el-form-item label="采集周期 (ms)"
+          <el-form-item :label="ui('采集周期（毫秒）', 'Interval (ms)')"
             ><el-input-number v-model="draft.intervalMs" :min="1"
           /></el-form-item>
-          <el-form-item label="读取超时 (ms)"
-            ><el-input-number v-model="draft.timeoutMs" :min="1"
-          /></el-form-item>
-          <el-form-item label="失败重试"
-            ><el-input-number v-model="draft.retryCount" :min="0"
-          /></el-form-item>
-          <el-form-item label="数值死区"
+          <el-form-item :label="ui('数值死区', 'Numeric Deadband')"
             ><el-input-number v-model="draft.deadband" :min="0"
           /></el-form-item>
-          <el-form-item label="优先级"
-            ><el-input-number v-model="draft.priority" :min="0"
-          /></el-form-item>
-          <el-form-item label="仅变化时采集"><el-switch v-model="draft.changeOnly" /></el-form-item>
+          <el-form-item :label="ui('仅变化时上报', 'Report Changes Only')"><el-switch v-model="draft.changeOnly" /></el-form-item>
         </div>
       </section>
 
       <section class="collector-point-drawer__section">
         <div class="collector-point-drawer__section-title">
-          <span>协议地址</span>
+          <span>{{ ui('协议地址', 'Protocol Address') }}</span>
           <el-tag v-if="addressHelperLabel" size="small" type="primary">{{
             addressHelperLabel
           }}</el-tag>
-          <el-tag v-if="sourceLocked" size="small" type="info">设备识别 · 只读</el-tag>
+          <el-tag v-if="sourceLocked" size="small" type="info">{{ ui('设备识别 · 只读', 'Discovered · Read-only') }}</el-tag>
         </div>
         <CollectorSchemaForm
           v-if="driver"
@@ -192,27 +178,27 @@
         />
         <el-skeleton v-else :rows="3" animated />
         <div class="collector-point-drawer__address-check">
-          <el-button :loading="normalizing" @click="normalizeAddress">校验并规范化</el-button>
+          <el-button :loading="normalizing" @click="normalizeAddress">{{ ui('校验并规范化', 'Validate and Normalize') }}</el-button>
           <span v-if="normalizedAddressText"
-            >规范地址：<code>{{ normalizedAddressText }}</code></span
+            >{{ ui('规范地址：', 'Normalized Address: ') }}<code>{{ normalizedAddressText }}</code></span
           >
         </div>
       </section>
 
       <section class="collector-point-drawer__switch-row">
-        <span>启用变量</span>
+        <span>{{ ui('启用变量', 'Enable Point') }}</span>
         <el-switch v-model="draft.enabled" />
       </section>
     </el-form>
 
     <template #footer>
       <template v-if="mode === 'detail'">
-        <el-button @click="emit('update:modelValue', false)">关闭</el-button>
-        <el-button type="primary" @click="mode = 'edit'">编辑变量</el-button>
+        <el-button @click="emit('update:modelValue', false)">{{ ui('关闭', 'Close') }}</el-button>
+        <el-button type="primary" @click="mode = 'edit'">{{ ui('编辑变量', 'Edit Point') }}</el-button>
       </template>
       <template v-else>
-        <el-button @click="emit('update:modelValue', false)">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存变量</el-button>
+        <el-button @click="emit('update:modelValue', false)">{{ ui('取消', 'Cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="save">{{ ui('保存变量', 'Save Point') }}</el-button>
       </template>
     </template>
   </el-drawer>
@@ -249,6 +235,9 @@ import {
   formatCollectorDebugValue,
   hasCollectorDebugSuccess,
 } from './collector-debug-snapshot'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 export type CollectorPointGroupNode = CollectorPointGroup & { children?: CollectorPointGroupNode[] }
 
@@ -283,17 +272,18 @@ const draft = reactive({
   dataType: 'float32',
   elementCount: 1,
   intervalMs: 1000,
-  timeoutMs: 3000,
-  retryCount: 0,
   deadband: 0,
   changeOnly: false,
-  priority: 0,
   acquisitionMode: 'inherit' as 'inherit' | 'override',
   enabled: true,
   address: {} as Record<string, unknown>,
 })
 const drawerTitle = computed(() =>
-  mode.value === 'create' ? '新建变量' : mode.value === 'edit' ? '编辑变量' : '变量详情',
+  mode.value === 'create'
+    ? ui('新建变量', 'New Point')
+    : mode.value === 'edit'
+      ? ui('编辑变量', 'Edit Point')
+      : ui('变量详情', 'Point Details'),
 )
 const driverDataTypes = computed(() => driver.value?.dataTypes || [])
 const pointFormState = computed(() =>
@@ -315,11 +305,11 @@ const addressHelperLabel = computed(() => {
   return (
     (
       {
-        siemens: '西门子地址助手',
-        modbus: 'Modbus 地址助手',
-        melsec: '三菱地址助手',
-        omron: '欧姆龙地址助手',
-        allen_bradley: '罗克韦尔标签助手',
+        siemens: ui('西门子地址助手', 'Siemens Address Helper'),
+        modbus: ui('Modbus 地址助手', 'Modbus Address Helper'),
+        melsec: ui('三菱地址助手', 'Mitsubishi Address Helper'),
+        omron: ui('欧姆龙地址助手', 'Omron Address Helper'),
+        allen_bradley: ui('罗克韦尔标签助手', 'Allen-Bradley Tag Helper'),
       } as Record<string, string>
     )[helper] || ''
   )
@@ -357,12 +347,8 @@ function resetDraft() {
     ? point?.elementCount || defaults?.elementCount || 1
     : 1
   draft.intervalMs = Number(point?.acquisition.intervalMs) || 1000
-  draft.timeoutMs =
-    Number(point?.acquisition.timeoutMs) || Number(defaultAcquisition.value.timeoutMs) || 3000
-  draft.retryCount = Number(point?.acquisition.retryCount) || 0
   draft.deadband = Number(point?.acquisition.deadband) || 0
   draft.changeOnly = Boolean(point?.acquisition.changeOnly)
-  draft.priority = Number(point?.acquisition.priority) || 0
   draft.acquisitionMode = point?.acquisitionMode || 'inherit'
   normalizedAddressText.value = point?.addressText || ''
   draft.enabled = point?.enabled ?? defaults?.enabled ?? true
@@ -385,11 +371,8 @@ function defaultSchemaValues(schema: Record<string, unknown>) {
 function buildPayload() {
   const candidate = {
     intervalMs: draft.intervalMs,
-    timeoutMs: draft.timeoutMs,
-    retryCount: draft.retryCount,
     deadband: draft.deadband,
     changeOnly: draft.changeOnly,
-    priority: draft.priority,
   }
   const overrides = Object.fromEntries(
     Object.entries(candidate).filter(([key, value]) => value !== defaultAcquisition.value[key]),
@@ -410,7 +393,12 @@ function buildPayload() {
   }
 }
 function acquisitionSummary(value: Record<string, unknown>) {
-  return `周期 ${Number(value.intervalMs) || 1000} ms · 超时 ${Number(value.timeoutMs) || 3000} ms · 重试 ${Number(value.retryCount) || 0} 次`
+  const changeOnly = Boolean(value.changeOnly)
+  const deadband = Number(value.deadband) || 0
+  return ui(
+    `周期 ${Number(value.intervalMs) || 1000} ms${changeOnly ? ` · 变化上报（死区 ${deadband}）` : ''}`,
+    `Interval ${Number(value.intervalMs) || 1000} ms${changeOnly ? ` · On change (deadband ${deadband})` : ''}`,
+  )
 }
 async function normalizeAddress() {
   normalizing.value = true
@@ -428,7 +416,7 @@ async function normalizeAddress() {
     normalizedAddressText.value = result.addressText
     return true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '地址校验失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('地址校验失败', 'Address validation failed')))
     return false
   } finally {
     normalizing.value = false
@@ -436,7 +424,7 @@ async function normalizeAddress() {
 }
 async function save() {
   if (!draft.name.trim()) {
-    ElMessage.warning('请填写变量名称')
+    ElMessage.warning(ui('请填写变量名称', 'Enter a point name'))
     return
   }
   if (pointFormState.value.error) {
@@ -460,12 +448,12 @@ async function save() {
         return
       }
     }
-    ElMessage.success(mode.value === 'edit' ? '变量已更新' : '变量已创建')
+    ElMessage.success(mode.value === 'edit' ? ui('变量已更新', 'Point updated') : ui('变量已创建', 'Point created'))
     emit('update:modelValue', false)
     emit('saved')
   } catch (error) {
     ElMessage.error(
-      getApiErrorMessage(error, mode.value === 'edit' ? '变量更新失败' : '变量创建失败'),
+      getApiErrorMessage(error, mode.value === 'edit' ? ui('变量更新失败', 'Failed to update the point') : ui('变量创建失败', 'Failed to create the point')),
     )
   } finally {
     saving.value = false
@@ -486,7 +474,7 @@ function flattenGroups(groups: CollectorPointGroupNode[]): CollectorPointGroupNo
   return groups.flatMap((group) => [group, ...flattenGroups(group.children || [])])
 }
 function groupLabel(groupId: string | null) {
-  return flattenGroups(props.groups).find((group) => group.id === groupId)?.name || '未分组'
+  return flattenGroups(props.groups).find((group) => group.id === groupId)?.name || ui('未分组', 'Ungrouped')
 }
 function intervalLabel(point: CollectorPoint) {
   const value = point.acquisition.intervalMs

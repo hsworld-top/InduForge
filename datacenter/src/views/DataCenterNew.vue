@@ -1,23 +1,23 @@
 <template>
-  <DataCenterShell v-model:active-module="navActiveModule" :modules="datacenterModules">
+  <DataCenterShell v-model:active-module="navActiveModule" :modules="localizedModules">
     <template #actions>
       <div class="datacenter-side-actions">
         <button
           type="button"
           class="datacenter-side-action"
-          title="数据契约检查"
+          :title="t('shell.contractCheck')"
           @click="showDataContractCheckDialog = true"
         >
-          <IconTablerFileCheck class="h-5 w-5" /><span>数据契约检查</span>
+          <IconTablerFileCheck class="h-5 w-5" /><span>{{ t('shell.contractCheck') }}</span>
         </button>
         <button
           type="button"
           class="datacenter-side-action"
           :class="{ 'is-primary': showCollectorAgentManager }"
-          title="采集调试代理"
+          :title="t('shell.collectorAgent')"
           @click="showCollectorAgentManager = true"
         >
-          <IconTablerDeviceDesktopCog class="h-5 w-5" /><span>采集调试代理</span>
+          <IconTablerDeviceDesktopCog class="h-5 w-5" /><span>{{ t('shell.collectorAgent') }}</span>
         </button>
       </div>
     </template>
@@ -33,6 +33,7 @@
     <IndustrialCollectorWorkbench
       v-else-if="activeModule === 'industrial-collector' && projectId"
       :project-id="projectId"
+      @navigate="handleCollectorNavigate"
     />
     <template v-else-if="activeModule === 'access-source'">
       <AccessSourceWorkbench
@@ -111,6 +112,7 @@ import { datacenterModules, type DatacenterModuleId } from '@/config/datacenterM
 import { DEFAULT_MODULE, resolveDatacenterRouteBase, type V2ModuleId } from '@/router/route-config'
 import { useProjectStore } from '@/stores/project.store'
 import { getApiErrorMessage } from '@/utils/request'
+import { t } from '@/i18n/runtime'
 
 type ConnectionRecord = Record<string, any> & {
   id: string
@@ -130,6 +132,24 @@ const VALID_MODULES = new Set<V2ModuleId>([
   'compute',
   'alarm',
 ])
+const moduleMessageKeys: Record<DatacenterModuleId, string> = {
+  datapoint: 'datapoint',
+  'access-source': 'accessSource',
+  'industrial-collector': 'industrialCollector',
+  'history-storage': 'historyStorage',
+  compute: 'compute',
+  alarm: 'alarm',
+}
+const localizedModules = computed(() =>
+  datacenterModules.map((module) => {
+    const key = moduleMessageKeys[module.id]
+    return {
+      ...module,
+      label: t(`modules.${key}.label`),
+      description: t(`modules.${key}.description`),
+    }
+  }),
+)
 const resolveModuleFromRoute = (): DatacenterModuleId => {
   const module = route.params.module as string | undefined
   return module && VALID_MODULES.has(module as V2ModuleId)
@@ -193,6 +213,12 @@ const handleCloseAlarmItem = () => {
   delete params.tab
   void router.replace({ name: route.name || 'datacenter', params, query: route.query })
 }
+const handleCollectorNavigate = (payload: { module: 'datapoint'; objectId: string }) => {
+  void router.push({
+    path: `${resolveDatacenterRouteBase(route.path)}/${payload.module}/${payload.objectId}`,
+    query: route.query,
+  })
+}
 
 watch(
   () => route.params.module,
@@ -242,7 +268,7 @@ watch(
     } catch (error) {
       if (loadVersion === workbenchConnectionLoadVersion) {
         activeWorkbenchConnection.value = null
-        ElMessage.error(getApiErrorMessage(error, '加载接入源详情失败'))
+        ElMessage.error(getApiErrorMessage(error, t('shell.loadSourceDetailFailed')))
       }
     }
   },
@@ -305,7 +331,7 @@ const handleConnectionSubmit = async (data: {
           await testSavedConnection(projectId.value, connectionId)
         }
         await loadConnections()
-        ElMessage.success('接入源创建成功')
+        ElMessage.success(t('shell.sourceCreateSuccess'))
       } else await createConnection({ name: data.name, type: data.type, config: data.config })
     } else if (currentConnection.value) {
       const updateProtocol = protocolUpdateHandlers[data.type]
@@ -316,13 +342,13 @@ const handleConnectionSubmit = async (data: {
           ...data.config,
         })
         await loadConnections()
-        ElMessage.success('接入源更新成功')
+        ElMessage.success(t('shell.sourceUpdateSuccess'))
       } else await updateConnection(currentConnection.value.id, data)
     }
     connectionDialogRef.value?.closeSilently?.()
     showConnectionDialog.value = false
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存接入源失败'))
+    ElMessage.error(getApiErrorMessage(error, t('shell.sourceSaveFailed')))
   }
 }
 

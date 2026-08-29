@@ -1,10 +1,10 @@
 <template>
   <TreePanel
     class="compute-tree"
-    title="计算单元"
+    :title="ui('计算单元', 'Compute Units')"
     :search-text="keyword"
-    search-placeholder="搜索目录或计算单元"
-    all-label="根目录"
+    :search-placeholder="ui('搜索目录或计算单元', 'Search folders or compute units')"
+    :all-label="ui('根目录', 'Root')"
     :all-active="!selectedFolderId"
     :loading="loading && hasTreeData"
     @update:search-text="updateKeyword"
@@ -14,29 +14,29 @@
       <button
         type="button"
         class="is-primary"
-        title="新建单元"
-        aria-label="新建单元"
+        :title="ui('新建单元', 'New Unit')"
+        :aria-label="ui('新建单元', 'New Unit')"
         @click="$emit('createUnit')"
       >
         <IconTablerPlus class="compute-tree__button-icon" />
       </button>
       <button
         type="button"
-        title="新建文件夹"
-        aria-label="新建文件夹"
+        :title="ui('新建文件夹', 'New Folder')"
+        :aria-label="ui('新建文件夹', 'New Folder')"
         @click="$emit('createFolder')"
       >
         <IconTablerFolderPlus class="compute-tree__button-icon" />
       </button>
       <button
         type="button"
-        title="依赖管理"
-        aria-label="依赖管理"
+        :title="ui('依赖管理', 'Dependency Manager')"
+        :aria-label="ui('依赖管理', 'Dependency Manager')"
         @click="$emit('manageDependencies')"
       >
         <IconTablerPackage class="compute-tree__button-icon" />
       </button>
-      <button type="button" title="刷新" aria-label="刷新" @click="$emit('refresh')">
+      <button type="button" :title="ui('刷新', 'Refresh')" :aria-label="ui('刷新', 'Refresh')" @click="$emit('refresh')">
         <IconTablerRefresh class="compute-tree__button-icon" />
       </button>
     </template>
@@ -57,8 +57,8 @@
     </div>
 
     <template v-else>
-      <span v-if="loading" class="compute-tree__updating">更新中…</span>
-      <div class="compute-tree__root" role="tree" aria-label="计算单元资源树">
+      <span v-if="loading" class="compute-tree__updating">{{ ui('更新中…', 'Updating…') }}</span>
+      <div class="compute-tree__root" role="tree" :aria-label="ui('计算单元资源树', 'Compute unit resource tree')">
         <ComputeTreeBranch
           v-for="folder in filteredFolders"
           :key="folder.id"
@@ -83,7 +83,7 @@
           :disabled="rootFoldersLoading"
           @click="$emit('loadMoreFolder', null)"
         >
-          {{ rootFoldersLoading ? '加载中…' : '加载更多目录' }}
+          {{ rootFoldersLoading ? ui('加载中…', 'Loading…') : ui('加载更多目录', 'Load More Folders') }}
         </button>
         <div
           v-for="unit in filteredRootUnits"
@@ -111,8 +111,8 @@
           <button
             type="button"
             class="compute-tree__more"
-            :aria-label="`${unit.name}操作`"
-            title="计算单元操作"
+            :aria-label="ui(`${unit.name}操作`, `Actions for ${unit.name}`)"
+            :title="ui('计算单元操作', 'Compute Unit Actions')"
             @click.stop="openUnitMenu($event, unit)"
           >
             <IconTablerDots />
@@ -123,8 +123,8 @@
       <EmptyState
         v-if="filteredRootUnits.length === 0 && filteredFolders.length === 0"
         icon-name="compute"
-        :title="keyword ? '没有匹配的计算单元' : '暂无计算单元'"
-        :description="keyword ? '换个关键词再试。' : '新建计算单元后会显示在列表中。'"
+        :title="keyword ? ui('没有匹配的计算单元', 'No Matching Compute Units') : ui('暂无计算单元', 'No Compute Units')"
+        :description="keyword ? ui('换个关键词再试。', 'Try another search term.') : ui('新建计算单元后会显示在列表中。', 'New compute units will appear here.')"
       />
     </template>
 
@@ -142,15 +142,15 @@
         >
           <button type="button" @click="emitContextAction('rename')">
             <IconTablerPencil class="compute-tree__menu-icon" />
-            <span>重命名</span>
+            <span>{{ ui('重命名', 'Rename') }}</span>
           </button>
           <button type="button" @click="emitContextAction('move')">
             <IconTablerFolderSymlink class="compute-tree__menu-icon" />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Folder') }}</span>
           </button>
           <button type="button" class="is-danger" @click="emitContextAction('delete')">
             <IconTablerTrash class="compute-tree__menu-icon" />
-            <span>删除</span>
+            <span>{{ ui('删除', 'Delete') }}</span>
           </button>
         </div>
       </div>
@@ -171,6 +171,7 @@ import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerTrash from '~icons/tabler/trash'
 import type { ComputeFolder, ComputeUnit } from '@/api/schemas/compute.schema'
+import { datacenterLocale } from '@/i18n/runtime'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import TreePanel from '@/components/shared/TreePanel.vue'
 import ComputeTreeBranch from './ComputeTreeBranch.vue'
@@ -179,6 +180,8 @@ import {
   filterComputeTree,
   type ComputeFolderTreeNode,
 } from './computeTreeModel'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -332,13 +335,13 @@ function emitContextAction(action: 'rename' | 'move' | 'delete') {
 
 const statusText = (status?: string) => {
   const map: Record<string, string> = {
-    enabled: '启用',
-    idle: '空闲',
-    running: '运行中',
-    error: '异常',
-    disabled: '停用',
+    enabled: ui('启用', 'Enabled'),
+    idle: ui('空闲', 'Idle'),
+    running: ui('运行中', 'Running'),
+    error: ui('异常', 'Error'),
+    disabled: ui('停用', 'Disabled'),
   }
-  return map[status || ''] || '未知'
+  return map[status || ''] || ui('未知', 'Unknown')
 }
 
 const statusTone = (status?: string) => {
@@ -351,7 +354,7 @@ const statusTone = (status?: string) => {
 const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id))
 
 const unitStatusText = (unit: ComputeUnit) =>
-  isUnitDirty(unit) ? '未保存' : statusText(unit.status)
+  isUnitDirty(unit) ? ui('未保存', 'Unsaved') : statusText(unit.status)
 
 const unitStatusTone = (unit: ComputeUnit) =>
   isUnitDirty(unit) ? 'warning' : statusTone(unit.status)

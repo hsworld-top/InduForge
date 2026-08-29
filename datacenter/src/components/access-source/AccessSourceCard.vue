@@ -9,7 +9,7 @@
           <component :is="resolveConnectionVisual(connection).icon" />
         </span>
         <div class="access-source-card__name" :title="connection.name">
-          {{ connection.name || '未命名连接' }}
+          {{ connection.name || t('accessSources.unnamed') }}
         </div>
       </div>
       <slot name="top-actions"></slot>
@@ -36,13 +36,13 @@
         >
           {{ connectionState.label }}
         </span>
-        <span>{{ connection.variableCount }} 个数据点</span>
+        <span>{{ pointCountLabel(connection.variableCount) }}</span>
       </div>
     </div>
 
     <div class="access-source-card__bottom">
       <button type="button" class="access-source-card__open" @click="$emit('open', connection)">
-        <span>工作台</span>
+        <span>{{ t('accessSources.workbench') }}</span>
         <IconTablerArrowRight class="access-source-card__open-icon" />
       </button>
       <div class="access-source-card__actions">
@@ -51,8 +51,8 @@
           type="button"
           class="access-source-card__edit"
           :disabled="testing"
-          :aria-label="`测试连接 ${connection.name || ''}`"
-          :title="`测试已保存连接 ${connection.name || ''}`"
+          :aria-label="`${t('accessSources.testSource')} ${connection.name || ''}`"
+          :title="`${t('accessSources.testSaved')} ${connection.name || ''}`"
           @click="$emit('test', connection)"
         >
           <IconTablerLoader2 v-if="testing" class="is-spinning" />
@@ -61,8 +61,8 @@
         <button
           type="button"
           class="access-source-card__edit"
-          :aria-label="`编辑连接 ${connection.name || ''}`"
-          :title="`编辑连接 ${connection.name || ''}`"
+          :aria-label="`${t('accessSources.editSource')} ${connection.name || ''}`"
+          :title="`${t('accessSources.editSource')} ${connection.name || ''}`"
           @click="$emit('edit', connection)"
         >
           <IconTablerSettings />
@@ -71,8 +71,8 @@
         <button
           type="button"
           class="access-source-card__delete"
-          :aria-label="`删除连接 ${connection.name || ''}`"
-          :title="`删除连接 ${connection.name || ''}`"
+          :aria-label="`${t('accessSources.deleteSource')} ${connection.name || ''}`"
+          :title="`${t('accessSources.deleteSource')} ${connection.name || ''}`"
           @click="$emit('delete-connection', connection)"
         >
           <IconTablerTrash />
@@ -91,12 +91,18 @@ import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerPlugConnected from '~icons/tabler/plug-connected'
 import { resolveAccessSourceVisual } from './access-source-visual'
 import type { Connection as AccessSourceConnection } from '@/api/schemas/connection.schema'
+import { datacenterLocale, t } from '@/i18n/runtime'
 
 const props = defineProps<{
   connection: AccessSourceConnection
   active: boolean
   testing?: boolean
 }>()
+
+const pointCountLabel = (count: number) =>
+  datacenterLocale.value === 'en'
+    ? `${count} data point${count === 1 ? '' : 's'}`
+    : t('accessSources.pointCount', { count })
 
 defineEmits<{
   /** 单击「打开工作台」按钮 */
@@ -121,10 +127,10 @@ const resolveConnectionVisual = (connection: AccessSourceConnection) => {
 
 const resolveConnectionType = (connection: AccessSourceConnection) => {
   const builtinLabels: Record<string, string> = {
-    'builtin.relation': 'IF关系库',
-    'builtin.timeseries': 'IF时序库',
-    'builtin.realtime': 'IF实时库',
-    'builtin.message': 'IF消息库',
+    'builtin.relation': t('accessSources.builtinTypes.relation'),
+    'builtin.timeseries': t('accessSources.builtinTypes.timeseries'),
+    'builtin.realtime': t('accessSources.builtinTypes.realtime'),
+    'builtin.message': t('accessSources.builtinTypes.message'),
   }
   if (connection.type && builtinLabels[connection.type]) {
     return builtinLabels[connection.type]
@@ -136,7 +142,7 @@ const resolveConnectionType = (connection: AccessSourceConnection) => {
       postgresql: 'PostgreSQL',
       sqlserver: 'SQL Server',
     }
-    return dbTypeLabels[dbType] || dbType || '数据库/时序库'
+    return dbTypeLabels[dbType] || dbType || t('accessSources.databaseTimeseries')
   }
   if (connection.type === 'mqtt') return 'MQTT Broker'
   const protocolLabels: Record<string, string> = {
@@ -149,78 +155,81 @@ const resolveConnectionType = (connection: AccessSourceConnection) => {
   if (connection.type && protocolLabels[connection.type]) {
     return protocolLabels[connection.type]
   }
-  return connection.type || '未知类型'
+  return connection.type || t('accessSources.unknownType')
 }
 
 const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   if (connection.type && builtinTypes.has(connection.type)) {
     const runtimeKey = String(connection.config?.['runtimeKey'] || '').trim()
     if (runtimeKey) return runtimeKey
-    return '工程内置运行库'
+    return t('accessSources.builtinStore')
   }
   if (connection.type === 'relational') {
     const config = connection.relationalConfig
-    if (!config) return '未配置数据库地址'
+    if (!config) return t('accessSources.notConfiguredDbAddress')
     const host = [config.host, config.port].filter(Boolean).join(':')
-    return [host, config.database].filter(Boolean).join(' / ') || '未配置数据库'
+    return [host, config.database].filter(Boolean).join(' / ') || t('accessSources.notConfiguredDb')
   }
   if (connection.type === 'mqtt') {
     const config = connection.mqttConfig
-    if (!config) return '未配置 Broker'
+    if (!config) return t('accessSources.notConfiguredBroker')
     const host = config.brokerUrl || config.host
     const endpoint = [host, config.port].filter(Boolean).join(':')
     const topic = config.topic || config.defaultTopic
-    return [endpoint, topic].filter(Boolean).join(' / ') || '未配置 Topic'
+    return [endpoint, topic].filter(Boolean).join(' / ') || t('accessSources.notConfiguredTopic')
   }
   const config = connection.config || {}
   if (connection.type === 'kafka') {
-    return [config['brokers'], config['topic']].filter(Boolean).join(' / ') || '未配置 Topic'
+    return [config['brokers'], config['topic']].filter(Boolean).join(' / ') || t('accessSources.notConfiguredTopic')
   }
   if (connection.type === 'http') {
-    return '请求在工作台配置'
+    return t('accessSources.requestInWorkbench')
   }
   if (connection.type === 'websocket') {
-    return [config['url'], config['topic']].filter(Boolean).join(' / ') || '未配置 WebSocket'
+    return [config['url'], config['topic']].filter(Boolean).join(' / ') || t('accessSources.notConfiguredWebSocket')
   }
   if (connection.type === 'redis') {
     return (
-      [config['address'], config['keyPattern'] || '*'].filter(Boolean).join(' / ') || '未配置 Redis'
+      [config['address'], config['keyPattern'] || '*'].filter(Boolean).join(' / ') || t('accessSources.notConfiguredRedis')
     )
   }
   if (connection.type === 'tdengine') {
-    return [config['host'], config['databaseName']].filter(Boolean).join(' / ') || '未配置 TDengine'
+    return [config['host'], config['databaseName']].filter(Boolean).join(' / ') || t('accessSources.notConfiguredTdengine')
   }
-  return '等待接入配置'
+  return t('accessSources.pendingConfig')
 }
 
 const connectionState = computed(() => {
   const connection = props.connection
-  if (!connection.enabled) return { label: '已停用', tone: 'muted', detail: '配置已停用' }
+  if (!connection.enabled) return { label: t('accessSources.disabled'), tone: 'muted', detail: t('accessSources.disabledDetail') }
   if (connection.configurationState === 'incomplete') {
-    return { label: '配置不完整', tone: 'warning', detail: '请补齐接入源必填配置' }
+    return { label: t('accessSources.incomplete'), tone: 'warning', detail: t('accessSources.incompleteDetail') }
   }
   if (connection.testCapability.status === 'unsupported') {
     return {
-      label: '正常',
+      label: t('accessSources.normal'),
       tone: 'success',
-      detail: connection.testCapability.reason || '请在所属工作台测试具体请求或会话',
+      detail: datacenterLocale.value === 'en' ? t('accessSources.workspaceTestHint') : connection.testCapability.reason || t('accessSources.workspaceTestHint'),
     }
   }
   if (connection.lastTest.status === 'succeeded') {
     return {
-      label: '正常',
+      label: t('accessSources.normal'),
       tone: 'success',
-      detail: connection.lastTest.message || '最近测试成功',
+      detail: datacenterLocale.value === 'en' ? t('accessSources.testSucceeded') : connection.lastTest.message || t('accessSources.testSucceeded'),
     }
   }
   if (connection.lastTest.status === 'failed') {
     return {
-      label: '异常',
+      label: t('accessSources.abnormal'),
       tone: 'danger',
-      detail: connection.lastTest.message || '最近测试失败',
+      detail:
+        datacenterLocale.value === 'en' && /[\u4e00-\u9fff]/.test(connection.lastTest.message || '')
+          ? t('accessSources.testFailed')
+          : connection.lastTest.message || t('accessSources.testFailed'),
     }
   }
-  return { label: '未测试', tone: 'muted', detail: '尚未测试已保存配置' }
+  return { label: t('accessSources.notTested'), tone: 'muted', detail: t('accessSources.notTestedDetail') }
 })
 </script>
 
@@ -283,15 +292,15 @@ const connectionState = computed(() => {
 }
 
 .access-source-card__icon.is-database {
-  border-color: #d1fae5;
-  background: #ecfdf5;
-  color: #047857;
+  border-color: color-mix(in srgb, var(--dc-success) 28%, var(--dc-border));
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-card__icon.is-stream {
-  border-color: #ffedd5;
-  background: #fff7ed;
-  color: #c2410c;
+  border-color: color-mix(in srgb, var(--dc-warning) 28%, var(--dc-border));
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 
 .access-source-card__icon svg {
@@ -340,15 +349,15 @@ const connectionState = computed(() => {
 }
 
 .access-source-card__type-badge.is-database {
-  border-color: #d1fae5;
-  background: #ecfdf5;
-  color: #047857;
+  border-color: color-mix(in srgb, var(--dc-success) 28%, var(--dc-border));
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-card__type-badge.is-stream {
-  border-color: #ffedd5;
-  background: #fff7ed;
-  color: #c2410c;
+  border-color: color-mix(in srgb, var(--dc-warning) 28%, var(--dc-border));
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 
 .access-source-card__type
@@ -381,18 +390,18 @@ const connectionState = computed(() => {
 }
 
 .access-source-card__state.is-success {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-card__state.is-warning {
-  background: #fff7ed;
-  color: #c2410c;
+  background: var(--dc-warning-soft);
+  color: var(--dc-warning);
 }
 
 .access-source-card__state.is-danger {
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .access-source-card__divider,
@@ -448,7 +457,7 @@ const connectionState = computed(() => {
 .access-source-card__open:hover {
   border-color: var(--dc-primary);
   background: var(--dc-primary);
-  color: var(--dc-surface-raised);
+  color: var(--dc-on-primary);
   transform: translateY(-1px);
 }
 

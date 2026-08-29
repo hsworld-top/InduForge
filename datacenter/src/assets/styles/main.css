@@ -23,6 +23,7 @@
     --dc-primary: #1d4ed8;
     --dc-primary-hover: #1e40af;
     --dc-primary-soft: #e7efff;
+    --dc-on-primary: #ffffff;
     --dc-accent: #0ea5a5;
     --dc-accent-soft: #e4f7f6;
     --dc-success: #16a34a;
@@ -58,6 +59,51 @@
     --dc-connection-icon-industrial-text: #8a2be2;
   }
 
+  html.dark {
+    --dc-bg: #0b1220;
+    --dc-surface: #111827;
+    --dc-surface-raised: #162033;
+    --dc-surface-muted: #1e293b;
+    --dc-surface-subtle: #182235;
+    --dc-text: #f1f5f9;
+    --dc-text-secondary: #cbd5e1;
+    --dc-text-muted: #94a3b8;
+    --dc-border: #334155;
+    --dc-border-strong: #526179;
+    --dc-primary: #7da8ff;
+    --dc-primary-hover: #9bbcff;
+    --dc-primary-soft: rgba(94, 143, 238, 0.18);
+    --dc-accent: #2dd4bf;
+    --dc-accent-soft: rgba(45, 212, 191, 0.14);
+    --dc-success: #4ade80;
+    --dc-success-soft: rgba(74, 222, 128, 0.14);
+    --dc-warning: #fbbf24;
+    --dc-warning-soft: rgba(251, 191, 36, 0.14);
+    --dc-danger: #fb7185;
+    --dc-danger-soft: rgba(251, 113, 133, 0.14);
+    --dc-shadow-surface: 0 2px 8px rgba(0, 0, 0, 0.28);
+    --dc-shadow-popover: 0 14px 30px rgba(0, 0, 0, 0.42);
+    --dc-connection-card-bg: #162033;
+    --dc-connection-card-border: #334155;
+    --dc-connection-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+    --dc-connection-card-hover-shadow: 0 14px 30px rgba(0, 0, 0, 0.38);
+    --dc-connection-card-create-border: #475569;
+    --dc-connection-status-online-bg: rgba(74, 222, 128, 0.14);
+    --dc-connection-status-online-text: #86efac;
+    --dc-connection-status-offline-bg: #243145;
+    --dc-connection-status-offline-text: #b8c4d6;
+    --dc-connection-status-degraded-bg: rgba(251, 191, 36, 0.14);
+    --dc-connection-status-degraded-text: #fde68a;
+    --dc-connection-status-unknown-bg: #243145;
+    --dc-connection-status-unknown-text: #b8c4d6;
+    --dc-connection-icon-database-bg: rgba(96, 165, 250, 0.16);
+    --dc-connection-icon-database-text: #93c5fd;
+    --dc-connection-icon-stream-bg: rgba(251, 146, 60, 0.16);
+    --dc-connection-icon-stream-text: #fdba74;
+    --dc-connection-icon-industrial-bg: rgba(192, 132, 252, 0.16);
+    --dc-connection-icon-industrial-text: #d8b4fe;
+  }
+
   html {
     width: 100%;
     height: 100%;
@@ -81,7 +127,7 @@
     height: var(--dc-control-height);
     border-radius: var(--dc-radius-sm);
     background: var(--dc-primary);
-    color: var(--dc-surface-raised);
+    color: var(--dc-on-primary);
     font-weight: 600;
     transition: background-color 0.18s ease;
   }
@@ -126,13 +172,13 @@
   .dc-button--primary {
     border-color: var(--dc-primary);
     background: var(--dc-primary);
-    color: var(--dc-surface-raised);
+    color: var(--dc-on-primary);
   }
 
   .dc-button--primary:hover:not(:disabled) {
     border-color: var(--dc-primary-hover);
     background: var(--dc-primary-hover);
-    color: var(--dc-surface-raised);
+    color: var(--dc-on-primary);
   }
 
   .dc-button:disabled {

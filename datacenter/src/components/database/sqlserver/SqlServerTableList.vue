@@ -8,9 +8,9 @@
       size="small"
       @row-dblclick="handleRowDblClick"
     >
-      <el-table-column prop="name" label="表名" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="comment" label="备注" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="rows" label="行数" width="120" align="right">
+      <el-table-column prop="name" :label="ui('表名', 'Table Name')" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="comment" :label="ui('备注', 'Comment')" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="rows" :label="ui('行数', 'Rows')" width="120" align="right">
         <template #default="{ row }">
           {{ row.rows?.toLocaleString() || 0 }}
         </template>
@@ -22,6 +22,9 @@
 <script setup lang="ts">
 import { computed, onMounted, inject } from 'vue'
 import { useSqlServer } from '@/composables/database/useSqlServer'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps({
   connectionId: {

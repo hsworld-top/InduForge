@@ -24,6 +24,7 @@ export const DatapointSchema = z
     dataType: z.string().optional(),
     unit: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
+    defaultValue: z.string().optional().nullable(),
     status: DatapointStatusSchema.optional(),
     sourceError: z.string().optional().nullable(),
     invalidReason: z.string().optional().nullable(),
@@ -43,6 +44,7 @@ export const DatapointUpdateSchema = z
     description: z.string().optional().nullable(),
     unit: z.string().optional().nullable(),
     dataType: z.string().optional(),
+    defaultValue: z.string().optional().nullable(),
   })
   .passthrough()
 

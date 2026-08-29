@@ -10,7 +10,7 @@
           class="datapoint-list__search"
           clearable
           :prefix-icon="Search"
-          placeholder="搜索名称、路径"
+          :placeholder="t('datapoints.searchPlaceholder')"
         />
 
         <!-- 状态筛选 pill -->
@@ -58,7 +58,7 @@
               v-model="sourceSearch"
               size="small"
               clearable
-              placeholder="搜索接入源、工业连接或计算单元"
+              :placeholder="t('datapoints.searchSources')"
               @input="scheduleSourceSearch"
             />
             <button
@@ -67,7 +67,7 @@
               :class="{ 'is-active': sourceFilter === '' }"
               @click="selectSourceFilter('')"
             >
-              全部接入源
+              {{ t('datapoints.allAccessSources') }}
             </button>
             <button
               v-for="option in dynamicSourceOptions"
@@ -85,7 +85,12 @@
               class="datapoint-list__popover-item"
               @click="loadAccessSources(sourcePagination.page + 1, true)"
             >
-              加载更多（{{ accessSources.length }}/{{ sourcePagination.total }}）
+              {{
+                t('datapoints.loadMore', {
+                  loaded: accessSources.length,
+                  total: sourcePagination.total,
+                })
+              }}
             </button>
           </div>
         </el-popover>
@@ -106,7 +111,11 @@
             <div v-if="tagFilterVisible" class="datapoint-tag-filter__panel" @click.stop>
               <div class="datapoint-tag-filter__search">
                 <Search />
-                <input v-model="tagFilterKeyword" type="text" placeholder="搜索标签" />
+                <input
+                  v-model="tagFilterKeyword"
+                  type="text"
+                  :placeholder="t('datapoints.searchTags')"
+                />
               </div>
 
               <div class="datapoint-tag-filter__list">
@@ -126,7 +135,7 @@
                   <button
                     type="button"
                     class="datapoint-tag-filter__delete"
-                    :aria-label="`删除标签 ${tag.name}`"
+                    :aria-label="`${t('actions.delete')} ${tag.name}`"
                     @click.stop.prevent="handleDeleteTagOption(tag.value)"
                   >
                     <Delete />
@@ -135,12 +144,12 @@
               </div>
 
               <p v-if="filteredTagOptions.length === 0" class="datapoint-tag-filter__empty">
-                暂无标签
+                {{ t('datapoints.noTags') }}
               </p>
 
               <label class="datapoint-tag-filter__group-row">
                 <input v-model="groupByTags" type="checkbox" />
-                <span>按标签分组展示</span>
+                <span>{{ t('datapoints.groupByTags') }}</span>
               </label>
             </div>
           </Transition>
@@ -186,8 +195,8 @@
         <button
           type="button"
           class="datapoint-list__icon-button"
-          title="刷新数据点"
-          aria-label="刷新数据点"
+          :title="t('datapoints.refresh')"
+          :aria-label="t('datapoints.refresh')"
           @click="handleRefresh"
         >
           <Refresh />
@@ -197,8 +206,8 @@
           class="datapoint-list__icon-button is-danger"
           :class="{ 'is-disabled': !canBatchDelete }"
           :disabled="!canBatchDelete"
-          title="批量清理失效数据点"
-          aria-label="批量清理失效数据点"
+          :title="t('datapoints.batchCleanInvalid')"
+          :aria-label="t('datapoints.batchCleanInvalid')"
           @click="handleBatchDelete"
         >
           <Delete />
@@ -230,7 +239,7 @@
           />
 
           <!-- 名称列 -->
-          <el-table-column label="名称" width="220" fixed="left">
+          <el-table-column :label="t('datapoints.name')" width="220" fixed="left">
             <template #default="{ row }">
               <div class="datapoint-list__name-cell">
                 <span class="datapoint-list__name" :title="row.name || '-'">
@@ -241,7 +250,7 @@
           </el-table-column>
 
           <!-- 路径列 -->
-          <el-table-column label="路径" min-width="280">
+          <el-table-column :label="t('datapoints.path')" min-width="280">
             <template #default="{ row }">
               <div class="datapoint-list__path-cell">
                 <span class="datapoint-list__path" :title="row.path || '-'">
@@ -252,7 +261,7 @@
           </el-table-column>
 
           <!-- 来源列 -->
-          <el-table-column label="来源" width="160">
+          <el-table-column :label="t('datapoints.source')" width="160">
             <template #default="{ row }">
               <div class="datapoint-list__source-cell">
                 <span class="datapoint-list__source-text">
@@ -263,21 +272,31 @@
           </el-table-column>
 
           <!-- 类型列 -->
-          <el-table-column label="类型" width="100">
+          <el-table-column :label="t('datapoints.dataType')" width="100">
             <template #default="{ row }">
               <span class="datapoint-list__mono">{{ row.dataType || '-' }}</span>
             </template>
           </el-table-column>
 
           <!-- 状态列：v2 StatusBadge -->
-          <el-table-column label="状态" width="96" align="center" header-align="center">
+          <el-table-column
+            :label="t('datapoints.status')"
+            width="96"
+            align="center"
+            header-align="center"
+          >
             <template #default="{ row }">
               <StatusBadge :tone="resolveStatusTone(row.status)" :text="formatStatus(row.status)" />
             </template>
           </el-table-column>
 
           <!-- 引用列 -->
-          <el-table-column label="引用" width="96" align="center" header-align="center">
+          <el-table-column
+            :label="t('datapoints.references')"
+            width="96"
+            align="center"
+            header-align="center"
+          >
             <template #default="{ row }">
               <span class="datapoint-list__ref-count">
                 {{ resolveRefCount(row) }}
@@ -286,7 +305,7 @@
           </el-table-column>
 
           <!-- 标签列 -->
-          <el-table-column label="标签" width="160">
+          <el-table-column :label="t('datapoints.tags')" width="160">
             <template #default="{ row }">
               <div class="datapoint-list__tags-cell">
                 <el-tag
@@ -311,14 +330,14 @@
                   class="datapoint-list__add-tag"
                   @click.stop="openTagDialog(row)"
                 >
-                  + 标签
+                  {{ t('datapoints.addTag') }}
                 </button>
               </div>
             </template>
           </el-table-column>
 
           <!-- 创建时间列 -->
-          <el-table-column label="创建时间" width="170">
+          <el-table-column :label="t('datapoints.createdAt')" width="170">
             <template #default="{ row }">
               <span class="datapoint-list__time">
                 {{ formatTime(getCreatedAt(row)) }}
@@ -328,7 +347,7 @@
 
           <!-- 操作列 -->
           <el-table-column
-            label="操作"
+            :label="t('datapoints.actions')"
             width="242"
             fixed="right"
             align="center"
@@ -340,8 +359,8 @@
                 <button
                   type="button"
                   class="datapoint-list__table-action"
-                  title="查看详情"
-                  aria-label="查看数据点详情"
+                  :title="t('datapoints.viewDetail')"
+                  :aria-label="t('datapoints.viewDetail')"
                   @click.stop="openDetailDrawer(row)"
                 >
                   <View />
@@ -351,8 +370,8 @@
                   type="button"
                   class="datapoint-list__table-action"
                   :disabled="row.status === 'invalid'"
-                  :title="row.status === 'invalid' ? invalidUsageHint : '历史存储'"
-                  aria-label="设置数据点历史存储"
+                  :title="row.status === 'invalid' ? invalidUsageHint : t('datapoints.historyStorage')"
+                  :aria-label="t('datapoints.historyStorage')"
                   @click.stop="openDatapointHistoryStorage(row)"
                 >
                   <Timer />
@@ -362,8 +381,8 @@
                   type="button"
                   class="datapoint-list__table-action"
                   :disabled="row.status === 'invalid'"
-                  :title="row.status === 'invalid' ? invalidUsageHint : '查看报警配置'"
-                  aria-label="查看数据点报警配置"
+                  :title="row.status === 'invalid' ? invalidUsageHint : t('datapoints.alarmConfig')"
+                  :aria-label="t('datapoints.alarmConfig')"
                   @click.stop="openDatapointAlarm(row)"
                 >
                   <Bell />
@@ -373,8 +392,8 @@
                   type="button"
                   class="datapoint-list__table-action"
                   :disabled="row.status === 'invalid' || customAttributesLoadingId === row.id"
-                  :title="row.status === 'invalid' ? invalidUsageHint : '自定义属性'"
-                  aria-label="配置数据点自定义属性"
+                  :title="row.status === 'invalid' ? invalidUsageHint : t('datapoints.customAttributes')"
+                  :aria-label="t('datapoints.customAttributes')"
                   @click.stop="openCustomAttributesDialog(row)"
                 >
                   <Key />
@@ -388,9 +407,9 @@
                   :title="
                     row.status === 'invalid'
                       ? invalidUsageHint
-                      : getSourceNavigation(row)?.actionLabel || '暂无可打开来源'
+                      : getSourceNavigation(row)?.actionLabel || t('datapoints.noSourceAvailable')
                   "
-                  :aria-label="getSourceNavigation(row)?.actionLabel || '暂无可打开来源'"
+                  :aria-label="getSourceNavigation(row)?.actionLabel || t('datapoints.noSourceAvailable')"
                   @click.stop="handleJumpToSource(row)"
                 >
                   <Cpu v-if="getSourceNavigation(row)?.module === 'compute'" />
@@ -400,8 +419,8 @@
                 <button
                   type="button"
                   class="datapoint-list__table-action"
-                  title="复制路径"
-                  aria-label="复制数据点路径"
+                  :title="t('datapoints.copyPath')"
+                  :aria-label="t('datapoints.copyPath')"
                   @click.stop="copyPath(row.path)"
                 >
                   <CopyDocument />
@@ -411,8 +430,8 @@
                   v-if="row.status === 'invalid'"
                   type="button"
                   class="datapoint-list__table-action is-danger"
-                  title="清理失效数据点"
-                  aria-label="清理失效数据点"
+                  :title="t('datapoints.cleanInvalid')"
+                  :aria-label="t('datapoints.cleanInvalid')"
                   @click.stop="handleDelete(row)"
                 >
                   <Delete />
@@ -422,7 +441,7 @@
           </el-table-column>
 
           <template #empty>
-            <el-empty description="暂无匹配的数据点" />
+            <el-empty :description="t('datapoints.emptyMatched')" />
           </template>
         </el-table>
       </div>
@@ -436,7 +455,7 @@
           :class="{ 'is-active': selectionScope === 'page' }"
           @click="selectCurrentPage"
         >
-          当前页
+          {{ t('datapoints.currentPage') }}
         </button>
         <button
           v-if="isManagementMode"
@@ -446,25 +465,25 @@
           :disabled="totalVisibleCount === 0"
           @click="selectAllFiltered"
         >
-          全部结果
+          {{ t('datapoints.allResults') }}
         </button>
         <button
           type="button"
           class="datapoint-list__bulk-action-btn"
           :disabled="bulkUsageDisabled"
-          :title="bulkUsageDisabled ? invalidBatchUsageHint : '为有效数据点添加标签'"
+          :title="bulkUsageDisabled ? invalidBatchUsageHint : t('datapoints.addTagHint')"
           @click="openBatchTagDialog"
         >
-          打标签
+          {{ t('datapoints.addTags') }}
         </button>
         <button
           type="button"
           class="datapoint-list__bulk-action-btn"
           :disabled="bulkUsageDisabled"
-          :title="bulkUsageDisabled ? invalidBatchUsageHint : '为有效数据点设置历史存储'"
+          :title="bulkUsageDisabled ? invalidBatchUsageHint : t('datapoints.historyStorageHint')"
           @click="openBatchHistoryStorage"
         >
-          历史存储
+          {{ t('datapoints.historyStorage') }}
         </button>
         <button
           type="button"
@@ -472,12 +491,12 @@
           :disabled="selectionScope === 'all' || actionableSelectedRows.length === 0"
           :title="
             selectionScope === 'all'
-              ? '创建报警只支持当前明确选中的数据点'
-              : '为选中数据点创建统一报警'
+              ? t('datapoints.alarmCurrentPageOnly')
+              : t('datapoints.alarmSelectedHint')
           "
           @click="openBatchAlarm"
         >
-          创建报警
+          {{ t('datapoints.createAlarm') }}
         </button>
         <button
           type="button"
@@ -485,7 +504,7 @@
           :disabled="!canBatchDelete"
           @click="handleBatchDelete"
         >
-          清理失效
+          {{ t('actions.clean') }}
         </button>
       </BulkActionBar>
 
@@ -496,7 +515,7 @@
         </p>
 
         <div class="datapoint-list__pagination-controls">
-          <span class="datapoint-list__pagination-label">每页</span>
+          <span class="datapoint-list__pagination-label">{{ t('datapoints.perPage') }}</span>
           <el-popover placement="top" :width="100" trigger="click">
             <template #reference>
               <button type="button" class="datapoint-list__pagination-pill">
@@ -523,7 +542,7 @@
               type="button"
               class="datapoint-list__page-nav-button"
               :disabled="!canPrevPage"
-              aria-label="上一页"
+              :aria-label="t('datapoints.previousPage')"
               @click="handlePrevPage"
             >
               <ArrowLeft />
@@ -535,7 +554,7 @@
               min="1"
               :max="Math.max(totalPages, 1)"
               :disabled="totalPages === 0"
-              aria-label="跳转页码"
+              :aria-label="t('datapoints.jumpPage')"
               @blur="applyJumpPageInput"
               @keydown.enter.prevent="applyJumpPageInput"
             />
@@ -543,7 +562,7 @@
               type="button"
               class="datapoint-list__page-nav-button"
               :disabled="!canNextPage"
-              aria-label="下一页"
+              :aria-label="t('datapoints.nextPage')"
               @click="handleNextPage"
             >
               <ArrowRight />
@@ -691,6 +710,9 @@ import {
 } from '@/models/datapoint-source'
 import DataPointDetailDrawer from './DataPointDetailDrawer.vue'
 import AlarmDatapointSummaryDialog from '@/components/alarm/AlarmDatapointSummaryDialog.vue'
+import { datacenterLocale, t } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type DataPointListMode = 'embedded' | 'management'
 type SortField = 'createdAt' | 'name' | 'path'
@@ -896,19 +918,19 @@ const detailDatapoint = ref<DataPointRow | null>(null)
 // ── 静态配置 ─────────────────────────────────────────────────────────────
 
 /** 状态选项（v2 规格：全部/活跃/失效/错误） */
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '活跃', value: 'active' },
-  { label: '失效', value: 'invalid' },
-  { label: '错误', value: 'error' },
-]
+const statusOptions = computed(() => [
+  { label: t('datapoints.statuses.all'), value: '' },
+  { label: t('datapoints.statuses.active'), value: 'active' },
+  { label: t('datapoints.statuses.invalid'), value: 'invalid' },
+  { label: t('datapoints.statuses.error'), value: 'error' },
+])
 
 /** 排序字段选项（v2 规格：创建时间/名称/路径） */
-const sortFieldOptions: Array<{ label: string; value: SortField }> = [
-  { label: '创建时间', value: 'createdAt' },
-  { label: '名称', value: 'name' },
-  { label: '路径', value: 'path' },
-]
+const sortFieldOptions = computed<Array<{ label: string; value: SortField }>>(() => [
+  { label: t('datapoints.createdAt'), value: 'createdAt' },
+  { label: t('datapoints.name'), value: 'name' },
+  { label: t('datapoints.path'), value: 'path' },
+])
 
 const pageSizeOptions = [20, 50, 100, 200, 500]
 
@@ -947,11 +969,13 @@ const selectedTagSet = computed(() => new Set(tagFilterValues.value))
 const isManagementMode = computed(() => props.mode === 'management')
 
 const currentStatusLabel = computed(
-  () => statusOptions.find((o) => o.value === statusFilter.value)?.label || '全部',
+  () =>
+    statusOptions.value.find((o) => o.value === statusFilter.value)?.label ||
+    t('datapoints.all'),
 )
 
 const currentSourceLabel = computed(() => {
-  if (!sourceFilter.value) return '接入源'
+  if (!sourceFilter.value) return t('datapoints.accessSource')
   return (
     dynamicSourceOptions.value.find((option) => option.value === sourceFilter.value)?.label ||
     sourceFilter.value
@@ -959,10 +983,14 @@ const currentSourceLabel = computed(() => {
 })
 
 const currentSortFieldLabel = computed(
-  () => sortFieldOptions.find((o) => o.value === sortFieldValue.value)?.label || '创建时间',
+  () =>
+    sortFieldOptions.value.find((o) => o.value === sortFieldValue.value)?.label ||
+    t('datapoints.createdAt'),
 )
 
-const currentSortOrderLabel = computed(() => (sortOrderValue.value === 'desc' ? '降序' : '升序'))
+const currentSortOrderLabel = computed(() =>
+  sortOrderValue.value === 'desc' ? t('datapoints.descending') : t('datapoints.ascending'),
+)
 
 const selectStatusFilter = (value: string) => {
   statusFilter.value = value
@@ -975,7 +1003,9 @@ const selectSourceFilter = (value: string) => {
 }
 
 const tagFilterLabel = computed(() =>
-  tagFilterValues.value.length > 0 ? `标签 (${tagFilterValues.value.length})` : '标签',
+  tagFilterValues.value.length > 0
+    ? t('datapoints.tagsSelected', { count: tagFilterValues.value.length })
+    : t('datapoints.tags'),
 )
 
 const selectedInvalidRows = computed(() =>
@@ -984,8 +1014,8 @@ const selectedInvalidRows = computed(() =>
 const actionableSelectedRows = computed(() =>
   selectedRows.value.filter((item) => item.status !== 'invalid'),
 )
-const invalidUsageHint = '该数据点已失效，仅可查看详情、复制路径或清理'
-const invalidBatchUsageHint = '当前选择没有可操作的数据点；失效数据点仅可查看或清理'
+const invalidUsageHint = computed(() => t('datapoints.invalidUsageHint'))
+const invalidBatchUsageHint = computed(() => t('datapoints.invalidBatchUsageHint'))
 
 const bulkSelectedCount = computed(() => {
   if (selectionScope.value === 'all') return totalVisibleCount.value
@@ -1009,8 +1039,8 @@ const canBatchDelete = computed(() => {
 
 const historyStorageDrawerTitle = computed(() =>
   historyStorageContext.value === 'single'
-    ? `历史存储 · ${historyStorageDatapoint.value?.name || historyStorageDatapoint.value?.path || '数据点'}`
-    : '批量设置历史存储',
+    ? `${t('datapoints.historyStorage')} · ${historyStorageDatapoint.value?.name || historyStorageDatapoint.value?.path || t('datapoints.datapointFallback')}`
+    : t('datapoints.batchHistoryStorage'),
 )
 
 const historyStorageDrawerBehavior = computed(() =>
@@ -1033,13 +1063,14 @@ const visibleDataPoints = computed(() => {
   /* 当前页内按标签分组，服务端分页总序仍由排序参数决定。 */
   if (groupByTags.value) {
     list = [...list].sort((a, b) => {
-      const ag = normalizeTags(a.tags)[0] || '未设置'
-      const bg = normalizeTags(b.tags)[0] || '未设置'
-      const gd = ag.localeCompare(bg, 'zh-Hans-CN')
+      const ag = normalizeTags(a.tags)[0] || t('common.none')
+      const bg = normalizeTags(b.tags)[0] || t('common.none')
+      const locale = datacenterLocale.value === 'en' ? 'en-US' : 'zh-Hans-CN'
+      const gd = ag.localeCompare(bg, locale)
       if (gd !== 0) return gd
       return String(a.name || a.path || '').localeCompare(
         String(b.name || b.path || ''),
-        'zh-Hans-CN',
+        locale,
       )
     })
   }
@@ -1066,10 +1097,10 @@ const currentPage = computed(() => {
 const displayDataPoints = computed(() => visibleDataPoints.value)
 
 const paginationSummary = computed(() => {
-  if (totalVisibleCount.value === 0) return '共 0 条'
+  if (totalVisibleCount.value === 0) return t('datapoints.totalSummary', { total: 0 })
   const start = (currentPage.value - 1) * pagination.value.pageSize + 1
   const end = Math.min(currentPage.value * pagination.value.pageSize, totalVisibleCount.value)
-  return `${start}-${end} / 共 ${totalVisibleCount.value} 条`
+  return t('datapoints.rangeSummary', { start, end, total: totalVisibleCount.value })
 })
 
 const pageIndicator = computed(
@@ -1143,7 +1174,7 @@ const loadAccessSources = async (page = 1, append = false) => {
     Object.assign(sourcePagination, payload.pagination || {})
   } catch (error) {
     if (requestSequence !== accessSourceRequestSequence || projectId !== props.projectId) return
-    ElMessage.error(getApiErrorMessage(error, '加载来源筛选项失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载来源筛选项失败', 'Failed to load source filters')))
   }
 }
 
@@ -1166,7 +1197,9 @@ const loadDataPointTags = async () => {
         count: Number(item.count || 0),
       }))
       .filter((item: { tag: string }) => item.tag)
-      .sort((a: { tag: string }, b: { tag: string }) => a.tag.localeCompare(b.tag, 'zh-Hans-CN'))
+      .sort((a: { tag: string }, b: { tag: string }) =>
+        a.tag.localeCompare(b.tag, datacenterLocale.value === 'en' ? 'en-US' : 'zh-Hans-CN'),
+      )
   } catch (error) {
     if (requestSequence !== tagRequestSequence || projectId !== props.projectId) return
     debugLogger.error('加载数据点标签失败:', error)
@@ -1195,7 +1228,7 @@ const loadDataPoints = async () => {
     clearSelection()
   } catch (error) {
     if (requestSequence !== dataPointRequestSequence || projectId !== props.projectId) return
-    ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载数据点失败', 'Failed to load data points')))
   } finally {
     if (requestSequence === dataPointRequestSequence && projectId === props.projectId) {
       loading.value = false
@@ -1205,7 +1238,7 @@ const loadDataPoints = async () => {
 
 const handleRefresh = async () => {
   await loadDataPoints()
-  ElMessage.success('数据点已刷新')
+  ElMessage.success(ui('数据点已刷新', 'Data points refreshed'))
 }
 
 // ── 分页 ──────────────────────────────────────────────────────────────────
@@ -1337,7 +1370,7 @@ const handleRowClick = (row: DataPointRow) => {
 
 /** 打开数据点所属的接入源、工业采集连接或计算单元。 */
 const handleJumpToSource = (row: DataPointRow) => {
-  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint)
+  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint.value)
   const target = getSourceNavigation(row)
   if (!target) return
   emit('navigate', {
@@ -1349,16 +1382,19 @@ const handleJumpToSource = (row: DataPointRow) => {
 
 const handleDelete = async (datapoint: DataPointRow) => {
   const ok = await confirm(
-    `确认清理失效数据点「${datapoint.name || datapoint.path || '-'}」？此操作不可恢复。`,
-    { title: '清理失效数据点', confirmText: '清理', type: 'warning' },
+    ui(
+      `确认清理失效数据点「${datapoint.name || datapoint.path || '-'}」？此操作不可恢复。`,
+      `Clean invalid data point “${datapoint.name || datapoint.path || '-'}”? This action cannot be undone.`,
+    ),
+    { title: ui('清理失效数据点', 'Clean Invalid Data Point'), confirmText: ui('清理', 'Clean'), type: 'warning' },
   )
   if (!ok) return
   try {
     await dataAPI.deleteDataPoint(props.projectId, datapoint.id)
-    ElMessage.success('数据点已清理')
+    ElMessage.success(ui('数据点已清理', 'Data point cleaned'))
     await Promise.all([loadDataPoints(), loadDataPointTags()])
   } catch (error) {
-    ElMessage.error('删除数据点失败：' + getApiErrorMessage(error, '删除数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除数据点失败', 'Failed to delete data point')))
   }
 }
 
@@ -1369,9 +1405,9 @@ const handleBatchDelete = async () => {
   if (!isAllSelection && invalidCount === 0) return
   const ok = await confirm(
     isAllSelection
-      ? '将清理当前筛选结果中的失效数据点，此操作不可恢复。有效数据点不会受影响。'
-      : `将清理 ${invalidCount} 个失效数据点，此操作不可恢复。非失效行不受影响。`,
-    { title: '批量清理失效项', confirmText: '批量清理', type: 'warning' },
+      ? ui('将清理当前筛选结果中的失效数据点，此操作不可恢复。有效数据点不会受影响。', 'All invalid data points in the current filtered results will be cleaned. This cannot be undone; valid data points are unaffected.')
+      : ui(`将清理 ${invalidCount} 个失效数据点，此操作不可恢复。非失效行不受影响。`, `${invalidCount} invalid data point${invalidCount === 1 ? '' : 's'} will be cleaned. This cannot be undone; valid rows are unaffected.`),
+    { title: ui('批量清理失效项', 'Clean Invalid Items'), confirmText: ui('批量清理', 'Clean'), type: 'warning' },
   )
   if (!ok) return
   try {
@@ -1385,32 +1421,32 @@ const handleBatchDelete = async () => {
           selectedInvalidRows.value.map((item) => item.id),
         )
     const deletedCount = response?.data?.deletedCount ?? 0
-    ElMessage.success(`已清理 ${deletedCount} 个失效数据点`)
+    ElMessage.success(ui(`已清理 ${deletedCount} 个失效数据点`, `Cleaned ${deletedCount} invalid data point${deletedCount === 1 ? '' : 's'}`))
     clearSelection()
     await loadDataPoints()
   } catch (error) {
-    ElMessage.error('批量删除数据点失败：' + getApiErrorMessage(error, '批量删除数据点失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('批量删除数据点失败', 'Failed to clean invalid data points')))
   }
 }
 
 // ── 标签 dialog（保留 D2 前实现） ─────────────────────────────────────────
 
 const openTagDialog = (row: DataPointRow) => {
-  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint)
+  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint.value)
   currentTagDatapoint.value = row
   tagEditMode.value = 'single'
   tagDialogVisible.value = true
 }
 
 const openBatchTagDialog = async () => {
-  if (bulkUsageDisabled.value) return ElMessage.warning(invalidBatchUsageHint)
+  if (bulkUsageDisabled.value) return ElMessage.warning(invalidBatchUsageHint.value)
   // 选中条目超过阈值时给二次确认，避免误操作
   if (bulkActionableCount.value >= BATCH_TAG_CONFIRM_THRESHOLD) {
     const ok = await confirm(
-      `即将为 ${bulkActionableCount.value} 个有效数据点批量添加标签，确认继续？`,
+      ui(`即将为 ${bulkActionableCount.value} 个有效数据点批量添加标签，确认继续？`, `Add tags to ${bulkActionableCount.value} valid data points?`),
       {
-        title: '批量打标签',
-        confirmText: '继续',
+        title: ui('批量打标签', 'Add Tags in Bulk'),
+        confirmText: ui('继续', 'Continue'),
         type: 'warning',
       },
     )
@@ -1422,7 +1458,7 @@ const openBatchTagDialog = async () => {
 }
 
 const openBatchHistoryStorage = async () => {
-  if (bulkUsageDisabled.value) return ElMessage.warning(invalidBatchUsageHint)
+  if (bulkUsageDisabled.value) return ElMessage.warning(invalidBatchUsageHint.value)
   const loadSequence = ++historyStorageLoadSequence
   historyStorageContext.value = 'batch'
   historyStorageDatapoint.value = null
@@ -1435,12 +1471,12 @@ const openBatchHistoryStorage = async () => {
     historyStorageDrawerVisible.value = true
   } catch (error) {
     if (loadSequence !== historyStorageLoadSequence) return
-    ElMessage.error('加载历史存储目标失败：' + getApiErrorMessage(error, '加载历史存储目标失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载历史存储目标失败', 'Failed to load history storage targets')))
   }
 }
 
 const openDatapointHistoryStorage = async (row: DataPointRow) => {
-  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint)
+  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint.value)
   const loadSequence = ++historyStorageLoadSequence
   historyStorageContext.value = 'single'
   historyStorageDatapoint.value = row
@@ -1458,7 +1494,7 @@ const openDatapointHistoryStorage = async (row: DataPointRow) => {
     historyStorageDrawerVisible.value = true
   } catch (error) {
     if (loadSequence !== historyStorageLoadSequence) return
-    ElMessage.error('加载历史存储设置失败：' + getApiErrorMessage(error, '加载历史存储设置失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载历史存储设置失败', 'Failed to load history storage settings')))
   }
 }
 
@@ -1474,27 +1510,27 @@ const saveHistoryStorage = async (payload: HistoryStorageSavePayload) => {
         payload,
       )
       historyStorageDrawerVisible.value = false
-      ElMessage.success('历史存储设置已保存')
+      ElMessage.success(ui('历史存储设置已保存', 'History storage settings saved'))
       await loadDataPoints()
     } catch (error) {
-      ElMessage.error('保存历史存储设置失败：' + getApiErrorMessage(error, '保存历史存储设置失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('保存历史存储设置失败', 'Failed to save history storage settings')))
     } finally {
       historyStorageSaving.value = false
     }
     return
   }
 
-  if (bulkUsageDisabled.value) return ElMessage.warning(invalidBatchUsageHint)
+  if (bulkUsageDisabled.value) return ElMessage.warning(invalidBatchUsageHint.value)
   const selectedCount = bulkActionableCount.value
   const action =
     payload.behavior === 'inherit'
-      ? '恢复沿用来源设置'
+      ? ui('恢复沿用来源设置', 'inherit the source settings')
       : payload.behavior === 'off'
-        ? '关闭历史存储'
-        : '应用新的历史存储设置'
-  const ok = await confirm(`将为 ${selectedCount} 个有效数据点${action}，确认继续？`, {
-    title: '批量设置历史存储',
-    confirmText: '确认应用',
+        ? ui('关闭历史存储', 'disable history storage')
+        : ui('应用新的历史存储设置', 'apply the new history storage settings')
+  const ok = await confirm(ui(`将为 ${selectedCount} 个有效数据点${action}，确认继续？`, `${action} for ${selectedCount} valid data point${selectedCount === 1 ? '' : 's'}?`), {
+    title: ui('批量设置历史存储', 'Configure History Storage in Bulk'),
+    confirmText: ui('确认应用', 'Apply'),
     type: 'warning',
   })
   if (!ok) return
@@ -1505,12 +1541,12 @@ const saveHistoryStorage = async (payload: HistoryStorageSavePayload) => {
   historyStorageSaving.value = true
   try {
     await batchConfigureDatapointHistoryStorage(props.projectId, selection, payload)
-    ElMessage.success(`已为 ${selectedCount} 个数据点应用历史存储设置`)
+    ElMessage.success(ui(`已为 ${selectedCount} 个数据点应用历史存储设置`, `History storage settings applied to ${selectedCount} data point${selectedCount === 1 ? '' : 's'}`))
     historyStorageDrawerVisible.value = false
     clearSelection()
     await loadDataPoints()
   } catch (error) {
-    ElMessage.error('批量设置失败：' + getApiErrorMessage(error, '批量设置历史存储失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('批量设置历史存储失败', 'Failed to configure history storage in bulk')))
   } finally {
     historyStorageSaving.value = false
   }
@@ -1520,23 +1556,24 @@ const alarmInitialPoints = computed<AlarmPointSelection[]>(() =>
   alarmTargetRows.value.map((row) => ({
     datapointId: row.id,
     path: row.path || '',
-    name: row.name || row.path || '数据点',
+    name: row.name || row.path || ui('数据点', 'Data Point'),
     dataType: row.dataType || '',
   })),
 )
 
 const openBatchAlarm = async () => {
   if (selectionScope.value === 'all') {
-    ElMessage.warning('创建报警只应用到当前明确选中的数据点')
+    ElMessage.warning(ui('创建报警只应用到当前明确选中的数据点', 'Alarm creation only applies to explicitly selected data points'))
     return
   }
-  if (actionableSelectedRows.value.length === 0) return ElMessage.warning(invalidBatchUsageHint)
+  if (actionableSelectedRows.value.length === 0)
+    return ElMessage.warning(invalidBatchUsageHint.value)
   alarmTargetRows.value = [...actionableSelectedRows.value]
   await openAlarmDrawer()
 }
 
 const openDatapointAlarm = async (row: DataPointRow) => {
-  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint)
+  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint.value)
   alarmSummaryDatapoint.value = row
   alarmDatapointSummary.value = null
   alarmSummaryDialogVisible.value = true
@@ -1545,7 +1582,7 @@ const openDatapointAlarm = async (row: DataPointRow) => {
     alarmDatapointSummary.value = await getDatapointAlarmSummary(props.projectId, row.id)
   } catch (error) {
     alarmSummaryDialogVisible.value = false
-    ElMessage.error(getApiErrorMessage(error, '加载报警配置失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载报警配置失败', 'Failed to load alarm configuration')))
   } finally {
     alarmSummaryLoading.value = false
   }
@@ -1572,10 +1609,10 @@ const saveAlarmSettings = async (
   if (count === 0) return
   const payloads = Array.isArray(payload) ? payload : [payload]
   const alarmTypes = describeAlarmPayloads(payloads)
-  const targetText = count === 1 ? '当前数据点' : `选中的 ${count} 个数据点`
-  const ok = await confirm(`将为${targetText}保存${alarmTypes}配置，确认继续？`, {
-    title: '保存报警配置',
-    confirmText: '保存配置',
+  const targetText = count === 1 ? ui('当前数据点', 'the current data point') : ui(`选中的 ${count} 个数据点`, `${count} selected data points`)
+  const ok = await confirm(ui(`将为${targetText}保存${alarmTypes}配置，确认继续？`, `Save ${alarmTypes} configuration for ${targetText}?`), {
+    title: ui('保存报警配置', 'Save Alarm Configuration'),
+    confirmText: ui('保存配置', 'Save'),
     type: 'warning',
   })
   if (!ok) return
@@ -1587,10 +1624,10 @@ const saveAlarmSettings = async (
     })
     alarmDrawerVisible.value = false
     clearSelection()
-    ElMessage.success(count === 1 ? '报警配置已保存' : `已为 ${count} 个数据点保存报警配置`)
+    ElMessage.success(count === 1 ? ui('报警配置已保存', 'Alarm configuration saved') : ui(`已为 ${count} 个数据点保存报警配置`, `Alarm configuration saved for ${count} data points`))
     await loadDataPoints()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '创建报警配置失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('创建报警配置失败', 'Failed to create alarm configuration')))
   } finally {
     alarmSaving.value = false
   }
@@ -1598,22 +1635,22 @@ const saveAlarmSettings = async (
 
 const describeAlarmPayloads = (payloads: AlarmItemSave[]) => {
   const labels: Record<string, string> = {
-    threshold: '越限报警',
-    range: '区间报警',
-    rate_of_change: '变化率报警',
-    deviation: '偏差报警',
-    state: '状态报警',
-    transition: '状态变化报警',
-    text_match: '文本报警',
-    quality: '质量报警',
-    stale: '数据陈旧报警',
-    offline: '离线报警',
+    threshold: ui('越限报警', 'threshold alarm'),
+    range: ui('区间报警', 'range alarm'),
+    rate_of_change: ui('变化率报警', 'rate-of-change alarm'),
+    deviation: ui('偏差报警', 'deviation alarm'),
+    state: ui('状态报警', 'state alarm'),
+    transition: ui('状态变化报警', 'state transition alarm'),
+    text_match: ui('文本报警', 'text alarm'),
+    quality: ui('质量报警', 'quality alarm'),
+    stale: ui('数据陈旧报警', 'stale-data alarm'),
+    offline: ui('离线报警', 'offline alarm'),
   }
   const names = payloads.map((item) => {
     if (item.evaluationMode === 'highest_matching') return labels.threshold
-    return labels[item.conditions[0]?.kind || ''] || '报警'
+    return labels[item.conditions[0]?.kind || ''] || ui('报警', 'alarm')
   })
-  return Array.from(new Set(names)).join('、')
+  return Array.from(new Set(names)).join(datacenterLocale.value === 'en' ? ', ' : '、')
 }
 
 const handleDeleteTagOption = async (tag: string) => {
@@ -1622,17 +1659,17 @@ const handleDeleteTagOption = async (tag: string) => {
 
   try {
     await ElMessageBox.confirm(
-      `确认从工程内 ${affectedCount} 个数据点中移除标签「${tag}」？`,
-      '删除标签',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+      ui(`确认从工程内 ${affectedCount} 个数据点中移除标签「${tag}」？`, `Remove tag “${tag}” from ${affectedCount} data point${affectedCount === 1 ? '' : 's'} in this project?`),
+      ui('删除标签', 'Delete Tag'),
+      { confirmButtonText: ui('删除', 'Delete'), cancelButtonText: ui('取消', 'Cancel'), type: 'warning' },
     )
     await dataAPI.removeDataPointTag(props.projectId, tag)
     tagFilterValues.value = tagFilterValues.value.filter((item) => item !== tag)
-    ElMessage.success('标签已删除')
+    ElMessage.success(ui('标签已删除', 'Tag deleted'))
     await Promise.all([loadDataPoints(), loadDataPointTags()])
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除标签失败：' + getApiErrorMessage(error, '删除标签失败'))
+      ElMessage.error(getApiErrorMessage(error, ui('删除标签失败', 'Failed to delete tag')))
     }
   }
 }
@@ -1645,7 +1682,7 @@ const handleTagDialogSubmit = async (tags: string[], mode: 'single' | 'batch') =
     if (mode === 'single') {
       if (!currentTagDatapoint.value?.id) return
       await dataAPI.updateDataPoint(props.projectId, currentTagDatapoint.value.id, { tags })
-      ElMessage.success('标签已保存')
+      ElMessage.success(ui('标签已保存', 'Tags saved'))
     } else {
       if (selectionScope.value === 'all') {
         const response = await dataAPI.appendDataPointTagsByFilter(
@@ -1654,7 +1691,7 @@ const handleTagDialogSubmit = async (tags: string[], mode: 'single' | 'batch') =
           tags,
         )
         const updatedCount = response?.data?.updatedCount ?? 0
-        ElMessage.success(`已为 ${updatedCount} 个数据点更新标签`)
+        ElMessage.success(ui(`已为 ${updatedCount} 个数据点更新标签`, `Tags updated for ${updatedCount} data point${updatedCount === 1 ? '' : 's'}`))
       } else {
         await Promise.all(
           actionableSelectedRows.value.map((row) => {
@@ -1662,14 +1699,14 @@ const handleTagDialogSubmit = async (tags: string[], mode: 'single' | 'batch') =
             return dataAPI.updateDataPoint(props.projectId, row.id, { tags: nextTags })
           }),
         )
-        ElMessage.success(`已为 ${actionableSelectedRows.value.length} 个数据点更新标签`)
+        ElMessage.success(ui(`已为 ${actionableSelectedRows.value.length} 个数据点更新标签`, `Tags updated for ${actionableSelectedRows.value.length} data point${actionableSelectedRows.value.length === 1 ? '' : 's'}`))
       }
     }
     tagDialogVisible.value = false
     clearSelection()
     await Promise.all([loadDataPoints(), loadDataPointTags()])
   } catch (error) {
-    ElMessage.error('保存标签失败：' + getApiErrorMessage(error, '保存标签失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存标签失败', 'Failed to save tags')))
   } finally {
     tagSaving.value = false
   }
@@ -1686,11 +1723,11 @@ const handlePermissionDialogSubmit = async (grant: Record<string, unknown>) => {
       currentPermissionDatapoint.value.id,
       { write: grant },
     )
-    ElMessage.success('写权限已保存')
+    ElMessage.success(ui('写权限已保存', 'Write permissions saved'))
     permissionDialogVisible.value = false
     await loadDataPoints()
   } catch (error) {
-    ElMessage.error('保存运行态权限失败：' + getApiErrorMessage(error, '保存运行态权限失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存运行态权限失败', 'Failed to save runtime permissions')))
   } finally {
     permissionSaving.value = false
   }
@@ -1703,7 +1740,12 @@ const handleDrawerNavigate = (payload: { module: string; objectId?: string; tab?
 }
 
 const handleDetailUpdated = () => {
-  void Promise.all([loadDataPoints(), loadDataPointTags()])
+  const id = detailDatapoint.value?.id
+  void Promise.all([
+    loadDataPoints(),
+    loadDataPointTags(),
+    id ? loadDataPointDetail(String(id)) : Promise.resolve(),
+  ])
 }
 
 const loadDataPointDetail = async (id: string) => {
@@ -1722,18 +1764,18 @@ const loadDataPointDetail = async (id: string) => {
       usages: usageResponse.data?.usages || [],
     }
   } catch (error) {
-    ElMessage.error('加载数据点详情失败：' + getApiErrorMessage(error, '加载数据点详情失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载数据点详情失败', 'Failed to load data point details')))
   }
 }
 
 const openPermissionDialog = (row: DataPointRow) => {
-  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint)
+  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint.value)
   currentPermissionDatapoint.value = row
   permissionDialogVisible.value = true
 }
 
 const openCustomAttributesDialog = async (row: DataPointRow) => {
-  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint)
+  if (row.status === 'invalid') return ElMessage.warning(invalidUsageHint.value)
   if (!props.projectId || customAttributesLoadingId.value) return
   customAttributesLoadingId.value = row.id
   try {
@@ -1742,7 +1784,7 @@ const openCustomAttributesDialog = async (row: DataPointRow) => {
     customAttributeDefaults.value = { ...result.attributes }
     customAttributesDialogVisible.value = true
   } catch (error) {
-    ElMessage.error('加载自定义属性失败：' + getApiErrorMessage(error, '加载自定义属性失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('加载自定义属性失败', 'Failed to load custom attributes')))
   } finally {
     customAttributesLoadingId.value = ''
   }
@@ -1757,9 +1799,9 @@ const saveCustomAttributes = async (attributes: Record<string, string>) => {
     customAttributeDefaults.value = { ...result.attributes }
     datapoint.attributeDefaults = { ...result.attributes }
     customAttributesDialogRef.value?.closeAfterSave()
-    ElMessage.success('自定义属性已保存')
+    ElMessage.success(ui('自定义属性已保存', 'Custom attributes saved'))
   } catch (error) {
-    ElMessage.error('保存自定义属性失败：' + getApiErrorMessage(error, '保存自定义属性失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存自定义属性失败', 'Failed to save custom attributes')))
   } finally {
     customAttributesSaving.value = false
   }
@@ -1771,9 +1813,9 @@ const copyPath = async (path?: string) => {
   if (!path) return
   try {
     await navigator.clipboard.writeText(path)
-    ElMessage.success('已复制数据点路径')
+    ElMessage.success(ui('已复制数据点路径', 'Data point path copied'))
   } catch {
-    ElMessage.error('复制失败，请手动复制')
+    ElMessage.error(ui('复制失败，请手动复制', 'Copy failed. Please copy manually.'))
   }
 }
 
@@ -1802,15 +1844,15 @@ function resolveStatusTone(status?: string): 'success' | 'danger' | 'warning' | 
 const formatStatus = (status?: string) => {
   switch (status) {
     case 'active':
-      return '活跃'
+      return t('datapoints.statuses.active')
     case 'invalid':
-      return '失效'
+      return t('datapoints.statuses.invalid')
     case 'error':
-      return '错误'
+      return t('datapoints.statuses.error')
     case 'inactive':
-      return '停用'
+      return t('common.disabled')
     default:
-      return '未知'
+      return t('common.unknown')
   }
 }
 
@@ -2028,7 +2070,7 @@ defineExpose({
   gap: 12px;
   border: 1px solid var(--dc-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.75);
+  background: color-mix(in srgb, var(--dc-surface-raised) 92%, transparent);
   box-shadow: var(--dc-shadow-surface);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -2750,7 +2792,7 @@ defineExpose({
 }
 
 .datapoint-list__page-nav-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--dc-surface-raised);
   color: var(--dc-text);
 }
 
@@ -2771,7 +2813,7 @@ defineExpose({
   border: 0;
   border-radius: 8px;
   outline: none;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--dc-surface-raised);
   color: var(--dc-text);
   font-family: inherit;
   font-size: 12px;

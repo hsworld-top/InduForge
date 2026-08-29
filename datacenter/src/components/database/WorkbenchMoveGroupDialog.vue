@@ -2,7 +2,7 @@
   <DcDialog
     ref="dialogRef"
     v-model="visible"
-    title="移动到分组"
+    :title="ui('移动到分组', 'Move to Group')"
     width="460px"
     body-max-height="260px"
     :dirty="isDirty"
@@ -10,14 +10,14 @@
     @close="resetForm"
   >
     <el-form label-position="top" class="workbench-move-dialog">
-      <el-form-item label="目标分组">
+      <el-form-item :label="ui('目标分组', 'Target Group')">
         <el-select
           v-model="groupId"
           class="workbench-move-dialog__select"
           clearable
-          placeholder="未分组"
+          :placeholder="ui('未分组', 'Ungrouped')"
         >
-          <el-option label="未分组" :value="null" />
+          <el-option :label="ui('未分组', 'Ungrouped')" :value="null" />
           <el-option
             v-for="group in groupOptions"
             :key="group.id"
@@ -30,9 +30,9 @@
 
     <template #footer>
       <div class="workbench-move-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          移动
+          {{ ui('移动', 'Move') }}
         </el-button>
       </div>
     </template>
@@ -42,6 +42,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type WorkbenchGroupOption = {
   id: string

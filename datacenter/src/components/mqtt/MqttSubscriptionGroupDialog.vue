@@ -3,7 +3,7 @@
     ref="dialogRef"
     v-model="visible"
     :mode="mode"
-    :title="mode === 'create' ? '新建分组' : '编辑分组'"
+    :title="mode === 'create' ? ui('新建分组', 'New Group') : ui('编辑分组', 'Edit Group')"
     :group="group"
     :group-options="groupOptions"
     :initial-parent-id="initialParentId"
@@ -16,6 +16,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 import type { MqttSubscriptionGroup, MqttSubscriptionGroupNode } from './mqttSubscriptionTreeModel'
 import {
   collectMqttSubscriptionGroupIds,

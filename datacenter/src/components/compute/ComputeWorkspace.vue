@@ -126,6 +126,7 @@ import type {
 import { getComputeCapabilities, getComputeFolders, getComputeUnits } from '@/api/compute.api'
 import { useComputeStore } from '@/stores/compute.store'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
 import ComputeEditorShell from './ComputeEditorShell.vue'
 import ComputeDependencyManager from './ComputeDependencyManager.vue'
 import ComputeTree from './ComputeTree.vue'
@@ -142,6 +143,8 @@ import {
   type ComputeEditorTab,
 } from './computeEditorModel'
 import type { ComputeFolderTreeNode } from './computeTreeModel'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   projectId: string
@@ -254,7 +257,7 @@ async function loadWorkspace() {
   ])
   const failed = results.find((result) => result.status === 'rejected')
   if (failed) {
-    ElMessage.warning('计算单元部分能力未启用')
+    ElMessage.warning(ui('计算单元部分能力未启用', 'Some compute unit capabilities are unavailable'))
   }
 }
 
@@ -309,7 +312,7 @@ async function loadComputeCapabilities() {
 function retryComputeCapabilities() {
   capabilityRetryAttempt = 0
   void loadComputeCapabilities().catch((error) => {
-    ElMessage.error(getApiErrorMessage(error, '重新检测计算沙箱失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('重新检测计算沙箱失败', 'Failed to recheck the compute sandbox')))
   })
 }
 
@@ -440,11 +443,11 @@ async function saveTab(id: string): Promise<boolean> {
       ...drafts.value,
       [id]: toComputeDraft(unit),
     }
-    ElMessage.success('计算单元已保存')
+    ElMessage.success(ui('计算单元已保存', 'Compute unit saved'))
     await refreshComputeTree()
     return true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存计算单元失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存计算单元失败', 'Failed to save compute unit')))
     return false
   }
 }
@@ -481,20 +484,20 @@ async function toggleEnabled(id: string, enabled: boolean) {
               status: String(unit.status || (unit.isEnabled === false ? 'disabled' : 'enabled')),
             },
     }
-    ElMessage.success(enabled ? '计算单元已启用' : '计算单元已停用')
+    ElMessage.success(enabled ? ui('计算单元已启用', 'Compute unit enabled') : ui('计算单元已停用', 'Compute unit disabled'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '更新计算单元状态失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('更新计算单元状态失败', 'Failed to update compute unit status')))
   }
 }
 
 async function confirmDirtyToggle(name: string, enabled: boolean) {
   try {
     await ElMessageBox.confirm(
-      `计算单元「${name}」有未保存修改，${enabled ? '启用' : '停用'}前是否先保存？`,
-      '切换计算单元状态',
+      ui(`计算单元「${name}」有未保存修改，${enabled ? '启用' : '停用'}前是否先保存？`, `Compute unit “${name}” has unsaved changes. Save before ${enabled ? 'enabling' : 'disabling'} it?`),
+      ui('切换计算单元状态', 'Change Compute Unit Status'),
       {
-        confirmButtonText: '保存后切换',
-        cancelButtonText: '放弃修改并切换',
+        confirmButtonText: ui('保存后切换', 'Save and Continue'),
+        cancelButtonText: ui('放弃修改并切换', 'Discard and Continue'),
         distinguishCancelAndClose: true,
         closeOnClickModal: false,
         type: 'warning',
@@ -518,11 +521,11 @@ async function handleDeleteUnitFromTree(unit: ComputeUnit) {
 
 async function confirmAndDeleteUnit(id: string, name?: string) {
   const ok = await ElMessageBox.confirm(
-    `确认删除计算单元「${name || id}」？此操作不可恢复。`,
-    '删除计算单元',
+    ui(`确认删除计算单元「${name || id}」？此操作不可恢复。`, `Delete compute unit “${name || id}”? This action cannot be undone.`),
+    ui('删除计算单元', 'Delete Compute Unit'),
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     },
   )
@@ -541,9 +544,9 @@ async function confirmAndDeleteUnit(id: string, name?: string) {
     } else {
       void router.push({ path: computeBasePath.value, query: route.query })
     }
-    ElMessage.success('计算单元已删除')
+    ElMessage.success(ui('计算单元已删除', 'Compute unit deleted'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除计算单元失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除计算单元失败', 'Failed to delete compute unit')))
   }
 }
 
@@ -552,21 +555,21 @@ async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
   try {
     impact = await loadComputeFolderDeleteImpact(folder.id)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '读取分组删除影响失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('读取分组删除影响失败', 'Failed to inspect the impact of deleting this folder')))
     return
   }
   const childFolderCount = impact.childFolderCount
   const unitCount = impact.unitIds.length
   const detail =
     childFolderCount > 0 || unitCount > 0
-      ? `该分组包含 ${childFolderCount} 个子分组、${unitCount} 个计算单元。确认后会一起删除。`
-      : '该分组为空。确认后会删除该分组。'
+      ? ui(`该分组包含 ${childFolderCount} 个子分组、${unitCount} 个计算单元。确认后会一起删除。`, `This folder contains ${childFolderCount} subfolder${childFolderCount === 1 ? '' : 's'} and ${unitCount} compute unit${unitCount === 1 ? '' : 's'}. They will be deleted together.`)
+      : ui('该分组为空。确认后会删除该分组。', 'This folder is empty and will be deleted.')
   const ok = await ElMessageBox.confirm(
-    `确认删除分组「${folder.name}」？${detail}此操作不可恢复。`,
-    '删除分组',
+    ui(`确认删除分组「${folder.name}」？${detail}此操作不可恢复。`, `Delete folder “${folder.name}”? ${detail} This action cannot be undone.`),
+    ui('删除分组', 'Delete Folder'),
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     },
   )
@@ -595,9 +598,9 @@ async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
         }
       }
     }
-    ElMessage.success('分组已删除')
+    ElMessage.success(ui('分组已删除', 'Folder deleted'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除分组失败', 'Failed to delete folder')))
   }
 }
 
@@ -636,9 +639,9 @@ async function loadComputeFolderDeleteImpact(rootFolderId: string) {
 
 async function confirmDirtyClose(name: string) {
   try {
-    await ElMessageBox.confirm(`计算单元「${name}」有未保存修改。`, '关闭标签', {
-      confirmButtonText: '保存',
-      cancelButtonText: '丢弃',
+    await ElMessageBox.confirm(ui(`计算单元「${name}」有未保存修改。`, `Compute unit “${name}” has unsaved changes.`), ui('关闭标签', 'Close Tab'), {
+      confirmButtonText: ui('保存', 'Save'),
+      cancelButtonText: ui('丢弃', 'Discard'),
       distinguishCancelAndClose: true,
       type: 'warning',
       closeOnClickModal: false,
@@ -685,9 +688,9 @@ async function handleCreateUnit(data: ComputeUnitSave) {
     }
     await refreshComputeTree()
     selectUnit(String(savedUnit.id))
-    ElMessage.success('计算单元已创建')
+    ElMessage.success(ui('计算单元已创建', 'Compute unit created'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '新建计算单元失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('新建计算单元失败', 'Failed to create compute unit')))
   }
 }
 
@@ -730,9 +733,9 @@ async function handleRenameUnit(name: string) {
     showRenameUnitDialog.value = false
     contextUnit.value = saved
     await refreshComputeTree()
-    ElMessage.success('计算单元已重命名')
+    ElMessage.success(ui('计算单元已重命名', 'Compute unit renamed'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '重命名计算单元失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('重命名计算单元失败', 'Failed to rename compute unit')))
   }
 }
 
@@ -747,9 +750,9 @@ async function handleMoveUnit(folderId: string | null) {
     showMoveUnitDialog.value = false
     contextUnit.value = saved
     await refreshComputeTree()
-    ElMessage.success('计算单元已移动')
+    ElMessage.success(ui('计算单元已移动', 'Compute unit moved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动计算单元失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动计算单元失败', 'Failed to move compute unit')))
   }
 }
 
@@ -767,9 +770,9 @@ async function handleRenameFolder(name: string) {
       parentId: saved.parentId ? String(saved.parentId) : null,
     }
     await refreshComputeTree()
-    ElMessage.success('分组已重命名')
+    ElMessage.success(ui('分组已重命名', 'Folder renamed'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '重命名分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('重命名分组失败', 'Failed to rename folder')))
   }
 }
 
@@ -786,9 +789,9 @@ async function handleMoveFolder(parentId: string | null) {
       parentId: saved.parentId ? String(saved.parentId) : null,
     }
     await refreshComputeTree()
-    ElMessage.success('分组已移动')
+    ElMessage.success(ui('分组已移动', 'Folder moved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动分组失败', 'Failed to move folder')))
   }
 }
 
@@ -796,9 +799,9 @@ async function handleCreateFolder(data: ComputeFolderSave) {
   try {
     await computeStore.createFolder(String(props.projectId), data)
     createFolderDialogRef.value?.closeSilently()
-    ElMessage.success('文件夹已创建')
+    ElMessage.success(ui('文件夹已创建', 'Folder created'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '新建文件夹失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('新建文件夹失败', 'Failed to create folder')))
   }
 }
 

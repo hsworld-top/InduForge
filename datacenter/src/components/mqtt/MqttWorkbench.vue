@@ -17,7 +17,7 @@
           >
             <span class="mqtt-workbench__connect-label is-default">{{ connectButtonLabel }}</span>
             <span v-if="connectionStarted" class="mqtt-workbench__connect-label is-hover">
-              断开
+              {{ ui('断开', 'Disconnect') }}
             </span>
           </button>
         </template>
@@ -42,8 +42,8 @@
             v-if="supportsSubscriptionGroups"
             type="button"
             class="workbench-source-header__icon-action"
-            title="新建分组"
-            aria-label="新建分组"
+            :title="ui('新建分组', 'New Group')"
+            :aria-label="ui('新建分组', 'New Group')"
             @click="openCreateGroupDialog"
           >
             <IconTablerFolderPlus />
@@ -108,7 +108,7 @@
             v-if="filteredGroups.length === 0 && filteredRootSubscriptions.length === 0"
             class="mqtt-workbench__empty"
           >
-            {{ filterText ? `没有匹配的${treeItemNoun}` : `暂无${treeItemNoun}` }}
+            {{ filterText ? ui(`没有匹配的${treeItemNoun}`, `No matching ${treeItemNoun.toLowerCase()}`) : ui(`暂无${treeItemNoun}`, `No ${treeItemNoun.toLowerCase()}`) }}
           </div>
         </template>
       </div>
@@ -210,6 +210,7 @@
       :mode="subscriptionDialogMode"
       :subscription="editingSubscription"
       :group-id="subscriptionDialogGroupId"
+      :entity-type="isBuiltinMessageMode ? 'topic' : 'subscription'"
       @success="handleSubscriptionSaved"
     />
 
@@ -243,9 +244,9 @@
     >
       <template #header>
         <div class="mqtt-workbench__monitor-header">
-          <span class="dc-dialog__title">变量预览/监控</span>
+          <span class="dc-dialog__title">{{ ui('变量预览/监控', 'Variable Preview / Monitor') }}</span>
           <div class="mqtt-workbench__monitor-actions">
-            <el-tooltip content="列表显示" placement="top">
+            <el-tooltip :content="ui('列表显示', 'List View')" placement="top">
               <button
                 type="button"
                 class="mqtt-workbench__monitor-action"
@@ -255,7 +256,7 @@
                 <IconTablerList />
               </button>
             </el-tooltip>
-            <el-tooltip content="卡片显示" placement="top">
+            <el-tooltip :content="ui('卡片显示', 'Card View')" placement="top">
               <button
                 type="button"
                 class="mqtt-workbench__monitor-action"
@@ -265,7 +266,7 @@
                 <IconTablerLayoutGrid />
               </button>
             </el-tooltip>
-            <el-tooltip content="重新加载变量配置" placement="top">
+            <el-tooltip :content="ui('重新加载变量配置', 'Reload Variable Configuration')" placement="top">
               <button
                 type="button"
                 class="mqtt-workbench__monitor-action"
@@ -291,7 +292,7 @@
 
     <DcDialog
       v-model="detailDialogVisible"
-      title="订阅详情"
+      :title="ui('订阅详情', 'Subscription Details')"
       width="680px"
       class="mqtt-workbench__detail-dialog"
       @close="detailSubscription = null"
@@ -306,10 +307,10 @@
         </div>
 
         <section class="mqtt-workbench__detail-section">
-          <div class="mqtt-workbench__panel-title">订阅信息</div>
+          <div class="mqtt-workbench__panel-title">{{ ui('订阅信息', 'Subscription Information') }}</div>
           <dl class="mqtt-workbench__facts">
             <div>
-              <dt>名称</dt>
+              <dt>{{ ui('名称', 'Name') }}</dt>
               <dd>{{ detailSubscription.name || '-' }}</dd>
             </div>
             <div>
@@ -317,7 +318,7 @@
               <dd>{{ detailSubscription.topic || '-' }}</dd>
             </div>
             <div>
-              <dt>路径</dt>
+              <dt>{{ ui('路径', 'Path') }}</dt>
               <dd>{{ subscriptionPath(detailSubscription) }}</dd>
             </div>
             <div>
@@ -325,15 +326,15 @@
               <dd>{{ detailSubscription.qos ?? 0 }}</dd>
             </div>
             <div>
-              <dt>消息保留数</dt>
+              <dt>{{ ui('消息保留数', 'Message Retention') }}</dt>
               <dd>{{ detailSubscription.messageRetention ?? 5000 }}</dd>
             </div>
             <div>
-              <dt>描述</dt>
+              <dt>{{ ui('描述', 'Description') }}</dt>
               <dd>{{ detailSubscription.description || '-' }}</dd>
             </div>
             <div>
-              <dt>{{ isBuiltinMessageMode ? 'Topic ID' : '订阅 ID' }}</dt>
+              <dt>{{ isBuiltinMessageMode ? 'Topic ID' : ui('订阅 ID', 'Subscription ID') }}</dt>
               <dd>{{ detailSubscription.id }}</dd>
             </div>
           </dl>
@@ -341,16 +342,16 @@
 
         <section class="mqtt-workbench__detail-section">
           <div class="mqtt-workbench__panel-title">
-            {{ isBuiltinMessageMode ? '当前消息库' : '当前 Broker' }}
+            {{ isBuiltinMessageMode ? ui('当前消息库', 'Current Message Store') : ui('当前 Broker', 'Current Broker') }}
           </div>
           <dl class="mqtt-workbench__facts">
             <div>
-              <dt>{{ isBuiltinMessageMode ? '标识' : '地址' }}</dt>
+              <dt>{{ isBuiltinMessageMode ? ui('标识', 'Identifier') : ui('地址', 'Address') }}</dt>
               <dd>{{ endpointText }}</dd>
             </div>
             <div>
-              <dt>状态</dt>
-              <dd>{{ connectionStarted ? '已连接' : '未连接' }}</dd>
+              <dt>{{ ui('状态', 'Status') }}</dt>
+              <dd>{{ connectionStarted ? ui('已连接', 'Connected') : ui('未连接', 'Disconnected') }}</dd>
             </div>
             <div>
               <dt>{{ treeItemNoun }}</dt>
@@ -379,7 +380,7 @@
             @click="emitContextAction('detail')"
           >
             <IconTablerInfoCircle class="mqtt-workbench__menu-icon" />
-            <span>详情</span>
+            <span>{{ ui('详情', 'Details') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'subscription'"
@@ -399,7 +400,7 @@
             @click="emitContextAction('messages')"
           >
             <IconTablerMessages class="mqtt-workbench__menu-icon" />
-            <span>查看消息</span>
+            <span>{{ ui('查看消息', 'View Messages') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'subscription'"
@@ -407,7 +408,7 @@
             @click="emitContextAction('rename')"
           >
             <IconTablerPencil class="mqtt-workbench__menu-icon" />
-            <span>编辑订阅</span>
+            <span>{{ ui('编辑订阅', 'Edit Subscription') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'subscription'"
@@ -415,7 +416,7 @@
             @click="emitContextAction('publish')"
           >
             <IconTablerSend class="mqtt-workbench__menu-icon" />
-            <span>发布测试</span>
+            <span>{{ ui('发布测试', 'Publish Test') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'subscription' && supportsSubscriptionGroups"
@@ -423,7 +424,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
-            <span>移动到分组</span>
+            <span>{{ ui('移动到分组', 'Move to Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
@@ -431,7 +432,7 @@
             @click="emitContextAction('createChildGroup')"
           >
             <IconTablerFolderPlus class="mqtt-workbench__menu-icon" />
-            <span>新建子分组</span>
+            <span>{{ ui('新建子分组', 'New Child Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
@@ -439,7 +440,7 @@
             @click="emitContextAction('rename')"
           >
             <IconTablerPencil class="mqtt-workbench__menu-icon" />
-            <span>编辑分组</span>
+            <span>{{ ui('编辑分组', 'Edit Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
@@ -447,7 +448,7 @@
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
-            <span>移动分组</span>
+            <span>{{ ui('移动分组', 'Move Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
@@ -456,7 +457,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="mqtt-workbench__menu-icon" />
-            <span>删除分组</span>
+            <span>{{ ui('删除分组', 'Delete Group') }}</span>
           </button>
           <button
             v-if="contextMenu.type === 'subscription'"
@@ -465,7 +466,7 @@
             @click="emitContextAction('delete')"
           >
             <IconTablerTrash class="mqtt-workbench__menu-icon" />
-            <span>删除</span>
+            <span>{{ ui('删除', 'Delete') }}</span>
           </button>
         </div>
       </div>
@@ -498,6 +499,7 @@ import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.
 import { usePreviewSession } from '@/composables/usePreviewSession'
 import { useMqttSocket } from '@/composables/useMqttSocket'
 import { getApiErrorMessage } from '@/utils/request'
+import { datacenterLocale } from '@/i18n/runtime'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import MqttMessageViewer from './MqttMessageViewer.vue'
 import MqttPublishTester from './MqttPublishTester.vue'
@@ -526,6 +528,8 @@ type MqttConnection = {
 
 type WorkbenchMode = 'mqtt' | 'builtin-message'
 
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+
 const props = defineProps<{
   projectId: string | number
   connection: MqttConnection
@@ -547,42 +551,42 @@ const isBuiltinMessageMode = computed(() => workbenchMode.value === 'builtin-mes
 const config = computed(() => props.connection.mqttConfig || props.connection.config || {})
 const endpointText = computed(() => {
   if (isBuiltinMessageMode.value) {
-    return String(config.value.runtimeKey || '未生成')
+    return String(config.value.runtimeKey || ui('未生成', 'Not generated'))
   }
-  const host = config.value.brokerUrl || config.value.host || '未配置 Broker'
+  const host = config.value.brokerUrl || config.value.host || ui('未配置 Broker', 'Broker not configured')
   const port = config.value.port ? `:${config.value.port}` : ''
   return `${host}${port}`
 })
 const fallbackTitle = computed(() =>
-  isBuiltinMessageMode.value ? 'IF消息库' : '未命名 MQTT 接入源',
+  isBuiltinMessageMode.value ? ui('IF消息库', 'IF Message Store') : ui('未命名 MQTT 接入源', 'Unnamed MQTT Source'),
 )
-const treeItemNoun = computed(() => (isBuiltinMessageMode.value ? 'Topic' : '订阅'))
+const treeItemNoun = computed(() => (isBuiltinMessageMode.value ? 'Topic' : ui('订阅', 'Subscription')))
 const filterPlaceholder = computed(() =>
-  isBuiltinMessageMode.value ? '筛选 Topic' : '筛选订阅或 Topic',
+  isBuiltinMessageMode.value ? ui('筛选 Topic', 'Filter topics') : ui('筛选订阅或 Topic', 'Filter subscriptions or topics'),
 )
 const createSubscriptionLabel = computed(() =>
-  isBuiltinMessageMode.value ? '新建 Topic' : '新建订阅',
+  isBuiltinMessageMode.value ? ui('新建 Topic', 'New Topic') : ui('新建订阅', 'New Subscription'),
 )
-const refreshLabel = computed(() => (isBuiltinMessageMode.value ? '刷新 Topic' : '刷新订阅'))
-const loadingLabel = computed(() => (isBuiltinMessageMode.value ? '加载 Topic...' : '加载订阅...'))
+const refreshLabel = computed(() => (isBuiltinMessageMode.value ? ui('刷新 Topic', 'Refresh Topics') : ui('刷新订阅', 'Refresh Subscriptions')))
+const loadingLabel = computed(() => (isBuiltinMessageMode.value ? ui('加载 Topic...', 'Loading topics...') : ui('加载订阅...', 'Loading subscriptions...')))
 const placeholderTitle = computed(() =>
-  isBuiltinMessageMode.value ? '选择 Topic 开始工作' : '选择订阅开始工作',
+  isBuiltinMessageMode.value ? ui('选择 Topic 开始工作', 'Select a Topic to Begin') : ui('选择订阅开始工作', 'Select a Subscription to Begin'),
 )
 const placeholderHint = computed(() =>
   isBuiltinMessageMode.value
-    ? '左键打开对应 Topic，右键查看详情、消息或发布测试。'
-    : '从左侧订阅树打开订阅；连接后可查看实时消息。',
+    ? ui('左键打开对应 Topic，右键查看详情、消息或发布测试。', 'Click a topic to open it; right-click for details, messages, or publish testing.')
+    : ui('从左侧订阅树打开订阅；连接后可查看实时消息。', 'Open a subscription from the tree; connect to view live messages.'),
 )
 const supportsSubscriptionGroups = computed(() => true)
 const sourceMetaRows = computed(() =>
   isBuiltinMessageMode.value
     ? [
-        { label: '类型', value: 'IF消息库' },
-        { label: '标识', value: endpointText.value },
+        { label: ui('类型', 'Type'), value: ui('IF消息库', 'IF Message Store') },
+        { label: ui('标识', 'Identifier'), value: endpointText.value },
       ]
     : [
-        { label: '类型', value: 'MQTT Broker' },
-        { label: '地址', value: endpointText.value },
+        { label: ui('类型', 'Type'), value: 'MQTT Broker' },
+        { label: ui('地址', 'Address'), value: endpointText.value },
       ],
 )
 
@@ -600,8 +604,8 @@ const subscriptionGroups = ref<MqttSubscriptionGroup[]>([])
 const selectedSubscription = ref<MqttSubscription | null>(null)
 const filterText = ref('')
 const connectionStarted = ref(false)
-const connectButtonLabel = computed(() => (connectionStarted.value ? '已连接' : '连接'))
-const connectButtonTitle = computed(() => (connectionStarted.value ? '断开' : '连接'))
+const connectButtonLabel = computed(() => (connectionStarted.value ? ui('已连接', 'Connected') : ui('连接', 'Connect')))
+const connectButtonTitle = computed(() => (connectionStarted.value ? ui('断开', 'Disconnect') : ui('连接', 'Connect')))
 const tabs = ref<any[]>([])
 const activeTabId = ref('')
 const messageViewerRefs = shallowRef(new Map<string, any>())
@@ -651,9 +655,9 @@ const contextPrimaryAction = computed<'messages' | 'variables'>(() =>
   contextSubscriptionMode.value === 'raw_datapoint' ? 'messages' : 'variables',
 )
 const contextPrimaryLabel = computed(() => {
-  if (contextSubscriptionMode.value === 'raw_datapoint') return '查看消息'
-  if (contextSubscriptionMode.value === 'batch_variable') return '批量映射配置'
-  return '单变量配置'
+  if (contextSubscriptionMode.value === 'raw_datapoint') return ui('查看消息', 'View Messages')
+  if (contextSubscriptionMode.value === 'batch_variable') return ui('批量映射配置', 'Batch Mapping Configuration')
+  return ui('单变量配置', 'Single Variable Configuration')
 })
 const contextPrimaryIcon = computed(() => {
   if (contextSubscriptionMode.value === 'raw_datapoint') return IconTablerMessages
@@ -718,7 +722,7 @@ const loadWorkbenchTree = async () => {
     ElMessage.error(
       getApiErrorMessage(
         error,
-        isBuiltinMessageMode.value ? '加载 IF消息库 Topic 失败' : '加载 MQTT 订阅树失败',
+        isBuiltinMessageMode.value ? ui('加载 IF消息库 Topic 失败', 'Failed to load IF Message Store topics') : ui('加载 MQTT 订阅树失败', 'Failed to load MQTT subscription tree'),
       ),
     )
   } finally {
@@ -729,7 +733,7 @@ const loadWorkbenchTree = async () => {
 const ensureMqttPreview = async () => {
   const session = await ensureSession()
   if (!session) {
-    ElMessage.warning('预览会话不可用')
+    ElMessage.warning(ui('预览会话不可用', 'Preview session unavailable'))
     return false
   }
   if (connectionStarted.value) return true
@@ -737,11 +741,11 @@ const ensureMqttPreview = async () => {
   try {
     await dataAPI.startMqttConnection(projectIdText.value, props.connection.id)
     connectionStarted.value = true
-    ElMessage.success(isBuiltinMessageMode.value ? 'IF消息库已连接' : 'MQTT 已连接')
+    ElMessage.success(isBuiltinMessageMode.value ? ui('IF消息库已连接', 'IF Message Store connected') : ui('MQTT 已连接', 'MQTT connected'))
     return true
   } catch (error) {
     ElMessage.error(
-      getApiErrorMessage(error, isBuiltinMessageMode.value ? 'IF消息库连接失败' : 'MQTT 连接失败'),
+      getApiErrorMessage(error, isBuiltinMessageMode.value ? ui('IF消息库连接失败', 'Failed to connect IF Message Store') : ui('MQTT 连接失败', 'Failed to connect MQTT')),
     )
     return false
   }
@@ -756,11 +760,11 @@ const stopMqttPreview = async () => {
     monitorSubscription.value = null
     await dataAPI.stopMqttConnection(projectIdText.value, props.connection.id)
     connectionStarted.value = false
-    ElMessage.success(isBuiltinMessageMode.value ? 'IF消息库已断开' : 'MQTT 已断开')
+    ElMessage.success(isBuiltinMessageMode.value ? ui('IF消息库已断开', 'IF Message Store disconnected') : ui('MQTT 已断开', 'MQTT disconnected'))
     return true
   } catch (error) {
     ElMessage.error(
-      getApiErrorMessage(error, isBuiltinMessageMode.value ? 'IF消息库断开失败' : 'MQTT 断开失败'),
+      getApiErrorMessage(error, isBuiltinMessageMode.value ? ui('IF消息库断开失败', 'Failed to disconnect IF Message Store') : ui('MQTT 断开失败', 'Failed to disconnect MQTT')),
     )
     return false
   }
@@ -820,7 +824,7 @@ const openMessages = async (subscription: MqttSubscription) => {
   addTab({
     id: `mqtt-messages-${subscription.id}`,
     type: 'messages',
-    title: `${subscription.name || subscription.topic} / 消息`,
+    title: `${subscription.name || subscription.topic} / ${ui('消息', 'Messages')}`,
     icon: IconTablerMessages,
     subscription,
   })
@@ -830,7 +834,7 @@ const openMessages = async (subscription: MqttSubscription) => {
 
 const subscribeMessageTab = async (subscription: MqttSubscription) => {
   if (!connectionStarted.value) {
-    ElMessage.warning('请先连接后再订阅消息')
+    ElMessage.warning(ui('请先连接后再订阅消息', 'Connect before subscribing to messages'))
     return
   }
   const tabId = `mqtt-messages-${subscription.id}`
@@ -864,7 +868,7 @@ const openTagManager = async (subscription: MqttSubscription) => {
     addTab({
       id: `mqtt-batch-${subscription.id}`,
       type: 'batch',
-      title: `${subscription.name || subscription.topic} / 映射`,
+      title: `${subscription.name || subscription.topic} / ${ui('映射', 'Mapping')}`,
       icon: IconTablerListTree,
       subscription,
     })
@@ -874,7 +878,7 @@ const openTagManager = async (subscription: MqttSubscription) => {
   addTab({
     id: `mqtt-tags-${subscription.id}`,
     type: 'tags',
-    title: `${subscription.name || subscription.topic} / 变量`,
+    title: `${subscription.name || subscription.topic} / ${ui('变量', 'Variables')}`,
     icon: IconTablerTags,
     subscription,
   })
@@ -883,7 +887,7 @@ const openTagManager = async (subscription: MqttSubscription) => {
 const openTagMonitor = (subscription: MqttSubscription) => {
   selectedSubscription.value = subscription
   if (!connectionStarted.value) {
-    ElMessage.warning('请先连接后再打开变量监控')
+    ElMessage.warning(ui('请先连接后再打开变量监控', 'Connect before opening variable monitoring'))
     return
   }
   const activeRef = tagListRefs.value.get(activeTabId.value)
@@ -910,7 +914,7 @@ const openPublishTester = async (subscription: MqttSubscription) => {
   addTab({
     id: `mqtt-publish-${subscription.id}`,
     type: 'publish',
-    title: `${subscription.name || subscription.topic} / 发布`,
+    title: `${subscription.name || subscription.topic} / ${ui('发布', 'Publish')}`,
     icon: IconTablerSend,
     subscription,
   })
@@ -942,10 +946,10 @@ const refreshSelectedAndTabs = (subscription: MqttSubscription) => {
 }
 
 const tabTypeLabel = (type: string) => {
-  if (type === 'messages') return '消息'
-  if (type === 'publish') return '发布'
-  if (type === 'batch') return '映射'
-  return '变量'
+  if (type === 'messages') return ui('消息', 'Messages')
+  if (type === 'publish') return ui('发布', 'Publish')
+  if (type === 'batch') return ui('映射', 'Mapping')
+  return ui('变量', 'Variables')
 }
 
 const subscriptionUpdatePayload = (
@@ -996,7 +1000,7 @@ function subscriptionPath(subscription: MqttSubscription) {
     groupId = group.parentId || ''
   }
 
-  return ['根目录', ...names].join(' / ')
+  return [ui('根目录', 'Root'), ...names].join(' / ')
 }
 
 async function handleSubscriptionSaved(data?: any) {
@@ -1025,21 +1029,21 @@ async function handleGroupDialogSubmit(data: { name: string; parentId: string | 
   try {
     if (groupDialogMode.value === 'create') {
       await dataAPI.createMqttSubscriptionGroup(projectIdText.value, props.connection.id, data)
-      ElMessage.success('分组已创建')
+      ElMessage.success(ui('分组已创建', 'Group created'))
     } else if (contextGroup.value) {
       await dataAPI.updateMqttSubscriptionGroup(projectIdText.value, contextGroup.value.id, {
         name: data.name,
         parentId: data.parentId,
         hasParentId: true,
       })
-      ElMessage.success('分组已重命名')
+      ElMessage.success(ui('分组已重命名', 'Group renamed'))
     }
     groupSaving.value = false
     groupDialogVisible.value = false
     groupDialogRef.value?.closeSilently()
     await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('保存分组失败', 'Failed to save group')))
   } finally {
     groupSaving.value = false
   }
@@ -1077,19 +1081,19 @@ async function handleMoveSubmit(groupId: string | null) {
       )
       const saved = response.data?.subscription || response.data
       if (saved?.id) refreshSelectedAndTabs(saved)
-      ElMessage.success('订阅已移动')
+      ElMessage.success(ui('订阅已移动', 'Subscription moved'))
     } else if (moveTargetType.value === 'group' && contextGroup.value) {
       await dataAPI.updateMqttSubscriptionGroup(projectIdText.value, contextGroup.value.id, {
         parentId: groupId,
         hasParentId: true,
       })
-      ElMessage.success('分组已移动')
+      ElMessage.success(ui('分组已移动', 'Group moved'))
     }
     moveSaving.value = false
     moveDialogVisible.value = false
     await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '移动失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('移动失败', 'Move failed')))
   } finally {
     moveSaving.value = false
   }
@@ -1097,11 +1101,11 @@ async function handleMoveSubmit(groupId: string | null) {
 
 async function deleteSubscription(subscription: MqttSubscription) {
   const ok = await ElMessageBox.confirm(
-    `确认删除订阅「${subscription.name || subscription.topic || subscription.id}」？此操作不可恢复。`,
-    '删除订阅',
+    ui(`确认删除订阅「${subscription.name || subscription.topic || subscription.id}」？此操作不可恢复。`, `Delete subscription “${subscription.name || subscription.topic || subscription.id}”? This cannot be undone.`),
+    ui('删除订阅', 'Delete Subscription'),
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     },
   )
@@ -1118,10 +1122,10 @@ async function deleteSubscription(subscription: MqttSubscription) {
     if (selectedSubscription.value?.id === subscription.id) {
       selectedSubscription.value = null
     }
-    ElMessage.success('订阅已删除')
+    ElMessage.success(ui('订阅已删除', 'Subscription deleted'))
     await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除订阅失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除订阅失败', 'Failed to delete subscription')))
   }
 }
 
@@ -1132,11 +1136,11 @@ const countGroupSubscriptions = (group: MqttSubscriptionGroupNode): number =>
 async function deleteGroup(group: MqttSubscriptionGroupNode) {
   const subscriptionCount = countGroupSubscriptions(group)
   const ok = await ElMessageBox.confirm(
-    `确认删除分组「${group.name}」？组内 ${subscriptionCount} 个订阅会回到根目录。`,
-    '删除分组',
+    ui(`确认删除分组「${group.name}」？组内 ${subscriptionCount} 个订阅会回到根目录。`, `Delete group “${group.name}”? Its ${subscriptionCount} subscriptions will return to Root.`),
+    ui('删除分组', 'Delete Group'),
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ui('删除', 'Delete'),
+      cancelButtonText: ui('取消', 'Cancel'),
       type: 'warning',
     },
   )
@@ -1146,10 +1150,10 @@ async function deleteGroup(group: MqttSubscriptionGroupNode) {
 
   try {
     await dataAPI.deleteMqttSubscriptionGroup(projectIdText.value, group.id)
-    ElMessage.success('分组已删除')
+    ElMessage.success(ui('分组已删除', 'Group deleted'))
     await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('删除分组失败', 'Failed to delete group')))
   }
 }
 

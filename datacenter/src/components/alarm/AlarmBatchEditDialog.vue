@@ -1,15 +1,15 @@
 <template>
-  <DcDrawer v-model="visible" title="批量修改报警项" :width="560" :max="640">
+  <DcDrawer v-model="visible" :title="t('alarmBatch.title')" :width="560" :max="640">
     <div class="alarm-batch">
       <div class="alarm-batch__notice">
-        将修改 <strong>{{ affectedCount }}</strong> 条报警项。只有勾选的字段会变化。
+        {{ t('alarmBatch.notice', { count: affectedCount }) }}
       </div>
       <label class="alarm-batch__row"
-        ><el-checkbox v-model="fields.isEnabled">启停状态</el-checkbox
+        ><el-checkbox v-model="fields.isEnabled">{{ t('alarmBatch.enabled') }}</el-checkbox
         ><el-switch v-model="patch.isEnabled" :disabled="!fields.isEnabled"
       /></label>
       <label class="alarm-batch__row"
-        ><el-checkbox v-model="fields.groupId">移动目录</el-checkbox
+        ><el-checkbox v-model="fields.groupId">{{ t('alarmBatch.moveDirectory') }}</el-checkbox
         ><AlarmGroupSelect
           v-model="patch.groupId"
           :project-id="projectId"
@@ -18,18 +18,18 @@
         ></label
       >
       <label class="alarm-batch__row"
-        ><el-checkbox v-model="fields.notification">通知方式</el-checkbox
+        ><el-checkbox v-model="fields.notification">{{ t('alarmBatch.notification') }}</el-checkbox
         ><el-select v-model="patch.notification.mode" :disabled="!fields.notification"
-          ><el-option label="沿用工程设置" value="inherit" /><el-option
-            label="不通知"
-            value="off" /><el-option label="单独设置" value="custom" /></el-select
+          ><el-option :label="t('alarmBatch.inherit')" value="inherit" /><el-option
+            :label="t('alarmBatch.off')"
+            value="off" /><el-option :label="t('alarmBatch.custom')" value="custom" /></el-select
       ></label>
       <section v-if="conditionsCompatible" class="alarm-batch__conditions">
-        <el-checkbox v-model="fields.conditions">统一替换报警条件</el-checkbox>
-        <p>替换会覆盖所选报警项原有条件。各报警项仍保持独立身份。</p>
+        <el-checkbox v-model="fields.conditions">{{ t('alarmBatch.replaceConditions') }}</el-checkbox>
+        <p>{{ t('alarmBatch.replaceHint') }}</p>
         <div v-if="fields.conditions" class="alarm-batch__condition-list">
           <article v-for="condition in patch.conditions" :key="condition.id">
-            <el-input v-model="condition.label" placeholder="等级标签" />
+            <el-input v-model="condition.label" :placeholder="t('alarmBatch.levelLabel')" />
             <el-select v-model="condition.severity"
               ><el-option
                 v-for="item in severityDefinitions"
@@ -49,9 +49,9 @@
               <el-select
                 :model-value="String(condition.params.direction || 'absolute')"
                 @update:model-value="condition.params = { ...condition.params, direction: $event }"
-                ><el-option label="上升" value="rise" /><el-option
-                  label="下降"
-                  value="fall" /><el-option label="绝对" value="absolute"
+                ><el-option :label="t('alarmBatch.rise')" value="rise" /><el-option
+                  :label="t('alarmBatch.fall')"
+                  value="fall" /><el-option :label="t('alarmBatch.absolute')" value="absolute"
               /></el-select>
               <el-input-number
                 :model-value="Number(condition.params.limit)"
@@ -64,7 +64,7 @@
               :model-value="condition.params.qualities"
               multiple
               @update:model-value="condition.params = { ...condition.params, qualities: $event }"
-              ><el-option label="异常" value="bad" /><el-option label="未知" value="unknown"
+              ><el-option :label="t('alarmBatch.bad')" value="bad" /><el-option :label="t('alarmBatch.unknown')" value="unknown"
             /></el-select>
             <el-input-number
               v-else-if="condition.kind === 'stale'"
@@ -75,16 +75,16 @@
           </article>
         </div>
       </section>
-      <div v-else class="alarm-batch__muted">所选报警类型不同，只能修改启停、目录和通知。</div>
+      <div v-else class="alarm-batch__muted">{{ t('alarmBatch.incompatible') }}</div>
       <footer>
-        <button type="button" class="dc-button" @click="visible = false">取消</button
+        <button type="button" class="dc-button" @click="visible = false">{{ t('alarmBatch.cancel') }}</button
         ><button
           type="button"
           class="dc-button dc-button--primary"
           :disabled="saving"
           @click="submit"
         >
-          确认修改
+          {{ t('alarmBatch.confirm') }}
         </button>
       </footer>
     </div>
@@ -97,6 +97,7 @@ import DcDrawer from '@/components/shared/DcDrawer.vue'
 import AlarmGroupSelect from './AlarmGroupSelect.vue'
 import type { AlarmBatchUpdate, AlarmItem, AlarmItemSelection } from '@/api/schemas/alarm.schema'
 import { useAlarmLevelDefinitions } from '@/composables/useAlarmLevelDefinitions'
+import { t } from '@/i18n/runtime'
 
 const props = withDefaults(
   defineProps<{
@@ -164,7 +165,7 @@ function submit() {
   const selectedFields = (Object.keys(fields) as Array<keyof typeof fields>).filter(
     (key) => fields[key],
   )
-  if (!selectedFields.length) return ElMessage.warning('请至少勾选一个要修改的字段')
+  if (!selectedFields.length) return ElMessage.warning(t('alarmBatch.selectField'))
   emit('save', {
     selection: props.selection,
     fields: selectedFields,

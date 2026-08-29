@@ -7,7 +7,7 @@
   >
     <template v-for="item in displayItems" :key="item.key">
       <div v-if="item.kind === 'placeholder'" class="access-source-list__placeholder">
-        <span>放到这里</span>
+        <span>{{ ui('放到这里', 'Drop here') }}</span>
       </div>
       <AccessSourceCard
         v-else
@@ -29,8 +29,8 @@
             type="button"
             class="access-source-list__drag-handle"
             draggable="true"
-            title="拖拽调整位置"
-            aria-label="拖拽调整位置"
+            :title="ui('拖拽调整位置', 'Drag to reorder')"
+            :aria-label="ui('拖拽调整位置', 'Drag to reorder')"
             @dragstart="handleDragStart(item.connection.id, $event)"
             @dragend="clearDragState"
             @click.stop
@@ -45,8 +45,8 @@
     <div v-if="connections.length === 0" class="access-source-list__empty-wrap">
       <EmptyState
         icon-name="access-source"
-        title="暂无接入源"
-        description="使用新增连接卡片创建第一个数据接入。"
+        :title="ui('暂无接入源', 'No access sources')"
+        :description="ui('使用新增连接卡片创建第一个数据接入。', 'Create the first data connection with New Connection.')"
       />
     </div>
   </div>
@@ -58,6 +58,9 @@ import AccessSourceCard from './AccessSourceCard.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import IconTablerGripVertical from '~icons/tabler/grip-vertical'
 import type { Connection as AccessSourceConnection } from '@/api/schemas/connection.schema'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const emit = defineEmits<{
   (event: 'open', connection: AccessSourceConnection): void

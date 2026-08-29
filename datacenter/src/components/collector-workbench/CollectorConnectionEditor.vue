@@ -6,12 +6,8 @@
     class="collector-editor"
   >
     <div class="collector-editor__basic">
-      <el-form-item label="连接名称">
-        <el-input v-model="name" maxlength="50" placeholder="仅支持文字、数字和空格" />
-      </el-form-item>
-      <el-form-item label="连接编码">
-        <el-input :model-value="connection.code" disabled />
-        <span class="collector-editor__hint">创建时自动生成，修改连接名称不会改变编码</span>
+      <el-form-item :label="ui('连接名称', 'Connection Name')">
+        <el-input v-model="name" maxlength="50" :placeholder="ui('例如 1号产线 OPC UA', 'For example, Line 1 OPC UA')" />
       </el-form-item>
     </div>
     <CollectorSchemaForm
@@ -24,35 +20,26 @@
     <section class="collector-editor__acquisition">
       <div class="collector-editor__section-title">
         <div>
-          <strong>默认采集参数</strong>
-          <p>新增变量自动继承；变量可以只覆盖有差异的字段。</p>
+          <strong>{{ ui('默认采集参数', 'Default Acquisition') }}</strong>
+          <p>{{ ui('作为该连接下变量的默认采集参数。', 'Applied as the default acquisition settings for points in this connection.') }}</p>
         </div>
-        <el-switch v-model="isEnabled" active-text="启用连接" />
+        <el-switch v-model="isEnabled" :active-text="ui('启用连接', 'Enable Connection')" />
       </div>
       <div class="collector-editor__acquisition-grid">
-        <el-form-item label="采集周期 (ms)"
+        <el-form-item :label="ui('采集周期（毫秒）', 'Interval (ms)')"
           ><el-input-number v-model="defaultAcquisition.intervalMs" :min="1"
         /></el-form-item>
-        <el-form-item label="读取超时 (ms)"
-          ><el-input-number v-model="defaultAcquisition.timeoutMs" :min="1"
-        /></el-form-item>
-        <el-form-item label="失败重试"
-          ><el-input-number v-model="defaultAcquisition.retryCount" :min="0"
-        /></el-form-item>
-        <el-form-item label="数值死区"
+        <el-form-item :label="ui('数值死区', 'Numeric Deadband')"
           ><el-input-number v-model="defaultAcquisition.deadband" :min="0"
         /></el-form-item>
-        <el-form-item label="优先级"
-          ><el-input-number v-model="defaultAcquisition.priority" :min="0"
-        /></el-form-item>
-        <el-form-item label="仅变化时采集"
+        <el-form-item :label="ui('仅变化时上报', 'Report Changes Only')"
           ><el-switch v-model="defaultAcquisition.changeOnly"
         /></el-form-item>
       </div>
     </section>
     <div class="collector-editor__actions">
       <el-button data-test="save-connection" type="primary" :loading="saving" @click="save"
-        >保存配置</el-button
+        >{{ ui('保存配置', 'Save Configuration') }}</el-button
       >
     </div>
   </el-form>
@@ -71,6 +58,9 @@ import {
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
 import { validateCollectorConnectionName } from './collector-workbench-model'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = defineProps<{
   projectId: string
@@ -89,11 +79,8 @@ const saving = ref(false)
 const isEnabled = ref(true)
 const defaultAcquisition = ref({
   intervalMs: 1000,
-  timeoutMs: 3000,
-  retryCount: 0,
   deadband: 0,
   changeOnly: false,
-  priority: 0,
 })
 const stringFieldOptions = computed<Record<string, string[]>>(() => {
   if (!driver.value?.connectionSchema.properties?.portName) return {}
@@ -117,11 +104,8 @@ watch(
       isEnabled.value = connection.isEnabled
       defaultAcquisition.value = {
         intervalMs: Number(connection.defaultAcquisition.intervalMs) || 1000,
-        timeoutMs: Number(connection.defaultAcquisition.timeoutMs) || 3000,
-        retryCount: Number(connection.defaultAcquisition.retryCount) || 0,
         deadband: Number(connection.defaultAcquisition.deadband) || 0,
         changeOnly: Boolean(connection.defaultAcquisition.changeOnly),
-        priority: Number(connection.defaultAcquisition.priority) || 0,
       }
     } finally {
       loading.value = false
@@ -146,9 +130,9 @@ async function save() {
       ...payload,
     })
     emit('saved', result)
-    ElMessage.success('连接配置已保存')
+    ElMessage.success(ui('连接配置已保存', 'Connection configuration saved'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '连接配置保存失败'))
+    ElMessage.error(getApiErrorMessage(error, ui('连接配置保存失败', 'Failed to save the connection configuration')))
   } finally {
     saving.value = false
   }
@@ -164,11 +148,6 @@ async function save() {
 .collector-editor__basic {
   width: min(100%, 560px);
   margin-bottom: 4px;
-}
-.collector-editor__hint {
-  margin-top: 6px;
-  color: var(--dc-text-muted);
-  font-size: 12px;
 }
 .collector-editor__actions {
   position: sticky;

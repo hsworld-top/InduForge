@@ -2,16 +2,16 @@
   <div class="collector-discovery">
     <div v-if="isOpcUa" class="collector-discovery__head">
       <div class="collector-discovery__title">
-        <strong>OPC UA 设备节点</strong>
-        <span v-if="isCascading">正在读取下级节点</span>
-        <span v-else-if="selectedCount > 0">已选择 {{ selectedCount }} 个变量</span>
+        <strong>{{ ui('OPC UA 设备节点', 'OPC UA Device Nodes') }}</strong>
+        <span v-if="isCascading">{{ ui('正在读取下级节点', 'Loading child nodes') }}</span>
+        <span v-else-if="selectedCount > 0">{{ ui(`已选择 ${selectedCount} 个变量`, `${selectedCount} point${selectedCount === 1 ? '' : 's'} selected`) }}</span>
       </div>
       <div class="collector-discovery__toolbar">
         <el-input
           v-model="nodeIdFilter"
           clearable
-          placeholder="筛选已加载节点的 NodeId"
-          aria-label="NodeId 筛选"
+          :placeholder="ui('筛选已加载节点的 NodeId', 'Filter loaded nodes by NodeId')"
+          :aria-label="ui('NodeId 筛选', 'Filter NodeId')"
         />
         <el-button
           type="primary"
@@ -19,16 +19,16 @@
           :disabled="selectedCount === 0 || isCascading || !enabled"
           @click="emitSelectedPoints"
         >
-          批量新增 {{ selectedCount || '' }}
+          {{ ui(`批量新增 ${selectedCount || ''}`, `Add Selected ${selectedCount || ''}`) }}
         </el-button>
         <el-button :loading="refreshing" :disabled="!enabled || isCascading" @click="refreshTree">
-          <IconTablerRefresh />刷新
+          <IconTablerRefresh />{{ ui('刷新', 'Refresh') }}
         </el-button>
       </div>
     </div>
 
     <div v-else class="collector-discovery__toolbar is-generic">
-      <el-input v-model="parentNodeId" placeholder="父节点 NodeId" />
+      <el-input v-model="parentNodeId" :placeholder="ui('父节点 NodeId', 'Parent NodeId')" />
       <el-button
         data-test="browse-device"
         type="primary"
@@ -36,16 +36,16 @@
         :loading="loading"
         @click="browseGeneric"
       >
-        浏览设备
+        {{ ui('浏览设备', 'Browse Device') }}
       </el-button>
       <el-button :loading="batchLoading" :disabled="!selected.length" @click="emitPoints">
-        保存为变量
+        {{ ui('保存为变量', 'Save as Points') }}
       </el-button>
     </div>
 
     <el-alert
       v-if="!enabled"
-      title="当前未选择兼容 Agent，仍可离线编辑连接和变量"
+      :title="ui('当前未选择兼容 Agent，仍可离线编辑连接和变量', 'No compatible agent is selected. Connections and points can still be edited offline.')"
       type="info"
       :closable="false"
       show-icon
@@ -93,7 +93,7 @@
                 class="collector-discovery__loading-icon"
               />
               <em v-if="data.dataType">{{ data.dataType }}</em>
-              <el-tag v-if="data.modeled" size="small" type="info">已添加</el-tag>
+              <el-tag v-if="data.modeled" size="small" type="info">{{ ui('已添加', 'Added') }}</el-tag>
               <el-tag
                 v-else
                 size="small"
@@ -106,8 +106,8 @@
                 class="collector-discovery__node-action"
                 text
                 circle
-                title="配置后新增变量"
-                aria-label="配置后新增变量"
+                :title="ui('配置后新增变量', 'Configure and add point')"
+                :aria-label="ui('配置后新增变量', 'Configure and add point')"
                 @click.stop="openPointDrawer(data)"
               >
                 <IconTablerPlus />
@@ -116,16 +116,16 @@
           </div>
         </template>
       </el-tree>
-      <el-empty v-else description="选择在线且支持 OPC UA 浏览的调试代理" />
+      <el-empty v-else :description="ui('选择在线且支持 OPC UA 浏览的调试代理', 'Select an online debug agent that supports OPC UA browsing')" />
     </div>
 
     <el-table v-else :data="nodes" height="100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="44" :selectable="isGenericNodeSelectable" />
-      <el-table-column prop="displayName" label="显示名" min-width="180" />
+      <el-table-column prop="displayName" :label="ui('显示名', 'Display Name')" min-width="180" />
       <el-table-column prop="nodeId" label="NodeId" min-width="260" />
-      <el-table-column label="状态" width="100">
+      <el-table-column :label="ui('状态', 'Status')" width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.modeled" size="small" type="info">已添加</el-tag>
+          <el-tag v-if="row.modeled" size="small" type="info">{{ ui('已添加', 'Added') }}</el-tag>
           <span v-else>{{ nodeClassLabel(row.nodeClass) }}</span>
         </template>
       </el-table-column>
@@ -155,6 +155,9 @@ import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerVariable from '~icons/tabler/variable'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const opcuaObjectsNodeId = 'ns=0;i=85'
 const browseBatchSize = 32
@@ -227,11 +230,11 @@ async function waitTask(projectId: string, taskId: string) {
     const task = await getCollectorTask(projectId, taskId)
     if (task.status === 'succeeded') return task
     if (['failed', 'cancelled', 'expired'].includes(task.status)) {
-      throw new Error(task.errorMessage || '设备浏览失败')
+      throw new Error(task.errorMessage || ui('设备浏览失败', 'Device browsing failed'))
     }
     await new Promise((resolve) => setTimeout(resolve, 200))
   }
-  throw new Error('设备浏览超时')
+  throw new Error(ui('设备浏览超时', 'Device browsing timed out'))
 }
 
 function normalizeBrowseNodes(nodesToNormalize: CollectorBrowseNode[] = []) {
@@ -528,7 +531,7 @@ async function selectBranch(node: CollectorBrowseNode) {
     selectedVariableIds.value = variableIds
     const branches = new Set(selectedBranchIds.value)
     if (result.variables.length > 0) branches.add(node.nodeId)
-    else ElMessage.info('该节点下没有可新增的变量')
+    else ElMessage.info(ui('该节点下没有可新增的变量', 'This node contains no points that can be added'))
     selectedBranchIds.value = branches
   } catch (error) {
     handleBrowseError(error)
@@ -625,11 +628,11 @@ function resetBrowseState() {
 }
 
 function nodeClassLabel(nodeClass: string) {
-  if (nodeClass === 'variable') return '变量'
-  if (nodeClass === 'method') return '方法'
-  if (nodeClass === 'view') return '视图'
-  if (nodeClass === 'object') return '对象'
-  return '节点'
+  if (nodeClass === 'variable') return ui('变量', 'Variable')
+  if (nodeClass === 'method') return ui('方法', 'Method')
+  if (nodeClass === 'view') return ui('视图', 'View')
+  if (nodeClass === 'object') return ui('对象', 'Object')
+  return ui('节点', 'Node')
 }
 
 async function browseGeneric() {
@@ -657,14 +660,15 @@ function buildBatchPoints(variables: CollectorBrowseNode[]) {
     ...buildCollectorPointCreateDefaults(node),
     description: null,
     readOptions: {},
-    acquisition: { mode: 'polling', intervalMs: 1000 },
+    acquisitionMode: 'inherit',
+    acquisitionOverrides: {},
     sortOrder: index,
     metadata: {},
   }))
 }
 
 function handleBrowseError(error: unknown) {
-  const message = error instanceof Error ? error.message : '设备浏览失败'
+  const message = error instanceof Error ? error.message : ui('设备浏览失败', 'Device browsing failed')
   if (/会话.*(断开|建立)|连接.*断开/.test(message)) emit('sessionError', message)
   ElMessage.error(message)
 }

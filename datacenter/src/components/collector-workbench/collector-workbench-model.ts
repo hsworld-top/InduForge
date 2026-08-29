@@ -4,6 +4,7 @@ import type {
   CollectorDriverSummary,
   CollectorJsonSchemaProperty,
 } from '@/api/schemas/collector.schema'
+import { datacenterLocale } from '@/i18n/runtime'
 
 export type CollectorDriverIconKey =
   | 'modbus'
@@ -47,7 +48,168 @@ export function resolveCollectorEnumOptionLabel(
   property: CollectorJsonSchemaProperty,
   option: unknown,
 ) {
-  return property['x-induforge-enum-labels']?.[String(option)] || String(option)
+  const value = String(option)
+  const commonLabels: Record<string, string> = {
+    none: '无',
+    odd: '奇校验',
+    even: '偶校验',
+    coil: '线圈',
+    discreteInput: '离散输入',
+    inputRegister: '输入寄存器',
+    holdingRegister: '保持寄存器',
+    ABCD: '大端顺序（ABCD）',
+    BADC: '字节交换（BADC）',
+    CDAB: '字交换（CDAB）',
+    DCBA: '完全反转（DCBA）',
+  }
+  const commonEnglishLabels: Record<string, string> = {
+    none: 'None',
+    anonymous: 'Anonymous',
+    username: 'Username and Password',
+    basic: 'Basic Authentication',
+    odd: 'Odd',
+    even: 'Even',
+    coil: 'Coil',
+    discreteInput: 'Discrete Input',
+    inputRegister: 'Input Register',
+    holdingRegister: 'Holding Register',
+    ABCD: 'Big Endian (ABCD)',
+    BADC: 'Byte Swap (BADC)',
+    CDAB: 'Word Swap (CDAB)',
+    DCBA: 'Reverse (DCBA)',
+  }
+  if (datacenterLocale.value === 'en') {
+    return commonEnglishLabels[value] || value
+  }
+  const label = property['x-induforge-enum-labels']?.[value] || commonLabels[value] || value
+  const suffix = label.match(/（([^）]+)）$/)
+  if (suffix?.[1].toLowerCase() === value.toLowerCase() && !/^[A-Z0-9_-]+$/.test(value)) {
+    return label.slice(0, -suffix[0].length)
+  }
+  return label
+}
+
+const collectorFieldLabelReplacements: Record<string, string> = {
+  串口: '串口名称',
+  校验位: '校验方式',
+  网络编号: '网络号',
+  '目标 IO 站号': '目标 I/O 站号',
+  允许位写字寄存器: '允许位写入字寄存器',
+  和校验: '启用和校验',
+  '连接 ID': 'CPU 连接号',
+  公司标识: 'PLC 系列',
+}
+
+const collectorEnglishFieldLabels: Record<string, string> = {
+  host: 'Device IP / Hostname',
+  port: 'Port',
+  endpointPath: 'Endpoint Path',
+  portName: 'Serial Port',
+  baudRate: 'Baud Rate',
+  dataBits: 'Data Bits',
+  parity: 'Parity',
+  stopBits: 'Stop Bits',
+  station: 'Station Address',
+  rack: 'Rack',
+  slot: 'Slot',
+  timeoutMs: 'Timeout',
+  connectTimeoutMs: 'Connection Timeout',
+  receiveTimeoutMs: 'Receive Timeout',
+  securityMode: 'Security Mode',
+  securityPolicy: 'Security Policy',
+  authMode: 'Authentication',
+  username: 'Username',
+  password: 'Password',
+  targetAmsNetId: 'Target AMS Net ID',
+  senderAmsNetId: 'Sender AMS Net ID',
+  amsPort: 'AMS Port',
+  useAutoAmsNetId: 'Detect AMS Net ID Automatically',
+  clientId: 'Client ID',
+  deviceTopic: 'Device Topic',
+  series: 'PLC Series',
+  dataFormat: 'Data Format',
+  stringReverse: 'Reverse String Bytes',
+  addressStartWithZero: 'Zero-based Addressing',
+  unitNumber: 'Unit Number',
+  plcType: 'PLC Type',
+  destinationNode: 'Destination Node',
+  sourceNode: 'Source Node',
+  checkType: 'Checksum Type',
+  enableCodeFE: 'Enable FE Preamble',
+  useSecurityRequest: 'Use Secure Request',
+  clientAddress: 'Client Address',
+  checkDataId: 'Validate Data ID',
+  opCode: 'Operator Code',
+  instrumentType: 'Instrument Type',
+  stationMatch: 'Validate Response Address',
+  waitingTime: 'Wait Time',
+  sumCheck: 'Enable Sum Check',
+  format: 'Frame Format',
+}
+
+function humanizeCollectorFieldName(name: string) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+export function formatCollectorSchemaFieldLabel(
+  name: string,
+  property: CollectorJsonSchemaProperty,
+) {
+  if (datacenterLocale.value === 'en') {
+    return collectorEnglishFieldLabels[name] || humanizeCollectorFieldName(name)
+  }
+  const title = (property.title || name).trim()
+  const suffix = title.match(/（([^）]+)）$/)
+  const aliases = suffix?.[1]
+    .split(/[\s/]+/)
+    .map((value) => value.toLowerCase())
+    .filter(Boolean)
+  const visibleTitle = aliases?.includes(name.toLowerCase())
+    ? title.slice(0, -suffix![0].length)
+    : title
+  return collectorFieldLabelReplacements[visibleTitle] || visibleTitle
+}
+
+const collectorRedundantHintFields = new Set([
+  'host',
+  'port',
+  'portName',
+  'baudRate',
+  'dataBits',
+  'parity',
+  'stopBits',
+  'rack',
+  'slot',
+  'connectTimeoutMs',
+  'receiveTimeoutMs',
+  'timeoutMs',
+])
+
+export function formatCollectorSchemaFieldHint(
+  name: string,
+  property: CollectorJsonSchemaProperty,
+) {
+  const description = property.description?.trim() || ''
+  if (!description) return ''
+  if (datacenterLocale.value === 'en') {
+    const hints: Record<string, string> = {
+      host: 'Enter the address without a protocol prefix.',
+      endpointPath: 'The leading slash is added automatically when omitted.',
+      portName: 'For example, COM3 on Windows or /dev/ttyUSB0 on Linux.',
+    }
+    return hints[name] || ''
+  }
+  if (name === 'host' && description.includes('不包含 opc.tcp://')) {
+    return '直接填写地址，不包含 opc.tcp:// 协议头。'
+  }
+  if (collectorRedundantHintFields.has(name)) return ''
+  return description
+    .replace(/^请输入/, '')
+    .replace(/^选择目标[^，]+，/, '')
+    .replace('当前调试代理', '当前版本')
 }
 
 const protocolFamilyLabels: Record<string, string> = {
@@ -251,13 +413,15 @@ export function formatCollectorAgentName(agent: CollectorAgent) {
   const name = agent.name.trim()
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   if (name && name !== agent.id && !uuidPattern.test(name)) return name
-  const platform = agent.os.toLowerCase() === 'windows' ? 'Windows' : agent.os || '本机'
-  return agent.ipAddress ? `${platform} 调试代理 · ${agent.ipAddress}` : `${platform} 调试代理`
+  const platform = agent.os.toLowerCase() === 'windows' ? 'Windows' : agent.os || (datacenterLocale.value === 'en' ? 'Local' : '本机')
+  const suffix = datacenterLocale.value === 'en' ? 'Debug Agent' : '调试代理'
+  return agent.ipAddress ? `${platform} ${suffix} · ${agent.ipAddress}` : `${platform} ${suffix}`
 }
 
 export function formatCollectorProtocolFamily(protocolFamily: string) {
   const normalized = protocolFamily.trim().toLowerCase()
-  return protocolFamilyLabels[normalized] || protocolFamily.trim().toUpperCase()
+  const label = protocolFamilyLabels[normalized] || protocolFamily.trim().toUpperCase()
+  return datacenterLocale.value === 'en' ? label.replace(/\s*\[[^\]]+\]\s*$/, '') : label
 }
 
 export function formatCollectorConnectionSummary(connection: CollectorConnection) {
@@ -279,24 +443,27 @@ export function formatCollectorConnectionSummary(connection: CollectorConnection
 export function formatCollectorConnectionStatus(status: string) {
   const normalized = status.trim().toLowerCase()
   if (['online', 'connected', 'running', 'healthy'].includes(normalized))
-    return { label: '在线', tone: 'success' as const }
+    return { label: datacenterLocale.value === 'en' ? 'Online' : '在线', tone: 'success' as const }
   if (['failed', 'error', 'invalid', 'unhealthy'].includes(normalized))
-    return { label: '异常', tone: 'danger' as const }
+    return { label: datacenterLocale.value === 'en' ? 'Error' : '异常', tone: 'danger' as const }
   if (['offline', 'disconnected'].includes(normalized))
-    return { label: '离线', tone: 'muted' as const }
+    return { label: datacenterLocale.value === 'en' ? 'Offline' : '离线', tone: 'muted' as const }
   if (['configured', 'ready'].includes(normalized))
-    return { label: '已配置', tone: 'primary' as const }
-  return { label: '未检测', tone: 'warning' as const }
+    return { label: datacenterLocale.value === 'en' ? 'Configured' : '已配置', tone: 'primary' as const }
+  return { label: datacenterLocale.value === 'en' ? 'Not Checked' : '未检测', tone: 'warning' as const }
 }
 
 export function formatCollectorCategoryLabel(category: string) {
   const normalized = category.trim().toLowerCase()
-  return categoryLabels[normalized] || category.trim().toUpperCase()
+  const label = categoryLabels[normalized] || category.trim().toUpperCase()
+  return datacenterLocale.value === 'en' ? label.replace(/\s*\[[^\]]+\]\s*$/, '') : label
 }
 
 export function formatCollectorDriverDisplayName(driver: CollectorDriverSummary) {
   const chineseLabel = driverChineseLabels[driver.driverId]
-  return chineseLabel ? `${driver.displayName} [${chineseLabel}]` : driver.displayName
+  return datacenterLocale.value === 'en' || !chineseLabel
+    ? driver.displayName
+    : `${driver.displayName} [${chineseLabel}]`
 }
 
 export function buildCollectorDriverTree(
@@ -453,10 +620,10 @@ export type CollectorPointCreateDefaults = {
 
 export function validateCollectorConnectionName(value: string) {
   const name = value.trim().replace(/\s+/g, ' ')
-  if (!name) return { name, error: '请填写连接名称' }
-  if ([...name].length > 50) return { name, error: '连接名称最多 50 个字符' }
+  if (!name) return { name, error: datacenterLocale.value === 'en' ? 'Enter a connection name' : '请填写连接名称' }
+  if ([...name].length > 50) return { name, error: datacenterLocale.value === 'en' ? 'Connection names can contain up to 50 characters' : '连接名称最多 50 个字符' }
   if (![...name].every((char) => char === ' ' || /[\p{L}\p{N}]/u.test(char))) {
-    return { name, error: '连接名称只能包含文字、数字和空格' }
+    return { name, error: datacenterLocale.value === 'en' ? 'Connection names can contain letters, numbers, and spaces only' : '连接名称只能包含文字、数字和空格' }
   }
   return { name, error: null }
 }
@@ -486,7 +653,7 @@ export function filterCollectorBrowseNode(nodeIdFilter: string, node: CollectorB
 export function buildCollectorPointCreateDefaults(
   node: CollectorBrowseNode,
 ): CollectorPointCreateDefaults {
-  const name = node.displayName.trim() || node.browseName.trim() || '未命名变量'
+  const name = node.displayName.trim() || node.browseName.trim() || (datacenterLocale.value === 'en' ? 'Unnamed Point' : '未命名变量')
   const rawDataType = node.dataType?.trim() || ''
   const dataType = opcuaDataTypeMap[rawDataType.toLowerCase()] || rawDataType || 'float64'
 

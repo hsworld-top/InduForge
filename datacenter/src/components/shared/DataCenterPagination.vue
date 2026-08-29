@@ -3,7 +3,7 @@
     <p class="dc-pagination__summary">{{ summary }}</p>
 
     <div class="dc-pagination__controls">
-      <span class="dc-pagination__label">每页</span>
+      <span class="dc-pagination__label">{{ t('common.perPage') }}</span>
       <el-popover placement="top" :width="100" trigger="click">
         <template #reference>
           <button type="button" class="dc-pagination__size-button">
@@ -29,7 +29,7 @@
         <button
           type="button"
           :disabled="!canPrev"
-          aria-label="上一页"
+          :aria-label="t('common.previousPage')"
           @click="changePage(page - 1)"
         >
           <IconTablerChevronLeft />
@@ -40,14 +40,14 @@
           min="1"
           :max="Math.max(totalPages, 1)"
           :disabled="totalPages === 0"
-          aria-label="跳转页码"
+          :aria-label="t('common.jumpPage')"
           @blur="applyJumpPage"
           @keydown.enter.prevent="applyJumpPage"
         />
         <button
           type="button"
           :disabled="!canNext"
-          aria-label="下一页"
+          :aria-label="t('common.nextPage')"
           @click="changePage(page + 1)"
         >
           <IconTablerChevronRight />
@@ -64,6 +64,7 @@ import { computed, ref, watch } from 'vue'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronLeft from '~icons/tabler/chevron-left'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import { t } from '@/i18n/runtime'
 
 const props = withDefaults(
   defineProps<{
@@ -92,10 +93,10 @@ const currentPage = computed(() => {
   return Math.min(Math.max(props.page, 1), resolvedTotalPages.value)
 })
 const summary = computed(() => {
-  if (props.total === 0) return '共 0 条'
+  if (props.total === 0) return t('common.total', { total: 0 })
   const start = (currentPage.value - 1) * props.pageSize + 1
   const end = Math.min(currentPage.value * props.pageSize, props.total)
-  return `${start}-${end} / 共 ${props.total} 条`
+  return t('common.rangeTotal', { start, end, total: props.total })
 })
 const pageIndicator = computed(
   () => `${resolvedTotalPages.value === 0 ? 0 : currentPage.value} / ${resolvedTotalPages.value}`,
@@ -169,13 +170,13 @@ const applyJumpPage = () => {
   padding: 0 10px;
   border: 0;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.05);
+  background: color-mix(in srgb, var(--dc-text) 5%, transparent);
   color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .dc-pagination__size-button:hover {
-  background: rgba(15, 23, 42, 0.09);
+  background: color-mix(in srgb, var(--dc-text) 9%, transparent);
   color: var(--dc-text);
 }
 
@@ -202,7 +203,7 @@ const applyJumpPage = () => {
 }
 
 .dc-pagination__size-item:hover {
-  background: rgba(15, 23, 42, 0.05);
+  background: color-mix(in srgb, var(--dc-text) 5%, transparent);
   color: var(--dc-text);
 }
 
@@ -218,7 +219,7 @@ const applyJumpPage = () => {
   gap: 3px;
   padding: 2px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.05);
+  background: color-mix(in srgb, var(--dc-text) 5%, transparent);
 }
 
 .dc-pagination__nav button {
@@ -233,7 +234,7 @@ const applyJumpPage = () => {
 }
 
 .dc-pagination__nav button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--dc-surface-raised) 70%, transparent);
   color: var(--dc-text);
 }
 
@@ -254,7 +255,7 @@ const applyJumpPage = () => {
   border: 0;
   border-radius: 8px;
   outline: none;
-  background: rgba(255, 255, 255, 0.78);
+  background: color-mix(in srgb, var(--dc-surface-raised) 78%, var(--dc-surface));
   color: var(--dc-text);
   font-size: 12px;
   text-align: center;

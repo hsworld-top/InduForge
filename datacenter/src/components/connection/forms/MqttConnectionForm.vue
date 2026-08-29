@@ -18,9 +18,9 @@
         <el-form-item prop="brokerUrl">
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              Broker 地址
+              {{ t('connection.mqtt.brokerHost') }}
               <el-tooltip
-                content="填写 MQTT Broker 的主机名或 IP，不需要包含协议和端口。"
+                :content="t('connection.mqtt.brokerHostHint')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
@@ -32,7 +32,7 @@
               v-model="formData.protocol"
               class="mqtt-connection-form__protocol-select"
               popper-class="mqtt-connection-form__protocol-popper"
-              aria-label="连接协议"
+              :aria-label="t('connection.mqtt.protocolAria')"
             >
               <el-option label="mqtt://" value="mqtt" />
               <el-option label="mqtts://" value="mqtts" />
@@ -42,7 +42,7 @@
             <el-input
               v-model="formData.brokerUrl"
               class="mqtt-connection-form__broker-input"
-              placeholder="例如：broker.emqx.io"
+              :placeholder="t('connection.mqtt.brokerExample')"
               clearable
             />
           </div>
@@ -51,21 +51,21 @@
         <el-form-item prop="port">
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              端口
-              <el-tooltip content="不同协议会自动带出常用端口，仍可手动修改。" placement="top">
+              {{ t('connection.port') }}
+              <el-tooltip :content="t('connection.mqtt.portHint')" placement="top">
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
           </template>
-          <el-input v-model.number="formData.port" inputmode="numeric" placeholder="请输入端口" />
+          <el-input v-model.number="formData.port" inputmode="numeric" :placeholder="t('connection.mqtt.portPlaceholder')" />
         </el-form-item>
       </div>
 
       <el-form-item prop="clientId">
         <template #label>
           <span class="mqtt-connection-form__field-label">
-            客户端 ID
-            <el-tooltip content="用于标识 MQTT 客户端；留空时系统会自动生成。" placement="top">
+            {{ t('connection.clientId') }}
+            <el-tooltip :content="t('connection.mqtt.clientIdHint')" placement="top">
               <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
             </el-tooltip>
           </span>
@@ -114,16 +114,16 @@
       <el-form-item>
         <template #label>
           <span class="mqtt-connection-form__field-label">
-            消息质量等级（QoS）
-            <el-tooltip content="控制消息送达保障，等级越高开销越大。" placement="top">
+            {{ t('connection.mqtt.qos') }}
+            <el-tooltip :content="t('connection.mqtt.qosHint')" placement="top">
               <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
             </el-tooltip>
           </span>
         </template>
         <el-radio-group v-model="formData.qos">
-          <el-radio :label="0">0 - 至多一次</el-radio>
-          <el-radio :label="1">1 - 至少一次</el-radio>
-          <el-radio :label="2">2 - 仅一次</el-radio>
+          <el-radio :label="0">{{ t('connection.mqtt.qos0') }}</el-radio>
+          <el-radio :label="1">{{ t('connection.mqtt.qos1') }}</el-radio>
+          <el-radio :label="2">{{ t('connection.mqtt.qos2') }}</el-radio>
         </el-radio-group>
       </el-form-item>
 
@@ -131,8 +131,8 @@
         <el-form-item>
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              心跳间隔
-              <el-tooltip content="客户端向 Broker 保持连接活跃的间隔，单位为秒。" placement="top">
+              {{ t('connection.mqtt.keepalive') }}
+              <el-tooltip :content="t('connection.mqtt.keepaliveHint')" placement="top">
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
@@ -145,8 +145,8 @@
         <el-form-item>
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              连接超时
-              <el-tooltip content="建立连接时允许等待的最长时间，单位为毫秒。" placement="top">
+              {{ t('connection.mqtt.timeout') }}
+              <el-tooltip :content="t('connection.mqtt.timeoutHint')" placement="top">
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
@@ -164,9 +164,9 @@
       <el-form-item>
         <template #label>
           <span class="mqtt-connection-form__field-label">
-            清除会话
+            {{ t('connection.mqtt.cleanSession') }}
             <el-tooltip
-              content="开启后每次连接都使用新会话；关闭后 Broker 可保留订阅与未送达消息。"
+              :content="t('connection.mqtt.cleanSessionHint')"
               placement="top"
             >
               <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
@@ -175,15 +175,15 @@
         </template>
         <el-switch v-model="formData.cleanSession" />
         <span class="form-item-tip ml-2">
-          {{ formData.cleanSession ? '每次连接使用新会话' : '重连时保留会话状态' }}
+          {{ formData.cleanSession ? t('connection.mqtt.newSession') : t('connection.mqtt.keepSession') }}
         </span>
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <span class="mqtt-connection-form__field-label">
-            重连间隔
-            <el-tooltip content="连接断开后再次尝试连接的间隔，单位为毫秒。" placement="top">
+            {{ t('connection.mqtt.reconnect') }}
+            <el-tooltip :content="t('connection.mqtt.reconnectHint')" placement="top">
               <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
             </el-tooltip>
           </span>
@@ -200,42 +200,42 @@
         <el-form-item>
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              遗嘱主题
+              {{ t('connection.mqtt.willTopic') }}
               <el-tooltip
-                content="客户端异常离线时，Broker 将向该主题发布遗嘱消息。"
+                :content="t('connection.mqtt.willTopicHint')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
           </template>
-          <el-input v-model="formData.will.topic" placeholder="例如：device/status" clearable />
+          <el-input v-model="formData.will.topic" :placeholder="t('connection.mqtt.willTopicExample')" clearable />
         </el-form-item>
 
-        <el-form-item label="遗嘱内容">
+        <el-form-item :label="t('connection.mqtt.willPayload')">
           <el-input
             v-model="formData.will.payload"
             type="textarea"
             :rows="3"
-            placeholder="例如：offline"
+            :placeholder="t('connection.mqtt.willPayloadExample')"
             clearable
           />
         </el-form-item>
 
-        <el-form-item label="遗嘱消息质量等级">
+        <el-form-item :label="t('connection.mqtt.willQos')">
           <el-radio-group v-model="formData.will.qos">
-            <el-radio :label="0">0 - 至多一次</el-radio>
-            <el-radio :label="1">1 - 至少一次</el-radio>
-            <el-radio :label="2">2 - 仅一次</el-radio>
+            <el-radio :label="0">{{ t('connection.mqtt.qos0') }}</el-radio>
+            <el-radio :label="1">{{ t('connection.mqtt.qos1') }}</el-radio>
+            <el-radio :label="2">{{ t('connection.mqtt.qos2') }}</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <el-form-item>
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              保留遗嘱消息
+              {{ t('connection.mqtt.willRetain') }}
               <el-tooltip
-                content="开启后 Broker 会保留最后一条遗嘱消息，供新订阅者读取。"
+                :content="t('connection.mqtt.willRetainHint')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
@@ -262,9 +262,9 @@
         <el-form-item>
           <template #label>
             <span class="mqtt-connection-form__field-label">
-              验证服务器证书
+              {{ t('connection.mqtt.verifyServer') }}
               <el-tooltip
-                content="生产环境建议开启；使用自签名证书调试时可按需关闭。"
+                :content="t('connection.mqtt.verifyServerHint')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
@@ -503,22 +503,22 @@ defineExpose({
 .form-section {
   margin-bottom: 24px;
   padding: 16px;
-  background-color: #f5f7fa;
+  background-color: var(--dc-surface-muted);
   border-radius: 4px;
 }
 
 .form-section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--dc-text);
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #dcdfe6;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .form-item-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--dc-text-muted);
   margin-left: 8px;
 }
 
@@ -531,7 +531,7 @@ defineExpose({
 .mqtt-connection-form__field-help {
   width: 14px;
   height: 14px;
-  color: #909399;
+  color: var(--dc-text-muted);
   cursor: help;
 }
 
@@ -554,7 +554,7 @@ defineExpose({
   justify-content: flex-end;
   gap: 12px;
   padding-top: 24px;
-  border-top: 1px solid #dcdfe6;
+  border-top: 1px solid var(--dc-border);
 }
 
 :deep(.el-collapse-item__header) {
@@ -583,7 +583,7 @@ defineExpose({
   min-height: 32px;
   padding: 0 12px;
   border-radius: var(--el-border-radius-base) 0 0 var(--el-border-radius-base);
-  background: #f8fafc;
+  background: var(--dc-surface-muted);
   box-shadow: 0 0 0 1px var(--el-border-color) inset;
 }
 
@@ -592,7 +592,7 @@ defineExpose({
 }
 
 .mqtt-connection-form__protocol-select :deep(.el-select__placeholder) {
-  color: #606266;
+  color: var(--dc-text-secondary);
 }
 
 .mqtt-connection-form__broker-input :deep(.el-input__wrapper) {

@@ -2,7 +2,7 @@
   <DcDialog
     ref="dialogRef"
     v-model="visible"
-    title="新建文件夹"
+    :title="ui('新建文件夹', 'New Folder')"
     width="460px"
     body-max-height="320px"
     :dirty="isDirty"
@@ -10,18 +10,18 @@
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-folder-dialog">
-      <el-form-item label="名称" required>
-        <el-input v-model="form.name" maxlength="40" show-word-limit placeholder="输入文件夹名称" />
+      <el-form-item :label="ui('名称', 'Name')" required>
+        <el-input v-model="form.name" maxlength="40" show-word-limit :placeholder="ui('输入文件夹名称', 'Enter a folder name')" />
       </el-form-item>
 
-      <el-form-item label="上级文件夹">
+      <el-form-item :label="ui('上级文件夹', 'Parent Folder')">
         <el-select
           v-model="form.parentId"
           class="compute-folder-dialog__select"
           clearable
-          placeholder="根目录"
+          :placeholder="ui('根目录', 'Root')"
         >
-          <el-option label="根目录" :value="null" />
+          <el-option :label="ui('根目录', 'Root')" :value="null" />
           <el-option
             v-for="folder in folderOptions"
             :key="folder.id"
@@ -36,9 +36,9 @@
 
     <template #footer>
       <div class="compute-folder-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          创建
+          {{ ui('创建', 'Create') }}
         </el-button>
       </div>
     </template>
@@ -49,6 +49,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { ComputeFolder, ComputeFolderSave } from '@/api/schemas/compute.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

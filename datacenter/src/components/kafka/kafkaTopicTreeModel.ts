@@ -64,8 +64,10 @@ export function filterKafkaTopicTree(
   }
 
   const mappingMatches = (mapping: KafkaTopicMapping) => {
-    const modeLabel = mapping.outputMode === 'raw_message' ? '整包数据点' : '字段数据点'
-    return [mapping.name, mapping.topic, mapping.consumerGroup, modeLabel]
+    const modeLabels = mapping.outputMode === 'raw_message'
+      ? ['整包数据点', 'raw message data point']
+      : ['字段数据点', 'field data points']
+    return [mapping.name, mapping.topic, mapping.consumerGroup, ...modeLabels]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(normalized))
   }

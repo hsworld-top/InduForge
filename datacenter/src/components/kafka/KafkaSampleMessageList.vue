@@ -3,7 +3,7 @@
     <el-scrollbar ref="scrollbarRef" class="kafka-sample-list__scroll" @scroll="handleScroll">
       <div v-if="loading" class="kafka-sample-list__state">
         <IconTablerLoader2 class="kafka-sample-list__spinner" />
-        <span>正在拉取 Kafka 样本...</span>
+        <span>{{ ui('正在拉取 Kafka 样本...', 'Pulling Kafka samples...') }}</span>
       </div>
 
       <div v-else-if="messages.length === 0" class="kafka-sample-list__state">
@@ -28,13 +28,13 @@
                 {{ item.message.topic || '-' }}
               </span>
               <span class="kafka-sample-list__meta">
-                分区 {{ item.message.partition ?? '-' }} / Offset {{ item.message.offset ?? '-' }}
+                {{ ui('分区', 'Partition') }} {{ item.message.partition ?? '-' }} / Offset {{ item.message.offset ?? '-' }}
               </span>
               <span v-if="item.message.key" class="kafka-sample-list__key">
                 key {{ item.message.key }}
               </span>
               <time v-if="showTimestamp">{{ formatTimestamp(item.message.timestamp) }}</time>
-              <el-tooltip content="复制 Payload" placement="top">
+              <el-tooltip :content="ui('复制 Payload', 'Copy Payload')" placement="top">
                 <button
                   type="button"
                   class="kafka-sample-list__copy"
@@ -60,6 +60,9 @@ import { TIME_FORMAT } from '@/constants'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerInbox from '~icons/tabler/inbox'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 export type KafkaSampleMessage = {
   id?: string | number
@@ -84,8 +87,8 @@ const props = withDefaults(
     loading: false,
     showTimestamp: true,
     formatJson: true,
-    emptyText: '暂无 Kafka 样本',
-    emptyHint: '设置拉取条数后点击拉取样本',
+    emptyText: datacenterLocale.value === 'en' ? 'No Kafka samples' : '暂无 Kafka 样本',
+    emptyHint: datacenterLocale.value === 'en' ? 'Set a pull count, then pull samples' : '设置拉取条数后点击拉取样本',
   },
 )
 

@@ -1,7 +1,7 @@
 <template>
   <DcDialog
     v-model="visible"
-    title="移动分组"
+    :title="ui('移动分组', 'Move Folder')"
     width="460px"
     body-max-height="260px"
     :dirty="isDirty"
@@ -9,14 +9,14 @@
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-folder-move-dialog">
-      <el-form-item label="目标分组">
+      <el-form-item :label="ui('目标分组', 'Target Folder')">
         <el-select
           v-model="parentId"
           class="compute-folder-move-dialog__select"
           clearable
-          placeholder="根目录"
+          :placeholder="ui('根目录', 'Root')"
         >
-          <el-option label="根目录" :value="null" />
+          <el-option :label="ui('根目录', 'Root')" :value="null" />
           <el-option
             v-for="folder in folderOptions"
             :key="folder.id"
@@ -29,9 +29,9 @@
 
     <template #footer>
       <div class="compute-folder-move-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          移动
+          {{ ui('移动', 'Move') }}
         </el-button>
       </div>
     </template>
@@ -42,7 +42,10 @@
 import { computed, ref, watch } from 'vue'
 import type { ComputeFolder } from '@/api/schemas/compute.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { datacenterLocale } from '@/i18n/runtime'
 import type { ComputeFolderTreeNode } from './computeTreeModel'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{

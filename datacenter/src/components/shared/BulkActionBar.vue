@@ -6,18 +6,22 @@
     role="status"
   >
     <span class="dc-bulk-action-bar__count">
-      {{ summary || `已选 ${selectedCount} ${itemLabel}` }}
+      {{ summary || ui(`已选 ${selectedCount} ${itemLabel}`, `${selectedCount} ${itemLabel} selected`) }}
     </span>
     <div class="dc-bulk-action-bar__actions">
       <slot />
     </div>
     <button type="button" class="dc-bulk-action-bar__clear" @click="$emit('clear')">
-      清空选择
+      {{ ui('清空选择', 'Clear Selection') }}
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
+
 withDefaults(
   defineProps<{
     selectedCount: number
@@ -28,7 +32,7 @@ withDefaults(
     /** 有“全部结果”范围时由调用方提供完整摘要。 */
     summary?: string
   }>(),
-  { placement: 'floating', itemLabel: '项', summary: '' },
+  { placement: 'floating', itemLabel: datacenterLocale.value === 'en' ? 'items' : '项', summary: '' },
 )
 
 defineEmits<{

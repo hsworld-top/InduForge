@@ -12,18 +12,18 @@
     @mousedown.stop
     @contextmenu.prevent
   >
-    <button type="button" :disabled="!selectedText" @click="copySelection">复制</button>
+    <button type="button" :disabled="!selectedText" @click="copySelection">{{ ui('复制', 'Copy') }}</button>
     <button
       type="button"
       :disabled="!selectedText || !editorContextMenu.canModify"
       @click="cutSelection"
     >
-      剪切
+      {{ ui('剪切', 'Cut') }}
     </button>
     <button type="button" :disabled="!editorContextMenu.canModify" @click="pasteFromClipboard">
-      粘贴
+      {{ ui('粘贴', 'Paste') }}
     </button>
-    <button type="button" @click="formatFromContextMenu">格式化文档</button>
+    <button type="button" @click="formatFromContextMenu">{{ ui('格式化文档', 'Format Document') }}</button>
   </div>
 </template>
 
@@ -34,6 +34,9 @@ import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import TypeScriptWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 type EditorDiagnostic = {
   severity?: string
@@ -670,10 +673,10 @@ onBeforeUnmount(() => {
   z-index: 3000;
   min-width: 128px;
   padding: 4px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--dc-border);
   border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-lg);
 }
 
 .monaco-editor-context-menu button {
@@ -683,7 +686,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #1f2937;
+  color: var(--dc-text);
   font-size: 13px;
   line-height: 20px;
   text-align: left;
@@ -691,7 +694,7 @@ onBeforeUnmount(() => {
 }
 
 .monaco-editor-context-menu button:hover:not(:disabled) {
-  background: #f3f4f6;
+  background: var(--dc-surface-muted);
 }
 
 .monaco-editor-context-menu button:disabled {

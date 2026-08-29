@@ -1,19 +1,19 @@
 <template>
   <DcDialog
     v-model="visible"
-    :title="mode === 'create' ? '新建消费规则' : '编辑消费规则'"
+    :title="mode === 'create' ? ui('新建消费规则', 'New Consumer Rule') : ui('编辑消费规则', 'Edit Consumer Rule')"
     width="640px"
     :close-disabled="loading"
   >
     <el-form label-position="top" class="kafka-topic-dialog">
       <div class="kafka-topic-dialog__section">
-        <div class="kafka-topic-dialog__section-title">基础信息</div>
+        <div class="kafka-topic-dialog__section-title">{{ ui('基础信息', 'Basic Information') }}</div>
         <el-form-item>
           <template #label>
             <span class="kafka-topic-dialog__field-label">
-              输出模式
+              {{ ui('输出模式', 'Output Mode') }}
               <el-tooltip
-                content="整包数据点会把最新消息写入一个数据点；字段数据点会把消息字段拆成多个数据点。"
+                :content="ui('整包数据点会把最新消息写入一个数据点；字段数据点会把消息字段拆成多个数据点。', 'Raw-message mode writes the latest message to one data point; field mode splits message fields into multiple data points.')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -40,25 +40,25 @@
             </button>
           </div>
           <p v-if="mode === 'edit'" class="kafka-topic-dialog__hint">
-            输出模式创建后不可修改。如需切换模式，请新建另一条消费规则。
+            {{ ui('输出模式创建后不可修改。如需切换模式，请新建另一条消费规则。', 'Output mode cannot be changed after creation. Create another consumer rule to use a different mode.') }}
           </p>
         </el-form-item>
         <el-form-item required>
           <template #label>
             <span class="kafka-topic-dialog__field-label">
-              名称
-              <el-tooltip content="消费规则会出现在左侧树中，建议使用业务流名称。" placement="top">
+              {{ ui('名称', 'Name') }}
+              <el-tooltip :content="ui('消费规则会出现在左侧树中，建议使用业务流名称。', 'The consumer rule appears in the tree. Use a business flow name.')" placement="top">
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
               </el-tooltip>
             </span>
           </template>
-          <el-input v-model="form.name" maxlength="100" show-word-limit placeholder="设备遥测" />
+          <el-input v-model="form.name" maxlength="100" show-word-limit :placeholder="ui('设备遥测', 'Device Telemetry')" />
         </el-form-item>
         <el-form-item required>
           <template #label>
             <span class="kafka-topic-dialog__field-label">
               Topic
-              <el-tooltip content="填写 Kafka 中真实存在或准备消费的 Topic 名称。" placement="top">
+              <el-tooltip :content="ui('填写 Kafka 中真实存在或准备消费的 Topic 名称。', 'Enter the Kafka topic to consume.')" placement="top">
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
               </el-tooltip>
             </span>
@@ -68,9 +68,9 @@
         <el-form-item>
           <template #label>
             <span class="kafka-topic-dialog__field-label">
-              消费组名称
+              {{ ui('消费组名称', 'Consumer Group') }}
               <el-tooltip
-                content="节点侧持久运行时用于记录消费进度；工作台预览不会使用该消费组，避免影响真实进度。"
+                :content="ui('节点侧持久运行时用于记录消费进度；工作台预览不会使用该消费组，避免影响真实进度。', 'The node uses this group to track runtime progress. Workbench previews do not use it, so real progress is unaffected.')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -81,19 +81,19 @@
             v-model="form.consumerGroup"
             clearable
             maxlength="200"
-            placeholder="留空时由节点侧默认策略生成"
+            :placeholder="ui('留空时由节点侧默认策略生成', 'Leave blank to generate on the node')"
           />
         </el-form-item>
       </div>
 
       <div v-if="form.outputMode === 'raw_message'" class="kafka-topic-dialog__section">
-        <div class="kafka-topic-dialog__section-title">数据点输出</div>
+        <div class="kafka-topic-dialog__section-title">{{ ui('数据点输出', 'Data Point Output') }}</div>
         <el-form-item>
           <template #label>
             <span class="kafka-topic-dialog__field-label">
-              输出内容
+              {{ ui('输出内容', 'Output Content') }}
               <el-tooltip
-                content="消息体只写入 payload/value；完整消息会包含 key、headers、partition、offset 和 payload。"
+                :content="ui('消息体只写入 payload/value；完整消息会包含 key、headers、partition、offset 和 payload。', 'Message body writes only payload/value; a complete message includes key, headers, partition, offset, and payload.')"
                 placement="top"
               >
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -101,28 +101,28 @@
             </span>
           </template>
           <el-select v-model="form.rawOutputScope">
-            <el-option label="消息体 payload" value="value" />
-            <el-option label="完整消息" value="full_message" />
+            <el-option :label="ui('消息体 payload', 'Message payload')" value="value" />
+            <el-option :label="ui('完整消息', 'Complete message')" value="full_message" />
           </el-select>
         </el-form-item>
         <p class="kafka-topic-dialog__hint">
-          整包数据点路径按规则名称自动生成，例如规则名 test1 对应 kafka.test1。
+          {{ ui('整包数据点路径按规则名称自动生成，例如规则名 test1 对应 kafka.test1。', 'The raw-message data point path is generated from the rule name; for example, test1 becomes kafka.test1.') }}
         </p>
       </div>
       <div v-else class="kafka-topic-dialog__mode-note">
-        保存后进入字段映射面板，可粘贴 JSON 样本或临时拉取样本生成数据点映射。
+        {{ ui('保存后进入字段映射面板，可粘贴 JSON 样本或临时拉取样本生成数据点映射。', 'After saving, use the field mapping panel to paste or pull a JSON sample and generate data point mappings.') }}
       </div>
 
       <div class="kafka-topic-dialog__section">
         <el-collapse v-model="advancedSections" class="kafka-topic-dialog__advanced">
-          <el-collapse-item title="高级配置：运行消费与样本参数" name="runtime">
+          <el-collapse-item :title="ui('高级配置：运行消费与样本参数', 'Advanced: Runtime Consumer and Sample Settings')" name="runtime">
             <div class="kafka-topic-dialog__grid">
               <el-form-item>
                 <template #label>
                   <span class="kafka-topic-dialog__field-label">
-                    分区策略
+                    {{ ui('分区策略', 'Partition Strategy') }}
                     <el-tooltip
-                      content="全部分区适合常规预览；单分区可用于定位指定 Partition 的消息。"
+                      :content="ui('全部分区适合常规预览；单分区可用于定位指定 Partition 的消息。', 'All partitions is suitable for normal previews; a single partition helps inspect a specific partition.')"
                       placement="top"
                     >
                       <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -131,15 +131,15 @@
                 </template>
                 <el-segmented v-model="form.partitionMode" :options="partitionModeOptions" />
               </el-form-item>
-              <el-form-item v-if="form.partitionMode === 'single'" label="分区编号" required>
+              <el-form-item v-if="form.partitionMode === 'single'" :label="ui('分区编号', 'Partition Number')" required>
                 <el-input-number v-model="form.partition" :min="0" :step="1" />
               </el-form-item>
               <el-form-item>
                 <template #label>
                   <span class="kafka-topic-dialog__field-label">
-                    起始位置
+                    {{ ui('起始位置', 'Start Position') }}
                     <el-tooltip
-                      content="用于节点侧首次运行或开发态拉取样本；已有消费进度由消费组记录。"
+                      :content="ui('用于节点侧首次运行或开发态拉取样本；已有消费进度由消费组记录。', 'Used for the node’s first run or development sample pulls; existing progress is tracked by the consumer group.')"
                       placement="top"
                     >
                       <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -147,20 +147,20 @@
                   </span>
                 </template>
                 <el-select v-model="form.startPosition">
-                  <el-option label="最新位置" value="latest" />
-                  <el-option label="最早位置" value="earliest" />
-                  <el-option label="指定 Offset" value="offset" />
+                  <el-option :label="ui('最新位置', 'Latest')" value="latest" />
+                  <el-option :label="ui('最早位置', 'Earliest')" value="earliest" />
+                  <el-option :label="ui('指定 Offset', 'Specific Offset')" value="offset" />
                 </el-select>
               </el-form-item>
-              <el-form-item v-if="form.startPosition === 'offset'" label="起始 Offset" required>
+              <el-form-item v-if="form.startPosition === 'offset'" :label="ui('起始 Offset', 'Start Offset')" required>
                 <el-input-number v-model="form.startOffset" :min="0" :step="1" />
               </el-form-item>
               <el-form-item>
                 <template #label>
                   <span class="kafka-topic-dialog__field-label">
-                    消息解码
+                    {{ ui('消息解码', 'Message Decode') }}
                     <el-tooltip
-                      content="JSON 会尝试解析消息体；String 保留文本；Binary 用于二进制载荷预览。"
+                      :content="ui('JSON 会尝试解析消息体；String 保留文本；Binary 用于二进制载荷预览。', 'JSON parses the message body; String preserves text; Binary previews binary payloads.')"
                       placement="top"
                     >
                       <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -169,16 +169,16 @@
                 </template>
                 <el-select v-model="form.decode">
                   <el-option label="JSON" value="json" />
-                  <el-option label="文本" value="string" />
-                  <el-option label="二进制" value="binary" />
+                  <el-option :label="ui('文本', 'Text')" value="string" />
+                  <el-option :label="ui('二进制', 'Binary')" value="binary" />
                 </el-select>
               </el-form-item>
               <el-form-item>
                 <template #label>
                   <span class="kafka-topic-dialog__field-label">
-                    样本上限
+                    {{ ui('样本上限', 'Sample Limit') }}
                     <el-tooltip
-                      content="单次预览最多读取的消息条数，数值越大等待时间可能越长。"
+                      :content="ui('单次预览最多读取的消息条数，数值越大等待时间可能越长。', 'Maximum messages read per preview. Larger values may take longer.')"
                       placement="top"
                     >
                       <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -190,9 +190,9 @@
               <el-form-item>
                 <template #label>
                   <span class="kafka-topic-dialog__field-label">
-                    预览超时
+                    {{ ui('预览超时', 'Preview Timeout') }}
                     <el-tooltip
-                      content="单次拉取样本等待消息的最长时间，单位毫秒。"
+                      :content="ui('单次拉取样本等待消息的最长时间，单位毫秒。', 'Maximum time to wait for a sample, in milliseconds.')"
                       placement="top"
                     >
                       <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
@@ -207,15 +207,15 @@
       </div>
 
       <div class="kafka-topic-dialog__section">
-        <div class="kafka-topic-dialog__section-title">备注</div>
-        <el-form-item label="描述">
+        <div class="kafka-topic-dialog__section-title">{{ ui('备注', 'Notes') }}</div>
+        <el-form-item :label="ui('描述', 'Description')">
           <el-input
             v-model="form.description"
             type="textarea"
             :rows="3"
             maxlength="500"
             show-word-limit
-            placeholder="可填写 Topic 用途、消息来源或字段说明"
+            :placeholder="ui('可填写 Topic 用途、消息来源或字段说明', 'Describe the topic purpose, message source, or fields')"
           />
         </el-form-item>
       </div>
@@ -223,9 +223,9 @@
 
     <template #footer>
       <div class="kafka-topic-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="visible = false">{{ ui('取消', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          保存
+          {{ ui('保存', 'Save') }}
         </el-button>
       </div>
     </template>
@@ -237,6 +237,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import IconTablerHelpCircle from '~icons/tabler/help-circle'
 import type { KafkaTopicGroup, KafkaTopicMapping } from './types'
+import { datacenterLocale } from '@/i18n/runtime'
+
+const ui = (zh: string, en: string) => (datacenterLocale.value === 'en' ? en : zh)
 
 const props = withDefaults(
   defineProps<{
@@ -263,22 +266,22 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value),
 })
 
-const partitionModeOptions = [
-  { label: '全部分区', value: 'all' },
-  { label: '单分区', value: 'single' },
-]
-const outputModeOptions = [
+const partitionModeOptions = computed(() => [
+  { label: ui('全部分区', 'All Partitions'), value: 'all' },
+  { label: ui('单分区', 'Single Partition'), value: 'single' },
+])
+const outputModeOptions = computed(() => [
   {
-    label: '整包数据点',
+    label: ui('整包数据点', 'Raw Message Data Point'),
     value: 'raw_message',
-    description: '把一条 Kafka 消息作为一个数据点，数据点名称跟随消费规则。',
+    description: ui('把一条 Kafka 消息作为一个数据点，数据点名称跟随消费规则。', 'Use one Kafka message as one data point named after the consumer rule.'),
   },
   {
-    label: '字段映射',
+    label: ui('字段映射', 'Field Mappings'),
     value: 'field_mapping',
-    description: '从 JSON 消息字段生成多个映射数据点，适合结构化业务数据。',
+    description: ui('从 JSON 消息字段生成多个映射数据点，适合结构化业务数据。', 'Generate multiple mapped data points from JSON fields for structured business data.'),
   },
-]
+])
 const advancedSections = ref<string[]>([])
 
 const form = reactive({
