@@ -20,6 +20,7 @@ var customRoutePrefixes = []string{
 	"/scene-asset-editor-sessions/",
 	"/projects/{projectId}/scenes",
 	"/projects/{projectId}/scene-assets",
+	"/ops",
 }
 
 func main() {

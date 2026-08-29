@@ -2467,6 +2467,174 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+  /ops/runtime-clusters:
+    get:
+      operationId: listRuntimeClusters
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+    post:
+      operationId: createRuntimeCluster
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RuntimeClusterCreateRequest'}}}}
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/runtime-clusters/{id}:
+    get:
+      operationId: getRuntimeCluster
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/node-enrollments:
+    get:
+      operationId: listNodeEnrollments
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+    post:
+      operationId: createNodeEnrollment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/NodeEnrollmentCreateRequest'}}}}
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/node-enrollments/{id}:
+    get:
+      operationId: getNodeEnrollment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/node-enrollments/{id}/approve:
+    post:
+      operationId: approveNodeEnrollment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/node-enrollments/{id}/reject:
+    post:
+      operationId: rejectNodeEnrollment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/host-nodes:
+    get:
+      operationId: listHostNodes
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/host-nodes/{id}:
+    get:
+      operationId: getHostNode
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/node-packages:
+    get:
+      operationId: listNodePackages
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/node-packages/{id}/download:
+    get:
+      operationId: downloadNodePackage
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: package}}
+  /ops/project-deployments:
+    get:
+      operationId: listProjectDeployments
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+    post:
+      operationId: createProjectDeployment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectDeploymentCreateRequest'}}}}
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/project-deployments/{id}:
+    get:
+      operationId: getProjectDeployment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/project-deployments/{id}/workloads/{role}/{action}:
+    post:
+      operationId: operateProjectDeploymentWorkload
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: role, in: path, required: true, schema: {type: string}}
+        - {name: action, in: path, required: true, schema: {type: string}}
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/deployment-runs/{id}:
+    get:
+      operationId: getDeploymentRun
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/deployment-runs/{id}/events:
+    get:
+      operationId: listDeploymentRunEvents
+      tags: [ops]
+      x-client: dev_ide
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/agent/enrollments/claim:
+    post:
+      operationId: claimNodeEnrollment
+      tags: [opsAgent]
+      x-client: node_agent
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentClaimRequest'}}}}
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/agent/host-nodes/{id}/heartbeat:
+    post:
+      operationId: heartbeatHostNode
+      tags: [opsAgent]
+      x-client: node_agent
+      security: [{agentTokenAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentHeartbeatRequest'}}}}
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+  /ops/agent/host-nodes/{id}/commands:
+    get:
+      operationId: listHostNodeCommands
+      tags: [opsAgent]
+      x-client: node_agent
+      security: [{agentTokenAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+
 components:
   parameters:
     ProjectId: {name: projectId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -2477,11 +2645,19 @@ components:
     AssetType: {name: type, in: query, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
     Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
     Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+    OpsPage: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    OpsPageSize: {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+    OpsSearch: {name: search, in: query, schema: {type: string, maxLength: 200}}
+    OpsKeyword: {name: keyword, in: query, schema: {type: string, maxLength: 200}, description: search 的兼容别名；search 优先}
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    agentTokenAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: NodeAgentToken
   schemas:
     LoginRequest:
       type: object
@@ -2700,6 +2876,82 @@ components:
       required: [nodeId]
       properties:
         nodeId: {type: string, format: uuid}
+    RuntimeClusterCreateRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        code: {type: string, pattern: '^[a-z][a-z0-9-]{1,62}$'}
+        description: {type: string}
+        topology: {type: string, enum: [single_node, high_availability]}
+        metadata: {type: object, additionalProperties: true}
+    NodeEnrollmentCreateRequest:
+      type: object
+      required: [role]
+      properties:
+        runtimeClusterId: {type: string, format: uuid}
+        role: {type: string, enum: [runtime_linux, collector_linux, collector_windows]}
+        displayName: {type: string, maxLength: 120}
+        ttlMinutes: {type: integer, minimum: 1, maximum: 1440}
+    ProjectDeploymentCreateRequest:
+      type: object
+      required: [projectId, runtimeClusterId, deploymentMode, workloads]
+      properties:
+        projectId: {type: string, format: uuid}
+        runtimeClusterId: {type: string, format: uuid}
+        version: {type: string}
+        deploymentMode: {type: string, enum: [development, production]}
+        workloads:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [role]
+            properties:
+              role: {type: string, enum: [compute, alert, collector]}
+              hostNodeId: {type: string, format: uuid}
+              replicas: {type: integer, minimum: 1}
+    AgentEnrollmentClaimRequest:
+      type: object
+      required: [code, host, agent]
+      properties:
+        code: {type: string, minLength: 1}
+        host:
+          type: object
+          required: [hostname, os, architecture]
+          properties:
+            displayName: {type: string}
+            hostname: {type: string}
+            os: {type: string}
+            architecture: {type: string}
+            machineFingerprint: {type: string}
+            ipAddress: {type: string}
+        agent:
+          type: object
+          required: [version]
+          properties:
+            version: {type: string}
+            capabilities: {type: object, additionalProperties: true}
+    AgentHeartbeatRequest:
+      type: object
+      required: [resourceSummary, observedState]
+      properties:
+        resourceSummary: {type: object, additionalProperties: true}
+        agentVersion: {type: string}
+        observedState:
+          type: object
+          properties:
+            workloads:
+              type: array
+              items:
+                type: object
+                required: [workloadId, observedStatus, observedGeneration]
+                properties:
+                  workloadId: {type: string, format: uuid}
+                  observedStatus: {type: string, enum: [running, stopped, failed]}
+                  observedGeneration: {type: integer, format: int64, minimum: 1}
+                  replicasObserved: {type: integer, minimum: 0}
+                  message: {type: string}
     ApiResponse:
       type: object
       required: [code, msg, data, reqId]

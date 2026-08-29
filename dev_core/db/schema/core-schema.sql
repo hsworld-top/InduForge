@@ -571,3 +571,136 @@ CREATE TABLE node_commands (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX node_commands_pending_idx ON node_commands (node_id, status, requested_at);
+
+-- 运维 v1：运行集群是业务工作负载的部署目标；宿主节点只承载 Agent 与原生采集器。
+CREATE TABLE runtime_clusters (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 120),
+  code text NOT NULL CHECK (code ~ '^[a-z][a-z0-9-]{1,62}$'),
+  description text,
+  topology text NOT NULL DEFAULT 'single_node' CHECK (topology IN ('single_node', 'high_availability')),
+  desired_status text NOT NULL DEFAULT 'ready' CHECK (desired_status IN ('ready', 'maintenance', 'disabled')),
+  observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'initializing', 'ready', 'degraded', 'offline')),
+  controller_status text NOT NULL DEFAULT 'pending' CHECK (controller_status IN ('pending', 'ready', 'offline')),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, code)
+);
+CREATE INDEX runtime_clusters_tenant_idx ON runtime_clusters (tenant_id, updated_at DESC);
+
+CREATE TABLE node_enrollments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  runtime_cluster_id uuid REFERENCES runtime_clusters (id) ON DELETE CASCADE,
+  role text NOT NULL CHECK (role IN ('runtime_linux', 'collector_linux', 'collector_windows')),
+  display_name text,
+  code_hash text NOT NULL UNIQUE,
+  status text NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'claimed', 'approved', 'rejected', 'expired')),
+  expires_at timestamptz NOT NULL,
+  claimed_at timestamptz,
+  claimed_by_node_id uuid,
+  approved_at timestamptz,
+  approved_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  rejected_at timestamptz,
+  rejected_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((role = 'runtime_linux' AND runtime_cluster_id IS NOT NULL) OR (role <> 'runtime_linux'))
+);
+CREATE INDEX node_enrollments_tenant_idx ON node_enrollments (tenant_id, status, expires_at DESC);
+
+CREATE TABLE host_nodes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  runtime_cluster_id uuid REFERENCES runtime_clusters (id) ON DELETE SET NULL,
+  enrollment_id uuid NOT NULL UNIQUE REFERENCES node_enrollments (id) ON DELETE RESTRICT,
+  role text NOT NULL CHECK (role IN ('runtime_linux', 'collector_linux', 'collector_windows')),
+  display_name text NOT NULL,
+  hostname text NOT NULL,
+  os text NOT NULL,
+  architecture text NOT NULL,
+  agent_version text,
+  agent_token_hash text NOT NULL UNIQUE,
+  machine_fingerprint text,
+  ip_address text,
+  desired_status text NOT NULL DEFAULT 'active' CHECK (desired_status IN ('active', 'maintenance', 'revoked')),
+  observed_status text NOT NULL DEFAULT 'pending_approval' CHECK (observed_status IN ('pending_approval', 'offline', 'online', 'degraded', 'revoked')),
+  resource_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+  capabilities jsonb NOT NULL DEFAULT '{}'::jsonb,
+  last_heartbeat_at timestamptz,
+  approved_at timestamptz,
+  approved_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX host_nodes_tenant_idx ON host_nodes (tenant_id, observed_status, updated_at DESC);
+CREATE INDEX host_nodes_cluster_idx ON host_nodes (runtime_cluster_id, role);
+
+CREATE TABLE project_deployments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  runtime_cluster_id uuid NOT NULL REFERENCES runtime_clusters (id) ON DELETE RESTRICT,
+  version text NOT NULL DEFAULT 'demo-v1',
+  deployment_mode text NOT NULL CHECK (deployment_mode IN ('development', 'production')),
+  desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
+  observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_deployments_tenant_project_cluster_key UNIQUE (tenant_id, project_id, runtime_cluster_id)
+);
+CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
+
+CREATE TABLE deployment_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
+  operation text NOT NULL CHECK (operation IN ('deploy', 'start', 'stop', 'restart')),
+  desired_status text NOT NULL CHECK (desired_status IN ('running', 'stopped')),
+  observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'failed')),
+  progress integer NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  message text,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT
+);
+CREATE INDEX deployment_runs_deployment_idx ON deployment_runs (project_deployment_id, started_at DESC);
+-- 同一部署只能有一条待调和记录；控制面会锁定部署行，索引同时防止绕过服务层的并发写入。
+CREATE UNIQUE INDEX deployment_runs_one_pending_idx ON deployment_runs (project_deployment_id)
+  WHERE observed_status = 'pending';
+
+CREATE TABLE deployment_run_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  deployment_run_id uuid NOT NULL REFERENCES deployment_runs (id) ON DELETE CASCADE,
+  stage text NOT NULL CHECK (stage IN ('queued', 'dispatched', 'observed', 'failed')),
+  message text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX deployment_run_events_run_idx ON deployment_run_events (deployment_run_id, created_at);
+
+CREATE TABLE workloads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
+  host_node_id uuid REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  role text NOT NULL CHECK (role IN ('compute', 'alert', 'collector')),
+  desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
+  observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'failed')),
+  replicas_desired integer NOT NULL DEFAULT 1 CHECK (replicas_desired >= 0),
+  replicas_observed integer NOT NULL DEFAULT 0 CHECK (replicas_observed >= 0),
+  desired_generation bigint NOT NULL DEFAULT 1 CHECK (desired_generation > 0),
+  observed_generation bigint NOT NULL DEFAULT 0 CHECK (observed_generation >= 0),
+  last_operation text NOT NULL DEFAULT 'deploy' CHECK (last_operation IN ('deploy', 'start', 'stop', 'restart')),
+  last_message text,
+  observed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (project_deployment_id, role),
+  CHECK ((role = 'collector' AND host_node_id IS NOT NULL) OR (role <> 'collector' AND host_node_id IS NULL))
+);
+CREATE INDEX workloads_host_node_idx ON workloads (host_node_id, desired_status) WHERE host_node_id IS NOT NULL;

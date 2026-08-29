@@ -47,6 +47,7 @@ type Config struct {
 	CacheAddress            string
 	CachePassword           string
 	CacheDB                 int
+	NodePackageDirectory    string
 }
 
 func Load() (Config, error) {
@@ -111,7 +112,25 @@ func Load() (Config, error) {
 		CacheAddress:            net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),
 		CachePassword:           firstEnv("IF_CACHE_STORE_PASSWORD"),
 		CacheDB:                 cacheDB,
+		NodePackageDirectory:    firstEnvWithDefault("NODE_PACKAGE_DIRECTORY", defaultNodePackageDirectory()),
 	}, nil
+}
+
+// 开发命令会在 dev_core 目录启动进程，安装包仍统一存放在仓库根 .data 下。
+func defaultNodePackageDirectory() string {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return filepath.Join(".data", "node-packages")
+	}
+	for current := filepath.Clean(workingDir); ; current = filepath.Dir(current) {
+		if info, statErr := os.Stat(filepath.Join(current, ".env")); statErr == nil && !info.IsDir() {
+			return filepath.Join(current, ".data", "node-packages")
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return filepath.Join(workingDir, ".data", "node-packages")
+		}
+	}
 }
 
 func buildDatabaseURL() string {

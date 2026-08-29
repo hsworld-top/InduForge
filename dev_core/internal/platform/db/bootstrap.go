@@ -32,6 +32,13 @@ var requiredTables = []string{
 	"nodes",
 	"node_deployments",
 	"node_commands",
+	"runtime_clusters",
+	"node_enrollments",
+	"host_nodes",
+	"project_deployments",
+	"deployment_runs",
+	"deployment_run_events",
+	"workloads",
 }
 
 func EnsureSchema(ctx context.Context, pool *pgxpool.Pool, allowCreate bool) error {

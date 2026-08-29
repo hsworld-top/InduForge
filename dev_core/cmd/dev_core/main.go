@@ -23,6 +23,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/deployment"
 	"github.com/indu-forge/dev_core/internal/node"
 	"github.com/indu-forge/dev_core/internal/objectstore"
+	"github.com/indu-forge/dev_core/internal/ops"
 	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
 	platformcache "github.com/indu-forge/dev_core/internal/platform/cache"
 	platformdb "github.com/indu-forge/dev_core/internal/platform/db"
@@ -135,6 +136,7 @@ func main() {
 	nodeService := node.NewService(node.NewPostgreSQLRepository(pool), cacheStore)
 	nodeService.SetEvents(realtimeServer)
 	nodeHandler := node.NewHandler(nodeService, authService)
+	opsHandler := ops.NewHandler(ops.NewService(ops.NewPostgreSQLRepository(pool), ops.NewFilePackageStore(cfg.NodePackageDirectory)), authService)
 	controlPlane.SetNodeHandler(nodeHandler)
 	deploymentService := deployment.NewService(
 		deployment.NewPostgreSQLRepository(pool), workspace, ifpObjects,
@@ -152,6 +154,7 @@ func main() {
 			router.Handle("/control-socket.io", realtimeServer.Handler())
 			router.Handle("/control-socket.io/*", realtimeServer.Handler())
 			nodeHandler.MountAgentRoutes(router)
+			opsHandler.MountRoutes(router)
 			router.Route("/api/v1", sceneAssetHandler.MountRoutes)
 			platformapi.HandlerFromMuxWithBaseURL(controlPlane, router, "/api/v1")
 		},

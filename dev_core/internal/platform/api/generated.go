@@ -21,8 +21,108 @@ import (
 )
 
 const (
-	BearerAuthScopes = "bearerAuth.Scopes"
+	AgentTokenAuthScopes = "agentTokenAuth.Scopes"
+	BearerAuthScopes     = "bearerAuth.Scopes"
 )
+
+// Defines values for AgentHeartbeatRequestObservedStateWorkloadsObservedStatus.
+const (
+	Failed  AgentHeartbeatRequestObservedStateWorkloadsObservedStatus = "failed"
+	Running AgentHeartbeatRequestObservedStateWorkloadsObservedStatus = "running"
+	Stopped AgentHeartbeatRequestObservedStateWorkloadsObservedStatus = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the AgentHeartbeatRequestObservedStateWorkloadsObservedStatus enum.
+func (e AgentHeartbeatRequestObservedStateWorkloadsObservedStatus) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Running:
+		return true
+	case Stopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NodeEnrollmentCreateRequestRole.
+const (
+	CollectorLinux   NodeEnrollmentCreateRequestRole = "collector_linux"
+	CollectorWindows NodeEnrollmentCreateRequestRole = "collector_windows"
+	RuntimeLinux     NodeEnrollmentCreateRequestRole = "runtime_linux"
+)
+
+// Valid indicates whether the value is a known member of the NodeEnrollmentCreateRequestRole enum.
+func (e NodeEnrollmentCreateRequestRole) Valid() bool {
+	switch e {
+	case CollectorLinux:
+		return true
+	case CollectorWindows:
+		return true
+	case RuntimeLinux:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectDeploymentCreateRequestDeploymentMode.
+const (
+	Development ProjectDeploymentCreateRequestDeploymentMode = "development"
+	Production  ProjectDeploymentCreateRequestDeploymentMode = "production"
+)
+
+// Valid indicates whether the value is a known member of the ProjectDeploymentCreateRequestDeploymentMode enum.
+func (e ProjectDeploymentCreateRequestDeploymentMode) Valid() bool {
+	switch e {
+	case Development:
+		return true
+	case Production:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectDeploymentCreateRequestWorkloadsRole.
+const (
+	Alert     ProjectDeploymentCreateRequestWorkloadsRole = "alert"
+	Collector ProjectDeploymentCreateRequestWorkloadsRole = "collector"
+	Compute   ProjectDeploymentCreateRequestWorkloadsRole = "compute"
+)
+
+// Valid indicates whether the value is a known member of the ProjectDeploymentCreateRequestWorkloadsRole enum.
+func (e ProjectDeploymentCreateRequestWorkloadsRole) Valid() bool {
+	switch e {
+	case Alert:
+		return true
+	case Collector:
+		return true
+	case Compute:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeClusterCreateRequestTopology.
+const (
+	HighAvailability RuntimeClusterCreateRequestTopology = "high_availability"
+	SingleNode       RuntimeClusterCreateRequestTopology = "single_node"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeClusterCreateRequestTopology enum.
+func (e RuntimeClusterCreateRequestTopology) Valid() bool {
+	switch e {
+	case HighAvailability:
+		return true
+	case SingleNode:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for RuntimeUserStatusRequestStatus.
 const (
@@ -456,6 +556,41 @@ func (e ImportSceneEditorAssetParamsType) Valid() bool {
 	}
 }
 
+// AgentEnrollmentClaimRequest defines model for AgentEnrollmentClaimRequest.
+type AgentEnrollmentClaimRequest struct {
+	Agent struct {
+		Capabilities *map[string]interface{} `json:"capabilities,omitempty"`
+		Version      string                  `json:"version"`
+	} `json:"agent"`
+	Code string `json:"code"`
+	Host struct {
+		Architecture       string  `json:"architecture"`
+		DisplayName        *string `json:"displayName,omitempty"`
+		Hostname           string  `json:"hostname"`
+		IpAddress          *string `json:"ipAddress,omitempty"`
+		MachineFingerprint *string `json:"machineFingerprint,omitempty"`
+		Os                 string  `json:"os"`
+	} `json:"host"`
+}
+
+// AgentHeartbeatRequest defines model for AgentHeartbeatRequest.
+type AgentHeartbeatRequest struct {
+	AgentVersion  *string `json:"agentVersion,omitempty"`
+	ObservedState struct {
+		Workloads *[]struct {
+			Message            *string                                                   `json:"message,omitempty"`
+			ObservedGeneration int64                                                     `json:"observedGeneration"`
+			ObservedStatus     AgentHeartbeatRequestObservedStateWorkloadsObservedStatus `json:"observedStatus"`
+			ReplicasObserved   *int                                                      `json:"replicasObserved,omitempty"`
+			WorkloadId         openapi_types.UUID                                        `json:"workloadId"`
+		} `json:"workloads,omitempty"`
+	} `json:"observedState"`
+	ResourceSummary map[string]interface{} `json:"resourceSummary"`
+}
+
+// AgentHeartbeatRequestObservedStateWorkloadsObservedStatus defines model for AgentHeartbeatRequest.ObservedState.Workloads.ObservedStatus.
+type AgentHeartbeatRequestObservedStateWorkloadsObservedStatus string
+
 // ApiResponse defines model for ApiResponse.
 type ApiResponse struct {
 	Code  int         `json:"code"`
@@ -496,6 +631,17 @@ type NodeApprovalRequest struct {
 	Reason *string `json:"reason,omitempty"`
 }
 
+// NodeEnrollmentCreateRequest defines model for NodeEnrollmentCreateRequest.
+type NodeEnrollmentCreateRequest struct {
+	DisplayName      *string                         `json:"displayName,omitempty"`
+	Role             NodeEnrollmentCreateRequestRole `json:"role"`
+	RuntimeClusterId *openapi_types.UUID             `json:"runtimeClusterId,omitempty"`
+	TtlMinutes       *int                            `json:"ttlMinutes,omitempty"`
+}
+
+// NodeEnrollmentCreateRequestRole defines model for NodeEnrollmentCreateRequest.Role.
+type NodeEnrollmentCreateRequestRole string
+
 // NoteRequest defines model for NoteRequest.
 type NoteRequest struct {
 	Content string `json:"content"`
@@ -511,6 +657,25 @@ type ProjectCreateRequest struct {
 type ProjectDeleteRequest struct {
 	Confirmation *string `json:"confirmation,omitempty"`
 }
+
+// ProjectDeploymentCreateRequest defines model for ProjectDeploymentCreateRequest.
+type ProjectDeploymentCreateRequest struct {
+	DeploymentMode   ProjectDeploymentCreateRequestDeploymentMode `json:"deploymentMode"`
+	ProjectId        openapi_types.UUID                           `json:"projectId"`
+	RuntimeClusterId openapi_types.UUID                           `json:"runtimeClusterId"`
+	Version          *string                                      `json:"version,omitempty"`
+	Workloads        []struct {
+		HostNodeId *openapi_types.UUID                         `json:"hostNodeId,omitempty"`
+		Replicas   *int                                        `json:"replicas,omitempty"`
+		Role       ProjectDeploymentCreateRequestWorkloadsRole `json:"role"`
+	} `json:"workloads"`
+}
+
+// ProjectDeploymentCreateRequestDeploymentMode defines model for ProjectDeploymentCreateRequest.DeploymentMode.
+type ProjectDeploymentCreateRequestDeploymentMode string
+
+// ProjectDeploymentCreateRequestWorkloadsRole defines model for ProjectDeploymentCreateRequest.Workloads.Role.
+type ProjectDeploymentCreateRequestWorkloadsRole string
 
 // ProjectImportRequest defines model for ProjectImportRequest.
 type ProjectImportRequest struct {
@@ -556,6 +721,18 @@ type ResetPasswordRequest struct {
 type RollbackRequest struct {
 	NodeId openapi_types.UUID `json:"nodeId"`
 }
+
+// RuntimeClusterCreateRequest defines model for RuntimeClusterCreateRequest.
+type RuntimeClusterCreateRequest struct {
+	Code        string                               `json:"code"`
+	Description *string                              `json:"description,omitempty"`
+	Metadata    *map[string]interface{}              `json:"metadata,omitempty"`
+	Name        string                               `json:"name"`
+	Topology    *RuntimeClusterCreateRequestTopology `json:"topology,omitempty"`
+}
+
+// RuntimeClusterCreateRequestTopology defines model for RuntimeClusterCreateRequest.Topology.
+type RuntimeClusterCreateRequestTopology string
 
 // RuntimeRoleCreateRequest defines model for RuntimeRoleCreateRequest.
 type RuntimeRoleCreateRequest struct {
@@ -711,6 +888,18 @@ type AssetType string
 // Limit defines model for Limit.
 type Limit = int
 
+// OpsKeyword defines model for OpsKeyword.
+type OpsKeyword = string
+
+// OpsPage defines model for OpsPage.
+type OpsPage = int
+
+// OpsPageSize defines model for OpsPageSize.
+type OpsPageSize = int
+
+// OpsSearch defines model for OpsSearch.
+type OpsSearch = string
+
 // Page defines model for Page.
 type Page = int
 
@@ -730,6 +919,46 @@ type SessionId = openapi_types.UUID
 type GetAuthCaptchaParams struct {
 	Username   string  `form:"username" json:"username"`
 	TenantCode *string `form:"tenantCode,omitempty" json:"tenantCode,omitempty"`
+}
+
+// ListHostNodesParams defines parameters for ListHostNodes.
+type ListHostNodesParams struct {
+	Page     *OpsPage     `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *OpsPageSize `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	Search   *OpsSearch   `form:"search,omitempty" json:"search,omitempty"`
+
+	// Keyword search 的兼容别名；search 优先
+	Keyword *OpsKeyword `form:"keyword,omitempty" json:"keyword,omitempty"`
+}
+
+// ListNodeEnrollmentsParams defines parameters for ListNodeEnrollments.
+type ListNodeEnrollmentsParams struct {
+	Page     *OpsPage     `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *OpsPageSize `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	Search   *OpsSearch   `form:"search,omitempty" json:"search,omitempty"`
+
+	// Keyword search 的兼容别名；search 优先
+	Keyword *OpsKeyword `form:"keyword,omitempty" json:"keyword,omitempty"`
+}
+
+// ListProjectDeploymentsParams defines parameters for ListProjectDeployments.
+type ListProjectDeploymentsParams struct {
+	Page     *OpsPage     `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *OpsPageSize `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	Search   *OpsSearch   `form:"search,omitempty" json:"search,omitempty"`
+
+	// Keyword search 的兼容别名；search 优先
+	Keyword *OpsKeyword `form:"keyword,omitempty" json:"keyword,omitempty"`
+}
+
+// ListRuntimeClustersParams defines parameters for ListRuntimeClusters.
+type ListRuntimeClustersParams struct {
+	Page     *OpsPage     `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *OpsPageSize `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	Search   *OpsSearch   `form:"search,omitempty" json:"search,omitempty"`
+
+	// Keyword search 的兼容别名；search 优先
+	Keyword *OpsKeyword `form:"keyword,omitempty" json:"keyword,omitempty"`
 }
 
 // ListSceneAssetsParams defines parameters for ListSceneAssets.
@@ -951,6 +1180,21 @@ type ApproveNodeJSONRequestBody = NodeApprovalRequest
 // RejectNodeJSONRequestBody defines body for RejectNode for application/json ContentType.
 type RejectNodeJSONRequestBody = NodeApprovalRequest
 
+// ClaimNodeEnrollmentJSONRequestBody defines body for ClaimNodeEnrollment for application/json ContentType.
+type ClaimNodeEnrollmentJSONRequestBody = AgentEnrollmentClaimRequest
+
+// HeartbeatHostNodeJSONRequestBody defines body for HeartbeatHostNode for application/json ContentType.
+type HeartbeatHostNodeJSONRequestBody = AgentHeartbeatRequest
+
+// CreateNodeEnrollmentJSONRequestBody defines body for CreateNodeEnrollment for application/json ContentType.
+type CreateNodeEnrollmentJSONRequestBody = NodeEnrollmentCreateRequest
+
+// CreateProjectDeploymentJSONRequestBody defines body for CreateProjectDeployment for application/json ContentType.
+type CreateProjectDeploymentJSONRequestBody = ProjectDeploymentCreateRequest
+
+// CreateRuntimeClusterJSONRequestBody defines body for CreateRuntimeCluster for application/json ContentType.
+type CreateRuntimeClusterJSONRequestBody = RuntimeClusterCreateRequest
+
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = ProjectCreateRequest
 
@@ -1133,6 +1377,69 @@ type ServerInterface interface {
 	// rejectNode
 	// (PUT /nodes/{nodeId}/reject)
 	RejectNode(w http.ResponseWriter, r *http.Request, nodeId string)
+
+	// (POST /ops/agent/enrollments/claim)
+	ClaimNodeEnrollment(w http.ResponseWriter, r *http.Request)
+
+	// (GET /ops/agent/host-nodes/{id}/commands)
+	ListHostNodeCommands(w http.ResponseWriter, r *http.Request, id string)
+
+	// (POST /ops/agent/host-nodes/{id}/heartbeat)
+	HeartbeatHostNode(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /ops/deployment-runs/{id})
+	GetDeploymentRun(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /ops/deployment-runs/{id}/events)
+	ListDeploymentRunEvents(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /ops/host-nodes)
+	ListHostNodes(w http.ResponseWriter, r *http.Request, params ListHostNodesParams)
+
+	// (GET /ops/host-nodes/{id})
+	GetHostNode(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /ops/node-enrollments)
+	ListNodeEnrollments(w http.ResponseWriter, r *http.Request, params ListNodeEnrollmentsParams)
+
+	// (POST /ops/node-enrollments)
+	CreateNodeEnrollment(w http.ResponseWriter, r *http.Request)
+
+	// (GET /ops/node-enrollments/{id})
+	GetNodeEnrollment(w http.ResponseWriter, r *http.Request, id string)
+
+	// (POST /ops/node-enrollments/{id}/approve)
+	ApproveNodeEnrollment(w http.ResponseWriter, r *http.Request, id string)
+
+	// (POST /ops/node-enrollments/{id}/reject)
+	RejectNodeEnrollment(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /ops/node-packages)
+	ListNodePackages(w http.ResponseWriter, r *http.Request)
+
+	// (GET /ops/node-packages/{id}/download)
+	DownloadNodePackage(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /ops/project-deployments)
+	ListProjectDeployments(w http.ResponseWriter, r *http.Request, params ListProjectDeploymentsParams)
+
+	// (POST /ops/project-deployments)
+	CreateProjectDeployment(w http.ResponseWriter, r *http.Request)
+
+	// (GET /ops/project-deployments/{id})
+	GetProjectDeployment(w http.ResponseWriter, r *http.Request, id string)
+
+	// (POST /ops/project-deployments/{id}/workloads/{role}/{action})
+	OperateProjectDeploymentWorkload(w http.ResponseWriter, r *http.Request, id string, role string, action string)
+
+	// (GET /ops/runtime-clusters)
+	ListRuntimeClusters(w http.ResponseWriter, r *http.Request, params ListRuntimeClustersParams)
+
+	// (POST /ops/runtime-clusters)
+	CreateRuntimeCluster(w http.ResponseWriter, r *http.Request)
+
+	// (GET /ops/runtime-clusters/{id})
+	GetRuntimeCluster(w http.ResponseWriter, r *http.Request, id string)
 	// listProjects
 	// (GET /projects)
 	ListProjects(w http.ResponseWriter, r *http.Request)
@@ -1568,6 +1875,111 @@ func (_ Unimplemented) ApproveNode(w http.ResponseWriter, r *http.Request, nodeI
 // rejectNode
 // (PUT /nodes/{nodeId}/reject)
 func (_ Unimplemented) RejectNode(w http.ResponseWriter, r *http.Request, nodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/agent/enrollments/claim)
+func (_ Unimplemented) ClaimNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/agent/host-nodes/{id}/commands)
+func (_ Unimplemented) ListHostNodeCommands(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/agent/host-nodes/{id}/heartbeat)
+func (_ Unimplemented) HeartbeatHostNode(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/deployment-runs/{id})
+func (_ Unimplemented) GetDeploymentRun(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/deployment-runs/{id}/events)
+func (_ Unimplemented) ListDeploymentRunEvents(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/host-nodes)
+func (_ Unimplemented) ListHostNodes(w http.ResponseWriter, r *http.Request, params ListHostNodesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/host-nodes/{id})
+func (_ Unimplemented) GetHostNode(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/node-enrollments)
+func (_ Unimplemented) ListNodeEnrollments(w http.ResponseWriter, r *http.Request, params ListNodeEnrollmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/node-enrollments)
+func (_ Unimplemented) CreateNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/node-enrollments/{id})
+func (_ Unimplemented) GetNodeEnrollment(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/node-enrollments/{id}/approve)
+func (_ Unimplemented) ApproveNodeEnrollment(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/node-enrollments/{id}/reject)
+func (_ Unimplemented) RejectNodeEnrollment(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/node-packages)
+func (_ Unimplemented) ListNodePackages(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/node-packages/{id}/download)
+func (_ Unimplemented) DownloadNodePackage(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/project-deployments)
+func (_ Unimplemented) ListProjectDeployments(w http.ResponseWriter, r *http.Request, params ListProjectDeploymentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/project-deployments)
+func (_ Unimplemented) CreateProjectDeployment(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/project-deployments/{id})
+func (_ Unimplemented) GetProjectDeployment(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/project-deployments/{id}/workloads/{role}/{action})
+func (_ Unimplemented) OperateProjectDeploymentWorkload(w http.ResponseWriter, r *http.Request, id string, role string, action string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/runtime-clusters)
+func (_ Unimplemented) ListRuntimeClusters(w http.ResponseWriter, r *http.Request, params ListRuntimeClustersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /ops/runtime-clusters)
+func (_ Unimplemented) CreateRuntimeCluster(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /ops/runtime-clusters/{id})
+func (_ Unimplemented) GetRuntimeCluster(w http.ResponseWriter, r *http.Request, id string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2795,6 +3207,724 @@ func (siw *ServerInterfaceWrapper) RejectNode(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RejectNode(w, r, nodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ClaimNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) ClaimNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClaimNodeEnrollment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListHostNodeCommands operation middleware
+func (siw *ServerInterfaceWrapper) ListHostNodeCommands(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AgentTokenAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListHostNodeCommands(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// HeartbeatHostNode operation middleware
+func (siw *ServerInterfaceWrapper) HeartbeatHostNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AgentTokenAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.HeartbeatHostNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDeploymentRun operation middleware
+func (siw *ServerInterfaceWrapper) GetDeploymentRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDeploymentRun(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDeploymentRunEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListDeploymentRunEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDeploymentRunEvents(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListHostNodes operation middleware
+func (siw *ServerInterfaceWrapper) ListHostNodes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListHostNodesParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListHostNodes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHostNode operation middleware
+func (siw *ServerInterfaceWrapper) GetHostNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHostNode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNodeEnrollments operation middleware
+func (siw *ServerInterfaceWrapper) ListNodeEnrollments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNodeEnrollmentsParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNodeEnrollments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) CreateNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNodeEnrollment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) GetNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNodeEnrollment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) ApproveNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveNodeEnrollment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectNodeEnrollment operation middleware
+func (siw *ServerInterfaceWrapper) RejectNodeEnrollment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectNodeEnrollment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNodePackages operation middleware
+func (siw *ServerInterfaceWrapper) ListNodePackages(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNodePackages(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadNodePackage operation middleware
+func (siw *ServerInterfaceWrapper) DownloadNodePackage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadNodePackage(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProjectDeployments operation middleware
+func (siw *ServerInterfaceWrapper) ListProjectDeployments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListProjectDeploymentsParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProjectDeployments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProjectDeployment operation middleware
+func (siw *ServerInterfaceWrapper) CreateProjectDeployment(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProjectDeployment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProjectDeployment operation middleware
+func (siw *ServerInterfaceWrapper) GetProjectDeployment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProjectDeployment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OperateProjectDeploymentWorkload operation middleware
+func (siw *ServerInterfaceWrapper) OperateProjectDeploymentWorkload(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "role" -------------
+	var role string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "role", chi.URLParam(r, "role"), &role, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "role", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "action" -------------
+	var action string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "action", chi.URLParam(r, "action"), &action, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OperateProjectDeploymentWorkload(w, r, id, role, action)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRuntimeClusters operation middleware
+func (siw *ServerInterfaceWrapper) ListRuntimeClusters(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRuntimeClustersParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRuntimeClusters(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRuntimeCluster operation middleware
+func (siw *ServerInterfaceWrapper) CreateRuntimeCluster(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRuntimeCluster(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRuntimeCluster operation middleware
+func (siw *ServerInterfaceWrapper) GetRuntimeCluster(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRuntimeCluster(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6583,6 +7713,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/nodes/{nodeId}/reject", wrapper.RejectNode)
 	})
+
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects", wrapper.ListProjects)
 	})
@@ -6763,103 +7894,122 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"rMyv/F8AAAD//+029xTpNAEA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
