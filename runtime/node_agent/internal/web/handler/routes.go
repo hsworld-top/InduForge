@@ -12,6 +12,10 @@ func (h *APIHandler) RegisterRoutes() *mux.Router {
 	// 节点信息（放在最前，确保 API 路由优先级更高）
 	router.HandleFunc("/api/v1/node/info", h.GetNodeInfo).Methods("GET")
 	router.HandleFunc("/api/v1/node/status", h.StatusCheck).Methods("GET")
+	router.HandleFunc("/api/v1/ops/processes", h.ListManagedProcesses).Methods("GET")
+	router.HandleFunc("/api/v1/ops/processes/{workloadId}/{action:start|stop|restart}", h.ManageProcess).Methods("POST")
+	router.HandleFunc("/api/v1/ops/processes/{workloadId}/{action:status}", h.ManageProcess).Methods("GET")
+	router.HandleFunc("/api/v1/ops/processes/{workloadId}/logs", h.ManagedProcessLogs).Methods("GET")
 
 	// 项目管理
 	projects := router.PathPrefix("/api/v1/projects").Subrouter()

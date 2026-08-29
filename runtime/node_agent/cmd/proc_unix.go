@@ -7,6 +7,9 @@ import (
 	"syscall"
 )
 
+func runWindowsService()                 { runDaemon() }
+func serviceStopSignal() <-chan struct{} { return nil }
+
 // setupDetachedProcess 设置进程为完全脱离模式 (Unix/Linux)
 func setupDetachedProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{

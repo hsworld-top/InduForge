@@ -1,0 +1,23 @@
+agent:
+  listen: { host: 127.0.0.1, port: 17601 }
+  executor:
+    {
+      type: process,
+      process:
+        {
+          workDir: /var/lib/node_agent/runtime,
+          logDir: /var/log/node_agent/runtime,
+          binary: runtime_engine,
+        },
+    }
+  ops:
+    {
+      enabled: true,
+      serverUrl: http://mock:18080,
+      enrollmentCode: runtime-e2e,
+      role: runtime_linux,
+      heartbeatEvery: 1s,
+      dataDir: /var/lib/node_agent/data,
+      demoRuntime: true,
+    }
+logging: { file: /var/log/node_agent/agent.log, level: info }

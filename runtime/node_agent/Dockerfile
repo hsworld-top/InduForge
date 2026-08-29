@@ -1,5 +1,5 @@
 # 构建阶段
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -31,9 +31,6 @@ COPY --from=builder /app/node_agent .
 RUN mkdir -p /var/lib/node_agent/data \
     /var/lib/node_agent/runtime \
     /var/log/node_agent/runtime
-
-# 复制配置文件
-COPY configs/config.yaml /etc/node_agent/config.yaml
 
 # 设置权限
 RUN chmod +x node_agent

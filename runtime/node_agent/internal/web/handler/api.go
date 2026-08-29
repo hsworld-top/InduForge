@@ -17,6 +17,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/indu-forge/node_agent/internal/agent/orchestrator"
 	"github.com/indu-forge/node_agent/internal/agent/store"
+	"github.com/indu-forge/node_agent/internal/ops"
 	pkgConfig "github.com/indu-forge/node_agent/internal/pkg/config"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
 	"github.com/indu-forge/node_agent/internal/pkg/types"
@@ -34,6 +35,13 @@ type APIHandler struct {
 	bootstrapStore *BootstrapStore
 	heartbeatCtrl  *heartbeatController
 	commandDeduper *centerCommandDeduper
+	supervisor     *ops.Supervisor
+}
+
+// WithSupervisor 绑定本机进程托管器。保留构造器签名，避免旧的本地 API 测试和调用方受影响。
+func (h *APIHandler) WithSupervisor(supervisor *ops.Supervisor) *APIHandler {
+	h.supervisor = supervisor
+	return h
 }
 
 // NewAPIHandler 创建 API 处理器

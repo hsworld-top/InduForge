@@ -16,6 +16,7 @@ import (
 // createTestHandler 创建用于测试的 API 处理器
 func createTestHandler(t *testing.T) *APIHandler {
 	tmpDir := t.TempDir()
+	t.Setenv("NODE_AGENT_MACHINE_ID_FILE", tmpDir+"/node_id")
 	st := store.NewLocalStore(tmpDir)
 	t.Cleanup(func() { _ = st.Close() })
 	handler := NewAPIHandler(nil, st)

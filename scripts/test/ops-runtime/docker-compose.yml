@@ -1,0 +1,28 @@
+services:
+  mock:
+    image: golang:1.24-alpine
+    working_dir: /e2e
+    volumes: ['.:/e2e:ro']
+    command: ['go', 'run', 'mock_control_plane.go']
+    ports: ['18080:18080']
+  runtime:
+    image: alpine:3.21
+    depends_on: [mock]
+    volumes: ['../../../.data/node-packages:/packages:ro', './runtime.yaml:/source-config.yaml:ro']
+    command:
+      [
+        '/bin/sh',
+        '-ec',
+        'apk add --no-cache bash tar; mkdir /package; tar -xzf /packages/induforge-node-runtime-linux.tar.gz -C /package --strip-components=1; /package/install.sh --prefix /app --config-dir /config --no-service; cp /source-config.yaml /config/config.yaml; NODE_AGENT_CONFIG=/config/config.yaml NODE_AGENT_WORKDIR=/app NODE_AGENT_DATA_DIR=/app/data /app/bin/node-agent --daemon',
+      ]
+  collector:
+    image: alpine:3.21
+    depends_on: [mock]
+    volumes:
+      ['../../../.data/node-packages:/packages:ro', './collector.yaml:/source-config.yaml:ro']
+    command:
+      [
+        '/bin/sh',
+        '-ec',
+        'apk add --no-cache bash tar; mkdir /package; tar -xzf /packages/induforge-node-collector-linux.tar.gz -C /package --strip-components=1; /package/install.sh --prefix /app --config-dir /config --no-service; cp /source-config.yaml /config/config.yaml; NODE_AGENT_CONFIG=/config/config.yaml NODE_AGENT_WORKDIR=/app NODE_AGENT_DATA_DIR=/app/data /app/bin/node-agent --daemon',
+      ]

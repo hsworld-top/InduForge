@@ -171,6 +171,36 @@ func SaveOfflineConfig(configPath string, nodeName string) error {
 	return nil
 }
 
+// ClearOpsEnrollmentCode 在身份领取成功后移除一次性引导码，避免它以明文长期留在配置中。
+func ClearOpsEnrollmentCode(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return err
+	}
+	agent, ok := config["agent"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid config structure")
+	}
+	ops, ok := agent["ops"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	ops["enrollmentCode"] = ""
+	updated, err := yaml.Marshal(config)
+	if err != nil {
+		return err
+	}
+	temporary := configPath + ".tmp"
+	if err := os.WriteFile(temporary, updated, 0600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, configPath)
+}
+
 // ValidateOnlineConfig 验证在线模式配置是否完整
 func ValidateOnlineConfig(config *OnlineConfig) error {
 	if config.CenterURL == "" {

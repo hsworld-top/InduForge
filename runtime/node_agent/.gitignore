@@ -27,6 +27,7 @@ logs/
 
 # 数据目录
 data/
+**/data/node_id
 runtime/
 
 # IDE 和编辑器文件

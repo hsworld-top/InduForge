@@ -19,6 +19,7 @@ import (
 	"github.com/indu-forge/node_agent/internal/agent/health"
 	"github.com/indu-forge/node_agent/internal/agent/orchestrator"
 	"github.com/indu-forge/node_agent/internal/agent/store"
+	"github.com/indu-forge/node_agent/internal/ops"
 	pkgConfig "github.com/indu-forge/node_agent/internal/pkg/config"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
 	"github.com/indu-forge/node_agent/internal/web/handler"
@@ -34,6 +35,18 @@ type AgentConfig struct {
 	ID       string         `mapstructure:"id"`
 	Listen   ListenConfig   `mapstructure:"listen"`
 	Executor ExecutorConfig `mapstructure:"executor"`
+	Ops      OpsConfig      `mapstructure:"ops"`
+}
+
+// OpsConfig 是运维控制面连接配置；包安装器会写入 serverUrl/code/role，身份凭据单独持久化。
+type OpsConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	ServerURL      string `mapstructure:"serverUrl"`
+	EnrollmentCode string `mapstructure:"enrollmentCode"`
+	Role           string `mapstructure:"role"`
+	HeartbeatEvery string `mapstructure:"heartbeatEvery"`
+	DataDir        string `mapstructure:"dataDir"`
+	DemoRuntime    bool   `mapstructure:"demoRuntime"`
 }
 
 type ListenConfig struct {
@@ -97,7 +110,30 @@ func getRuntimeWorkDir() string {
 	return "."
 }
 
+// nodeAgentExecutable 返回可重新拉起当前节点代理的绝对路径。
+// Supervisor 会将子进程的工作目录切换到 workload 目录，因此不能直接使用可能为相对路径的 os.Args[0]。
+func nodeAgentExecutable() string {
+	if executable, err := os.Executable(); err == nil && strings.TrimSpace(executable) != "" {
+		if absolute, absErr := filepath.Abs(executable); absErr == nil {
+			return absolute
+		}
+		return executable
+	}
+	if absolute, err := filepath.Abs(os.Args[0]); err == nil {
+		return absolute
+	}
+	return os.Args[0]
+}
+
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--service" {
+		runWindowsService()
+		return
+	}
+	if len(os.Args) >= 3 && os.Args[1] == "demo-workload" {
+		runDemoWorkload(os.Args[2])
+		return
+	}
 	// 开发模式：跳过交互，直接运行服务
 	if isDevMode() {
 		runDaemon()
@@ -253,7 +289,7 @@ func initFileLogger(config Config) error {
 
 // startServiceForeground 在当前进程前台启动服务。
 func startServiceForeground(config Config, nodeMode pkgConfig.NodeMode, configPath string) {
-	storeInstance := store.NewLocalStore("./data")
+	storeInstance := store.NewLocalStore(getDataDir(config))
 	execInstance, err := createExecutor(config.Agent.Executor)
 	if err != nil {
 		fmt.Printf("  创建执行器失败: %v\n", err)
@@ -306,7 +342,7 @@ func runDaemon() {
 	nodeMode, _ := pkgConfig.GetMode(configPath)
 
 	// 初始化组件
-	storeInstance := store.NewLocalStore("./data")
+	storeInstance := store.NewLocalStore(getDataDir(*config))
 	execInstance, err := createExecutor(config.Agent.Executor)
 	if err != nil {
 		fileLogger.Error(fmt.Sprintf("创建执行器失败: %v", err))
@@ -330,7 +366,18 @@ func runDaemon() {
 // runHTTPServer 运行 HTTP 服务（后台模式）
 func runHTTPServer(config Config, storeInstance *store.LocalStore, orchInstance *orchestrator.Orchestrator, healthChecker *health.HealthChecker, nodeMode pkgConfig.NodeMode, configPath string) {
 	// 创建 API 处理器
-	apiHandler := handler.NewAPIHandler(orchInstance, storeInstance)
+	supervisor := ops.NewSupervisor(nodeAgentExecutable(), config.Agent.Executor.Process.WorkDir, config.Agent.Executor.Process.LogDir)
+	apiHandler := handler.NewAPIHandler(orchInstance, storeInstance).WithSupervisor(supervisor)
+	opsContext, cancelOps := context.WithCancel(context.Background())
+	if agent, err := newOpsAgent(config, supervisor, storeInstance.DataDir()); err != nil {
+		fileLogger.Warn("运维控制面配置无效，跳过启动", "error", err)
+	} else if agent != nil {
+		go func() {
+			if err := agent.Run(opsContext); err != nil {
+				fileLogger.Warn("运维控制面连接已停止", "error", err)
+			}
+		}()
+	}
 
 	// 创建 HTTP 服务器
 	server := &http.Server{
@@ -362,16 +409,45 @@ func runHTTPServer(config Config, storeInstance *store.LocalStore, orchInstance 
 	// 等待服务关闭信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case <-serviceStopSignal():
+	}
 
 	// 关闭服务
 	fileLogger.Info("正在关闭服务...")
+	cancelOps()
+	supervisor.Shutdown()
 	notifyCenterOffline(nodeMode, configPath)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)
 	fileLogger.Close()
 	cleanupLockFile()
+}
+
+func getDataDir(config Config) string {
+	if value := strings.TrimSpace(os.Getenv("NODE_AGENT_DATA_DIR")); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(config.Agent.Ops.DataDir); value != "" {
+		return value
+	}
+	return "./data"
+}
+
+func newOpsAgent(config Config, supervisor *ops.Supervisor, defaultDataDir string) (*ops.Agent, error) {
+	if !config.Agent.Ops.Enabled {
+		return nil, nil
+	}
+	interval, err := time.ParseDuration(config.Agent.Ops.HeartbeatEvery)
+	if config.Agent.Ops.HeartbeatEvery == "" {
+		interval, err = 10*time.Second, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ops heartbeatEvery 无效: %w", err)
+	}
+	return ops.NewAgent(ops.Config{Enabled: true, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, Role: config.Agent.Ops.Role, HeartbeatEvery: interval, DataDir: defaultDataDir, DemoRuntime: config.Agent.Ops.DemoRuntime, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }}, supervisor)
 }
 
 // notifyCenterOffline 在 Agent 正常退出时主动通知运维中心离线。
@@ -435,8 +511,8 @@ func loadConfig() (*Config, error) {
 	if consoleLogger == nil {
 		consoleLogger = logger.NewSimpleLogger(logger.LevelInfo)
 	}
-	// 配置文件直接放在当前目录
-	configPath := "./config.yaml"
+	// 安装包通过 NODE_AGENT_CONFIG 指定配置位置；开发环境仍默认当前目录。
+	configPath := pkgConfig.GetConfigPath()
 
 	// 检查配置文件是否存在，不存在则生成默认配置
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -446,9 +522,9 @@ func loadConfig() (*Config, error) {
 		consoleLogger.Info(fmt.Sprintf("已生成默认配置文件: %s", configPath))
 	}
 
-	viper.SetConfigName("config")
+	viper.Reset()
+	viper.SetConfigFile(configPath)
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
 
 	viper.AutomaticEnv()
 
@@ -631,6 +707,14 @@ func generateDefaultConfig(configPath string) error {
         centerUrl: "http://127.0.0.1:19601"
         nodeId: ""
         registrationToken: ""
+    ops:
+        enabled: false
+        serverUrl: ""
+        enrollmentCode: ""
+        role: collector_linux
+        heartbeatEvery: 10s
+        dataDir: ./data
+        demoRuntime: true
     runtime:
         healthCheck:
             enabled: true
@@ -651,6 +735,28 @@ storage:
 `
 
 	return os.WriteFile(configPath, []byte(defaultConfig), 0644)
+}
+
+// runDemoWorkload 是可被三类安装包共同托管的小型长期进程，用于验证 supervisor 的
+// start/stop/restart/status/log 链路；它不模拟业务计算或工业协议。
+func runDemoWorkload(role string) {
+	if role != "compute" && role != "alert" && role != "collector" {
+		os.Exit(2)
+	}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	fmt.Printf("demo workload started role=%s pid=%d\n", role, os.Getpid())
+	for {
+		select {
+		case <-quit:
+			fmt.Printf("demo workload stopped role=%s\n", role)
+			return
+		case now := <-ticker.C:
+			fmt.Printf("demo workload heartbeat role=%s at=%s\n", role, now.UTC().Format(time.RFC3339))
+		}
+	}
 }
 
 // waitForKeyPress 等待用户按键
