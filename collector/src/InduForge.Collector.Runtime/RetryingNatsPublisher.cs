@@ -11,14 +11,22 @@ public sealed class RetryingNatsPublisher : IJetStreamPublisher, IAsyncDisposabl
     private readonly ICollectorSecretResolver _secrets;
     private readonly string _resourceReference;
     private readonly string _secretReference;
+    private readonly string _accountId;
     private readonly bool _production;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private NatsClient? _client;
     private NatsJetStreamPublisher? _publisher;
     private DateTimeOffset _nextConnect;
 
-    public RetryingNatsPublisher(ICollectorResourceResolver resources, ICollectorSecretResolver secrets, string resourceReference, string secretReference, bool production = false)
-    { _resources = resources; _secrets = secrets; _resourceReference = resourceReference; _secretReference = secretReference; _production = production; }
+    public RetryingNatsPublisher(ICollectorResourceResolver resources, ICollectorSecretResolver secrets, string resourceReference, string secretReference, string accountId, bool production = false)
+    {
+        _resources = resources ?? throw new ArgumentNullException(nameof(resources));
+        _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
+        _resourceReference = resourceReference;
+        _secretReference = secretReference;
+        _accountId = StrictJson.RequireStableId(accountId);
+        _production = production;
+    }
 
     public bool IsConnected => Volatile.Read(ref _publisher) is not null;
 
@@ -40,10 +48,12 @@ public sealed class RetryingNatsPublisher : IJetStreamPublisher, IAsyncDisposabl
             try
             {
                 var resource = await _resources.ResolveResourceAsync(_resourceReference, cancellationToken).ConfigureAwait(false);
+                var server = ParseServerResource(resource.Value);
+                // 在读取凭据或建立连接前固定校验租户边界，避免错误 Binding 跨 account 使用资源。
+                if (!string.Equals(server.AccountId, _accountId, StringComparison.Ordinal)) throw ConfigurationError.Invalid();
                 using var secret = await _secrets.ResolveSecretAsync(_secretReference, cancellationToken).ConfigureAwait(false);
-                var uri = ParseServerResource(resource.Value);
                 var credential = NatsCredential.Parse(secret.Value, _production);
-                var options = new NatsOpts { Url = uri.AbsoluteUri };
+                var options = new NatsOpts { Url = server.Url.AbsoluteUri };
                 if (credential.ToOptions() is { } authentication) options = options with { AuthOpts = authentication };
                 NatsClient? client = new NatsClient(options);
                 try
@@ -75,13 +85,19 @@ public sealed class RetryingNatsPublisher : IJetStreamPublisher, IAsyncDisposabl
     }
     public async ValueTask DisposeAsync() { await DropAsync().ConfigureAwait(false); _gate.Dispose(); }
 
-    internal static Uri ParseServerResource(JsonElement resource)
+    internal static NatsServerResource ParseServerResource(JsonElement resource)
     {
-        StrictJson.RequireObject(resource, "nats resource"); StrictJson.RequireOnly(resource, "url");
+        StrictJson.RequireObject(resource, "nats resource"); StrictJson.RequireOnly(resource, "url", "accountId");
         var url = StrictJson.RequireNonEmptyString(resource, "url");
+        var accountId = StrictJson.RequireStableId(resource, "accountId");
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("nats" or "tls") || !string.IsNullOrEmpty(uri.UserInfo) || string.IsNullOrEmpty(uri.Host) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) throw ConfigurationError.Invalid();
-        return uri;
+        return new NatsServerResource(uri, accountId);
     }
+}
+
+internal sealed record NatsServerResource(Uri Url, string AccountId)
+{
+    public override string ToString() => "NatsServerResource { redacted }";
 }
 
 internal sealed record NatsCredential(string Kind, string? Token, string? Username, string? Password)

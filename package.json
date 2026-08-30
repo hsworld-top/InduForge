@@ -105,6 +105,8 @@
     "collector:restore": "dotnet restore collector/InduForge.Collector.slnx",
     "collector:build": "dotnet build collector/InduForge.Collector.slnx --no-restore",
     "collector:test": "dotnet test collector/InduForge.Collector.slnx",
-    "collector:publish:dev": "dotnet publish collector/src/InduForge.Collector.DevAgent/InduForge.Collector.DevAgent.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o collector/artifacts/win-x64"
+    "collector:publish:dev": "dotnet publish collector/src/InduForge.Collector.DevAgent/InduForge.Collector.DevAgent.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o collector/artifacts/win-x64",
+    "collector:publish:runtime:win-x64": "dotnet publish collector/src/InduForge.Collector.Runtime/InduForge.Collector.Runtime.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o collector/artifacts/runtime/win-x64",
+    "collector:publish:runtime:linux-x64": "dotnet publish collector/src/InduForge.Collector.Runtime/InduForge.Collector.Runtime.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o collector/artifacts/runtime/linux-x64"
   }
 }

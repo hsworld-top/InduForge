@@ -515,6 +515,12 @@ public sealed partial class DurableWal : IAsyncDisposable
         }
     }
 
+    /// <summary>供高频健康探活使用的 O(1) 可用性判定；不得遍历待回放记录或读取 payload。</summary>
+    internal bool IsUnavailableForHealth()
+    {
+        lock (_stateLock) return _isCorrupted || _stopping;
+    }
+
     public void RecordPublishFailure(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);

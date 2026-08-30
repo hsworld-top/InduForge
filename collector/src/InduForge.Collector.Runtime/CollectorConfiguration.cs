@@ -233,6 +233,12 @@ internal static class SecureFile
     internal static async Task<byte[]> ReadAsync(string path, int maximum, bool requireReadOnly, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path) || path.Contains('\0')) throw ConfigurationError.Invalid();
+        if (OperatingSystem.IsWindows())
+        {
+            await using var verified = WindowsSecureFile.OpenVerified(path, requireReadOnly);
+            if (verified.Length > maximum) throw ConfigurationError.Invalid();
+            return await ReadExactlyAsync(verified, maximum, cancellationToken).ConfigureAwait(false);
+        }
         RejectLinkedParents(path);
         var info = new FileInfo(path);
         if (!info.Exists || info.LinkTarget is not null || (info.Attributes & FileAttributes.ReparsePoint) != 0) throw ConfigurationError.Invalid();
@@ -245,10 +251,17 @@ internal static class SecureFile
         if (info.Length > maximum) throw ConfigurationError.Invalid();
         await using var stream = OpenNoFollow(path);
         if (stream.Length != info.Length || stream.Length > maximum) throw ConfigurationError.Invalid();
-        var bytes = new byte[stream.Length]; var read = 0;
-        while (read < bytes.Length) { var amount = await stream.ReadAsync(bytes.AsMemory(read), cancellationToken).ConfigureAwait(false); if (amount == 0) throw ConfigurationError.Invalid(); read += amount; }
+        var bytes = await ReadExactlyAsync(stream, maximum, cancellationToken).ConfigureAwait(false);
         var post = new FileInfo(path);
         if (!post.Exists || post.LinkTarget is not null || post.Length != bytes.Length || post.LastWriteTimeUtc != info.LastWriteTimeUtc) throw ConfigurationError.Invalid();
+        return bytes;
+    }
+
+    private static async Task<byte[]> ReadExactlyAsync(FileStream stream, int maximum, CancellationToken cancellationToken)
+    {
+        if (stream.Length > maximum) throw ConfigurationError.Invalid();
+        var bytes = new byte[stream.Length]; var read = 0;
+        while (read < bytes.Length) { var amount = await stream.ReadAsync(bytes.AsMemory(read), cancellationToken).ConfigureAwait(false); if (amount == 0) throw ConfigurationError.Invalid(); read += amount; }
         return bytes;
     }
 
@@ -295,11 +308,127 @@ internal static class SecureFile
 #pragma warning restore CA2101
 }
 
+/// <summary>
+/// Windows 生产挂载的文件必须以 handle 为准验证。路径属性在打开前后都可能被 junction 替换，
+/// 因此只接受最终对象与请求路径一致、且当前进程无法取得写入或删除能力的普通文件。
+/// </summary>
+internal static class WindowsSecureFile
+{
+    private const uint FileAttributeReparsePoint = 0x400;
+    private const uint GenericWrite = 0x40000000;
+    private const uint Delete = 0x00010000;
+    private const uint WriteDac = 0x00040000;
+    private const uint WriteOwner = 0x00080000;
+    private const uint FileAddFile = 0x00000002;
+    private const uint FileDeleteChild = 0x00000040;
+    private const uint ShareAll = 0x00000007;
+    private const uint OpenExisting = 3;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+    private const int FileBasicInfo = 0;
+    private const int ErrorAccessDenied = 5;
+
+    internal static FileStream OpenVerified(string path, bool requireReadOnly)
+    {
+        try
+        {
+            // 必须在受保护读取句柄建立前探测，否则 FileShare.Read 会把自身的拒绝共享误判成 ACL 拒绝。
+            if (requireReadOnly) VerifyNoMutationCapability(path);
+            var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.SequentialScan);
+            try
+            {
+                VerifyFinalObject(handle, path);
+                return new FileStream(handle, FileAccess.Read, 64 * 1024, isAsync: false);
+            }
+            catch
+            {
+                handle.Dispose();
+                throw;
+            }
+        }
+        catch (CollectorRuntimeConfigurationException) { throw; }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            throw ConfigurationError.Invalid();
+        }
+    }
+
+    private static void VerifyFinalObject(SafeFileHandle handle, string requestedPath)
+    {
+        if (!GetFileInformationByHandleEx(handle, FileBasicInfo, out var basic, (uint)Marshal.SizeOf<FileBasicInformation>()) || (basic.FileAttributes & FileAttributeReparsePoint) != 0)
+            throw ConfigurationError.Invalid();
+        var final = new StringBuilder(32_768);
+        var length = GetFinalPathNameByHandleW(handle, final, (uint)final.Capacity, 0);
+        if (length == 0 || length >= final.Capacity || !string.Equals(NormalizeFinalPath(final.ToString()), NormalizeFinalPath(requestedPath), StringComparison.OrdinalIgnoreCase))
+            throw ConfigurationError.Invalid();
+    }
+
+    private static string NormalizeFinalPath(string path)
+    {
+        var full = Path.GetFullPath(path).Replace('/', '\\');
+        if (full.StartsWith("\\\\?\\UNC\\", StringComparison.OrdinalIgnoreCase)) return full;
+        return full.StartsWith("\\\\?\\", StringComparison.Ordinal) ? full : "\\\\?\\" + full;
+    }
+
+    private static void VerifyNoMutationCapability(string path)
+    {
+        // 这是 capability 探测，不修改文件。可打开即说明 ACL 允许当前进程篡改或替换，生产环境应 fail-closed。
+        if (ProbeMutation(path, GenericWrite, 0) != MutationCapability.Denied ||
+            ProbeMutation(path, Delete, 0) != MutationCapability.Denied ||
+            ProbeMutation(path, WriteDac, 0) != MutationCapability.Denied ||
+            ProbeMutation(path, WriteOwner, 0) != MutationCapability.Denied) throw ConfigurationError.Invalid();
+        var parent = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(parent) ||
+            ProbeMutation(parent, GenericWrite, FileFlagBackupSemantics) != MutationCapability.Denied ||
+            ProbeMutation(parent, Delete, FileFlagBackupSemantics) != MutationCapability.Denied ||
+            ProbeMutation(parent, WriteDac, FileFlagBackupSemantics) != MutationCapability.Denied ||
+            ProbeMutation(parent, WriteOwner, FileFlagBackupSemantics) != MutationCapability.Denied ||
+            ProbeMutation(parent, FileAddFile, FileFlagBackupSemantics) != MutationCapability.Denied ||
+            ProbeMutation(parent, FileDeleteChild, FileFlagBackupSemantics) != MutationCapability.Denied) throw ConfigurationError.Invalid();
+    }
+
+    private static MutationCapability ProbeMutation(string path, uint desiredAccess, uint flags)
+    {
+        using var handle = CreateFileW(path, desiredAccess, ShareAll, IntPtr.Zero, OpenExisting, flags, IntPtr.Zero);
+        if (!handle.IsInvalid) return MutationCapability.Allowed;
+        // 仅 ERROR_ACCESS_DENIED 能证明当前令牌缺少该具体能力；共享冲突、I/O 或其他错误都 fail-closed。
+        return Marshal.GetLastWin32Error() == ErrorAccessDenied ? MutationCapability.Denied : MutationCapability.Unknown;
+    }
+
+    private enum MutationCapability { Allowed, Denied, Unknown }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileBasicInformation
+    {
+        internal long CreationTime;
+        internal long LastAccessTime;
+        internal long LastWriteTime;
+        internal long ChangeTime;
+        internal uint FileAttributes;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandleEx(SafeFileHandle fileInformation, int fileInformationClass, out FileBasicInformation fileInformationData, uint bufferSize);
+
+ #pragma warning disable CA1838 // Win32 API 返回可变长 UTF-16 路径，缓冲区避免额外托管复制。
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint pathLength, uint flags);
+ #pragma warning restore CA1838
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(string fileName, uint desiredAccess, uint shareMode, IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+}
+
 internal static class StrictJson
 {
     private static readonly Regex Stable = new("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant);
     private static readonly Regex Uuid = new("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", RegexOptions.CultureInvariant);
-    internal static JsonDocument Parse(ReadOnlyMemory<byte> bytes) { RejectDuplicates(bytes.Span); try { return JsonDocument.Parse(bytes); } catch (JsonException) { throw ConfigurationError.Invalid(); } }
+    internal static JsonDocument Parse(ReadOnlyMemory<byte> bytes)
+    {
+        try { RejectDuplicates(bytes.Span); return JsonDocument.Parse(bytes); }
+        catch (JsonException) { throw ConfigurationError.Invalid(); }
+        catch (InvalidOperationException) { throw ConfigurationError.Invalid(); }
+    }
     internal static void RequireObject(JsonElement value, string _) { if (value.ValueKind != JsonValueKind.Object) throw ConfigurationError.Invalid(); }
     internal static JsonElement RequireProperty(JsonElement value, string name) => value.TryGetProperty(name, out var property) ? property : throw ConfigurationError.Invalid();
     /// <summary>仅拒绝未声明字段。必填字段由各读取器在实际读取时强制，避免把 Schema optional 误当 required。</summary>
@@ -310,7 +439,8 @@ internal static class StrictJson
     }
     internal static string RequireString(JsonElement value, string name, string? expected = null) { var text = RequireNonEmptyString(value, name); if (expected is not null && !string.Equals(text, expected, StringComparison.Ordinal)) throw ConfigurationError.Invalid(); return text; }
     internal static string RequireNonEmptyString(JsonElement value, string name) { if (!value.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(property.GetString())) throw ConfigurationError.Invalid(); return property.GetString()!; }
-    internal static string RequireStableId(JsonElement value, string name) { var text = RequireNonEmptyString(value, name); return Stable.IsMatch(text) ? text : throw ConfigurationError.Invalid(); }
+    internal static string RequireStableId(JsonElement value, string name) => RequireStableId(RequireNonEmptyString(value, name));
+    internal static string RequireStableId(string value) => !string.IsNullOrEmpty(value) && Stable.IsMatch(value) ? value : throw ConfigurationError.Invalid();
     internal static string RequireUuid(JsonElement value, string name) { var text = RequireNonEmptyString(value, name); return Uuid.IsMatch(text) ? text : throw ConfigurationError.Invalid(); }
     internal static int RequirePositiveInt(JsonElement value, string name) => RequireInt32(value, name, 1, int.MaxValue);
     internal static int RequireInt32(JsonElement value, string name, int minimum, int maximum) => value.TryGetProperty(name, out var property) ? RequireInt32Value(property, minimum, maximum) : throw ConfigurationError.Invalid();
