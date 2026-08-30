@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "runtime.dlq.event.v1",
+  "dlqId": "7fe0afbd96f4b358d599559934cd9caad251863c9f4276f781b08d939b8874db",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "consumerKey": "writer-raw-v1",
+  "originalSubject": "data.raw.22222222-2222-4222-8222-222222222222",
+  "eventId": null,
+  "reasonCode": "endpoint-timeout",
+  "deliveryCount": 0,
+  "bodySha256": "sha256:ee268a71b05de985c2d7b596eede7bb289ad999b071882bc65e653b9c52e58a6",
+  "bodyBase64": "not base64!",
+  "occurredAt": "2026-08-30T10:20:31Z",
+  "dsn": "postgres://forbidden"
+}

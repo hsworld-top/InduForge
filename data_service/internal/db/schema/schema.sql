@@ -599,6 +599,7 @@ CREATE TABLE data_compute_units (
     input_bindings jsonb DEFAULT '{}'::jsonb NOT NULL,
     timeout_ms integer DEFAULT 3000 NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -608,6 +609,7 @@ CREATE TABLE data_compute_units (
     CONSTRAINT data_compute_units_language_check CHECK ((language = ANY (ARRAY['js'::text, 'python'::text]))),
     CONSTRAINT data_compute_units_name_check CHECK ((char_length(name) <= 100)),
     CONSTRAINT data_compute_units_timeout_ms_check CHECK (((timeout_ms > 0) AND (timeout_ms <= 120000))),
+    CONSTRAINT data_compute_units_revision_check CHECK ((revision > 0)),
     CONSTRAINT data_compute_units_trigger_config_check CHECK ((jsonb_typeof(trigger_config) = 'object'::text)),
     CONSTRAINT data_compute_units_trigger_type_check CHECK ((trigger_type = ANY (ARRAY['manual'::text, 'schedule'::text, 'datapoint_change'::text, 'condition'::text])))
 );
@@ -653,7 +655,7 @@ CREATE TABLE data_compute_unit_outputs (
     CONSTRAINT data_compute_unit_outputs_path_check CHECK (((char_length(btrim(path)) >= 1) AND (char_length(path) <= 255))),
     CONSTRAINT data_compute_unit_outputs_data_type_check CHECK ((data_type = ANY (ARRAY['bool'::text, 'int8'::text, 'uint8'::text, 'int16'::text, 'uint16'::text, 'int32'::text, 'uint32'::text, 'int64'::text, 'uint64'::text, 'float32'::text, 'float64'::text, 'decimal'::text, 'string'::text, 'bytes'::text, 'datetime'::text, 'object'::text, 'array'::text]))),
     CONSTRAINT data_compute_unit_outputs_precision_check CHECK (((precision_num IS NULL) OR (precision_num >= 0))),
-    CONSTRAINT data_compute_unit_outputs_null_policy_check CHECK ((null_policy = ANY (ARRAY['error'::text, 'skip'::text]))),
+    CONSTRAINT data_compute_unit_outputs_null_policy_check CHECK ((null_policy = ANY (ARRAY['error'::text, 'skip'::text, 'default'::text]))),
     CONSTRAINT data_compute_unit_outputs_sort_order_check CHECK ((sort_order >= 0))
 );
 

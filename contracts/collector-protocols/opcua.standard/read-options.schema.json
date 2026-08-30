@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OPC UA Standard V1 point read options",
+  "type": "object",
+  "additionalProperties": false,
+  "maxProperties": 0
+}

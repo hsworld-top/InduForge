@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/runtime-health-status.schema.json",
+  "title": "runtime-health-status.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "componentRole", "siteId", "executionForm", "lifecycleState", "healthState", "version", "startedAt", "uptimeSeconds", "observedAt"],
+  "properties": {
+    "schemaVersion": { "const": "runtime-health-status.v1" },
+    "componentRole": { "type": "string", "enum": ["runtime-api", "runtime-engine", "industrial-collector", "compute-sandbox"] },
+    "siteId": { "$ref": "common.schema.json#/$defs/stableId" }, "deploymentId": { "$ref": "common.schema.json#/$defs/stableId" }, "accountId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "projectId": { "$ref": "common.schema.json#/$defs/stableId" }, "projectCode": { "type": "string", "minLength": 1 }, "deploymentStage": { "type": "string", "enum": ["development", "staging", "production"] },
+    "executionForm": { "type": "string", "enum": ["k3s-workload", "native-linux", "native-windows"] }, "nodeId": { "$ref": "common.schema.json#/$defs/stableId" }, "processId": { "type": "integer", "minimum": 1 },
+    "lifecycleState": { "type": "string", "enum": ["STARTING", "RUNNING", "STOPPING", "STOPPED", "FAILED"] }, "healthState": { "type": "string", "enum": ["HEALTHY", "DEGRADED", "UNAVAILABLE", "MAINTENANCE", "UNKNOWN"] }, "version": { "type": "string", "minLength": 1 },
+    "startedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "uptimeSeconds": { "type": "integer", "minimum": 0 }, "observedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "lastError": { "type": ["string", "null"], "maxLength": 1024 }, "reasonCode": { "type": ["string", "null"], "maxLength": 128 },
+    "businessFreshness": {
+      "type": "object", "additionalProperties": false, "required": ["state", "lastBusinessEventAt", "evaluatedAt"],
+      "properties": { "state": { "type": "string", "enum": ["FRESH", "STALE", "EXPIRED", "UNKNOWN"] }, "lastBusinessEventAt": { "anyOf": [{ "$ref": "common.schema.json#/$defs/utcRfc3339" }, { "type": "null" }] }, "evaluatedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" } }
+    },
+    "collector": {
+      "type": "object", "additionalProperties": false,
+      "required": ["assignmentId", "assignmentRevision", "bindingId", "bindingRevision", "artifact", "ownership", "walBacklogRecords", "walBytes", "walOldestAgeSeconds", "walWatermark", "upstreamStatus"],
+      "properties": {
+        "assignmentId": { "$ref": "common.schema.json#/$defs/stableId" }, "assignmentRevision": { "type": "integer", "minimum": 1 }, "bindingId": { "$ref": "common.schema.json#/$defs/stableId" }, "bindingRevision": { "type": "integer", "minimum": 1 }, "artifact": { "$ref": "common.schema.json#/$defs/artifactRef" }, "ownership": { "$ref": "common.schema.json#/$defs/ownership" },
+        "walBacklogRecords": { "type": "integer", "minimum": 0 }, "walBytes": { "type": "integer", "minimum": 0 }, "walOldestAgeSeconds": { "type": "integer", "minimum": 0 }, "walWatermark": { "type": "string", "enum": ["NORMAL", "HIGH", "FULL"] }, "upstreamStatus": { "type": "string", "enum": ["CONNECTED", "DISCONNECTED", "DEGRADED", "UNKNOWN"] }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "componentRole": { "enum": ["runtime-api", "runtime-engine", "industrial-collector"] } } }, "then": { "required": ["deploymentId", "accountId", "businessFreshness"], "properties": { "deploymentId": {}, "accountId": {}, "businessFreshness": {} } } },
+    { "if": { "properties": { "componentRole": { "const": "industrial-collector" } } }, "then": { "required": ["nodeId", "processId", "collector"], "properties": { "nodeId": {}, "processId": {}, "collector": {}, "executionForm": { "enum": ["native-linux", "native-windows"] } } } },
+    { "if": { "properties": { "componentRole": { "enum": ["runtime-api", "runtime-engine", "compute-sandbox"] } } }, "then": { "not": { "properties": { "collector": {} }, "required": ["collector"] } } }
+  ]
+}

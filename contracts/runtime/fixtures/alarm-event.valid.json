@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "alarm.event.v1",
+  "subject": "alarm.event",
+  "eventId": "7a7dcb8ca402e5904675103895fa259404bf856bb04372f64fae38c9fecf0f73",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "kind": "alarm-transition",
+  "alarmId": "alarm-line1-temperature-high-20260830",
+  "alarmItemId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "pointIds": [
+    "22222222-2222-4222-8222-222222222222"
+  ],
+  "operation": "RAISE",
+  "ownerId": "runtime-engine-alarm-0",
+  "epoch": 7,
+  "sourceTimestamp": "2026-08-30T10:20:30.123Z",
+  "serverTimestamp": "2026-08-30T10:20:30.190Z",
+  "receivedAt": "2026-08-30T10:20:30.190Z",
+  "transition": {
+    "alarmState": "OPEN",
+    "severity": "shutdown",
+    "previousSeverity": null,
+    "conditionId": "aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "value": 36.5,
+    "quality": "good",
+    "message": "温度超过高限",
+    "openedAt": "2026-08-30T10:20:30.123Z",
+    "updatedAt": "2026-08-30T10:20:30.190Z",
+    "clearedAt": null,
+    "ackedAt": null,
+    "acknowledgedBy": null,
+    "stateVersion": 1,
+    "transitionSequence": 1
+  }
+}

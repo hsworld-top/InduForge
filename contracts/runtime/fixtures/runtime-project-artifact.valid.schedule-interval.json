@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "runtime-project-artifact.v1",
+  "projectArtifactVersion": "1.0",
+  "projectId": "11111111-1111-4111-8111-111111111111",
+  "generatedAt": "2026-08-30T10:00:00Z",
+  "dataPoints": [],
+  "computeUnits": [
+    {
+      "id": "21000000-0000-4100-8100-000000000001",
+      "revision": 1,
+      "name": "interval",
+      "description": null,
+      "language": "js",
+      "scriptCode": "return 1;",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [],
+      "inputs": [],
+      "outputs": [
+        {
+          "datapointId": "22000000-0000-4200-8200-000000000001",
+          "outputKey": "result",
+          "path": "result",
+          "name": "result",
+          "description": null,
+          "dataType": "float64",
+          "unit": null,
+          "precisionNum": null,
+          "sortOrder": 0,
+          "nullPolicy": "skip"
+        }
+      ],
+      "trigger": {
+        "kind": "schedule",
+        "schedule": {
+          "kind": "interval",
+          "every": 5,
+          "unit": "minutes",
+          "startAt": "2026-08-30T08:00:00Z",
+          "endAt": "2026-08-30T18:00:00Z",
+          "maxRuns": 10
+        }
+      }
+    }
+  ],
+  "alarmItems": []
+}

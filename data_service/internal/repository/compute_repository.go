@@ -1,12 +1,17 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math/big"
 	"net/http"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,6 +38,7 @@ type ComputeUnitRecord struct {
 	Dependencies  []any
 	TimeoutMS     int
 	IsEnabled     bool
+	Revision      int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -162,6 +168,7 @@ type ComputeOutputParam struct {
 	PrecisionNum *int
 	NullPolicy   string
 	Description  *string
+	DefaultValue *string
 }
 
 // ComputeOutputRecord 是规范化计算输出及其稳定生成点身份。
@@ -177,6 +184,7 @@ type ComputeOutputRecord struct {
 	PrecisionNum *int
 	NullPolicy   string
 	SortOrder    int
+	DefaultValue *string
 }
 
 // HasComputeDependencyPath 判断 fromUnit 是否直接或间接依赖 toUnit。
@@ -204,7 +212,7 @@ func hydrateComputeOutputsFromPool(ctx context.Context, pool *pgxpool.Pool, unit
 		return nil
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT output.id::text,output.datapoint_id::text,output.output_key,point.name,point.description,
+		SELECT output.id::text,output.datapoint_id::text,output.output_key,point.name,point.description,point.default_value,
 		       output.path,output.data_type,output.unit,output.precision_num,output.null_policy,output.sort_order
 		FROM data_compute_unit_outputs output
 		JOIN data_points point ON point.id=output.datapoint_id
@@ -218,7 +226,7 @@ func hydrateComputeOutputsFromPool(ctx context.Context, pool *pgxpool.Pool, unit
 	unit.Outputs = make([]ComputeOutputRecord, 0)
 	for rows.Next() {
 		var output ComputeOutputRecord
-		if err := rows.Scan(&output.ID, &output.DatapointID, &output.OutputKey, &output.Name, &output.Description, &output.Path, &output.DataType, &output.Unit, &output.PrecisionNum, &output.NullPolicy, &output.SortOrder); err != nil {
+		if err := rows.Scan(&output.ID, &output.DatapointID, &output.OutputKey, &output.Name, &output.Description, &output.DefaultValue, &output.Path, &output.DataType, &output.Unit, &output.PrecisionNum, &output.NullPolicy, &output.SortOrder); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取计算输出失败", err)
 		}
 		unit.Outputs = append(unit.Outputs, output)
@@ -240,7 +248,7 @@ func computeOutputRecordsFromParams(outputs []ComputeOutputParam) []ComputeOutpu
 		if nullPolicy == "" {
 			nullPolicy = "error"
 		}
-		result = append(result, ComputeOutputRecord{OutputKey: key, Name: output.Name, Description: output.Description, Path: output.Path, DataType: output.DataType, Unit: output.Unit, PrecisionNum: output.PrecisionNum, NullPolicy: nullPolicy, SortOrder: index})
+		result = append(result, ComputeOutputRecord{OutputKey: key, Name: output.Name, Description: output.Description, DefaultValue: output.DefaultValue, Path: output.Path, DataType: output.DataType, Unit: output.Unit, PrecisionNum: output.PrecisionNum, NullPolicy: nullPolicy, SortOrder: index})
 	}
 	return result
 }
@@ -315,7 +323,7 @@ func (r *ComputeRepository) CreateUnit(ctx context.Context, params CreateCompute
 			updated_by
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $12)
-		RETURNING id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
+		RETURNING id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
 	`, params.ProjectID, params.Name, params.Description, params.FolderID, params.Language, params.ScriptCode, params.TriggerType, triggerConfigPayload, inputBindingsPayload, dependenciesPayload, params.TimeoutMS, params.UserID)
 
 	record, scanErr := scanComputeUnit(row)
@@ -349,7 +357,7 @@ func (r *ComputeRepository) ListUnits(ctx context.Context, projectID string, fil
 
 	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
+        SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
         FROM data_compute_units
         WHERE `+whereSQL+`
         ORDER BY created_at DESC
@@ -380,7 +388,7 @@ func (r *ComputeRepository) ListUnits(ctx context.Context, projectID string, fil
 // GetUnitByProjectAndID 按项目与单元 ID 读取单元定义。
 func (r *ComputeRepository) GetUnitByProjectAndID(ctx context.Context, projectID, unitID string) (*ComputeUnitRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
+		SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
 		FROM data_compute_units
 		WHERE project_id = $1 AND id = $2
 	`, projectID, unitID)
@@ -418,6 +426,10 @@ func (r *ComputeRepository) UpdateUnit(ctx context.Context, params UpdateCompute
 	if err := lockComputeProject(ctx, tx, params.ProjectID); err != nil {
 		return nil, err
 	}
+	definitionChanged, err := computeExecutableDefinitionChangedTx(ctx, tx, params, []byte(triggerConfigPayload), []byte(inputBindingsPayload), []byte(dependenciesPayload))
+	if err != nil {
+		return nil, err
+	}
 
 	row := tx.QueryRow(ctx, `
         UPDATE data_compute_units
@@ -435,7 +447,7 @@ func (r *ComputeRepository) UpdateUnit(ctx context.Context, params UpdateCompute
             updated_by = $14,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
+        RETURNING id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
     `, params.ProjectID, params.ID, params.Name, params.Description, params.FolderID, params.Language, params.ScriptCode, params.TriggerType, triggerConfigPayload, inputBindingsPayload, dependenciesPayload, params.TimeoutMS, params.IsEnabled, params.UserID)
 
 	record, err := scanComputeUnit(row)
@@ -448,6 +460,13 @@ func (r *ComputeRepository) UpdateUnit(ctx context.Context, params UpdateCompute
 	if err := syncComputeOutputsTx(ctx, tx, record, params.UserID, params.Outputs); err != nil {
 		return nil, err
 	}
+	// 输出和稳定数据点引用同样属于可执行定义。前面先锁定并比较，最终只在一次业务更新中递增一次。
+	if definitionChanged {
+		if _, err := tx.Exec(ctx, `UPDATE data_compute_units SET revision=revision+1 WHERE project_id=$1 AND id=$2`, params.ProjectID, params.ID); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "递增计算单元版本失败", err)
+		}
+		record.Revision++
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交计算单元更新事务失败", err)
 	}
@@ -455,6 +474,200 @@ func (r *ComputeRepository) UpdateUnit(ctx context.Context, params UpdateCompute
 		return nil, err
 	}
 	return &record, nil
+}
+
+// computeExecutableDefinitionChangedTx 对本次写入前的可执行投影做精确比较。
+// 名称、描述和目录没有进入比较；所有可影响节点执行的字段（含 refs/outputs）都进入比较。
+func computeExecutableDefinitionChangedTx(ctx context.Context, tx pgx.Tx, params UpdateComputeUnitParams, trigger, inputs, dependencies []byte) (bool, error) {
+	var language, script, triggerType string
+	var oldTrigger, oldInputs, oldDependencies []byte
+	var timeout int
+	var enabled bool
+	err := tx.QueryRow(ctx, `SELECT language,script_code,trigger_type,trigger_config,input_bindings,dependencies,timeout_ms,is_enabled FROM data_compute_units WHERE project_id=$1 AND id=$2 FOR UPDATE`, params.ProjectID, params.ID).Scan(&language, &script, &triggerType, &oldTrigger, &oldInputs, &oldDependencies, &timeout, &enabled)
+	if err != nil {
+		return false, translateComputeWriteError("锁定计算单元定义失败", err)
+	}
+	if language != params.Language || script != params.ScriptCode || triggerType != params.TriggerType || timeout != params.TimeoutMS || enabled != params.IsEnabled || !jsonPayloadEqual(oldTrigger, trigger) || !jsonPayloadEqual(oldInputs, inputs) || !jsonPayloadEqual(oldDependencies, dependencies) {
+		return true, nil
+	}
+	oldRefs, err := loadComputeRefsTx(ctx, tx, params.ID)
+	if err != nil {
+		return false, err
+	}
+	if !reflect.DeepEqual(oldRefs, normalizedComputeRefs(params.DatapointRefs)) {
+		return true, nil
+	}
+	oldOutputs, err := loadComputeOutputsForRevisionTx(ctx, tx, params.ProjectID, params.ID)
+	if err != nil {
+		return false, err
+	}
+	return !reflect.DeepEqual(oldOutputs, normalizedComputeOutputsForRevision(params.Outputs)), nil
+}
+
+func jsonPayloadEqual(left, right []byte) bool {
+	decode := func(payload []byte) (any, error) {
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			return nil, fmt.Errorf("JSON 存在多余值")
+		}
+		return value, nil
+	}
+	a, err := decode(left)
+	if err != nil {
+		return false
+	}
+	b, err := decode(right)
+	if err != nil {
+		return false
+	}
+	return exactJSONEqual(a, b)
+}
+func exactJSONEqual(left, right any) bool {
+	switch a := left.(type) {
+	case nil:
+		return right == nil
+	case bool:
+		b, ok := right.(bool)
+		return ok && a == b
+	case string:
+		b, ok := right.(string)
+		return ok && a == b
+	case json.Number:
+		b, ok := right.(json.Number)
+		if !ok {
+			return false
+		}
+		ar, aok := new(big.Rat).SetString(a.String())
+		br, bok := new(big.Rat).SetString(b.String())
+		return aok && bok && ar.Cmp(br) == 0
+	case []any:
+		b, ok := right.([]any)
+		if !ok || len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if !exactJSONEqual(a[i], b[i]) {
+				return false
+			}
+		}
+		return true
+	case map[string]any:
+		b, ok := right.(map[string]any)
+		if !ok || len(a) != len(b) {
+			return false
+		}
+		for key, value := range a {
+			other, ok := b[key]
+			if !ok || !exactJSONEqual(value, other) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+type computeRefRevision struct {
+	DatapointID, Role, Alias string
+	SortOrder                int
+}
+
+func loadComputeRefsTx(ctx context.Context, tx pgx.Tx, unitID string) ([]computeRefRevision, error) {
+	rows, err := tx.Query(ctx, `SELECT datapoint_id::text,role,COALESCE(alias,''),sort_order FROM data_compute_unit_datapoint_refs WHERE compute_unit_id=$1 ORDER BY role,sort_order,alias,datapoint_id`, unitID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取计算数据点引用失败", err)
+	}
+	defer rows.Close()
+	out := []computeRefRevision{}
+	for rows.Next() {
+		var x computeRefRevision
+		if err := rows.Scan(&x.DatapointID, &x.Role, &x.Alias, &x.SortOrder); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+func normalizedComputeRefs(refs []ComputeDatapointRefParam) []computeRefRevision {
+	out := make([]computeRefRevision, 0, len(refs))
+	for _, r := range refs {
+		alias := ""
+		if r.Alias != nil {
+			alias = *r.Alias
+		}
+		out = append(out, computeRefRevision{r.DatapointID, r.Role, alias, r.SortOrder})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Role != out[j].Role {
+			return out[i].Role < out[j].Role
+		}
+		if out[i].SortOrder != out[j].SortOrder {
+			return out[i].SortOrder < out[j].SortOrder
+		}
+		if out[i].Alias != out[j].Alias {
+			return out[i].Alias < out[j].Alias
+		}
+		return out[i].DatapointID < out[j].DatapointID
+	})
+	return out
+}
+
+type computeOutputRevision struct {
+	Key, Name, Description, Path, DataType, Unit, NullPolicy string
+	Precision                                                *int
+	DefaultValue                                             string
+	SortOrder                                                int
+}
+
+func loadComputeOutputsForRevisionTx(ctx context.Context, tx pgx.Tx, projectID, unitID string) ([]computeOutputRevision, error) {
+	rows, err := tx.Query(ctx, `SELECT output.output_key,point.name,COALESCE(point.description,''),output.path,output.data_type,COALESCE(output.unit,''),output.precision_num,COALESCE(point.default_value,''),output.null_policy,output.sort_order FROM data_compute_unit_outputs output JOIN data_points point ON point.id=output.datapoint_id WHERE output.project_id=$1 AND output.compute_unit_id=$2 ORDER BY output.output_key`, projectID, unitID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取计算输出定义失败", err)
+	}
+	defer rows.Close()
+	out := []computeOutputRevision{}
+	for rows.Next() {
+		var x computeOutputRevision
+		if err := rows.Scan(&x.Key, &x.Name, &x.Description, &x.Path, &x.DataType, &x.Unit, &x.Precision, &x.DefaultValue, &x.NullPolicy, &x.SortOrder); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+func normalizedComputeOutputsForRevision(outputs []ComputeOutputParam) []computeOutputRevision {
+	out := make([]computeOutputRevision, 0, len(outputs))
+	for i, o := range outputs {
+		key := strings.TrimSpace(o.OutputKey)
+		if key == "" {
+			key = strings.TrimSpace(o.Name)
+		}
+		description, unit := "", ""
+		if o.Description != nil {
+			description = *o.Description
+		}
+		if o.Unit != nil {
+			unit = *o.Unit
+		}
+		policy := strings.TrimSpace(o.NullPolicy)
+		if policy == "" {
+			policy = "error"
+		}
+		defaultValue := ""
+		if o.DefaultValue != nil {
+			defaultValue = *o.DefaultValue
+		}
+		out = append(out, computeOutputRevision{Key: key, Name: o.Name, Description: description, Path: o.Path, DataType: o.DataType, Unit: unit, NullPolicy: policy, Precision: o.PrecisionNum, DefaultValue: defaultValue, SortOrder: i})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
 }
 
 func lockComputeProject(ctx context.Context, tx pgx.Tx, projectID string) error {
@@ -543,8 +756,20 @@ func syncComputeOutputsTx(ctx context.Context, tx pgx.Tx, unit ComputeUnitRecord
 		if nullPolicy == "" {
 			nullPolicy = "error"
 		}
-		if nullPolicy != "error" && nullPolicy != "skip" {
+		if nullPolicy != "error" && nullPolicy != "skip" && nullPolicy != "default" {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出空值策略无效")
+		}
+		if nullPolicy == "default" && output.DefaultValue == nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "default 空值策略缺少默认值")
+		}
+		if nullPolicy != "default" && output.DefaultValue != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "非 default 空值策略不能保存默认值")
+		}
+		if nullPolicy == "default" {
+			parsed, parseErr := ParseTypedJSONDefault(*output.DefaultValue, output.DataType)
+			if parseErr != nil || parsed == nil {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "default 空值策略默认值类型无效或为 null")
+			}
 		}
 		sourceConfig, marshalErr := json.Marshal(map[string]any{"computeUnitId": unit.ID, "outputKey": key})
 		if marshalErr != nil {
@@ -554,16 +779,16 @@ func syncComputeOutputsTx(ctx context.Context, tx pgx.Tx, unit ComputeUnitRecord
 		if datapointID != "" {
 			_, err = tx.Exec(ctx, `
 				UPDATE data_points
-				SET path=$3,name=$4,description=$5,source_config=$6::jsonb,data_type=$7,unit=$8,precision_num=$9,
-				    refresh_mode='manual',status='active',updated_by=$10,updated_at=now()
+				SET path=$3,name=$4,description=$5,source_config=$6::jsonb,data_type=$7,unit=$8,precision_num=$9,default_value=$10,
+				    refresh_mode='manual',status='active',updated_by=$11,updated_at=now()
 				WHERE project_id=$1 AND id=$2
-			`, unit.ProjectID, datapointID, path, output.Name, output.Description, string(sourceConfig), output.DataType, output.Unit, output.PrecisionNum, userID)
+			`, unit.ProjectID, datapointID, path, output.Name, output.Description, string(sourceConfig), output.DataType, output.Unit, output.PrecisionNum, output.DefaultValue, userID)
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO data_points(project_id,path,name,description,source_type,source_id,source_config,data_type,unit,precision_num,tags,refresh_mode,status,created_by,updated_by)
-				VALUES($1,$2,$3,$4,'calc.output',$5,$6::jsonb,$7,$8,$9,'[]'::jsonb,'manual','active',$10,$10)
+				INSERT INTO data_points(project_id,path,name,description,source_type,source_id,source_config,data_type,unit,precision_num,default_value,tags,refresh_mode,status,created_by,updated_by)
+				VALUES($1,$2,$3,$4,'calc.output',$5,$6::jsonb,$7,$8,$9,$10,'[]'::jsonb,'manual','active',$11,$11)
 				RETURNING id::text
-			`, unit.ProjectID, path, output.Name, output.Description, unit.ID, string(sourceConfig), output.DataType, output.Unit, output.PrecisionNum, userID).Scan(&datapointID)
+			`, unit.ProjectID, path, output.Name, output.Description, unit.ID, string(sourceConfig), output.DataType, output.Unit, output.PrecisionNum, output.DefaultValue, userID).Scan(&datapointID)
 		}
 		if err != nil {
 			return translateComputeWriteError("同步计算输出数据点失败", err)
@@ -607,17 +832,29 @@ func syncComputeOutputsTx(ctx context.Context, tx pgx.Tx, unit ComputeUnitRecord
 
 // UpdateUnitEnabled 更新计算单元启用状态。
 func (r *ComputeRepository) UpdateUnitEnabled(ctx context.Context, projectID, unitID, userID string, enabled bool) (*ComputeUnitRecord, error) {
-	row := r.pool.QueryRow(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启计算单元启用状态事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+	if err := lockComputeProject(ctx, tx, projectID); err != nil {
+		return nil, err
+	}
+	row := tx.QueryRow(ctx, `
         UPDATE data_compute_units
         SET is_enabled = $3,
+            revision = revision + CASE WHEN is_enabled IS DISTINCT FROM $3 THEN 1 ELSE 0 END,
             updated_by = $4,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
+        RETURNING id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config, input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
     `, projectID, unitID, enabled, userID)
 	record, err := scanComputeUnit(row)
 	if err != nil {
 		return nil, translateComputeWriteError("更新计算单元启用状态失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交计算单元启用状态事务失败", err)
 	}
 	if err := r.hydrateComputeOutputs(ctx, &record); err != nil {
 		return nil, err
@@ -1043,6 +1280,7 @@ func scanComputeUnit(row computeScannable) (ComputeUnitRecord, error) {
 		&dependenciesBytes,
 		&record.TimeoutMS,
 		&record.IsEnabled,
+		&record.Revision,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {

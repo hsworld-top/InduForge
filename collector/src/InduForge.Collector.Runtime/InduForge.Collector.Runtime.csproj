@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>industrial_collector</AssemblyName>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <RootNamespace>InduForge.Collector.Runtime</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NATS.Net" Version="3.2.0" />
+    <ProjectReference Include="..\InduForge.Collector.DriverHosting\InduForge.Collector.DriverHosting.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.ModbusTcp\InduForge.Collector.Drivers.ModbusTcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.OpcUa\InduForge.Collector.Drivers.OpcUa.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\contracts\collector-protocols\opcua.standard\manifest.json"
+                      LogicalName="InduForge.Collector.Runtime.Manifests.opcua.standard.json" />
+    <EmbeddedResource Include="..\..\..\contracts\collector-protocols\modbus.tcp\manifest.json"
+                      LogicalName="InduForge.Collector.Runtime.Manifests.modbus.tcp.json" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "runtime-project-artifact.v1",
+  "projectArtifactVersion": "1.0",
+  "projectId": "project-line1",
+  "generatedAt": "2026-08-30T10:00:00Z",
+  "dataPoints": [],
+  "computeUnits": [
+    {
+      "id": "compute-invalid",
+      "revision": 1,
+      "name": "错误定时器",
+      "language": "javascript",
+      "scriptCode": "return 1",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [],
+      "inputs": [],
+      "outputs": [
+        {
+          "datapointId": "dp-output",
+          "outputKey": "result",
+          "path": "output",
+          "dataType": "float64",
+          "nullPolicy": "skip"
+        }
+      ],
+      "trigger": {
+        "kind": "schedule",
+        "schedule": {
+          "kind": "weekly",
+          "time": "08:00"
+        }
+      }
+    }
+  ],
+  "alarmItems": []
+}

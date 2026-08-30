@@ -305,7 +305,7 @@ SELECT id,project_id,connection_id,group_id,code,name,description,address,addres
 ON CONFLICT DO NOTHING RETURNING id
 )
 INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by)
-SELECT input.project_id,input.path,input.name,input.description,'collector.point',input.id,'{}'::jsonb,input.data_type,'auto',input.refresh_interval_ms,input.status,input.sort_order,input.user_id,input.user_id
+SELECT input.project_id,input.path,input.name,input.description,'collector.point',input.id,jsonb_build_object('connectionId', input.connection_id::text),input.data_type,'auto',input.refresh_interval_ms,input.status,input.sort_order,input.user_id,input.user_id
 FROM input JOIN inserted_points ON inserted_points.id=input.id
 RETURNING source_id::text`, string(payload))
 	if err != nil {
@@ -369,7 +369,7 @@ func (r *CollectorRepository) UpdatePointsBatch(ctx context.Context, params []Up
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点不存在")
 		}
 		interval := collectorRefreshInterval(item.Acquisition)
-		_, err = tx.Exec(ctx, `UPDATE data_points SET path=$2,name=$3,description=$4,data_type=$5,refresh_mode='auto',refresh_interval_ms=$6,status=$7,display_order=$8,updated_by=$9,updated_at=now() WHERE project_id=$1 AND source_type='collector.point' AND source_id=$10`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID, item.ID)
+		_, err = tx.Exec(ctx, `UPDATE data_points SET path=$2,name=$3,description=$4,source_config=jsonb_build_object('connectionId',$11::text),data_type=$5,refresh_mode='auto',refresh_interval_ms=$6,status=$7,display_order=$8,updated_by=$9,updated_at=now() WHERE project_id=$1 AND source_type='collector.point' AND source_id=$10`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID, item.ID, item.ConnectionID)
 		if err != nil {
 			return nil, translateCollectorWriteError("更新采集点映射数据点失败", err)
 		}
@@ -527,9 +527,12 @@ func insertCollectorPointAndDataPoint(ctx context.Context, tx pgx.Tx, item Creat
 	if err != nil {
 		return translateCollectorWriteError("创建采集点失败", err)
 	}
-	sourceConfig := `{}`
+	sourceConfig, err := json.Marshal(map[string]any{"connectionId": item.ConnectionID})
+	if err != nil {
+		return badCollectorPayload("序列化采集点来源失败", err)
+	}
 	interval := collectorRefreshInterval(item.Acquisition)
-	_, err = tx.Exec(ctx, `INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,'collector.point',$5,$6::jsonb,$7,'auto',$8,$9,$10,$11,$11)`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.ID, sourceConfig, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID)
+	_, err = tx.Exec(ctx, `INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,'collector.point',$5,$6::jsonb,$7,'auto',$8,$9,$10,$11,$11)`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.ID, string(sourceConfig), item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID)
 	if err != nil {
 		return translateCollectorWriteError("创建采集点映射数据点失败", err)
 	}

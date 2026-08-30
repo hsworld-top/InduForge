@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "alarm.event.v1",
+  "subject": "alarm.event",
+  "eventId": "71da009ccdffd30cf828407c37d6165be3545fdec583d8cae83d73cd7818be38",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "kind": "data-gap",
+  "operation": "DATA_GAP",
+  "ownerId": "collector-line1-a",
+  "epoch": 7,
+  "sourceTimestamp": "2026-08-30T10:20:30Z",
+  "serverTimestamp": "2026-08-30T10:20:31Z",
+  "receivedAt": "2026-08-30T10:20:31Z",
+  "dataGap": {
+    "collectorId": "collector-line1-a",
+    "connectionId": "aaaaaaaa-1111-4111-8111-111111111111",
+    "fromSequence": 1000,
+    "toSequence": 1024,
+    "fromSourceTimestamp": "2026-08-30T10:00:00Z",
+    "toSourceTimestamp": "2026-08-30T10:20:30Z",
+    "detectedAt": "2026-08-30T10:20:31Z",
+    "reason": "wal-capacity"
+  }
+}

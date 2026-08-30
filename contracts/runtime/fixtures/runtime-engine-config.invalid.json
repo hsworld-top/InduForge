@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "runtime-engine.config.v1",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "artifact": { "artifactId": "runtime-artifact-line1", "artifactRevision": 12, "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+  "roles": ["writer"],
+  "jetStream": { "dataRawStream": "DATA_RAW", "dataDerivedStream": "DATA_DERIVED", "eventStream": "EVENT", "consumers": [{ "durableName": "writer-v1", "filterSubject": "data.raw.>", "ackPolicy": "none", "ackWaitMs": 0, "maxDeliver": 0, "backoffMs": [], "deadLetterSubject": "writer-dlq" }] },
+  "stateStore": { "engine": "sqlite", "dsnSecretRef": "postgres://plain-secret", "casRequired": false, "outboxRequired": false, "processedEventRequired": false, "checkpointRequired": false }
+}

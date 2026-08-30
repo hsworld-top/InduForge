@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/point-event.schema.json",
+  "title": "data.raw.v1 与 data.computed.v1 共用点位事件",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "subject", "eventId", "deploymentId", "accountId", "pointId", "ownerId", "epoch", "sequence", "value", "quality", "sourceTimestamp", "serverTimestamp", "receivedAt"],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["data.raw.v1", "data.computed.v1"] },
+    "subject": { "type": "string", "pattern": "^data\\.(raw|computed)\\.[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "eventId": { "$ref": "common.schema.json#/$defs/eventId" },
+    "deploymentId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "accountId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "pointId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "ownerId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "epoch": { "type": "integer", "minimum": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "value": { "$ref": "common.schema.json#/$defs/jsonValue" },
+    "quality": { "$ref": "common.schema.json#/$defs/quality" },
+    "sourceTimestamp": { "$ref": "common.schema.json#/$defs/utcRfc3339" },
+    "serverTimestamp": { "$ref": "common.schema.json#/$defs/utcRfc3339" },
+    "receivedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collectorId", "connectionId", "variableId"],
+      "properties": {
+        "collectorId": { "$ref": "common.schema.json#/$defs/stableId" },
+        "connectionId": { "$ref": "common.schema.json#/$defs/uuid" },
+        "variableId": { "$ref": "common.schema.json#/$defs/uuid" }
+      }
+    },
+    "computation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["computeId", "computeRevision", "inputEventIds"],
+      "properties": {
+        "computeId": { "$ref": "common.schema.json#/$defs/uuid" },
+        "computeRevision": { "type": "integer", "minimum": 1 },
+        "inputEventIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/eventId" },
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "schemaVersion": { "const": "data.raw.v1" } } },
+      "then": {
+        "required": ["source"],
+        "not": { "properties": { "computation": {} }, "required": ["computation"] },
+        "properties": { "source": {}, "subject": { "type": "string", "pattern": "^data\\.raw\\." } }
+      }
+    },
+    {
+      "if": { "properties": { "schemaVersion": { "const": "data.computed.v1" } } },
+      "then": {
+        "required": ["computation"],
+        "not": { "properties": { "source": {} }, "required": ["source"] },
+        "properties": { "computation": {}, "subject": { "type": "string", "pattern": "^data\\.computed\\." } }
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "runtime-project-artifact.v1",
+  "projectArtifactVersion": "1.0",
+  "projectId": "project-line1",
+  "generatedAt": "2026-08-30T10:00:00Z",
+  "dataPoints": [],
+  "computeUnits": [],
+  "alarmItems": [
+    {
+      "id": "alarm-invalid",
+      "revision": 1,
+      "displayName": "缺失表达式",
+      "mode": "derived",
+      "evaluationMode": "all",
+      "inputs": [
+        {
+          "datapointId": "dp-input",
+          "alias": "input",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "condition",
+          "kind": "threshold",
+          "operator": "gt",
+          "params": {
+            "value": 1
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ]
+    }
+  ]
+}

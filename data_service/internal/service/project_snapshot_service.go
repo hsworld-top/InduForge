@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,11 +14,29 @@ import (
 // ProjectSnapshotService 承载项目级数据域快照读写。
 type ProjectSnapshotService struct {
 	repository *repository.ProjectSnapshotRepository
+	now        func() time.Time
+	schemaRoot string
 }
 
 // NewProjectSnapshotService 创建快照服务。
 func NewProjectSnapshotService(repo *repository.ProjectSnapshotRepository) *ProjectSnapshotService {
-	return &ProjectSnapshotService{repository: repo}
+	return NewProjectSnapshotServiceWithClock(repo, time.Now)
+}
+
+// NewProjectSnapshotServiceWithClock 允许发布调用方在测试和可重放构建中注入时钟。
+func NewProjectSnapshotServiceWithClock(repo *repository.ProjectSnapshotRepository, now func() time.Time) *ProjectSnapshotService {
+	return NewProjectSnapshotServiceWithClockAndSchemaRoot(repo, now, "")
+}
+
+// NewProjectSnapshotServiceWithClockAndSchemaRoot 同时注入时钟和受控 runtime schema 目录。
+func NewProjectSnapshotServiceWithClockAndSchemaRoot(repo *repository.ProjectSnapshotRepository, now func() time.Time, schemaRoot string) *ProjectSnapshotService {
+	if now == nil {
+		now = time.Now
+	}
+	if strings.TrimSpace(schemaRoot) != "" {
+		schemaRoot = filepath.Clean(schemaRoot)
+	}
+	return &ProjectSnapshotService{repository: repo, now: now, schemaRoot: schemaRoot}
 }
 
 // Get 读取项目快照。
@@ -29,7 +48,7 @@ func (s *ProjectSnapshotService) Get(ctx context.Context, projectID string) (*re
 }
 
 // GetArtifact 基于项目快照生成数据域发布产物。
-func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID string) (*repository.ProjectArtifactV1, error) {
+func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID string) (*repository.RuntimeProjectArtifactV1, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -37,7 +56,7 @@ func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID stri
 	if err != nil {
 		return nil, err
 	}
-	return repository.BuildProjectArtifactV1(projectID, snapshot, time.Now().UTC()), nil
+	return repository.BuildRuntimeProjectArtifactV1(s.schemaRoot, projectID, snapshot, s.now().UTC())
 }
 
 // Replace 用快照内容覆盖项目数据域数据。

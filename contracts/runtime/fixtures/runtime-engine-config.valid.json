@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "runtime-engine.config.v1",
+  "siteId": "site-a",
+  "projectId": "11111111-1111-4111-8111-111111111111",
+  "executionForm": "k3s-workload",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "projectArtifact": {
+    "artifactId": "runtime-artifact-line1",
+    "artifactRevision": 12,
+    "artifactDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "artifactMount": {
+    "source": "release-pvc",
+    "mountPath": "/opt/induforge/runtime",
+    "artifactFile": "runtime/runtime-artifact.json",
+    "readOnly": true
+  },
+  "roles": [
+    "writer",
+    "alarm",
+    "compute",
+    "query",
+    "coord"
+  ],
+  "roleAssignments": [
+    {
+      "role": "writer",
+      "ownership": {
+        "ownerId": "runtime-engine-writer-0",
+        "epoch": 7
+      }
+    },
+    {
+      "role": "alarm",
+      "ownership": {
+        "ownerId": "runtime-engine-alarm-0",
+        "epoch": 7
+      }
+    },
+    {
+      "role": "compute",
+      "ownership": {
+        "ownerId": "runtime-engine-compute-0",
+        "epoch": 7
+      }
+    },
+    {
+      "role": "query",
+      "ownership": {
+        "ownerId": "runtime-engine-query-0",
+        "epoch": 7
+      }
+    },
+    {
+      "role": "coord",
+      "ownership": {
+        "ownerId": "runtime-engine-coord-0",
+        "epoch": 7
+      }
+    }
+  ],
+  "producerAssignments": [
+    {
+      "producerType": "collector",
+      "collectorId": "collector-line1-a",
+      "ownership": {
+        "ownerId": "collector-line1-a",
+        "epoch": 7
+      },
+      "collectorArtifact": {
+        "artifact": {
+          "artifactId": "collector-artifact-line1",
+          "artifactRevision": 12,
+          "artifactDigest": "sha256:eb187b25db8c9833dea3fc3ed500a2de327f4126fca2c06925a4704dbd79fe34"
+        },
+        "artifactFile": "collector/collector-artifact.json"
+      }
+    },
+    {
+      "producerType": "compute",
+      "computeId": "44444444-4444-4444-8444-444444444444",
+      "role": "compute",
+      "ownership": {
+        "ownerId": "runtime-engine-compute-0",
+        "epoch": 7
+      }
+    },
+    {
+      "producerType": "alarm",
+      "role": "alarm",
+      "ownership": {
+        "ownerId": "runtime-engine-alarm-0",
+        "epoch": 7
+      }
+    },
+    {
+      "producerType": "compute",
+      "computeId": "55555555-5555-4555-8555-555555555555",
+      "role": "compute",
+      "ownership": {
+        "ownerId": "runtime-engine-compute-0",
+        "epoch": 7
+      }
+    },
+    {
+      "producerType": "compute",
+      "computeId": "66666666-6666-4666-8666-666666666666",
+      "role": "compute",
+      "ownership": {
+        "ownerId": "runtime-engine-compute-0",
+        "epoch": 7
+      }
+    },
+    {
+      "producerType": "compute",
+      "computeId": "77777777-7777-4777-8777-777777777777",
+      "role": "compute",
+      "ownership": {
+        "ownerId": "runtime-engine-compute-0",
+        "epoch": 7
+      }
+    }
+  ],
+  "jetStream": {
+    "serverResourceRef": "site-resource://site-a/nats",
+    "credentialSecretRef": "secret://site-a/deployment-line1-prod/nats-runtime-engine",
+    "dataRawStream": "DATA_RAW",
+    "dataDerivedStream": "DATA_DERIVED",
+    "eventStream": "EVENT",
+    "deadLetterStream": "RUNTIME_DLQ",
+    "consumers": [
+      {
+        "role": "writer",
+        "consumerKey": "writer-raw-v1",
+        "stream": "DATA_RAW",
+        "durableName": "writer-v1",
+        "filterSubject": "data.raw.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.writer"
+      },
+      {
+        "role": "alarm",
+        "consumerKey": "alarm-raw-v1",
+        "stream": "DATA_RAW",
+        "durableName": "alarm-raw-v1",
+        "filterSubject": "data.raw.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.alarm"
+      },
+      {
+        "role": "alarm",
+        "consumerKey": "alarm-derived-v1",
+        "stream": "DATA_DERIVED",
+        "durableName": "alarm-derived-v1",
+        "filterSubject": "data.computed.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.alarm-derived"
+      },
+      {
+        "role": "compute",
+        "consumerKey": "compute-raw-v1",
+        "stream": "DATA_RAW",
+        "durableName": "compute-raw-v1",
+        "filterSubject": "data.raw.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.compute"
+      },
+      {
+        "role": "writer",
+        "consumerKey": "writer-derived-v1",
+        "stream": "DATA_DERIVED",
+        "durableName": "writer-derived-v1",
+        "filterSubject": "data.computed.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.writer-derived"
+      },
+      {
+        "role": "compute",
+        "consumerKey": "compute-derived-v1",
+        "stream": "DATA_DERIVED",
+        "durableName": "compute-derived-v1",
+        "filterSubject": "data.computed.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.compute-derived"
+      }
+    ]
+  },
+  "computeSandbox": {
+    "serverResourceRef": "site-resource://site-a/compute-sandbox",
+    "credentialSecretRef": "secret://site-a/deployment-line1-prod/compute-sandbox"
+  },
+  "stateStore": {
+    "engine": "postgresql",
+    "dsnSecretRef": "secret://site-a/deployment-line1-prod/runtime-postgres",
+    "casRequired": true,
+    "outboxRequired": true,
+    "processedEventRequired": true,
+    "checkpointRequired": true
+  }
+}

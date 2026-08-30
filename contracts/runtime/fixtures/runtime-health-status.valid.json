@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "runtime-health-status.v1",
+  "componentRole": "industrial-collector",
+  "siteId": "site-a",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "executionForm": "native-windows",
+  "nodeId": "collector-win-01",
+  "processId": 1234,
+  "lifecycleState": "RUNNING",
+  "healthState": "DEGRADED",
+  "version": "1.0.0",
+  "startedAt": "2026-08-30T09:00:00Z",
+  "uptimeSeconds": 4820,
+  "observedAt": "2026-08-30T10:20:30Z",
+  "lastError": null,
+  "reasonCode": "WAL_HIGH_WATERMARK",
+  "businessFreshness": {
+    "state": "STALE",
+    "lastBusinessEventAt": "2026-08-30T10:10:00Z",
+    "evaluatedAt": "2026-08-30T10:20:30Z"
+  },
+  "collector": {
+    "assignmentId": "assignment-line1-primary",
+    "assignmentRevision": 4,
+    "bindingId": "collector-binding-line1-prod",
+    "bindingRevision": 8,
+    "artifact": { "artifactId": "collector-artifact-line1", "artifactRevision": 12, "artifactDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    "ownership": { "ownerId": "collector-line1-a", "epoch": 7 }
+    ,"walBacklogRecords": 1024,
+    "walBytes": 805306368,
+    "walOldestAgeSeconds": 610,
+    "walWatermark": "HIGH",
+    "upstreamStatus": "DISCONNECTED"
+  }
+}

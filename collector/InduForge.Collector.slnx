@@ -19,7 +19,9 @@
     <Project Path="src/InduForge.Collector.Drivers.PanasonicMewtocolTcp/InduForge.Collector.Drivers.PanasonicMewtocolTcp.csproj" />
     <Project Path="src/InduForge.Collector.Drivers.PanasonicMcBinary/InduForge.Collector.Drivers.PanasonicMcBinary.csproj" />
     <Project Path="src/InduForge.Collector.Contracts/InduForge.Collector.Contracts.csproj" />
+    <Project Path="src/InduForge.Collector.DriverHosting/InduForge.Collector.DriverHosting.csproj" />
     <Project Path="src/InduForge.Collector.DevAgent/InduForge.Collector.DevAgent.csproj" />
+    <Project Path="src/InduForge.Collector.Runtime/InduForge.Collector.Runtime.csproj" />
     <Project Path="src/InduForge.Collector.Drivers.OpcUa/InduForge.Collector.Drivers.OpcUa.csproj" />
     <Project Path="src/InduForge.Collector.Drivers.OrientalMotor/InduForge.Collector.Drivers.OrientalMotor.csproj" />
     <Project Path="src/InduForge.Collector.Drivers.Robots/InduForge.Collector.Drivers.Robots.csproj" />
@@ -57,6 +59,7 @@
     <Project Path="tests/InduForge.Collector.Drivers.PanasonicMewtocolTcp.Tests/InduForge.Collector.Drivers.PanasonicMewtocolTcp.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Drivers.PanasonicMcBinary.Tests/InduForge.Collector.Drivers.PanasonicMcBinary.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Contracts.Tests/InduForge.Collector.Contracts.Tests.csproj" />
+    <Project Path="tests/InduForge.Collector.DriverHosting.Tests/InduForge.Collector.DriverHosting.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Drivers.OpcUa.Tests/InduForge.Collector.Drivers.OpcUa.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Drivers.OrientalMotor.Tests/InduForge.Collector.Drivers.OrientalMotor.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Drivers.Robots.Tests/InduForge.Collector.Drivers.Robots.Tests.csproj" />
@@ -74,5 +77,6 @@
     <Project Path="tests/InduForge.Collector.Drivers.Yaskawa.Tests/InduForge.Collector.Drivers.Yaskawa.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Drivers.Yokogawa.Tests/InduForge.Collector.Drivers.Yokogawa.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.DevAgent.Tests/InduForge.Collector.DevAgent.Tests.csproj" />
+    <Project Path="tests/InduForge.Collector.Runtime.Tests/InduForge.Collector.Runtime.Tests.csproj" />
   </Folder>
 </Solution>
