@@ -49,7 +49,8 @@
         "runtime-engine-config.valid.json"
       ],
       "invalid": [
-        "runtime-engine-config.invalid.json"
+        "runtime-engine-config.invalid.json",
+        "runtime-engine-config.invalid.event-consumer.json"
       ]
     },
     "runtime-project-artifact": {
@@ -84,6 +85,14 @@
         "runtime-health-status.invalid.collector-missing.json",
         "runtime-health-status.invalid.engine-missing-deployment.json",
         "runtime-health-status.invalid.noncollector-details.json"
+      ]
+    },
+    "runtime-dlq-event": {
+      "valid": [
+        "runtime-dlq-event.valid.json"
+      ],
+      "invalid": [
+        "runtime-dlq-event.invalid.json"
       ]
     }
   }

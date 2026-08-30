@@ -124,6 +124,7 @@
             "required": [
               "producerType",
               "collectorId",
+              "collectorArtifact",
               "ownership"
             ],
             "properties": {
@@ -132,6 +133,20 @@
               },
               "collectorId": {
                 "$ref": "common.schema.json#/$defs/stableId"
+              },
+              "collectorArtifact": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["artifact", "artifactFile"],
+                "properties": {
+                  "artifact": {
+                    "$ref": "common.schema.json#/$defs/artifactRef"
+                  },
+                  "artifactFile": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+                  }
+                }
               },
               "ownership": {
                 "$ref": "common.schema.json#/$defs/ownership"
@@ -254,7 +269,7 @@
               },
               "filterSubject": {
                 "type": "string",
-                "minLength": 1
+                "enum": ["data.raw.>", "data.computed.>"]
               },
               "ackPolicy": {
                 "const": "explicit"

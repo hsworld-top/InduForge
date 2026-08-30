@@ -183,6 +183,13 @@ WAL 的 `fsync/checksum/commitMarker` 是 Artifact 的不可变耐久语义；`m
 比较由实现完成，JSON Schema 无法表达。Engine config 固定 `siteId/projectId/executionForm=k3s-workload`；装载器必须验证 config projectId 与挂载 runtime-project-artifact 的 projectId 相等。Engine 必须从受信只读 `release-pvc` 挂载读取 `artifactMount.artifactFile`，
 并重新计算 digest，必须与 `projectArtifact` 引用完全相同后才可启动。`artifactMount.artifactFile` 的 Schema 使用 Go RE2-safe 的分段相对路径正则；装载器还必须拒绝 NUL、`.`/`..`、双斜线、symlink 和非普通文件。`producerAssignments` 是带 discriminator 的受信 producer fence：`collector` 记录 collectorId/ownership，原始事件按 payload 的 collectorId/ownerId/epoch 校验；`compute` 记录 computeId/role=compute/ownership，computed 事件按该 Assignment 与 Artifact computeId 校验；`alarm` 记录 role=alarm/ownership，仅允许报警 transition producer 使用。data-gap 由 Collector producer fence 校验，computed 由 compute fence 校验，alarm-transition 由 alarm producer fence 校验；三类都不能与 consumer role token 混为一谈。
 
+每个 collector producer 还必须恰有一个 `collectorArtifact`：其中固定 Artifact id/revision/digest 与同一
+`artifactMount.mountPath` 下的 RE2-safe 相对 artifactFile。装载器对该文件执行与 Project Artifact 相同的 16MiB、
+no-follow、普通文件、TOCTOU、最具体只读 mount、原始 bytes digest 和 Schema 校验；其 projectId 必须同时等于
+config 和 Project Artifact。装载后，enabled mapping 必须一一映射到 active `collector.point`：datapointId、sourceId
+(variableId)、sourceConfig.connectionId 和 dataType 全相等，反向也必须恰有一个 mapping。由此 raw ingress 可按
+collectorId + pointId + connectionId + variableId 校验，不需要也不得比较 producer/consumer ownership token。
+
 Collector 只在 Binding 的 `ownerId/epoch` 与已持久化发布决议一致时激活；standby 可以校验 Artifact/Binding，
 但不得连接为业务写 owner 或发布数据。
 
@@ -197,7 +204,14 @@ Collector 只在 Binding 的 `ownerId/epoch` 与已持久化发布决议一致�
   记录和最终 DLQ 发布先在数据库事务中写入 Outbox，提交成功后才 Ack 原消息；不得静默丢弃或无限重试。
 - 至少一次投递是既定语义。所有副作用必须以 `eventId`、业务键和 owner/epoch 防重，不能依赖“只投递一次”。
 
-每项 `jetStream.consumers` 显式声明 `role`、稳定 `consumerKey`、配置中的实际 `stream` 名称、durableName 与 filterSubject；不得由 durableName 或 Subject 字符串猜测角色。装载器必须校验 stream 分别等于 dataRawStream/dataDerivedStream/eventStream、role 已启用、consumerKey 与 durableName 均唯一，writer/alarm/compute 的 raw 与 computed Subject 覆盖完整，并将 consumerKey 用作 `processed_event` 的去重命名空间；backoff 非递减且长度不得超过 maxDeliver。
+每项 `jetStream.consumers` 显式声明 `role`、稳定 `consumerKey`、配置中的实际 `stream` 名称、durableName 与 filterSubject；不得由 durableName 或 Subject 字符串猜测角色。装载器必须校验 raw/derived consumer 的 stream 分别等于 dataRawStream/dataDerivedStream、role 已启用、consumerKey 与 durableName 均唯一，writer/alarm/compute 的 raw 与 computed Subject 覆盖完整，并将 consumerKey 用作 `processed_event` 的去重命名空间；backoff 非递减且长度不得超过 maxDeliver。
+
+V1 的 EVENT stream 只承载 `alarm.event.v1`（alarm transition 与 DATA_GAP）输出，不是 Engine 入站 consumer。
+因此 `jetStream.consumers` 只允许 `data.raw.>` 与 `data.computed.>`，Schema 和装载器均拒绝 event stream consumer。
+DLQ body 使用 `runtime.dlq.event.v1`：含 deployment/account/consumer、原 subject、可空 eventId、稳定 reasonCode、
+deliveryCount、原 body 的 SHA-256 与受 1MiB 解码上限约束的 base64、occurredAt；不得包含 Secret、endpoint 或 DSN。
+`dlqId`/Outbox dedupe key 为 `SHA-256(schemaVersion, deploymentId, consumerKey, originalSubject, eventId 或空字段,
+reasonCode, bodySha256)`，字段以 0x1f 拼接，忽略会随重试变化的 deliveryCount/occurredAt，以避免同一失败重复创建 Outbox。
 
 ## 8. PostgreSQL 事务、Outbox 与 checkpoint
 
@@ -222,6 +236,10 @@ checkpoint 只表示已安全处理到的位置，不能绕过 `processed_event`
 consumer owner/epoch 只用于自己的 CAS fencing，两者是独立 token，禁止比较它们是否相等。Assignment
 必须与 `roles` 一一对应，由配置装载器做数组键唯一和集合相等校验。`artifactMount` 固定 Artifact 从 release PVC 的
 只读本地来源，运行进程不能从网络 URL 或可写工作目录读取该输入。
+
+启动时可用受信 assignment 显式调用独立 CAS 激活 owner；`Store.Open` 不得自动写库或激活任何 producer/consumer token。
+roleAssignment 与 producerAssignment 的 ownership.epoch 均为至少 1 的独立 fencing token；只允许在各自侧做 CAS，
+不得以两者是否相等作为启动或事件验收条件。
 
 除 Schema 可直接验证的字段外，配置装载器必须拒绝：roles 与 roleAssignments 的集合不相等、重复 role、重复
 connectionId/datapointId、mapping 的 `(connectionId, variableId)` 不唯一、mapping 指向不存在连接、Subject 尾段不等于

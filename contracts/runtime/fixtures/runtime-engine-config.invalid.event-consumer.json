@@ -132,9 +132,9 @@
       {
         "role": "writer",
         "consumerKey": "writer-raw-v1",
-        "stream": "DATA_RAW",
+        "stream": "EVENT",
         "durableName": "writer-v1",
-        "filterSubject": "data.raw.>",
+        "filterSubject": "alarm.event",
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
