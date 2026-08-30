@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "runtime-fixtures.v1",
+  "schemas": {
+    "point-event": {
+      "valid": [
+        "point-event.valid.raw.json",
+        "point-event.valid.computed.json"
+      ],
+      "invalid": [
+        "point-event.invalid.json",
+        "point-event.invalid.raw-computation.json",
+        "point-event.invalid.computed-source.json"
+      ]
+    },
+    "alarm-event": {
+      "valid": [
+        "alarm-event.valid.json",
+        "alarm-event.valid.data-gap.json"
+      ],
+      "invalid": [
+        "alarm-event.invalid.json",
+        "alarm-event.invalid-clear.json",
+        "alarm-event.invalid-severity-change.json"
+      ]
+    },
+    "collector-runtime-artifact": {
+      "valid": [
+        "collector-runtime-artifact.valid.json"
+      ],
+      "invalid": [
+        "collector-runtime-artifact.invalid.json",
+        "collector-runtime-artifact.invalid.inherit-overrides.json",
+        "collector-runtime-artifact.invalid.object-data-type.json"
+      ]
+    },
+    "collector-runtime-binding": {
+      "valid": [
+        "collector-runtime-binding.valid.json",
+        "collector-runtime-binding.valid.no-secret.json"
+      ],
+      "invalid": [
+        "collector-runtime-binding.invalid.json",
+        "collector-runtime-binding.invalid.missing-wal.json",
+        "collector-runtime-binding.invalid.max-wal.json"
+      ]
+    },
+    "runtime-engine-config": {
+      "valid": [
+        "runtime-engine-config.valid.json"
+      ],
+      "invalid": [
+        "runtime-engine-config.invalid.json"
+      ]
+    },
+    "runtime-project-artifact": {
+      "valid": [
+        "runtime-project-artifact.valid.json",
+        "runtime-project-artifact.valid.schedule-interval.json",
+        "runtime-project-artifact.valid.schedule-daily.json",
+        "runtime-project-artifact.valid.schedule-weekly.json",
+        "runtime-project-artifact.valid.schedule-monthly-weekday.json",
+        "runtime-project-artifact.valid.schedule-yearly-day.json"
+      ],
+      "invalid": [
+        "runtime-project-artifact.invalid.json",
+        "runtime-project-artifact.invalid.schedule.json",
+        "runtime-project-artifact.invalid-derived.json",
+        "runtime-project-artifact.invalid.schedule-missing-weekdays.json",
+        "runtime-project-artifact.invalid.schedule-window.json",
+        "runtime-project-artifact.invalid.schedule-irrelevant-field.json",
+        "runtime-project-artifact.invalid.datapoint-change-deadband.json",
+        "runtime-project-artifact.invalid.alarm-missing-enabled.json",
+        "runtime-project-artifact.invalid.alarm-transition-extra-params.json",
+        "runtime-project-artifact.invalid.alarm-deviation-operator.json"
+      ]
+    },
+    "runtime-health-status": {
+      "valid": [
+        "runtime-health-status.valid.json",
+        "runtime-health-status.valid.compute-sandbox.json"
+      ],
+      "invalid": [
+        "runtime-health-status.invalid.json",
+        "runtime-health-status.invalid.collector-missing.json",
+        "runtime-health-status.invalid.engine-missing-deployment.json",
+        "runtime-health-status.invalid.noncollector-details.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "runtime-project-artifact.v1",
+  "projectArtifactVersion": "1.0",
+  "projectId": "11111111-1111-4111-8111-111111111111",
+  "generatedAt": "2026-08-30T10:00:00Z",
+  "dataPoints": [],
+  "computeUnits": [
+    {
+      "id": "21000000-0000-4100-8100-000000000004",
+      "revision": 1,
+      "name": "monthly weekday",
+      "description": null,
+      "language": "js",
+      "scriptCode": "return 1;",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [],
+      "inputs": [],
+      "outputs": [
+        {
+          "datapointId": "22000000-0000-4200-8200-000000000004",
+          "outputKey": "result",
+          "path": "result",
+          "name": "result",
+          "description": null,
+          "dataType": "float64",
+          "unit": null,
+          "precisionNum": null,
+          "sortOrder": 0,
+          "nullPolicy": "skip"
+        }
+      ],
+      "trigger": {
+        "kind": "schedule",
+        "schedule": {
+          "kind": "monthly",
+          "timezone": "Asia/Shanghai",
+          "time": "08:30:00",
+          "dayRule": "weekday",
+          "weekOfMonth": -1,
+          "weekday": 1,
+          "dayOfMonth": 1
+        }
+      }
+    }
+  ],
+  "alarmItems": []
+}

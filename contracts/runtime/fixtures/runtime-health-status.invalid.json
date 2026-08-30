@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "runtime-health-status.v1",
+  "componentRole": "collector",
+  "deploymentId": "deployment-line1-prod",
+  "lifecycleState": "RUNNING",
+  "healthState": "FRESH",
+  "version": "1.0.0",
+  "startedAt": "2026-08-30T09:00:00+08:00",
+  "observedAt": "2026-08-30T10:20:30Z",
+  "businessFreshness": { "state": "HEALTHY", "lastBusinessEventAt": null, "evaluatedAt": "2026-08-30T10:20:30Z" }
+}

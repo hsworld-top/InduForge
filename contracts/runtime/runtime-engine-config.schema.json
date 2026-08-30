@@ -1,0 +1,321 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/runtime-engine-config.schema.json",
+  "title": "runtime-engine.config.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "siteId",
+    "projectId",
+    "executionForm",
+    "deploymentId",
+    "accountId",
+    "projectArtifact",
+    "artifactMount",
+    "roles",
+    "roleAssignments",
+    "producerAssignments",
+    "jetStream",
+    "stateStore"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "runtime-engine.config.v1"
+    },
+    "siteId": {
+      "$ref": "common.schema.json#/$defs/stableId"
+    },
+    "projectId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "executionForm": {
+      "const": "k3s-workload"
+    },
+    "deploymentId": {
+      "$ref": "common.schema.json#/$defs/stableId"
+    },
+    "accountId": {
+      "$ref": "common.schema.json#/$defs/stableId"
+    },
+    "projectArtifact": {
+      "$ref": "common.schema.json#/$defs/artifactRef"
+    },
+    "artifactMount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "mountPath",
+        "artifactFile",
+        "readOnly"
+      ],
+      "properties": {
+        "source": {
+          "const": "release-pvc"
+        },
+        "mountPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^/"
+        },
+        "artifactFile": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+        },
+        "readOnly": {
+          "const": true
+        }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "writer",
+          "alarm",
+          "compute",
+          "query",
+          "coord"
+        ]
+      }
+    },
+    "roleAssignments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "ownership"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "writer",
+              "alarm",
+              "compute",
+              "query",
+              "coord"
+            ]
+          },
+          "ownership": {
+            "$ref": "common.schema.json#/$defs/ownership"
+          }
+        }
+      },
+      "uniqueItems": true
+    },
+    "producerAssignments": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "producerType",
+              "collectorId",
+              "ownership"
+            ],
+            "properties": {
+              "producerType": {
+                "const": "collector"
+              },
+              "collectorId": {
+                "$ref": "common.schema.json#/$defs/stableId"
+              },
+              "ownership": {
+                "$ref": "common.schema.json#/$defs/ownership"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "producerType",
+              "computeId",
+              "role",
+              "ownership"
+            ],
+            "properties": {
+              "producerType": {
+                "const": "compute"
+              },
+              "computeId": {
+                "$ref": "common.schema.json#/$defs/uuid"
+              },
+              "role": {
+                "const": "compute"
+              },
+              "ownership": {
+                "$ref": "common.schema.json#/$defs/ownership"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "producerType",
+              "role",
+              "ownership"
+            ],
+            "properties": {
+              "producerType": {
+                "const": "alarm"
+              },
+              "role": {
+                "const": "alarm"
+              },
+              "ownership": {
+                "$ref": "common.schema.json#/$defs/ownership"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "jetStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serverResourceRef",
+        "credentialSecretRef",
+        "dataRawStream",
+        "dataDerivedStream",
+        "eventStream",
+        "consumers"
+      ],
+      "properties": {
+        "serverResourceRef": {
+          "type": "string",
+          "pattern": "^site-resource://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$"
+        },
+        "credentialSecretRef": {
+          "type": "string",
+          "pattern": "^secret://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$"
+        },
+        "dataRawStream": {
+          "$ref": "common.schema.json#/$defs/stableId"
+        },
+        "dataDerivedStream": {
+          "$ref": "common.schema.json#/$defs/stableId"
+        },
+        "eventStream": {
+          "$ref": "common.schema.json#/$defs/stableId"
+        },
+        "consumers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "consumerKey",
+              "stream",
+              "durableName",
+              "filterSubject",
+              "ackPolicy",
+              "ackWaitMs",
+              "maxDeliver",
+              "backoffMs",
+              "deadLetterSubject"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "writer",
+                  "alarm",
+                  "compute",
+                  "query",
+                  "coord"
+                ]
+              },
+              "consumerKey": {
+                "$ref": "common.schema.json#/$defs/stableId"
+              },
+              "stream": {
+                "$ref": "common.schema.json#/$defs/stableId"
+              },
+              "durableName": {
+                "$ref": "common.schema.json#/$defs/stableId"
+              },
+              "filterSubject": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ackPolicy": {
+                "const": "explicit"
+              },
+              "ackWaitMs": {
+                "type": "integer",
+                "minimum": 1000
+              },
+              "maxDeliver": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "backoffMs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1000
+                }
+              },
+              "deadLetterSubject": {
+                "type": "string",
+                "pattern": "^dlq\\.[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "stateStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "dsnSecretRef",
+        "casRequired",
+        "outboxRequired",
+        "processedEventRequired",
+        "checkpointRequired"
+      ],
+      "properties": {
+        "engine": {
+          "const": "postgresql"
+        },
+        "dsnSecretRef": {
+          "type": "string",
+          "pattern": "^secret://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$"
+        },
+        "casRequired": {
+          "const": true
+        },
+        "outboxRequired": {
+          "const": true
+        },
+        "processedEventRequired": {
+          "const": true
+        },
+        "checkpointRequired": {
+          "const": true
+        }
+      }
+    }
+  }
+}

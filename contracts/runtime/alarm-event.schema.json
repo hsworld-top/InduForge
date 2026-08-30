@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/alarm-event.schema.json",
+  "title": "alarm.event.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "subject", "eventId", "deploymentId", "accountId", "kind", "operation", "ownerId", "epoch", "sourceTimestamp", "serverTimestamp", "receivedAt"],
+  "properties": {
+    "schemaVersion": { "const": "alarm.event.v1" }, "subject": { "const": "alarm.event" }, "eventId": { "$ref": "common.schema.json#/$defs/eventId" },
+    "deploymentId": { "$ref": "common.schema.json#/$defs/stableId" }, "accountId": { "$ref": "common.schema.json#/$defs/stableId" },
+    "kind": { "type": "string", "enum": ["alarm-transition", "data-gap"] }, "operation": { "type": "string", "enum": ["RAISE", "SEVERITY_CHANGE", "ACK", "CLEAR", "DATA_GAP"] },
+    "alarmId": { "$ref": "common.schema.json#/$defs/stableId" }, "alarmItemId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "pointIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/uuid" } },
+    "ownerId": { "$ref": "common.schema.json#/$defs/stableId" }, "epoch": { "type": "integer", "minimum": 1 },
+    "sourceTimestamp": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "serverTimestamp": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "receivedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" },
+    "transition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["alarmState", "severity", "previousSeverity", "conditionId", "value", "quality", "message", "openedAt", "updatedAt", "clearedAt", "ackedAt", "acknowledgedBy", "stateVersion", "transitionSequence"],
+      "properties": {
+        "alarmState": { "type": "string", "enum": ["OPEN", "ACKED", "CLEARED"] }, "severity": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,29}$" },
+        "previousSeverity": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9_]{0,29}$" }, "conditionId": { "$ref": "common.schema.json#/$defs/uuid" }, "value": { "$ref": "common.schema.json#/$defs/jsonValue" }, "quality": { "$ref": "common.schema.json#/$defs/quality" }, "message": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "openedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "updatedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "clearedAt": { "anyOf": [{ "$ref": "common.schema.json#/$defs/utcRfc3339" }, { "type": "null" }] }, "ackedAt": { "anyOf": [{ "$ref": "common.schema.json#/$defs/utcRfc3339" }, { "type": "null" }] }, "acknowledgedBy": { "anyOf": [{ "$ref": "common.schema.json#/$defs/stableId" }, { "type": "null" }] }, "stateVersion": { "type": "integer", "minimum": 1 }, "transitionSequence": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "dataGap": {
+      "type": "object", "additionalProperties": false, "required": ["collectorId", "connectionId", "fromSequence", "toSequence", "detectedAt", "reason"],
+      "properties": {
+        "collectorId": { "$ref": "common.schema.json#/$defs/stableId" }, "connectionId": { "$ref": "common.schema.json#/$defs/uuid" }, "fromSequence": { "type": "integer", "minimum": 0 }, "toSequence": { "type": "integer", "minimum": 0 }, "fromSourceTimestamp": { "anyOf": [{ "$ref": "common.schema.json#/$defs/utcRfc3339" }, { "type": "null" }] }, "toSourceTimestamp": { "anyOf": [{ "$ref": "common.schema.json#/$defs/utcRfc3339" }, { "type": "null" }] }, "detectedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "reason": { "type": "string", "enum": ["wal-capacity", "wal-corruption", "manual-cleanup", "unrecoverable"] }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "alarm-transition" } } }, "then": { "required": ["alarmId", "alarmItemId", "pointIds", "transition"], "not": { "properties": { "dataGap": {} }, "required": ["dataGap"] }, "properties": { "alarmId": {}, "alarmItemId": {}, "pointIds": {}, "transition": {}, "operation": { "enum": ["RAISE", "SEVERITY_CHANGE", "ACK", "CLEAR"] } } } },
+    { "if": { "properties": { "kind": { "const": "data-gap" } } }, "then": { "required": ["dataGap"], "not": { "anyOf": [{ "properties": { "alarmId": {} }, "required": ["alarmId"] }, { "properties": { "alarmItemId": {} }, "required": ["alarmItemId"] }, { "properties": { "pointIds": {} }, "required": ["pointIds"] }, { "properties": { "transition": {} }, "required": ["transition"] }] }, "properties": { "dataGap": {}, "operation": { "const": "DATA_GAP" } } } },
+    { "if": { "properties": { "operation": { "const": "RAISE" } } }, "then": { "properties": { "transition": { "type": "object", "properties": { "alarmState": { "const": "OPEN" }, "previousSeverity": { "type": "null" }, "clearedAt": { "type": "null" }, "ackedAt": { "type": "null" }, "acknowledgedBy": { "type": "null" } } } } } },
+    { "if": { "properties": { "operation": { "const": "SEVERITY_CHANGE" } } }, "then": { "properties": { "transition": { "type": "object", "properties": { "alarmState": { "const": "OPEN" }, "previousSeverity": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,29}$" }, "clearedAt": { "type": "null" }, "ackedAt": { "type": "null" }, "acknowledgedBy": { "type": "null" } } } } } },
+    { "if": { "properties": { "operation": { "const": "ACK" } } }, "then": { "properties": { "transition": { "type": "object", "properties": { "alarmState": { "const": "ACKED" }, "previousSeverity": { "type": "null" }, "clearedAt": { "type": "null" }, "ackedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }, "acknowledgedBy": { "$ref": "common.schema.json#/$defs/stableId" } } } } } },
+    { "if": { "properties": { "operation": { "const": "CLEAR" } } }, "then": { "properties": { "transition": { "type": "object", "properties": { "alarmState": { "const": "CLEARED" }, "previousSeverity": { "type": "null" }, "clearedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" } } } } } }
+  ]
+}

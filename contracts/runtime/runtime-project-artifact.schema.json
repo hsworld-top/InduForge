@@ -1,0 +1,1389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/runtime-project-artifact.schema.json",
+  "title": "runtime-project-artifact.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "projectArtifactVersion",
+    "projectId",
+    "generatedAt",
+    "dataPoints",
+    "computeUnits",
+    "alarmItems"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "runtime-project-artifact.v1"
+    },
+    "projectArtifactVersion": {
+      "const": "1.0"
+    },
+    "projectId": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "generatedAt": {
+      "$ref": "common.schema.json#/$defs/utcRfc3339"
+    },
+    "dataPoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dataPoint"
+      }
+    },
+    "computeUnits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/computeUnit"
+      }
+    },
+    "alarmItems": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/alarmItem"
+      }
+    }
+  },
+  "$defs": {
+    "dataPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "name",
+        "dataType",
+        "sourceType",
+        "sourceId",
+        "sourceConfig",
+        "runtimePermissions",
+        "refreshMode",
+        "refreshIntervalMs",
+        "status",
+        "displayOrder",
+        "unit",
+        "precisionNum",
+        "defaultValue",
+        "tags",
+        "attributeDefaults"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataType": {
+          "$ref": "common.schema.json#/$defs/dataPointType"
+        },
+        "sourceType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceId": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "sourceConfig": {
+          "type": "object"
+        },
+        "runtimePermissions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["write"],
+          "properties": {
+            "write": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["allowRoles", "denyRoles", "inherit"],
+              "properties": {
+                "allowRoles": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "$ref": "common.schema.json#/$defs/stableId" }
+                },
+                "denyRoles": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "$ref": "common.schema.json#/$defs/stableId" }
+                },
+                "inherit": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "refreshMode": {
+          "enum": ["auto", "manual", "subscription"]
+        },
+        "refreshIntervalMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "status": {
+          "enum": ["active", "inactive", "invalid"]
+        },
+        "displayOrder": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "precisionNum": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "defaultValue": {
+          "$ref": "common.schema.json#/$defs/jsonValue"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/jsonValue"
+          }
+        },
+        "attributeDefaults": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "computeUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "name",
+        "description",
+        "language",
+        "scriptCode",
+        "enabled",
+        "timeoutMs",
+        "dependencies",
+        "inputs",
+        "outputs",
+        "trigger"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language": {
+          "enum": [
+            "js",
+            "python"
+          ]
+        },
+        "scriptCode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120000
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/dependency"
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/input"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/output"
+          }
+        },
+        "trigger": {
+          "$ref": "#/$defs/trigger"
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packageName",
+        "importName",
+        "version",
+        "language"
+      ],
+      "properties": {
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "importName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "enum": [
+            "js",
+            "python"
+          ]
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alias",
+        "datapointId",
+        "path",
+        "dataType"
+      ],
+      "properties": {
+        "alias": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        },
+        "datapointId": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataType": {
+          "$ref": "common.schema.json#/$defs/dataPointType"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "datapointId",
+        "outputKey",
+        "path",
+        "name",
+        "description",
+        "dataType",
+        "unit",
+        "precisionNum",
+        "sortOrder",
+        "nullPolicy"
+      ],
+      "properties": {
+        "datapointId": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "outputKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dataType": {
+          "$ref": "common.schema.json#/$defs/dataPointType"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "precisionNum": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sortOrder": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nullPolicy": {
+          "enum": [
+            "propagate",
+            "skip",
+            "default"
+          ]
+        },
+        "defaultValue": {
+          "$ref": "common.schema.json#/$defs/jsonValue"
+        }
+      }
+    },
+    "trigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "manual"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "schedule"
+          ],
+          "properties": {
+            "kind": {
+              "const": "schedule"
+            },
+            "schedule": {
+              "$ref": "#/$defs/schedule"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "datapointId",
+            "path",
+            "dataType",
+            "mode",
+            "debounceMs"
+          ],
+          "properties": {
+            "kind": {
+              "const": "datapoint_change"
+            },
+            "datapointId": {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dataType": {
+              "$ref": "common.schema.json#/$defs/dataPointType"
+            },
+            "mode": {
+              "enum": [
+                "any",
+                "value_change",
+                "increase",
+                "decrease",
+                "rising_edge",
+                "falling_edge"
+              ]
+            },
+            "deadband": {
+              "type": "number",
+              "minimum": 0
+            },
+            "debounceMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600000
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "mode": { "enum": ["any", "value_change"] } }, "required": ["mode"] },
+              "then": { "properties": { "dataType": { "enum": ["bool", "string", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal"] } } }
+            },
+            {
+              "if": { "properties": { "mode": { "enum": ["increase", "decrease"] } }, "required": ["mode"] },
+              "then": { "properties": { "dataType": { "enum": ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal"] } } }
+            },
+            {
+              "if": { "properties": { "mode": { "enum": ["rising_edge", "falling_edge"] } }, "required": ["mode"] },
+              "then": { "properties": { "dataType": { "const": "bool" } } }
+            },
+            {
+              "if": { "properties": { "deadband": {} }, "required": ["deadband"] },
+              "then": {
+                "properties": {
+                  "mode": { "enum": ["value_change", "increase", "decrease"] },
+                  "dataType": { "enum": ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal"] }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "expression",
+            "phases",
+            "variables",
+            "debounceMs"
+          ],
+          "properties": {
+            "kind": {
+              "const": "condition"
+            },
+            "expression": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "phases": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "entered",
+                  "active",
+                  "exited"
+                ]
+              }
+            },
+            "variables": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/input"
+              }
+            },
+            "debounceMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600000
+            }
+          }
+        }
+      ]
+    },
+    "schedule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "every",
+            "unit"
+          ],
+          "properties": {
+            "kind": {
+              "const": "interval"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "unit": {
+              "enum": [
+                "seconds",
+                "minutes",
+                "hours"
+              ]
+            },
+            "startAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "endAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "maxRuns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "time",
+            "timezone"
+          ],
+          "properties": {
+            "kind": {
+              "const": "daily"
+            },
+            "time": {
+              "type": "string",
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1
+            },
+            "startAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "endAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "maxRuns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "time",
+            "timezone",
+            "weekdays"
+          ],
+          "properties": {
+            "kind": {
+              "const": "weekly"
+            },
+            "time": {
+              "type": "string",
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1
+            },
+            "weekdays": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7
+              }
+            },
+            "startAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "endAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "maxRuns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "time",
+            "timezone",
+            "dayRule"
+          ],
+          "properties": {
+            "kind": {
+              "const": "monthly"
+            },
+            "time": {
+              "type": "string",
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dayRule": {
+              "enum": [
+                "day",
+                "weekday"
+              ]
+            },
+            "dayOfMonth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "weekOfMonth": {
+              "anyOf": [
+                { "const": -1 },
+                { "type": "integer", "minimum": 1, "maximum": 5 }
+              ]
+            },
+            "weekday": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "startAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "endAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "maxRuns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "dayRule": {
+                    "const": "day"
+                  }
+                },
+                "required": [
+                  "dayRule"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "dayOfMonth": {}
+                },
+                "required": ["dayOfMonth"],
+                "not": { "anyOf": [{ "properties": { "weekOfMonth": {} }, "required": ["weekOfMonth"] }, { "properties": { "weekday": {} }, "required": ["weekday"] }] }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "dayRule": {
+                    "const": "weekday"
+                  }
+                },
+                "required": [
+                  "dayRule"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "weekOfMonth": {},
+                  "weekday": {}
+                },
+                "required": ["weekOfMonth", "weekday"],
+                "not": { "properties": { "dayOfMonth": {} }, "required": ["dayOfMonth"] }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "time",
+            "timezone",
+            "month",
+            "dayRule"
+          ],
+          "properties": {
+            "kind": {
+              "const": "yearly"
+            },
+            "time": {
+              "type": "string",
+              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1
+            },
+            "month": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "dayRule": {
+              "enum": [
+                "day",
+                "weekday"
+              ]
+            },
+            "dayOfMonth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "weekOfMonth": {
+              "anyOf": [
+                { "const": -1 },
+                { "type": "integer", "minimum": 1, "maximum": 5 }
+              ]
+            },
+            "weekday": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "startAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "endAt": {
+              "$ref": "common.schema.json#/$defs/utcRfc3339"
+            },
+            "maxRuns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "dayRule": {
+                    "const": "day"
+                  }
+                },
+                "required": [
+                  "dayRule"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "dayOfMonth": {}
+                },
+                "required": ["dayOfMonth"],
+                "not": { "anyOf": [{ "properties": { "weekOfMonth": {} }, "required": ["weekOfMonth"] }, { "properties": { "weekday": {} }, "required": ["weekday"] }] }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "dayRule": {
+                    "const": "weekday"
+                  }
+                },
+                "required": [
+                  "dayRule"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "weekOfMonth": {},
+                  "weekday": {}
+                },
+                "required": ["weekOfMonth", "weekday"],
+                "not": { "properties": { "dayOfMonth": {} }, "required": ["dayOfMonth"] }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "alarmItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "displayName",
+        "enabled",
+        "mode",
+        "evaluationMode",
+        "inputs",
+        "conditions"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "point",
+            "derived"
+          ]
+        },
+        "evaluationMode": {
+          "enum": [
+            "single",
+            "highest_matching"
+          ]
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/input"
+          }
+        },
+        "derivedExpression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/alarmCondition"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "derived"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "derivedExpression"
+            ],
+            "properties": {
+              "derivedExpression": {},
+              "evaluationMode": {
+                "const": "single"
+              },
+              "inputs": {
+                "type": "array",
+                "minItems": 2
+              },
+              "conditions": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "allOf": [
+                    {
+                      "not": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "offline",
+                              "quality",
+                              "stale"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "point"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "not": {
+              "type": "object",
+              "required": [
+                "derivedExpression"
+              ]
+            },
+            "properties": {
+              "inputs": {
+                "type": "array",
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "point"
+              },
+              "evaluationMode": {
+                "const": "single"
+              }
+            },
+            "required": [
+              "mode",
+              "evaluationMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "conditions": {
+                "type": "array",
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "point"
+              },
+              "evaluationMode": {
+                "const": "highest_matching"
+              }
+            },
+            "required": [
+              "mode",
+              "evaluationMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "threshold"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "alarmCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "operator",
+        "params",
+        "severity",
+        "triggerDelayMs",
+        "clearDelayMs",
+        "deadband"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "threshold",
+            "range",
+            "state",
+            "transition",
+            "text_match",
+            "rate_of_change",
+            "deviation",
+            "offline",
+            "quality",
+            "stale"
+          ]
+        },
+        "operator": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "severity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,29}$"
+        },
+        "triggerDelayMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clearDelayMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deadband": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "threshold"
+            },
+            "operator": {
+              "enum": [
+                "gt",
+                "gte",
+                "lt",
+                "lte"
+              ]
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "threshold"
+              ],
+              "properties": {
+                "threshold": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "range"
+            },
+            "operator": {
+              "enum": [
+                "between",
+                "outside"
+              ]
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lower",
+                "upper"
+              ],
+              "properties": {
+                "lower": {
+                  "type": "number"
+                },
+                "upper": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "state"
+            },
+            "operator": {
+              "enum": [
+                "eq",
+                "ne"
+              ]
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expected"
+              ],
+              "properties": {
+                "expected": {
+                  "$ref": "common.schema.json#/$defs/jsonValue"
+                }
+              }
+            },
+            "deadband": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "transition"
+            },
+            "triggerDelayMs": {
+              "const": 0
+            },
+            "deadband": {
+              "const": 0
+            }
+          },
+          "allOf": [
+            {
+              "oneOf": [
+                {
+                  "properties": {
+                    "operator": { "enum": ["changed", "rising", "falling"] },
+                    "params": { "type": "object", "maxProperties": 0 }
+                  }
+                },
+                {
+                  "properties": {
+                    "operator": { "const": "from_to" },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["from", "to"],
+                      "properties": {
+                        "from": { "$ref": "common.schema.json#/$defs/jsonValue" },
+                        "to": { "$ref": "common.schema.json#/$defs/jsonValue" }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "text_match"
+            },
+            "operator": {
+              "enum": [
+                "eq",
+                "ne",
+                "contains",
+                "regex"
+              ]
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expected"
+              ],
+              "properties": {
+                "expected": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "deadband": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "rate_of_change"
+            },
+            "operator": {
+              "const": "gt"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "direction",
+                "limit",
+                "windowMs"
+              ],
+              "properties": {
+                "direction": {
+                  "enum": [
+                    "rise",
+                    "fall",
+                    "absolute"
+                  ]
+                },
+                "limit": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "windowMs": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "deviation"
+            },
+            "operator": {
+              "const": "gt"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "baseline",
+                "limit"
+              ],
+              "properties": {
+                "baseline": {
+                  "type": "number"
+                },
+                "limit": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "offline"
+            },
+            "operator": {
+              "const": "is"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            },
+            "deadband": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "quality"
+            },
+            "operator": {
+              "const": "in"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "qualities"
+              ],
+              "properties": {
+                "qualities": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "bad",
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            },
+            "deadband": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "stale"
+            },
+            "operator": {
+              "const": "age_gte"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "maxAgeMs"
+              ],
+              "properties": {
+                "maxAgeMs": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            },
+            "deadband": {
+              "const": 0
+            }
+          }
+        }
+      ]
+    }
+  }
+}

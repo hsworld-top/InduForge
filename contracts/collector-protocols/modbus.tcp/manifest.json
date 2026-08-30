@@ -32,6 +32,6 @@
   "acquisitionModes": ["polling"],
   "platforms": {
     "devAgent": ["windows-x64"],
-    "runtime": []
+    "runtime": ["linux-x64", "linux-arm64"]
   }
 }

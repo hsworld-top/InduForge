@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "collector-runtime-binding.v1",
+  "bindingId": "collector-binding-line1-prod",
+  "bindingRevision": 8,
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "artifact": {
+    "artifactId": "collector-artifact-line1",
+    "artifactRevision": 12,
+    "artifactDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "collectorId": "collector-line1-a",
+  "ownership": {
+    "ownerId": "collector-line1-a",
+    "epoch": 7
+  },
+  "connections": [
+    {
+      "connectionId": "aaaaaaaa-1111-4111-8111-111111111111",
+      "resourceRef": "site-resource://collector-line1-a/modbus-line1",
+      "secretRefs": [
+        "secret://site-a/deployment-line1-prod/modbus-line1"
+      ]
+    }
+  ],
+  "nats": {
+    "serverResourceRef": "site-resource://site-a/nats",
+    "credentialSecretRef": "secret://site-a/deployment-line1-prod/nats-collector",
+    "rawSubjectPrefix": "data.raw"
+  },
+  "walCapacity": {
+    "maxBytes": 1073741825,
+    "highWatermarkBytes": 805306368,
+    "diagnosticReserveBytes": 1048576,
+    "dataGapPolicy": "emit-alarm-event"
+  }
+}

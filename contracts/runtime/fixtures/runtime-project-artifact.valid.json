@@ -1,0 +1,643 @@
+{
+  "schemaVersion": "runtime-project-artifact.v1",
+  "projectArtifactVersion": "1.0",
+  "projectId": "11111111-1111-4111-8111-111111111111",
+  "generatedAt": "2026-08-30T10:00:00Z",
+  "dataPoints": [
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "path": "line1.temperature",
+      "name": "温度",
+      "dataType": "float64",
+      "sourceType": "collector.point",
+      "sourceId": "bbbbbbbb-1111-4111-8111-111111111111",
+      "sourceConfig": {
+        "connectionId": "aaaaaaaa-1111-4111-8111-111111111111"
+      },
+      "runtimePermissions": {
+        "write": {
+          "allowRoles": [],
+          "denyRoles": [],
+          "inherit": true
+        }
+      },
+      "refreshMode": "subscription",
+      "refreshIntervalMs": null,
+      "status": "active",
+      "displayOrder": 1,
+      "unit": "C",
+      "precisionNum": 1,
+      "defaultValue": null,
+      "tags": [
+        "line1"
+      ],
+      "attributeDefaults": {
+        "display": "temperature"
+      }
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "path": "line1.result",
+      "name": "结果",
+      "dataType": "float64",
+      "sourceType": "calc.output",
+      "sourceId": "44444444-4444-4444-8444-444444444444",
+      "sourceConfig": {
+        "computeId": "44444444-4444-4444-8444-444444444444"
+      },
+      "runtimePermissions": {
+        "write": {
+          "allowRoles": [],
+          "denyRoles": [],
+          "inherit": true
+        }
+      },
+      "refreshMode": "auto",
+      "refreshIntervalMs": null,
+      "status": "active",
+      "displayOrder": 2,
+      "unit": null,
+      "precisionNum": null,
+      "defaultValue": null,
+      "tags": [],
+      "attributeDefaults": {}
+    },
+    {
+      "id": "88888888-0000-4000-8000-000000000001",
+      "path": "line1.result.changed",
+      "name": "变化结果",
+      "dataType": "float64",
+      "sourceType": "calc.output",
+      "sourceId": "55555555-5555-4555-8555-555555555555",
+      "sourceConfig": {
+        "computeId": "55555555-5555-4555-8555-555555555555"
+      },
+      "runtimePermissions": {
+        "write": {
+          "allowRoles": [],
+          "denyRoles": [],
+          "inherit": true
+        }
+      },
+      "refreshMode": "auto",
+      "refreshIntervalMs": null,
+      "status": "active",
+      "displayOrder": 3,
+      "unit": null,
+      "precisionNum": null,
+      "defaultValue": null,
+      "tags": [],
+      "attributeDefaults": {}
+    },
+    {
+      "id": "88888888-0000-4000-8000-000000000002",
+      "path": "line1.result.scheduled",
+      "name": "计划结果",
+      "dataType": "float64",
+      "sourceType": "calc.output",
+      "sourceId": "66666666-6666-4666-8666-666666666666",
+      "sourceConfig": {
+        "computeId": "66666666-6666-4666-8666-666666666666"
+      },
+      "runtimePermissions": {
+        "write": {
+          "allowRoles": [],
+          "denyRoles": [],
+          "inherit": true
+        }
+      },
+      "refreshMode": "auto",
+      "refreshIntervalMs": null,
+      "status": "active",
+      "displayOrder": 4,
+      "unit": null,
+      "precisionNum": null,
+      "defaultValue": null,
+      "tags": [],
+      "attributeDefaults": {}
+    },
+    {
+      "id": "88888888-0000-4000-8000-000000000003",
+      "path": "line1.result.condition",
+      "name": "条件结果",
+      "dataType": "float64",
+      "sourceType": "calc.output",
+      "sourceId": "77777777-7777-4777-8777-777777777777",
+      "sourceConfig": {
+        "computeId": "77777777-7777-4777-8777-777777777777"
+      },
+      "runtimePermissions": {
+        "write": {
+          "allowRoles": [],
+          "denyRoles": [],
+          "inherit": true
+        }
+      },
+      "refreshMode": "auto",
+      "refreshIntervalMs": null,
+      "status": "active",
+      "displayOrder": 5,
+      "unit": null,
+      "precisionNum": null,
+      "defaultValue": null,
+      "tags": [],
+      "attributeDefaults": {}
+    }
+  ],
+  "computeUnits": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "revision": 1,
+      "name": "人工执行",
+      "description": null,
+      "language": "js",
+      "scriptCode": "return inputs.temperature;",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [
+        {
+          "packageName": "@induforge/sdk",
+          "importName": "sdk",
+          "version": "1.0.0",
+          "language": "js"
+        }
+      ],
+      "inputs": [
+        {
+          "alias": "temperature",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "outputs": [
+        {
+          "datapointId": "33333333-3333-4333-8333-333333333333",
+          "outputKey": "manual",
+          "path": "line1.result",
+          "name": "结果",
+          "description": null,
+          "dataType": "float64",
+          "unit": null,
+          "precisionNum": null,
+          "sortOrder": 1,
+          "nullPolicy": "propagate"
+        }
+      ],
+      "trigger": {
+        "kind": "manual"
+      }
+    },
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "revision": 2,
+      "name": "变化计算",
+      "description": "有死区",
+      "language": "python",
+      "scriptCode": "return temperature",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [],
+      "inputs": [
+        {
+          "alias": "temperature",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "outputs": [
+        {
+          "datapointId": "88888888-0000-4000-8000-000000000001",
+          "outputKey": "changed",
+          "path": "line1.result.changed",
+          "name": "变化结果",
+          "description": null,
+          "dataType": "float64",
+          "unit": null,
+          "precisionNum": null,
+          "sortOrder": 2,
+          "nullPolicy": "default",
+          "defaultValue": 0
+        }
+      ],
+      "trigger": {
+        "kind": "datapoint_change",
+        "datapointId": "22222222-2222-4222-8222-222222222222",
+        "path": "line1.temperature",
+        "dataType": "float64",
+        "mode": "value_change",
+        "deadband": 0.1,
+        "debounceMs": 100
+      }
+    },
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "revision": 3,
+      "name": "周计划",
+      "description": null,
+      "language": "js",
+      "scriptCode": "return 1;",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [],
+      "inputs": [],
+      "outputs": [
+        {
+          "datapointId": "88888888-0000-4000-8000-000000000002",
+          "outputKey": "scheduled",
+          "path": "line1.result.scheduled",
+          "name": "计划结果",
+          "description": null,
+          "dataType": "float64",
+          "unit": null,
+          "precisionNum": null,
+          "sortOrder": 3,
+          "nullPolicy": "skip"
+        }
+      ],
+      "trigger": {
+        "kind": "schedule",
+        "schedule": {
+          "kind": "weekly",
+          "timezone": "Asia/Shanghai",
+          "time": "08:30:00",
+          "weekdays": [
+            1,
+            3,
+            5
+          ],
+          "startAt": "2026-08-30T08:00:00Z",
+          "endAt": "2026-08-30T18:00:00Z",
+          "maxRuns": 10
+        }
+      }
+    },
+    {
+      "id": "77777777-7777-4777-8777-777777777777",
+      "revision": 4,
+      "name": "条件计算",
+      "description": null,
+      "language": "python",
+      "scriptCode": "return temp",
+      "enabled": true,
+      "timeoutMs": 1000,
+      "dependencies": [],
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "outputs": [
+        {
+          "datapointId": "88888888-0000-4000-8000-000000000003",
+          "outputKey": "condition",
+          "path": "line1.result.condition",
+          "name": "条件结果",
+          "description": null,
+          "dataType": "float64",
+          "unit": null,
+          "precisionNum": null,
+          "sortOrder": 4,
+          "nullPolicy": "skip"
+        }
+      ],
+      "trigger": {
+        "kind": "condition",
+        "expression": "temp > 80",
+        "phases": [
+          "entered",
+          "active",
+          "exited"
+        ],
+        "variables": [
+          {
+            "alias": "temp",
+            "datapointId": "22222222-2222-4222-8222-222222222222",
+            "path": "line1.temperature",
+            "dataType": "float64"
+          }
+        ],
+        "debounceMs": 200
+      }
+    }
+  ],
+  "alarmItems": [
+    {
+      "id": "88888888-8888-4888-8888-888888888888",
+      "revision": 5,
+      "displayName": "派生报警",
+      "mode": "derived",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        },
+        {
+          "alias": "result",
+          "datapointId": "33333333-3333-4333-8333-333333333333",
+          "path": "line1.result",
+          "dataType": "float64"
+        }
+      ],
+      "derivedExpression": "temp > result",
+      "conditions": [
+        {
+          "id": "99999999-9999-4999-8999-999999999999",
+          "kind": "threshold",
+          "operator": "gt",
+          "params": {
+            "threshold": 80
+          },
+          "severity": "shutdown",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "revision": 1,
+      "displayName": "区间",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "kind": "range",
+          "operator": "outside",
+          "params": {
+            "lower": 0,
+            "upper": 100
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "revision": 1,
+      "displayName": "状态",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "bbbbbbb1-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "kind": "state",
+          "operator": "eq",
+          "params": {
+            "expected": true
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "revision": 1,
+      "displayName": "变化",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "ccccccc1-cccc-4ccc-8ccc-cccccccccccc",
+          "kind": "transition",
+          "operator": "from_to",
+          "params": {
+            "from": false,
+            "to": true
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "revision": 1,
+      "displayName": "文本",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "ddddddd1-dddd-4ddd-8ddd-dddddddddddd",
+          "kind": "text_match",
+          "operator": "contains",
+          "params": {
+            "expected": "error"
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "revision": 1,
+      "displayName": "变化率",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "eeeeeee1-eeee-4eee-8eee-eeeeeeeeeeee",
+          "kind": "rate_of_change",
+          "operator": "gt",
+          "params": {
+            "direction": "absolute",
+            "limit": 5,
+            "windowMs": 60000
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      "revision": 1,
+      "displayName": "偏差",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "fffffff1-ffff-4fff-8fff-ffffffffffff",
+          "kind": "deviation",
+          "operator": "gt",
+          "params": {
+            "baseline": 20,
+            "limit": 5
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "12121212-1212-4121-8121-121212121212",
+      "revision": 1,
+      "displayName": "离线",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "12121213-1212-4121-8121-121212121212",
+          "kind": "offline",
+          "operator": "is",
+          "params": {},
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "13131313-1313-4131-8131-131313131313",
+      "revision": 1,
+      "displayName": "质量",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "13131314-1313-4131-8131-131313131313",
+          "kind": "quality",
+          "operator": "in",
+          "params": {
+            "qualities": [
+              "bad",
+              "unknown"
+            ]
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "14141414-1414-4141-8141-141414141414",
+      "revision": 1,
+      "displayName": "陈旧",
+      "mode": "point",
+      "evaluationMode": "single",
+      "inputs": [
+        {
+          "alias": "temp",
+          "datapointId": "22222222-2222-4222-8222-222222222222",
+          "path": "line1.temperature",
+          "dataType": "float64"
+        }
+      ],
+      "conditions": [
+        {
+          "id": "14141415-1414-4141-8141-141414141414",
+          "kind": "stale",
+          "operator": "age_gte",
+          "params": {
+            "maxAgeMs": 60000
+          },
+          "severity": "major",
+          "triggerDelayMs": 0,
+          "clearDelayMs": 0,
+          "deadband": 0
+        }
+      ],
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "data.computed.v1",
+  "subject": "data.computed.33333333-3333-4333-8333-333333333333",
+  "eventId": "2f1ce6a2f5fdb940edbf1f3e1ef31d3d5fc4cee4b08b3d77f7e4ff6bf73872a0",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "pointId": "33333333-3333-4333-8333-333333333333",
+  "ownerId": "runtime-engine-compute-0",
+  "epoch": 7,
+  "sequence": 1024,
+  "value": 97.7,
+  "quality": "good",
+  "sourceTimestamp": "2026-08-30T10:20:30Z",
+  "serverTimestamp": "2026-08-30T10:20:30Z",
+  "receivedAt": "2026-08-30T10:20:30Z",
+  "source": {
+    "collectorId": "collector-line1-a",
+    "connectionId": "aaaaaaaa-1111-4111-8111-111111111111",
+    "variableId": "bbbbbbbb-1111-4111-8111-111111111111"
+  },
+  "computation": {
+    "computeId": "44444444-4444-4444-8444-444444444444",
+    "computeRevision": 3,
+    "inputEventIds": [
+      "1f1ce6a2f5fdb940edbf1f3e1ef31d3d5fc4cee4b08b3d77f7e4ff6bf73872a0"
+    ]
+  }
+}

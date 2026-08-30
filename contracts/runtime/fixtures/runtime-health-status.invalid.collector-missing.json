@@ -1,0 +1,3 @@
+{
+  "schemaVersion": "runtime-health-status.v1", "componentRole": "industrial-collector", "siteId": "site-a", "deploymentId": "deployment-line1-prod", "executionForm": "native-linux", "nodeId": "collector-linux-01", "processId": 1234, "lifecycleState": "RUNNING", "healthState": "HEALTHY", "version": "1.0.0", "startedAt": "2026-08-30T09:00:00Z", "uptimeSeconds": 1, "observedAt": "2026-08-30T10:20:30Z", "businessFreshness": { "state": "FRESH", "lastBusinessEventAt": "2026-08-30T10:20:00Z", "evaluatedAt": "2026-08-30T10:20:30Z" }
+}

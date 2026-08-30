@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "alarm.event.v1",
+  "subject": "alarm.event.dp-line1-temperature",
+  "eventId": "3f1ce6a2f5fdb940edbf1f3e1ef31d3d5fc4cee4b08b3d77f7e4ff6bf73872a0",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "kind": "alarm-transition",
+  "alarmId": "alarm-line1-temperature-high-20260830",
+  "alarmItemId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "pointIds": [
+    "22222222-2222-4222-8222-222222222222"
+  ],
+  "operation": "RAISE",
+  "ownerId": "runtime-engine-alarm-0",
+  "epoch": 7,
+  "sourceTimestamp": "2026-08-30T10:20:30Z",
+  "serverTimestamp": "2026-08-30T10:20:30Z",
+  "receivedAt": "2026-08-30T10:20:30Z",
+  "transition": {
+    "alarmState": "ACKED",
+    "severity": "major",
+    "previousSeverity": "warning",
+    "conditionId": "aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "value": 36.5,
+    "quality": "good",
+    "message": "错误的 raise 状态",
+    "openedAt": "2026-08-30T10:20:30Z",
+    "updatedAt": "2026-08-30T10:20:30Z",
+    "clearedAt": null,
+    "ackedAt": null,
+    "acknowledgedBy": null,
+    "stateVersion": 1,
+    "transitionSequence": 1
+  }
+}
