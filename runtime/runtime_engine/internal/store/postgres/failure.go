@@ -13,6 +13,10 @@ import (
 
 type FailureReasonCode string
 
+// ProducerFenceKey 与 role/consumer 身份分离，永久失败只有在入口已完成生产者校验后才能携带它。
+// 它避开 activation 的 ProducerKey 函数，后者负责从配置推导标准 key。
+type ProducerFenceKey string
+
 const (
 	FailurePermanentValidation FailureReasonCode = "permanent-validation"
 	FailureEventIDCollision    FailureReasonCode = "event-id-collision"
@@ -22,20 +26,23 @@ const (
 
 // PermanentFailure 是可安全隔离的最小证据；不承载 endpoint、Secret、DSN 或任意错误文本。
 type PermanentFailure struct {
-	DeploymentID       string
-	ConsumerKey        string
-	Role               string
-	Token              ConsumerRoleToken
-	DLQID              string
-	AccountID          string
-	EventID            *string // 解析失败的 body 可以没有合法 eventId。
-	Subject            string
-	RawBody            []byte
-	BodySHA256         string
-	ReasonCode         FailureReasonCode
-	DeliveryCount      int
-	CheckpointPosition int64
-	OccurredAt         time.Time
+	DeploymentID         string
+	ConsumerKey          string
+	Role                 string
+	Token                ConsumerRoleToken
+	RequireProducerFence bool
+	ProducerKey          ProducerFenceKey
+	ProducerToken        ProducerToken
+	DLQID                string
+	AccountID            string
+	EventID              *string // 解析失败的 body 可以没有合法 eventId。
+	Subject              string
+	RawBody              []byte
+	BodySHA256           string
+	ReasonCode           FailureReasonCode
+	DeliveryCount        int
+	CheckpointPosition   int64
+	OccurredAt           time.Time
 }
 
 type PermanentFailureHandler func(context.Context, *BusinessTx, PermanentFailure) error
@@ -48,6 +55,9 @@ func (s *Store) ProcessPermanentFailure(ctx context.Context, failure PermanentFa
 	if enqueueDLQ == nil {
 		return fmt.Errorf("%w: permanent failure 必须写入 DLQ outbox", ErrInvalidInput)
 	}
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -56,6 +66,12 @@ func (s *Store) ProcessPermanentFailure(ctx context.Context, failure PermanentFa
 	msg := Message{DeploymentID: failure.DeploymentID, Role: failure.Role, Token: failure.Token}
 	if err := assertConsumerFence(ctx, tx, msg); err != nil {
 		return err
+	}
+	if failure.RequireProducerFence {
+		// 生产者在 consumer fence 之后、所有失败证据/出站/水位副作用之前锁定。
+		if err := assertProducerFence(ctx, tx, failure.DeploymentID, string(failure.ProducerKey), failure.ProducerToken); err != nil {
+			return err
+		}
 	}
 	var inserted int
 	err = tx.QueryRow(ctx, `INSERT INTO runtime_engine.processing_failure (deployment_id,consumer_key,dlq_id,event_id,reason_code,delivery_count,jetstream_position,subject,body_sha256,raw_body,occurred_at)
@@ -87,6 +103,14 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (deployment_id,dlq_id) D
 func validPermanentFailure(f PermanentFailure) error {
 	if err := validToken(f.DeploymentID, f.Role, f.Token.OwnerID, f.Token.Epoch); err != nil || f.AccountID == "" || f.ConsumerKey == "" || f.DLQID == "" || f.Subject == "" || len(f.Subject) > 4096 || len(f.RawBody) > 1<<20 || f.DeliveryCount < 1 || f.CheckpointPosition < 0 || f.OccurredAt.IsZero() || !validFailureReason(f.ReasonCode) {
 		return fmt.Errorf("%w: permanent failure", ErrInvalidInput)
+	}
+	if f.RequireProducerFence {
+		if (f.ReasonCode != FailureMaxDeliver && f.ReasonCode != FailureHandler) || validToken(f.DeploymentID, string(f.ProducerKey), f.ProducerToken.OwnerID, f.ProducerToken.Epoch) != nil {
+			return fmt.Errorf("%w: permanent producer fence", ErrInvalidInput)
+		}
+	} else if f.ProducerKey != "" || f.ProducerToken.OwnerID != "" || f.ProducerToken.Epoch != 0 {
+		// 未通过完整入站校验的坏消息只能使用 consumer fence；禁止手工伪造 producer 进入永久隔离。
+		return fmt.Errorf("%w: unexpected permanent producer fence", ErrInvalidInput)
 	}
 	if len(f.BodySHA256) != 64 || f.BodySHA256 != strings.ToLower(f.BodySHA256) {
 		return fmt.Errorf("%w: body digest", ErrInvalidInput)

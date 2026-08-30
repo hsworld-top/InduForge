@@ -3,12 +3,15 @@ package jetstream
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/model"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 	js "github.com/nats-io/nats.go/jetstream"
 )
 
@@ -53,6 +56,69 @@ func TestConnectionOptionsAccountIdentityIsChecked(t *testing.T) {
 	}
 	if _, err := Open(context.Background(), options, "account-b"); err == nil {
 		t.Fatal("mismatched account must fail before dialing")
+	}
+}
+
+func TestClientCloseIsNilSafeAndConcurrentIdempotent(t *testing.T) {
+	var client Client
+	var group sync.WaitGroup
+	for range 16 {
+		group.Add(1)
+		go func() { defer group.Done(); client.Close() }()
+	}
+	group.Wait()
+}
+
+func TestPublishRejectsPayloadBeforeBrokerAndPreservesDLQLimit(t *testing.T) {
+	var client Client
+	pointID := "11111111-1111-4111-8111-111111111111"
+	for _, test := range []struct {
+		subject string
+		limit   int
+	}{
+		{"data.computed." + pointID, transportlimits.MaxBodyBytes},
+		{"dlq.writer-derived", transportlimits.MaxDLQPayloadBytes},
+	} {
+		if err := client.Publish(t.Context(), PublishMessage{Subject: test.subject, DedupeKey: "stable", Payload: make([]byte, test.limit+1)}); !errors.Is(err, ErrPayloadTooLarge) {
+			t.Fatalf("%s over boundary error=%v", test.subject, err)
+		}
+	}
+	if err := client.Publish(t.Context(), PublishMessage{Subject: "dlq.writer?x", DedupeKey: "stable"}); !errors.Is(err, ErrInvalidSubject) {
+		t.Fatalf("masquerading subject error=%v", err)
+	}
+}
+
+func TestExactDurableNamesRejectsExtrasAndDuplicates(t *testing.T) {
+	expected := []string{"writer-raw-v1", "alarm-raw-v1", "compute-raw-v1"}
+	if !exactDurableNames([]string{"compute-raw-v1", "writer-raw-v1", "alarm-raw-v1"}, expected) {
+		t.Fatal("same durable set in another order must be accepted")
+	}
+	for _, actual := range [][]string{
+		{"writer-raw-v1", "alarm-raw-v1"},
+		{"writer-raw-v1", "alarm-raw-v1", "compute-raw-v1", "query-raw-v1"},
+		{"writer-raw-v1", "alarm-raw-v1", "writer-raw-v1"},
+	} {
+		if exactDurableNames(actual, expected) {
+			t.Fatalf("unexpected/duplicate durable set accepted: %#v", actual)
+		}
+	}
+}
+
+func TestExpectedDurableNamesAreScopedToDataStream(t *testing.T) {
+	config := model.EngineConfig{JetStream: model.JetStream{DataRawStream: "DATA_RAW", DataDerivedStream: "DATA_DERIVED", Consumers: []model.Consumer{
+		{Stream: "DATA_RAW", DurableName: "writer-raw-v1"},
+		{Stream: "DATA_DERIVED", DurableName: "writer-derived-v1"},
+	}}}
+	raw, err := expectedDurableNames(config, "DATA_RAW")
+	if err != nil || !exactDurableNames(raw, []string{"writer-raw-v1"}) {
+		t.Fatalf("raw expected durable names=%#v err=%v", raw, err)
+	}
+	if _, err := expectedDurableNames(config, "EVENT"); err == nil {
+		t.Fatal("non-data stream must not get an expected durable set")
+	}
+	config.JetStream.Consumers = append(config.JetStream.Consumers, model.Consumer{Stream: "DATA_RAW", DurableName: "writer-raw-v1"})
+	if _, err := expectedDurableNames(config, "DATA_RAW"); err == nil {
+		t.Fatal("duplicate configured durable must fail before server comparison")
 	}
 }
 

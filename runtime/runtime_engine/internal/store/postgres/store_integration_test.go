@@ -34,6 +34,10 @@ func TestApplyPointCurrentConcurrentOrder(t *testing.T) {
 	if _, err := store.ActivateRole(ctx, "dep-c", "writer", token, 0); err != nil {
 		t.Fatal(err)
 	}
+	producer := ProducerToken{OwnerID: "collector-c", Epoch: 1}
+	if _, err := store.ActivateProducer(ctx, "dep-c", "collector-c", producer, 0); err != nil {
+		t.Fatal(err)
+	}
 	const writes = 16
 	base := time.Date(2026, 1, 4, 0, 0, 0, 0, time.UTC)
 	var applied atomic.Int64
@@ -44,7 +48,7 @@ func TestApplyPointCurrentConcurrentOrder(t *testing.T) {
 		go func(sequence int) {
 			defer wg.Done()
 			eventID := fmt.Sprintf("%064x", sequence+1)
-			message := Message{DeploymentID: "dep-c", AccountID: "account-c", ConsumerKey: "writer.concurrent", Role: "writer", Token: token, EventID: eventID, RawBody: []byte(eventID), Subject: "data.raw.p", CheckpointPosition: int64(sequence + 1), DeliveryCount: 1, OccurredAt: base}
+			message := Message{DeploymentID: "dep-c", AccountID: "account-c", ConsumerKey: "writer.concurrent", Role: "writer", Token: token, ProducerKey: "collector-c", ProducerToken: producer, EventID: eventID, RawBody: []byte(eventID), Subject: "data.raw.p", CheckpointPosition: int64(sequence + 1), DeliveryCount: 1, OccurredAt: base}
 			var result PointCurrentResult
 			_, err := store.ProcessMessage(ctx, message, func(ctx context.Context, tx *BusinessTx) error {
 				var applyErr error
@@ -202,6 +206,7 @@ func TestPostgresV1Foundation(t *testing.T) {
 	})
 
 	writer := ConsumerRoleToken{OwnerID: "writer-a", Epoch: 1}
+	producer := ProducerToken{OwnerID: "collector-a", Epoch: 1}
 	t.Run("fence idempotent elevate and reject stale", func(t *testing.T) {
 		first, err := store.ActivateRole(ctx, "dep-a", "writer", writer, 0)
 		if err != nil {
@@ -227,7 +232,10 @@ func TestPostgresV1Foundation(t *testing.T) {
 		if fence.Version != first.Version+1 {
 			t.Fatal("提升 epoch 必须递增 version")
 		}
-		stale := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.stale", Role: "writer", Token: ConsumerRoleToken{OwnerID: "writer-a", Epoch: 1}, EventID: strings.Repeat("e", 64), RawBody: []byte("old"), Subject: "data.raw.p", CheckpointPosition: 1, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+		if _, err := store.ActivateProducer(ctx, "dep-a", "collector-a", producer, 0); err != nil {
+			t.Fatal(err)
+		}
+		stale := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.stale", Role: "writer", Token: ConsumerRoleToken{OwnerID: "writer-a", Epoch: 1}, ProducerKey: "collector-a", ProducerToken: producer, EventID: strings.Repeat("e", 64), RawBody: []byte("old"), Subject: "data.raw.p", CheckpointPosition: 1, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 		if _, err := store.ProcessMessage(ctx, stale, func(context.Context, *BusinessTx) error { t.Fatal("旧 role epoch 不得进入 handler"); return nil }, ProcessOptions{}); !errors.Is(err, ErrFenceStale) {
 			t.Fatalf("旧 role epoch 必须拒绝: %v", err)
 		}
@@ -243,7 +251,7 @@ func TestPostgresV1Foundation(t *testing.T) {
 		body := []byte(`{"value":1}`)
 		event := strings.Repeat("a", 64)
 		var calls atomic.Int32
-		msg := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.raw", Role: "writer", Token: writer, EventID: event, RawBody: body, Subject: "data.raw.point", CheckpointPosition: 10, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+		msg := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.raw", Role: "writer", Token: writer, ProducerKey: "collector-a", ProducerToken: producer, EventID: event, RawBody: body, Subject: "data.raw.point", CheckpointPosition: 10, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 		if got, err := store.ProcessMessage(ctx, msg, func(context.Context, *BusinessTx) error { calls.Add(1); return nil }, ProcessOptions{}); err != nil || got != Processed {
 			t.Fatalf("first: %s %v", got, err)
 		}
@@ -291,7 +299,7 @@ func TestPostgresV1Foundation(t *testing.T) {
 
 	t.Run("handler failure fully rolls back", func(t *testing.T) {
 		id := strings.Repeat("b", 64)
-		msg := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.failure", Role: "writer", Token: writer, EventID: id, RawBody: []byte("bad"), Subject: "data.raw.p", CheckpointPosition: 1, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+		msg := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.failure", Role: "writer", Token: writer, ProducerKey: "collector-a", ProducerToken: producer, EventID: id, RawBody: []byte("bad"), Subject: "data.raw.p", CheckpointPosition: 1, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 		_, err := store.ProcessMessage(ctx, msg, func(ctx context.Context, tx *BusinessTx) error {
 			_, _, enqueueErr := tx.Enqueue(ctx, OutboxMessage{DeploymentID: "dep-a", DedupeKey: "rollback", Subject: "x", Payload: []byte("x")})
 			if enqueueErr != nil {
@@ -312,7 +320,7 @@ func TestPostgresV1Foundation(t *testing.T) {
 	})
 
 	t.Run("concurrent same event invokes handler once", func(t *testing.T) {
-		msg := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.concurrent", Role: "writer", Token: writer, EventID: strings.Repeat("c", 64), RawBody: []byte("same"), Subject: "data.raw.p", CheckpointPosition: 2, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+		msg := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.concurrent", Role: "writer", Token: writer, ProducerKey: "collector-a", ProducerToken: producer, EventID: strings.Repeat("c", 64), RawBody: []byte("same"), Subject: "data.raw.p", CheckpointPosition: 2, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 		var handlers atomic.Int32
 		var processed atomic.Int32
 		var wg sync.WaitGroup
@@ -342,8 +350,8 @@ func TestPostgresV1Foundation(t *testing.T) {
 	})
 
 	t.Run("outbox claim lease retry and puback crash replay", func(t *testing.T) {
-		enqueueForTest(t, store, ctx, OutboxMessage{DeploymentID: "dep-a", DedupeKey: "one", Subject: "out.one", Headers: []byte(`{"x":"1"}`), Payload: []byte("payload-one")})
-		enqueueForTest(t, store, ctx, OutboxMessage{DeploymentID: "dep-a", DedupeKey: "two", Subject: "out.two", Payload: []byte("payload-two")})
+		enqueueForTest(t, store, ctx, OutboxMessage{DeploymentID: "dep-a", DedupeKey: "one", Subject: "data.raw.11111111-1111-4111-8111-111111111111", Headers: []byte(`{"x":"1"}`), Payload: []byte("payload-one")})
+		enqueueForTest(t, store, ctx, OutboxMessage{DeploymentID: "dep-a", DedupeKey: "two", Subject: "data.computed.22222222-2222-4222-8222-222222222222", Payload: []byte("payload-two")})
 		var left, right []OutboxRecord
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -474,7 +482,7 @@ func TestPostgresV1Foundation(t *testing.T) {
 		lockConn.Release()
 		// 不同值 consumer token 仍只在 consumer fence 中生效，绝不与 producer token 比较。
 		consumer := ConsumerRoleToken{OwnerID: "consumer-b", Epoch: 2}
-		message := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "shared.consumer", Role: "shared", Token: consumer, EventID: strings.Repeat("d", 64), RawBody: []byte("independent"), Subject: "data.raw.p", CheckpointPosition: 1, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+		message := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "shared.consumer", Role: "shared", Token: consumer, ProducerKey: "shared", ProducerToken: old, EventID: strings.Repeat("d", 64), RawBody: []byte("independent"), Subject: "data.raw.p", CheckpointPosition: 1, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 		if disposition, err := store.ProcessMessage(ctx, message, nil, ProcessOptions{}); err != nil || disposition != Processed {
 			t.Fatalf("different consumer token must not depend on producer fence: %s %v", disposition, err)
 		}
@@ -519,11 +527,76 @@ func TestPostgresV1Foundation(t *testing.T) {
 		}
 	})
 
+	t.Run("validated permanent failure fences its producer before all side effects", func(t *testing.T) {
+		producerKey := "failure-producer"
+		oldProducer := ProducerToken{OwnerID: "failure-owner-a", Epoch: 1}
+		if _, err := store.ActivateProducer(ctx, "dep-a", producerKey, oldProducer, 0); err != nil {
+			t.Fatal(err)
+		}
+		// 同一生产者的正常路径先能提交；永久业务隔离使用完全相同的 fence 身份。
+		valid := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.fence-ok", Role: "writer", Token: writer, ProducerKey: producerKey, ProducerToken: oldProducer, EventID: strings.Repeat("9", 64), RawBody: []byte("ok"), Subject: "data.raw.p", CheckpointPosition: 40, DeliveryCount: 1, OccurredAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}
+		if got, err := store.ProcessMessage(ctx, valid, nil, ProcessOptions{}); err != nil || got != Processed {
+			t.Fatalf("有效 producer 应可正常处理: %s %v", got, err)
+		}
+		failed := valid
+		failed.ConsumerKey = "writer.fence-dlq"
+		failed.EventID = strings.Repeat("8", 64)
+		failed.RawBody = []byte("business-failed")
+		failed.CheckpointPosition = 41
+		if _, err := store.ProcessMessage(ctx, failed, func(context.Context, *BusinessTx) error { return errors.New("business failed") }, ProcessOptions{}); err == nil {
+			t.Fatal("业务错误必须回滚，等待 ingress 重试或最终 DLQ")
+		}
+		var count int
+		if err := store.pool.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.processing_failure WHERE consumer_key='writer.fence-dlq'`).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("业务重试前不得写 failure: %d %v", count, err)
+		}
+		digest := eventid.BodySHA256(failed.RawBody)
+		dlqID, err := runtimeDLQID("dep-a", failed.ConsumerKey, failed.Subject, failed.EventID, FailureHandler, digest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		failure := PermanentFailure{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: failed.ConsumerKey, Role: "writer", Token: writer, RequireProducerFence: true, ProducerKey: ProducerFenceKey(producerKey), ProducerToken: oldProducer, DLQID: dlqID, EventID: &failed.EventID, Subject: failed.Subject, RawBody: failed.RawBody, BodySHA256: digest, ReasonCode: FailureHandler, DeliveryCount: 2, CheckpointPosition: failed.CheckpointPosition, OccurredAt: failed.OccurredAt}
+		callback := func(ctx context.Context, tx *BusinessTx, f PermanentFailure) error {
+			_, _, err := tx.Enqueue(ctx, OutboxMessage{DeploymentID: f.DeploymentID, DedupeKey: f.DLQID, Subject: "dlq.writer", Payload: f.RawBody})
+			return err
+		}
+		if err := store.ProcessPermanentFailure(ctx, failure, callback); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.ActivateProducer(ctx, "dep-a", producerKey, ProducerToken{OwnerID: "failure-owner-b", Epoch: 2}, 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.ProcessPermanentFailure(ctx, failure, callback); !errors.Is(err, ErrFenceStale) {
+			t.Fatalf("生产者 epoch 提升后最终失败必须拒绝: %v", err)
+		}
+		if err := store.pool.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.processing_failure WHERE consumer_key='writer.fence-dlq'`).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("stale producer 不得新增 failure: %d %v", count, err)
+		}
+		if err := store.pool.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.transactional_outbox WHERE dedupe_key=$1`, dlqID).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("stale producer 不得重建 outbox: %d %v", count, err)
+		}
+		var checkpoint int64
+		if err := store.pool.QueryRow(ctx, `SELECT position FROM runtime_engine.consumer_checkpoint WHERE deployment_id='dep-a' AND consumer_key='writer.fence-dlq'`).Scan(&checkpoint); err != nil || checkpoint != 41 {
+			t.Fatalf("stale producer 不得推进 checkpoint: %d %v", checkpoint, err)
+		}
+		// 解析失败消息没有生产者身份，仍仅受 consumer fence 隔离，不能被无关 producer epoch 阻断。
+		invalidBody := []byte(`{"bad":"unvalidated"}`)
+		invalidDigest := eventid.BodySHA256(invalidBody)
+		invalidDLQ, err := runtimeDLQID("dep-a", "writer.invalid-fence", "data.raw.p", "", FailurePermanentValidation, invalidDigest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		invalid := PermanentFailure{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.invalid-fence", Role: "writer", Token: writer, DLQID: invalidDLQ, Subject: "data.raw.p", RawBody: invalidBody, BodySHA256: invalidDigest, ReasonCode: FailurePermanentValidation, DeliveryCount: 1, CheckpointPosition: 42, OccurredAt: failed.OccurredAt}
+		if err := store.ProcessPermanentFailure(ctx, invalid, callback); err != nil {
+			t.Fatalf("invalid 消息只能使用 consumer fence: %v", err)
+		}
+	})
+
 	t.Run("apply point current orders atomically and versions internally", func(t *testing.T) {
 		pointID := "11111111-1111-4111-8111-111111111111"
 		base := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
 		apply := func(event string, epoch, sequence int64, source time.Time, position int64, fail bool) (PointCurrentResult, error) {
-			message := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.current", Role: "writer", Token: writer, EventID: event, RawBody: []byte(event), Subject: "data.raw.p", CheckpointPosition: position, DeliveryCount: 1, OccurredAt: base}
+			message := Message{DeploymentID: "dep-a", AccountID: "acc-a", ConsumerKey: "writer.current", Role: "writer", Token: writer, ProducerKey: "collector-a", ProducerToken: producer, EventID: event, RawBody: []byte(event), Subject: "data.raw.p", CheckpointPosition: position, DeliveryCount: 1, OccurredAt: base}
 			var result PointCurrentResult
 			_, err := store.ProcessMessage(ctx, message, func(ctx context.Context, tx *BusinessTx) error {
 				var applyErr error

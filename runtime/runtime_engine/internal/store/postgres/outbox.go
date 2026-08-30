@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -45,6 +46,13 @@ type BusinessTx struct {
 	deploymentID string
 }
 
+func (b *BusinessTx) ensureOpen() error {
+	if b == nil || b.store == nil {
+		return ErrStoreClosed
+	}
+	return b.store.ensureOpen()
+}
+
 // PointHistoryWrite/PointCurrentWrite 是算法层唯一可用的点位状态写模型；底层事务不外泄。
 type PointHistoryWrite struct {
 	DeploymentID, PointID, EventID, OwnerID, Quality string
@@ -75,12 +83,18 @@ func (b *BusinessTx) Enqueue(ctx context.Context, message OutboxMessage) (int64,
 	if b == nil || b.store == nil || message.DeploymentID != b.deploymentID {
 		return 0, false, fmt.Errorf("%w: outbox deployment", ErrInvalidInput)
 	}
+	if err := b.ensureOpen(); err != nil {
+		return 0, false, err
+	}
 	return b.store.enqueueTx(ctx, b.tx, message)
 }
 
 func (b *BusinessTx) InsertPointHistory(ctx context.Context, write PointHistoryWrite) error {
 	if b == nil || b.tx == nil || write.DeploymentID != b.deploymentID || !validPointWrite(write.DeploymentID, write.PointID, write.EventID, write.OwnerID, write.Quality, write.Epoch, write.Sequence, write.SourceTimestamp, write.ServerTimestamp, write.Value) || write.ReceivedAt.IsZero() {
 		return fmt.Errorf("%w: point history", ErrInvalidInput)
+	}
+	if err := b.ensureOpen(); err != nil {
+		return err
 	}
 	_, err := b.tx.Exec(ctx, `INSERT INTO runtime_engine.point_history (deployment_id,point_id,event_id,owner_id,epoch,sequence,source_timestamp,server_timestamp,value,quality,received_at) VALUES ($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11) ON CONFLICT DO NOTHING`, write.DeploymentID, write.PointID, write.EventID, write.OwnerID, write.Epoch, write.Sequence, write.SourceTimestamp.UTC(), write.ServerTimestamp.UTC(), nullableJSON(write.Value), write.Quality, write.ReceivedAt.UTC())
 	return err
@@ -90,6 +104,9 @@ func (b *BusinessTx) InsertPointHistory(ctx context.Context, write PointHistoryW
 func (b *BusinessTx) ApplyPointCurrent(ctx context.Context, write PointCurrentWrite) (PointCurrentResult, error) {
 	if b == nil || b.tx == nil || write.DeploymentID != b.deploymentID || !validPointWrite(write.DeploymentID, write.PointID, write.EventID, write.OwnerID, write.Quality, write.Epoch, write.Sequence, write.SourceTimestamp, write.ServerTimestamp, write.Value) {
 		return PointCurrentResult{}, fmt.Errorf("%w: point current", ErrInvalidInput)
+	}
+	if err := b.ensureOpen(); err != nil {
+		return PointCurrentResult{}, err
 	}
 	for attempts := 0; attempts < 2; attempts++ {
 		var current PointCurrentWrite
@@ -275,8 +292,14 @@ const (
 
 // enqueueTx 仅供 Store 内部已验证 fence 的事务调用。重复 key 仅接受完全相同的不可变发布内容。
 func (s *Store) enqueueTx(ctx context.Context, tx pgx.Tx, message OutboxMessage) (int64, bool, error) {
-	if tx == nil || message.DeploymentID == "" || message.DedupeKey == "" || message.Subject == "" || len(message.DedupeKey) > 512 || len(message.Subject) > 4096 || len(message.Payload) > 2<<20 {
+	if message.DeploymentID == "" || message.DedupeKey == "" || message.Subject == "" || len(message.DedupeKey) > 512 || len(message.Subject) > 4096 {
 		return 0, false, fmt.Errorf("%w: outbox message", ErrInvalidInput)
+	}
+	if err := transportlimits.ValidateOutboundPayload(message.Subject, message.Payload); err != nil {
+		return 0, false, err
+	}
+	if tx == nil {
+		return 0, false, fmt.Errorf("%w: outbox transaction", ErrInvalidInput)
 	}
 	headers, err := objectJSON(message.Headers)
 	if err != nil {
@@ -309,6 +332,9 @@ VALUES ($1,$2,$3,$4::jsonb,$5,$6) ON CONFLICT DO NOTHING RETURNING id`, message.
 func (s *Store) ClaimOutbox(ctx context.Context, deploymentID, leaseOwner string, limit int, leaseFor time.Duration) ([]OutboxRecord, error) {
 	if !validStableID(deploymentID) || !validStableID(leaseOwner) || limit < 1 || limit > 500 || leaseFor < time.Millisecond || leaseFor > 15*time.Minute {
 		return nil, fmt.Errorf("%w: outbox claim", ErrInvalidInput)
+	}
+	if err := s.ensureOpen(); err != nil {
+		return nil, err
 	}
 	token, err := randomLeaseToken()
 	if err != nil {
@@ -344,6 +370,9 @@ func (s *Store) MarkPublished(ctx context.Context, id int64, leaseToken string) 
 	if id <= 0 || leaseToken == "" {
 		return fmt.Errorf("%w: mark published", ErrInvalidInput)
 	}
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	command, err := s.pool.Exec(ctx, `UPDATE runtime_engine.transactional_outbox
 SET state='published', published_at=now(), lease_token=NULL, lease_owner=NULL, lease_until=NULL, updated_at=now()
 WHERE id=$1 AND state='leased' AND lease_token=$2`, id, leaseToken)
@@ -361,6 +390,9 @@ func (s *Store) RetryOutbox(ctx context.Context, id int64, leaseToken string, ne
 	if id <= 0 || leaseToken == "" || nextAttemptAt.IsZero() || !validRetryCode(code) {
 		return fmt.Errorf("%w: retry outbox", ErrInvalidInput)
 	}
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	command, err := s.pool.Exec(ctx, `UPDATE runtime_engine.transactional_outbox
 SET state='pending', lease_token=NULL, lease_owner=NULL, lease_until=NULL, next_attempt_at=$3, last_error_code=$4, updated_at=now()
 WHERE id=$1 AND state='leased' AND lease_token=$2`, id, leaseToken, nextAttemptAt.UTC(), code)
@@ -375,6 +407,12 @@ WHERE id=$1 AND state='leased' AND lease_token=$2`, id, leaseToken, nextAttemptA
 
 // ReleaseOutbox 是无错误重试的便捷形式，仍走 lease token CAS。
 func (s *Store) ReleaseOutbox(ctx context.Context, id int64, leaseToken string, nextAttemptAt time.Time, code RetryCode) error {
+	if id <= 0 || leaseToken == "" || nextAttemptAt.IsZero() || !validRetryCode(code) {
+		return fmt.Errorf("%w: retry outbox", ErrInvalidInput)
+	}
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	return s.RetryOutbox(ctx, id, leaseToken, nextAttemptAt, code)
 }
 

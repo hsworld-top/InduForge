@@ -14,6 +14,14 @@ import (
 // CLEAR，也不允许悄悄抹除该实例，调用方必须把它作为健康失败处理。
 var ErrActiveAlarmRevision = errors.New("活动 alarm 不允许跨 revision 重置")
 
+// ErrAlarmStateTooLarge is a deterministic V1 capacity refusal. The database
+// schema keeps the final CHECK; this marker lets callers classify it before
+// an INSERT/UPDATE can turn an otherwise valid ingress event into a driver
+// error.
+var ErrAlarmStateTooLarge = errors.New("alarm state exceeds frozen size limit")
+
+const maxAlarmStateBytes = 1 << 20
+
 // ErrAlarmSweepItemPoison 标识已知的单个 alarm 领域/状态坏项。它只用于
 // sweep 的隔离语义：该项的事务必须回滚，但其他独立 item 可以继续提交。
 // 它不是数据库、提交或 fence 错误的替代品，后者始终会让整个 sweep 失败。
@@ -88,6 +96,9 @@ func (s *Store) AlarmItemStates(ctx context.Context, deploymentID string) (map[s
 	if s == nil || s.pool == nil || !validStableID(deploymentID) {
 		return nil, ErrInvalidInput
 	}
+	if err := s.ensureOpen(); err != nil {
+		return nil, err
+	}
 	rows, err := s.pool.Query(ctx, `SELECT alarm_item_id::text,alarm_revision,state,version,next_evaluation_at FROM runtime_engine.alarm_item_state WHERE deployment_id=$1 ORDER BY alarm_item_id`, deploymentID)
 	if err != nil {
 		return nil, err
@@ -108,6 +119,9 @@ func (s *Store) AlarmItemStates(ctx context.Context, deploymentID string) (map[s
 func (b *BusinessTx) AlarmItemState(ctx context.Context, alarmItemID string, revision int64) (AlarmItemState, error) {
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(alarmItemID) || revision < 1 {
 		return AlarmItemState{}, ErrInvalidInput
+	}
+	if err := b.ensureOpen(); err != nil {
+		return AlarmItemState{}, err
 	}
 	var state AlarmItemState
 	err := b.tx.QueryRow(ctx, `SELECT alarm_revision,state,version,next_evaluation_at
@@ -155,6 +169,19 @@ func (b *BusinessTx) SaveAlarmItemState(ctx context.Context, alarmItemID string,
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(alarmItemID) || state.AlarmRevision < 1 || !validFiniteJSON(state.State) || len(state.State) == 0 || state.Version < 0 || (state.NextEvaluationAt != nil && state.NextEvaluationAt.Location() != time.UTC) {
 		return ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
+	// PostgreSQL jsonb may canonicalize numeric spellings differently from the
+	// input bytes. Ask the same engine used by the CHECK constraint so this
+	// preflight is conservative with respect to the eventual persisted text.
+	var encodedBytes int
+	if err := b.tx.QueryRow(ctx, `SELECT octet_length($1::jsonb::text)`, state.State).Scan(&encodedBytes); err != nil {
+		return err
+	}
+	if encodedBytes > maxAlarmStateBytes {
+		return ErrAlarmStateTooLarge
+	}
 	var command pgconnTag
 	var err error
 	if state.Version == 0 {
@@ -186,6 +213,9 @@ type AlarmSweepItem struct {
 func (b *BusinessTx) AlarmDueItems(ctx context.Context, items []AlarmSweepItem, now time.Time, limit int) ([]AlarmSweepItem, error) {
 	if b == nil || b.tx == nil || !validAlarmSweepItems(items) || now.IsZero() || now.Location() != time.UTC || limit < 1 || limit > len(items) {
 		return nil, ErrInvalidInput
+	}
+	if err := b.ensureOpen(); err != nil {
+		return nil, err
 	}
 	ids := make([]string, 0, len(items))
 	revisions := make([]int64, 0, len(items))
@@ -237,6 +267,9 @@ func (s *Store) ProcessAlarmSweep(ctx context.Context, message AlarmSweepMessage
 	}
 	if !validAlarmSweepItems(message.AlarmItems) {
 		return ErrInvalidInput
+	}
+	if err := s.ensureOpen(); err != nil {
+		return err
 	}
 	var items []AlarmSweepItem
 	if err := s.withAlarmSweepTx(ctx, message, func(business *BusinessTx) error {

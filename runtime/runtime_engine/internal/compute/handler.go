@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/indu-forge/runtime-engine/internal/loader"
 	"github.com/indu-forge/runtime-engine/internal/model"
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 )
 
 type Executor interface {
@@ -23,7 +25,7 @@ type Executor interface {
 // ErrUnitBusiness marks sandbox execution and output-contract failures that
 // are isolated to one scheduled compute unit. Fence, storage and context
 // failures deliberately never use this marker.
-var ErrUnitBusiness = errors.New("compute 单元业务执行失败")
+var ErrUnitBusiness = ingress.ErrRetryableBusiness
 
 // ErrSandboxTimeout 表示 SandboxClient 为单次执行创建的内部 deadline 已到。
 // 它不包装 context.DeadlineExceeded，调用方可将其作为单元业务失败继续调度其余单元。
@@ -514,6 +516,19 @@ func (h *Handler) executeAndQueue(ctx context.Context, tx *postgres.BusinessTx, 
 		inputIDs = append(inputIDs, snapshot.EventID)
 	}
 	sort.Strings(inputIDs)
+	now := time.Now().UTC()
+	// The sandbox controls value bytes.  Build every envelope at the largest
+	// possible sequence width before consuming a sequence, so a too-large
+	// result rolls back the whole business transaction without an output gap.
+	for _, output := range unit.Outputs {
+		value, emit := outputs[output.OutputKey]
+		if !emit {
+			continue
+		}
+		if _, err := h.computedPayload(unit, output, producer, message, inputIDs, math.MaxInt64, strings.Repeat("f", 64), value, now); err != nil {
+			return &UnitBusinessError{ComputeID: unit.ID, Cause: err}
+		}
+	}
 	for _, output := range unit.Outputs {
 		value, emit := outputs[output.OutputKey]
 		if !emit {
@@ -523,20 +538,36 @@ func (h *Handler) executeAndQueue(ctx context.Context, tx *postgres.BusinessTx, 
 		if err != nil {
 			return err
 		}
-		now := time.Now().UTC()
 		id, err := eventid.Computed("data.computed.v1", h.config.DeploymentID, output.DatapointID, producer.Ownership.OwnerID, producer.Ownership.Epoch, sequence, unit.ID, unit.Revision, inputIDs)
 		if err != nil {
 			return err
 		}
-		payload, err := json.Marshal(ingress.Event{SchemaVersion: "data.computed.v1", Subject: "data.computed." + output.DatapointID, EventID: id, DeploymentID: h.config.DeploymentID, AccountID: h.config.AccountID, PointID: output.DatapointID, OwnerID: producer.Ownership.OwnerID, Epoch: producer.Ownership.Epoch, Sequence: sequence, Value: value, Quality: "good", SourceTimestamp: message.Event.SourceTimestamp, ServerTimestamp: now.Format(time.RFC3339Nano), ReceivedAt: now.Format(time.RFC3339Nano), Computation: &ingress.Computation{ComputeID: unit.ID, ComputeRevision: unit.Revision, InputEventIDs: inputIDs}})
-		if err != nil || loader.ValidatePointEvent(payload) != nil {
-			return errors.New("computed payload 非法")
+		payload, err := h.computedPayload(unit, output, producer, message, inputIDs, sequence, id, value, now)
+		if err != nil {
+			// The preflight above proves this cannot be a size failure for this
+			// sequence. Keep the defensive check nevertheless for future fields.
+			return &UnitBusinessError{ComputeID: unit.ID, Cause: err}
 		}
 		if _, _, err = tx.Enqueue(ctx, postgres.OutboxMessage{DeploymentID: h.config.DeploymentID, DedupeKey: id, Subject: "data.computed." + output.DatapointID, Payload: payload}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (h *Handler) computedPayload(unit model.ComputeUnit, output model.Output, producer model.ProducerAssignment, message ingress.ValidatedMessage, inputIDs []string, sequence int64, eventID string, value json.RawMessage, now time.Time) ([]byte, error) {
+	subject := "data.computed." + output.DatapointID
+	payload, err := json.Marshal(ingress.Event{SchemaVersion: "data.computed.v1", Subject: subject, EventID: eventID, DeploymentID: h.config.DeploymentID, AccountID: h.config.AccountID, PointID: output.DatapointID, OwnerID: producer.Ownership.OwnerID, Epoch: producer.Ownership.Epoch, Sequence: sequence, Value: value, Quality: "good", SourceTimestamp: message.Event.SourceTimestamp, ServerTimestamp: now.Format(time.RFC3339Nano), ReceivedAt: now.Format(time.RFC3339Nano), Computation: &ingress.Computation{ComputeID: unit.ID, ComputeRevision: unit.Revision, InputEventIDs: inputIDs}})
+	if err != nil {
+		return nil, errors.New("computed payload 非法")
+	}
+	if err := transportlimits.ValidateOutboundPayload(subject, payload); err != nil {
+		return nil, err
+	}
+	if loader.ValidatePointEvent(payload) != nil {
+		return nil, errors.New("computed payload 非法")
+	}
+	return payload, nil
 }
 
 func inputDatapointIDs(inputs []model.Input) []string {

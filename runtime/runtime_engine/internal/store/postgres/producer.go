@@ -25,6 +25,9 @@ func (b *BusinessTx) VerifyProducerInTx(ctx context.Context, producerKey string,
 	if b == nil || b.tx == nil || validToken(b.deploymentID, producerKey, token.OwnerID, token.Epoch) != nil {
 		return ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
 	var owner string
 	var epoch int64
 	err := b.tx.QueryRow(ctx, `SELECT owner_id,epoch FROM runtime_engine.producer_fence WHERE deployment_id=$1 AND producer_key=$2 FOR UPDATE`, b.deploymentID, producerKey).Scan(&owner, &epoch)
@@ -43,6 +46,9 @@ func (b *BusinessTx) VerifyProducerInTx(ctx context.Context, producerKey string,
 // RunProducerTransaction 为合法 producer 提供同一 fence 事务内的受控状态/outbox 写入口。
 func (s *Store) RunProducerTransaction(ctx context.Context, deploymentID, producerKey string, token ProducerToken, handler ProducerHandler) error {
 	if err := validToken(deploymentID, producerKey, token.OwnerID, token.Epoch); err != nil {
+		return err
+	}
+	if err := s.ensureOpen(); err != nil {
 		return err
 	}
 	tx, err := s.pool.Begin(ctx)
@@ -74,6 +80,9 @@ func (s *Store) RunProducerTransaction(ctx context.Context, deploymentID, produc
 func (s *Store) ActivateProducer(ctx context.Context, deploymentID, producerKey string, token ProducerToken, expectedVersion int64) (ProducerFence, error) {
 	if err := validToken(deploymentID, producerKey, token.OwnerID, token.Epoch); err != nil || expectedVersion < 0 {
 		return ProducerFence{}, fmt.Errorf("%w: producer assignment", ErrInvalidInput)
+	}
+	if err := s.ensureOpen(); err != nil {
+		return ProducerFence{}, err
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -114,6 +123,9 @@ func (s *Store) VerifyProducer(ctx context.Context, deploymentID, producerKey st
 	if err := validToken(deploymentID, producerKey, token.OwnerID, token.Epoch); err != nil {
 		return err
 	}
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	var owner string
 	var epoch int64
 	err := s.pool.QueryRow(ctx, `SELECT owner_id,epoch FROM runtime_engine.producer_fence WHERE deployment_id=$1 AND producer_key=$2`, deploymentID, producerKey).Scan(&owner, &epoch)
@@ -132,6 +144,9 @@ func (s *Store) VerifyProducer(ctx context.Context, deploymentID, producerKey st
 // NextProducerSequence 在 producer fence 内原子分配 sequence。新 epoch 的首值为 0，旧 token 一律拒绝。
 func (s *Store) NextProducerSequence(ctx context.Context, deploymentID, producerKey string, token ProducerToken) (int64, error) {
 	if err := validToken(deploymentID, producerKey, token.OwnerID, token.Epoch); err != nil {
+		return 0, err
+	}
+	if err := s.ensureOpen(); err != nil {
 		return 0, err
 	}
 	tx, err := s.pool.Begin(ctx)

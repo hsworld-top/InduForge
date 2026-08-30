@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/indu-forge/runtime-engine/internal/loader"
 	"github.com/indu-forge/runtime-engine/internal/model"
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 )
 
 const producerKey = "alarm"
@@ -197,19 +199,32 @@ func (h *Handler) persist(ctx context.Context, tx *postgres.BusinessTx, runtime 
 		record.State = raw
 		record.NextEvaluationAt = NextEvaluationAt(item, state.Items[id], now.UTC())
 		if err := tx.SaveAlarmItemState(ctx, id, record); err != nil {
+			if errors.Is(err, postgres.ErrAlarmStateTooLarge) {
+				return retryableOutputError(err)
+			}
 			return err
 		}
 	}
 	for _, event := range events {
 		payload, err := json.Marshal(event)
 		if err != nil || loader.ValidateAlarmEvent(payload) != nil {
-			return errors.New("alarm outbox payload 非法")
+			return retryableOutputError(errors.New("alarm outbox payload 非法"))
 		}
 		if _, _, err = tx.Enqueue(ctx, postgres.OutboxMessage{DeploymentID: h.config.DeploymentID, DedupeKey: event.EventID, Subject: "alarm.event", Payload: payload}); err != nil {
+			if errors.Is(err, transportlimits.ErrOutboundPayloadTooLarge) || errors.Is(err, transportlimits.ErrOutboundSubject) {
+				return retryableOutputError(err)
+			}
 			return err
 		}
 	}
 	return nil
+}
+
+// retryableOutputError is deliberately limited to data derived entirely from
+// one input event. It gives ingress its normal bounded maxDeliver→DLQ path;
+// store, fence and context errors must retain their fatal semantics.
+func retryableOutputError(err error) error {
+	return fmt.Errorf("%w: %w", ingress.ErrRetryableBusiness, err)
 }
 
 // SweepDue 使用持久化 next_evaluation_at 进行有界、无忙轮询的恢复性扫描。
@@ -242,16 +257,19 @@ func (h *Handler) sweepDue(ctx context.Context, store alarmSweepStore, token pos
 			return postgres.NewAlarmSweepItemPoison(postgres.AlarmSweepPoisonInvalidState)
 		}
 		if err := h.persist(ctx, tx, runtime, records, events, now); err != nil {
-			// ErrInvalidInput here can only arise from the in-memory state/event
-			// supplied by this handler. It is a domain poison; database, commit
-			// and fence errors intentionally retain their original fatal type.
-			if errors.Is(err, postgres.ErrInvalidInput) {
-				return postgres.NewAlarmSweepItemPoison(postgres.AlarmSweepPoisonInvalidOutput)
-			}
-			return err
+			return sweepPersistError(err)
 		}
 		return nil
 	})
+}
+
+func sweepPersistError(err error) error {
+	// These markers originate only from persist's deterministic event/envelope
+	// construction. All storage, fence and lifecycle errors remain fatal.
+	if errors.Is(err, postgres.ErrInvalidInput) || errors.Is(err, postgres.ErrAlarmStateTooLarge) || errors.Is(err, ingress.ErrRetryableBusiness) {
+		return postgres.NewAlarmSweepItemPoison(postgres.AlarmSweepPoisonInvalidOutput)
+	}
+	return err
 }
 
 func sweepItemLoadError(err error) error {
@@ -280,14 +298,58 @@ func (h *Handler) sweepItems() []postgres.AlarmSweepItem {
 
 // RunSweepRunner 是可取消 runner；它不拥有服务生命周期，main 后续只需传入 ctx。
 func (h *Handler) RunSweepRunner(ctx context.Context, store *postgres.Store, token postgres.ConsumerRoleToken, interval time.Duration, limit int) error {
+	err := h.RunSweepRunnerWithDrain(ctx, ctx, store, token, interval, limit, nil)
+	if err == nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+// RunSweepRunnerWithDrain stops new sweep ticks when intake is cancelled, but
+// gives a sweep already selected a separate work context to finish.  Poison is
+// isolated by SweepDue and reported through a stable callback without killing
+// later alarms.
+func (h *Handler) RunSweepRunnerWithDrain(intake, work context.Context, store *postgres.Store, token postgres.ConsumerRoleToken, interval time.Duration, limit int, onPoison func()) error {
 	if interval <= 0 {
 		return errors.New("alarm runner interval 非法")
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	return runSweepRunner(ctx, time.Now().UTC(), ticker.C, func(now time.Time) error {
-		return h.SweepDue(ctx, store, token, now.UTC(), limit)
-	})
+	if intake.Err() != nil {
+		return nil
+	}
+	sweep := func(now time.Time) error { return h.SweepDue(work, store, token, now.UTC(), limit) }
+	if err := sweep(time.Now().UTC()); err != nil {
+		if errors.Is(err, postgres.ErrAlarmSweepItemPoison) {
+			if onPoison != nil {
+				onPoison()
+			}
+		} else if work.Err() == nil {
+			return err
+		}
+	}
+	for {
+		select {
+		case <-intake.Done():
+			return nil
+		case now := <-ticker.C:
+			if intake.Err() != nil {
+				return nil
+			}
+			if err := sweep(now); err != nil {
+				if work.Err() != nil {
+					return nil
+				}
+				if errors.Is(err, postgres.ErrAlarmSweepItemPoison) {
+					if onPoison != nil {
+						onPoison()
+					}
+					continue
+				}
+				return err
+			}
+		}
+	}
 }
 
 func runSweepRunner(ctx context.Context, initial time.Time, ticks <-chan time.Time, sweep func(time.Time) error) error {

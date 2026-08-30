@@ -32,6 +32,9 @@ func (b *BusinessTx) UpsertComputeInput(ctx context.Context, input ComputeInputS
 		!validPointWrite(input.DeploymentID, input.DatapointID, input.EventID, input.OwnerID, input.Quality, input.Epoch, input.Sequence, input.SourceTimestamp, input.ServerTimestamp, input.Value) || input.ReceivedAt.IsZero() || !canonicalPointUUID.MatchString(input.ComputeID) {
 		return ComputeInputResult{}, ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return ComputeInputResult{}, err
+	}
 	for attempt := 0; attempt < 2; attempt++ {
 		var current ComputeInputSnapshot
 		var version int64
@@ -83,6 +86,9 @@ func (b *BusinessTx) ComputeInputs(ctx context.Context, computeID string, datapo
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(computeID) {
 		return nil, ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return nil, err
+	}
 	result := make(map[string]ComputeInputSnapshot, len(datapointIDs))
 	for _, id := range datapointIDs {
 		if !canonicalPointUUID.MatchString(id) {
@@ -118,6 +124,9 @@ func (b *BusinessTx) ComputeTriggerState(ctx context.Context, computeID string, 
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(computeID) || revision < 1 {
 		return ComputeTriggerState{}, ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return ComputeTriggerState{}, err
+	}
 	var state ComputeTriggerState
 	var previousQuality *string
 	var pendingPhase *string
@@ -145,6 +154,9 @@ func (b *BusinessTx) SaveComputeTriggerState(ctx context.Context, computeID stri
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(computeID) || state.ComputeRevision < 1 || (state.PendingPhase == "") != (state.PendingSince == nil) || (state.PendingPhase != "" && state.PendingPhase != "entered" && state.PendingPhase != "exited") || (state.PreviousQuality != "" && state.PreviousQuality != "good" && state.PreviousQuality != "bad" && state.PreviousQuality != "unknown") || (len(state.PreviousValue) > 0 && !validFiniteJSON(state.PreviousValue)) {
 		return ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
 	_, err := b.tx.Exec(ctx, `INSERT INTO runtime_engine.compute_trigger_state (deployment_id,compute_id,compute_revision,previous_value,previous_quality,previous_seen,condition_active,pending_phase,pending_since)
 VALUES ($1,$2::uuid,$3,$4::jsonb,$5,$6,$7,NULLIF($8,''),$9)
 ON CONFLICT (deployment_id,compute_id) DO UPDATE SET compute_revision=EXCLUDED.compute_revision,previous_value=EXCLUDED.previous_value,previous_quality=EXCLUDED.previous_quality,previous_seen=EXCLUDED.previous_seen,condition_active=EXCLUDED.condition_active,pending_phase=EXCLUDED.pending_phase,pending_since=EXCLUDED.pending_since,updated_at=now()`, b.deploymentID, computeID, state.ComputeRevision, nullableJSON(state.PreviousValue), nullableText(state.PreviousQuality), state.PreviousSeen, state.ConditionActive, state.PendingPhase, state.PendingSince)
@@ -156,6 +168,9 @@ ON CONFLICT (deployment_id,compute_id) DO UPDATE SET compute_revision=EXCLUDED.c
 func (b *BusinessTx) NextComputeSequence(ctx context.Context, producerKey string, token ProducerToken) (int64, error) {
 	if b == nil || b.tx == nil || validToken(b.deploymentID, producerKey, token.OwnerID, token.Epoch) != nil {
 		return 0, ErrInvalidInput
+	}
+	if err := b.ensureOpen(); err != nil {
+		return 0, err
 	}
 	var owner string
 	var epoch int64
@@ -201,6 +216,9 @@ func (b *BusinessTx) VerifyComputeProducer(ctx context.Context, producerKey stri
 	if b == nil || b.tx == nil || validToken(b.deploymentID, producerKey, token.OwnerID, token.Epoch) != nil {
 		return ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
 	var owner string
 	var epoch int64
 	err := b.tx.QueryRow(ctx, `SELECT owner_id,epoch FROM runtime_engine.producer_fence WHERE deployment_id=$1 AND producer_key=$2 FOR UPDATE`, b.deploymentID, producerKey).Scan(&owner, &epoch)
@@ -237,6 +255,9 @@ func (b *BusinessTx) ComputeScheduleState(ctx context.Context, computeID string,
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(computeID) || revision < 1 {
 		return ComputeScheduleState{}, ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return ComputeScheduleState{}, err
+	}
 	var state ComputeScheduleState
 	var lastLocalKey *string
 	err := b.tx.QueryRow(ctx, `SELECT compute_revision,run_count,next_run_at,last_run_at,last_local_key FROM runtime_engine.compute_schedule_state WHERE deployment_id=$1 AND compute_id=$2::uuid FOR UPDATE`, b.deploymentID, computeID).Scan(&state.ComputeRevision, &state.RunCount, &state.NextRunAt, &state.LastRunAt, &lastLocalKey)
@@ -258,6 +279,9 @@ func (b *BusinessTx) SaveComputeScheduleState(ctx context.Context, computeID str
 	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(computeID) || state.ComputeRevision < 1 || state.RunCount < 0 || len(state.LastLocalKey) > 256 || ((state.LastRunAt == nil) != (state.LastLocalKey == "")) {
 		return ErrInvalidInput
 	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
 	_, err := b.tx.Exec(ctx, `INSERT INTO runtime_engine.compute_schedule_state (deployment_id,compute_id,compute_revision,run_count,next_run_at,last_run_at,last_local_key) VALUES ($1,$2::uuid,$3,$4,$5,$6,NULLIF($7,'')) ON CONFLICT (deployment_id,compute_id) DO UPDATE SET compute_revision=EXCLUDED.compute_revision,run_count=EXCLUDED.run_count,next_run_at=EXCLUDED.next_run_at,last_run_at=EXCLUDED.last_run_at,last_local_key=EXCLUDED.last_local_key,updated_at=now()`, b.deploymentID, computeID, state.ComputeRevision, state.RunCount, state.NextRunAt, state.LastRunAt, state.LastLocalKey)
 	return err
 }
@@ -276,6 +300,9 @@ type ScheduledHandler func(context.Context, *BusinessTx) error
 func (s *Store) ProcessScheduled(ctx context.Context, message ScheduledMessage, handler ScheduledHandler) error {
 	if handler == nil || validToken(message.DeploymentID, message.Role, message.Token.OwnerID, message.Token.Epoch) != nil || !canonicalPointUUID.MatchString(message.ComputeID) || message.ProducerKey == "" || validToken(message.DeploymentID, message.ProducerKey, message.ProducerToken.OwnerID, message.ProducerToken.Epoch) != nil || message.OccurredAt.IsZero() {
 		return ErrInvalidInput
+	}
+	if err := s.ensureOpen(); err != nil {
+		return err
 	}
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

@@ -56,6 +56,10 @@ func TestPostgresWriterV1(t *testing.T) {
 	if _, err := store.ActivateRole(ctx, writerDeployment, "writer", token, 0); err != nil {
 		t.Fatal(err)
 	}
+	producer := postgres.ProducerToken{OwnerID: "collector-writer", Epoch: 1}
+	if _, err := store.ActivateProducer(ctx, writerDeployment, "collector-writer", producer, 0); err != nil {
+		t.Fatal(err)
+	}
 	handler := NewPostgresHandler()
 	adapter := ingress.NewPostgresAdapter(store, model.EngineConfig{}, handler)
 	base := time.Date(2026, 8, 30, 1, 2, 3, 0, time.UTC)
@@ -127,7 +131,7 @@ func writerMessage(eventID string, sequence int64, source time.Time, value strin
 		SourceTimestamp: source.UTC().Format(time.RFC3339Nano), ServerTimestamp: server.UTC().Format(time.RFC3339Nano), ReceivedAt: received.UTC().Format(time.RFC3339Nano),
 	}
 	body, _ := json.Marshal(event)
-	return ingress.ValidatedMessage{Event: event, RawBody: body, Consumer: model.Consumer{Role: "writer", ConsumerKey: "writer.raw"}, Token: ingress.ConsumerToken{OwnerID: writerOwner, Epoch: 1}, StreamPosition: sequence + 1, DeliveryCount: 1, OccurredAt: received}
+	return ingress.ValidatedMessage{Event: event, RawBody: body, Consumer: model.Consumer{Role: "writer", ConsumerKey: "writer.raw"}, Token: ingress.ConsumerToken{OwnerID: writerOwner, Epoch: 1}, ProducerKey: "collector-writer", ProducerToken: ingress.ProducerToken{OwnerID: "collector-writer", Epoch: 1}, StreamPosition: sequence + 1, DeliveryCount: 1, OccurredAt: received}
 }
 
 func assertPointCounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, history, current int) {

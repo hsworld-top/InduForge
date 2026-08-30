@@ -13,6 +13,7 @@ import (
 
 	"github.com/indu-forge/runtime-engine/internal/loader"
 	"github.com/indu-forge/runtime-engine/internal/model"
+	"github.com/indu-forge/runtime-engine/internal/store/postgres"
 )
 
 type fakeStore struct {
@@ -84,12 +85,15 @@ func TestRunnerDLQsPermanentFailuresAndMaxDeliver(t *testing.T) {
 	if len(store.permanent[0].BodySHA256) != 71 || store.permanent[0].BodySHA256[:7] != "sha256:" {
 		t.Fatal("DLQ body digest must use contract sha256: prefix")
 	}
+	if store.permanent[0].RequireProducerFence || store.permanent[0].ProducerKey != "" || store.permanent[0].ProducerToken.OwnerID != "" || store.permanent[0].ProducerToken.Epoch != 0 {
+		t.Fatal("未通过校验的坏消息不得伪造 producer fence")
+	}
 	if err := loader.ValidateDLQEvent(store.permanent[0].DLQPayload); err != nil {
 		t.Fatalf("DLQ schema: %v", err)
 	}
 	runner, _ = testRunner(t)
 	store = runner.processor.(*fakeStore)
-	store.processErr = os.ErrDeadlineExceeded
+	store.processErr = ErrRetryableBusiness
 	body := validBody(t)
 	message = &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 10, deliveries: 5, occurred: time.Now()}
 	if err := runner.Handle(context.Background(), message); err != nil {
@@ -108,14 +112,14 @@ func TestRunnerBusinessThresholdAndDLQRecovery(t *testing.T) {
 	runner, body := testRunner(t)
 	runner.consumer.MaxDeliver = 2
 	store := runner.processor.(*fakeStore)
-	store.processErr = os.ErrDeadlineExceeded
+	store.processErr = ErrRetryableBusiness
 	// The threshold delivery performs the final business attempt, then writes DLQ.
 	last := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 2, deliveries: 2, occurred: time.Now()}
 	if err := runner.Handle(context.Background(), last); err != nil || store.processed != 1 || len(store.permanent) != 1 || last.ack != 1 {
 		t.Fatalf("threshold disposition processed=%d permanent=%d ack=%d err=%v", store.processed, len(store.permanent), last.ack, err)
 	}
 	// A retry after threshold must not execute the business handler again.
-	store.permanentErr = os.ErrDeadlineExceeded
+	store.permanentErr = ErrRetryableBusiness
 	retry := &fakeMessage{subject: last.subject, body: body, position: 3, deliveries: 3, occurred: time.Now()}
 	if err := runner.Handle(context.Background(), retry); err != nil || store.processed != 1 || retry.nak != 1 {
 		t.Fatalf("post-threshold must retry DLQ only: processed=%d nak=%d err=%v", store.processed, retry.nak, err)
@@ -123,6 +127,41 @@ func TestRunnerBusinessThresholdAndDLQRecovery(t *testing.T) {
 	store.permanentErr = nil
 	if err := runner.Handle(context.Background(), retry); err != nil || store.processed != 1 || retry.ack != 1 {
 		t.Fatalf("DLQ recovery must Ack without handler: processed=%d ack=%d err=%v", store.processed, retry.ack, err)
+	}
+}
+
+func TestRunnerBusinessFailureReportsImmediatelyAndCarriesProducerFenceToDLQ(t *testing.T) {
+	runner, body := testRunner(t)
+	runner.consumer.MaxDeliver = 2
+	store := runner.processor.(*fakeStore)
+	health := &fakeHealth{}
+	runner.health = health
+	store.processErr = ErrRetryableBusiness
+	first := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 1, deliveries: 1, occurred: time.Now()}
+	if err := runner.Handle(context.Background(), first); err != nil || first.nak != 1 || len(health.codes) != 1 || health.codes[0] != "handler-failure" {
+		t.Fatalf("首次业务失败必须立即退化并 NAK: err=%v nak=%d health=%v", err, first.nak, health.codes)
+	}
+	last := &fakeMessage{subject: first.subject, body: body, position: 2, deliveries: 2, occurred: time.Now()}
+	if err := runner.Handle(context.Background(), last); err != nil || last.ack != 1 || len(store.permanent) != 1 {
+		t.Fatalf("阈值业务失败必须写入 DLQ 后 Ack: err=%v ack=%d permanent=%d", err, last.ack, len(store.permanent))
+	}
+	failure := store.permanent[0]
+	if failure.ReasonCode != "max-deliver" || !failure.RequireProducerFence || failure.ProducerKey == "" || failure.ProducerToken.OwnerID == "" || failure.ProducerToken.Epoch < 1 {
+		t.Fatalf("已验证业务失败必须携带 producer fence: %#v", failure)
+	}
+	if len(health.codes) != 2 || health.codes[1] != "handler-failure" {
+		t.Fatalf("阈值业务失败仍必须保持退化: %v", health.codes)
+	}
+}
+
+func TestRunnerNonBusinessFailureDoesNotReportOrDispose(t *testing.T) {
+	runner, body := testRunner(t)
+	health := &fakeHealth{}
+	runner.health = health
+	runner.processor.(*fakeStore).processErr = postgres.ErrFenceStale
+	message := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 1, deliveries: 1, occurred: time.Now()}
+	if err := runner.Handle(context.Background(), message); !errors.Is(err, postgres.ErrFenceStale) || message.ack != 0 || message.nak != 0 || len(health.codes) != 0 {
+		t.Fatalf("fence/PG/context 错误不可被标作业务退化或 disposition: err=%v ack=%d nak=%d health=%v", err, message.ack, message.nak, health.codes)
 	}
 }
 func TestRunnerPoisonSubjectStopsAndReportsHealth(t *testing.T) {
@@ -180,13 +219,33 @@ func TestRunnerRejectsProducerFenceAndNaksFailureStore(t *testing.T) {
 		t.Fatal("permanent producer fence must ack only after fake durable failure")
 	}
 	runner, body = testRunner(t)
-	runner.processor.(*fakeStore).processErr = os.ErrDeadlineExceeded
+	runner.processor.(*fakeStore).processErr = ErrRetryableBusiness
 	message = &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 1, deliveries: 1, occurred: time.Now()}
 	if err := runner.Handle(context.Background(), message); err != nil {
 		t.Fatal(err)
 	}
 	if message.nak != 1 || message.ack != 0 {
 		t.Fatal("temporary store failure must Nak")
+	}
+}
+
+func TestRunnerOrdinaryStoreErrorIsFatalWithoutDisposition(t *testing.T) {
+	runner, body := testRunner(t)
+	runner.processor.(*fakeStore).processErr = errors.New("pg query failed")
+	message := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 1, deliveries: 1, occurred: time.Now()}
+	err := runner.Handle(context.Background(), message)
+	if err == nil || message.ack != 0 || message.nak != 0 {
+		t.Fatalf("ordinary store error must be fatal: err=%v ack=%d nak=%d", err, message.ack, message.nak)
+	}
+}
+
+func TestRunnerStaleStoreFenceDoesNotDisposeMessage(t *testing.T) {
+	runner, body := testRunner(t)
+	runner.processor.(*fakeStore).processErr = postgres.ErrFenceStale
+	message := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 1, deliveries: 1, occurred: time.Now()}
+	err := runner.Handle(context.Background(), message)
+	if !errors.Is(err, postgres.ErrFenceStale) || message.ack != 0 || message.nak != 0 {
+		t.Fatalf("stale fence must be fatal without disposition: err=%v ack=%d nak=%d", err, message.ack, message.nak)
 	}
 }
 

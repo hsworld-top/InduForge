@@ -56,6 +56,17 @@ func TestJetStreamOptInPullAckAndMsgIDDuplicate(t *testing.T) {
 		t.Logf("consumer info: %+v", info.Config)
 		t.Fatalf("explicit consumer did not round-trip: %v", err)
 	}
+	if err := validateDurableNames(t.Context(), stream, []string{"pull"}); err != nil {
+		t.Fatalf("single configured durable set must validate: %v", err)
+	}
+	extra := *config
+	extra.Durable = "unexpected-query-v1"
+	if _, err = legacy.AddConsumer(name, &extra); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDurableNames(t.Context(), stream, []string{"pull"}); err == nil {
+		t.Fatal("unexpected durable on a data stream must reject topology")
+	}
 	msg := nats.NewMsg(subject)
 	msg.Data = []byte("immutable")
 	msg.Header.Set("Nats-Msg-Id", "stable-id")

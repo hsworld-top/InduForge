@@ -71,6 +71,37 @@ func TestFlushOnceRetriesDigestAndPubAckFailures(t *testing.T) {
 		t.Fatal("puback failure must retry with safe code")
 	}
 }
+func TestPublishBudgetExhaustionIsFatal(t *testing.T) {
+	payload := []byte("x")
+	store := &fakeStore{records: []Record{{ID: 1, DeploymentID: "d", DedupeKey: "x", Subject: "x", Payload: payload, PayloadSHA256: transport.PayloadSHA256(payload), LeaseToken: "l", AttemptCount: 99}}}
+	worker, err := NewWorker(store, &fakePublisher{err: errors.New("down")}, Options{DeploymentID: "d", LeaseOwner: "worker", BatchSize: 1, LeaseFor: time.Second, PollInterval: time.Second, BaseRetry: time.Second, MaxRetry: time.Second, DrainTimeout: time.Second, MaxConsecutiveFailures: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.FlushOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	store.records = []Record{{ID: 1, DeploymentID: "d", DedupeKey: "x", Subject: "x", Payload: payload, PayloadSHA256: transport.PayloadSHA256(payload), LeaseToken: "l"}}
+	if err := worker.FlushOnce(context.Background()); !errors.Is(err, ErrRetryBudgetExhausted) {
+		t.Fatalf("retry budget=%v", err)
+	}
+}
+
+func TestFlushOnceDoesNotRetryDeterministicallyUnpublishableRecord(t *testing.T) {
+	payload := []byte("x")
+	store := &fakeStore{records: []Record{{ID: 9, DeploymentID: "d", DedupeKey: "bad", Subject: "data.raw.11111111-1111-4111-8111-111111111111", Payload: payload, PayloadSHA256: transport.PayloadSHA256(payload), LeaseToken: "lease"}}}
+	degraded := 0
+	worker, err := NewWorker(store, &fakePublisher{err: transport.ErrPayloadTooLarge}, Options{DeploymentID: "d", LeaseOwner: "worker", BatchSize: 1, LeaseFor: time.Second, PollInterval: time.Second, BaseRetry: time.Second, MaxRetry: time.Second, DrainTimeout: time.Second, OnIntegrityFault: func() { degraded++ }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.FlushOnce(context.Background()); !errors.Is(err, ErrUnpublishableRecord) {
+		t.Fatalf("FlushOnce error=%v", err)
+	}
+	if len(store.retries) != 0 || degraded != 1 {
+		t.Fatalf("unpublishable record must not be retried: retries=%v degraded=%d", store.retries, degraded)
+	}
+}
 func newWorker(t *testing.T, s Store, p Publisher) *Worker {
 	t.Helper()
 	w, err := NewWorker(s, p, Options{DeploymentID: "d", LeaseOwner: "worker", BatchSize: 8, LeaseFor: time.Second, PollInterval: time.Millisecond, BaseRetry: time.Millisecond, MaxRetry: time.Second, DrainTimeout: time.Second})

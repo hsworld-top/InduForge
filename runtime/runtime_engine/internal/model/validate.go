@@ -77,6 +77,9 @@ func ValidateEngineConfig(config EngineConfig) error {
 			collectorArtifacts[artifactKey] = struct{}{}
 			collectorProducers[producer.CollectorID] = struct{}{}
 		case "compute":
+			if _, enabled := roles["compute"]; !enabled {
+				return fmt.Errorf("compute producer %q 引用未启用 compute role", producer.ComputeID)
+			}
 			if producer.Role != "compute" {
 				return fmt.Errorf("compute producer %q 必须使用 compute role", producer.ComputeID)
 			}
@@ -85,6 +88,9 @@ func ValidateEngineConfig(config EngineConfig) error {
 			}
 			computeProducers[producer.ComputeID] = struct{}{}
 		case "alarm":
+			if _, enabled := roles["alarm"]; !enabled {
+				return fmt.Errorf("alarm producer 引用未启用 alarm role")
+			}
 			if producer.Role != "alarm" {
 				return fmt.Errorf("alarm producer 必须使用 alarm role")
 			}
@@ -127,14 +133,32 @@ func ValidateEngineConfig(config EngineConfig) error {
 		if consumer.Stream != expectedStream {
 			return fmt.Errorf("consumer %q 的 stream %q 与 filterSubject %q 不匹配", consumer.ConsumerKey, consumer.Stream, consumer.FilterSubject)
 		}
+		if consumer.Role == "query" || consumer.Role == "coord" {
+			return fmt.Errorf("%s role 不允许 JetStream consumer", consumer.Role)
+		}
 		if coverage[consumer.Role] == nil {
 			coverage[consumer.Role] = map[string]bool{}
+		}
+		if coverage[consumer.Role][kind] {
+			return fmt.Errorf("role %q 的 %s consumer 重复", consumer.Role, kind)
+		}
+		keyKind := kind
+		if keyKind == "computed" {
+			keyKind = "derived"
+		}
+		expectedKey := consumer.Role + "-" + keyKind + "-v1"
+		if consumer.ConsumerKey != expectedKey {
+			return fmt.Errorf("consumer %q 必须使用冻结 consumerKey %q", consumer.ConsumerKey, expectedKey)
 		}
 		coverage[consumer.Role][kind] = true
 	}
 	for _, role := range []string{"writer", "alarm", "compute"} {
-		if _, enabled := roles[role]; enabled && (!coverage[role]["raw"] || !coverage[role]["computed"]) {
-			return fmt.Errorf("已启用 %s role 必须覆盖 raw 与 computed stream", role)
+		_, enabled := roles[role]
+		if enabled && (!coverage[role]["raw"] || !coverage[role]["computed"]) {
+			return fmt.Errorf("已启用 %s role 必须恰有 raw 与 computed consumer", role)
+		}
+		if !enabled && len(coverage[role]) != 0 {
+			return fmt.Errorf("未启用 %s role 不允许 consumer", role)
 		}
 	}
 	if _, compute := roles["compute"]; compute && config.ComputeSandbox == nil {

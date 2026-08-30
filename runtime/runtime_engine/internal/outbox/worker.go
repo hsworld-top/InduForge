@@ -4,6 +4,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"time"
 
@@ -39,36 +40,47 @@ type Options struct {
 	BatchSize                                                 int
 	LeaseFor, PollInterval, BaseRetry, MaxRetry, DrainTimeout time.Duration
 	OnIntegrityFault                                          func()
+	MaxConsecutiveFailures                                    int
 }
 type Worker struct {
 	store     Store
 	publisher Publisher
 	options   Options
+	failures  map[int64]int
 }
 
 func NewWorker(store Store, publisher Publisher, options Options) (*Worker, error) {
-	if store == nil || publisher == nil || options.DeploymentID == "" || options.LeaseOwner == "" || options.BatchSize < 1 || options.LeaseFor <= 0 || options.PollInterval <= 0 || options.BaseRetry <= 0 || options.MaxRetry < options.BaseRetry || options.DrainTimeout <= 0 {
+	if options.MaxConsecutiveFailures == 0 {
+		options.MaxConsecutiveFailures = 5
+	}
+	if store == nil || publisher == nil || options.DeploymentID == "" || options.LeaseOwner == "" || options.BatchSize < 1 || options.LeaseFor <= 0 || options.PollInterval <= 0 || options.BaseRetry <= 0 || options.MaxRetry < options.BaseRetry || options.DrainTimeout <= 0 || options.MaxConsecutiveFailures < 1 {
 		return nil, errors.New("outbox worker 配置非法")
 	}
-	return &Worker{store: store, publisher: publisher, options: options}, nil
+	return &Worker{store: store, publisher: publisher, options: options, failures: map[int64]int{}}, nil
 }
 
 // Run 在外层取消后不再开始新 Claim；已经开始的批次使用有界 detached context 排空。
 func (w *Worker) Run(ctx context.Context) error {
+	return w.RunWithDrain(ctx, ctx)
+}
+
+// RunWithDrain stops new claims when intake is cancelled while allowing the
+// active claim/publish batch to finish under the bounded work context.
+func (w *Worker) RunWithDrain(intake, work context.Context) error {
 	ticker := time.NewTicker(w.options.PollInterval)
 	defer ticker.Stop()
 	for {
-		if ctx.Err() != nil {
+		if intake.Err() != nil {
 			return nil
 		}
-		drain, cancel := context.WithTimeout(context.Background(), w.options.DrainTimeout)
+		drain, cancel := context.WithTimeout(work, w.options.DrainTimeout)
 		err := w.FlushOnce(drain)
 		cancel()
-		if err != nil && ctx.Err() == nil {
+		if err != nil && work.Err() == nil {
 			return err
 		}
 		select {
-		case <-ctx.Done():
+		case <-intake.Done():
 			return nil
 		case <-ticker.C:
 		}
@@ -81,8 +93,16 @@ func (w *Worker) FlushOnce(ctx context.Context) error {
 	}
 	for _, record := range records {
 		if err := w.publishOne(ctx, record); err != nil {
+			if errors.Is(err, ErrDeferred) {
+				w.failures[record.ID]++
+				if w.failures[record.ID] >= w.options.MaxConsecutiveFailures {
+					return ErrRetryBudgetExhausted
+				}
+				continue
+			}
 			return err
 		}
+		delete(w.failures, record.ID)
 	}
 	return nil
 }
@@ -91,16 +111,39 @@ func (w *Worker) publishOne(ctx context.Context, record Record) error {
 		if w.options.OnIntegrityFault != nil {
 			w.options.OnIntegrityFault()
 		}
-		return w.retry(ctx, record, RetryPublishError)
+		if err := w.retry(ctx, record, RetryPublishError); err != nil {
+			return err
+		}
+		return ErrDeferred
 	}
 	if err := w.publisher.Publish(ctx, transport.PublishMessage{Subject: record.Subject, Headers: record.Headers, Payload: record.Payload, DedupeKey: record.DedupeKey}); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return w.retry(ctx, record, RetryPublishTimeout)
+		if errors.Is(err, transport.ErrPayloadTooLarge) || errors.Is(err, transport.ErrInvalidSubject) {
+			if w.options.OnIntegrityFault != nil {
+				w.options.OnIntegrityFault()
+			}
+			return fmt.Errorf("%w: %w", ErrUnpublishableRecord, err)
 		}
-		return w.retry(ctx, record, RetryPublishError)
+		if errors.Is(err, context.DeadlineExceeded) {
+			if retryErr := w.retry(ctx, record, RetryPublishTimeout); retryErr != nil {
+				return retryErr
+			}
+			return ErrDeferred
+		}
+		if retryErr := w.retry(ctx, record, RetryPublishError); retryErr != nil {
+			return retryErr
+		}
+		return ErrDeferred
 	}
 	return w.store.MarkPublished(ctx, record.ID, record.LeaseToken)
 }
+
+var ErrDeferred = errors.New("outbox publish deferred")
+var ErrRetryBudgetExhausted = errors.New("outbox publish retry budget exhausted")
+
+// ErrUnpublishableRecord is terminal for this worker invocation. The record
+// cannot be repaired by retrying the same immutable bytes against JetStream.
+var ErrUnpublishableRecord = errors.New("outbox record cannot be published")
+
 func (w *Worker) retry(ctx context.Context, record Record, code RetryCode) error {
 	return w.store.RetryOutbox(ctx, record.ID, record.LeaseToken, time.Now().UTC().Add(w.retryDelay(record)), code)
 }

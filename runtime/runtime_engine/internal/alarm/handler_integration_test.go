@@ -11,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indu-forge/runtime-engine/internal/ingress"
+	"github.com/indu-forge/runtime-engine/internal/loader"
 	"github.com/indu-forge/runtime-engine/internal/model"
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -147,6 +150,51 @@ func TestSweepDuePoisonDoesNotStarveLaterItems(t *testing.T) {
 	}
 	assertAlarmStateVersion(t, ctx, audit, deploymentID, items[4].ID, 1)
 	assertAlarmOutboxCount(t, ctx, audit, deploymentID, 3)
+}
+
+func TestOversizedIngressStateIsRetryableWithoutCommittedStateOrOutbox(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_ENGINE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("RUNTIME_ENGINE_TEST_DATABASE_URL 未设置")
+	}
+	ctx := context.Background()
+	store, audit, cleanup := alarmIntegrationStore(t, ctx, dsn)
+	defer cleanup()
+	const deploymentID = "alarm-oversized-ingress"
+	value := strings.Repeat("x", transportlimits.MaxBodyBytes-4096)
+	item := model.AlarmItem{ID: "11111111-1111-4111-8111-111111111111", Revision: 1, DisplayName: "oversized", Enabled: true, Mode: "point", EvaluationMode: "single", Inputs: []model.Input{{Alias: "v", DatapointID: "22222222-2222-4222-8222-222222222222"}}, Conditions: []model.AlarmCondition{{ID: "33333333-3333-4333-8333-333333333333", Kind: "text_match", Operator: "eq", Params: json.RawMessage(`{"expected":"` + value + `"}`), Severity: "warning", TriggerDelayMS: 0, Deadband: json.RawMessage(`0`)}}}
+	config := model.EngineConfig{DeploymentID: deploymentID, AccountID: "account", ProducerAssignments: []model.ProducerAssignment{{ProducerType: "alarm", Role: "alarm", Ownership: model.Ownership{OwnerID: "alarm-owner", Epoch: 1}}}}
+	handler, err := NewPostgresHandler(model.ProjectArtifact{AlarmItems: []model.AlarmItem{item}}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	producer := postgres.ProducerToken{OwnerID: "alarm-owner", Epoch: 1}
+	if _, err = store.ActivateProducer(ctx, deploymentID, "alarm", producer, 0); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
+	event := ingress.Event{SchemaVersion: "data.raw.v1", Subject: "data.raw." + item.Inputs[0].DatapointID, EventID: strings.Repeat("a", 64), DeploymentID: deploymentID, AccountID: "account", PointID: item.Inputs[0].DatapointID, OwnerID: "collector-owner", Epoch: 1, Sequence: 1, Value: json.RawMessage(`"` + value + `"`), Quality: "good", SourceTimestamp: at.Format(time.RFC3339Nano), ServerTimestamp: at.Format(time.RFC3339Nano), ReceivedAt: at.Format(time.RFC3339Nano), Source: &ingress.Source{CollectorID: "collector-owner", ConnectionID: "aaaaaaaa-1111-4111-8111-111111111111", VariableID: "bbbbbbbb-1111-4111-8111-111111111111"}}
+	raw, err := json.Marshal(event)
+	if err != nil || len(raw) > transportlimits.MaxBodyBytes || loader.ValidatePointEvent(raw) != nil {
+		t.Fatalf("test input must be a frozen valid <=1MiB point event: bytes=%d marshal=%v validate=%v", len(raw), err, loader.ValidatePointEvent(raw))
+	}
+	message := ingress.ValidatedMessage{Consumer: model.Consumer{Role: "alarm"}, Event: event, RawBody: raw}
+	err = store.RunProducerTransaction(ctx, deploymentID, "alarm", producer, func(ctx context.Context, tx *postgres.BusinessTx) error {
+		return handler.HandlePostgres(ctx, tx, message)
+	})
+	if !errors.Is(err, ingress.ErrRetryableBusiness) || !errors.Is(err, postgres.ErrAlarmStateTooLarge) {
+		t.Fatalf("oversized ingress error=%v", err)
+	}
+	var stateCount, outboxCount int
+	if err = audit.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.alarm_item_state WHERE deployment_id=$1`, deploymentID).Scan(&stateCount); err != nil {
+		t.Fatal(err)
+	}
+	if err = audit.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.transactional_outbox WHERE deployment_id=$1`, deploymentID).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if stateCount != 0 || outboxCount != 0 {
+		t.Fatalf("oversized ingress committed state/outbox: state=%d outbox=%d", stateCount, outboxCount)
+	}
 }
 
 func TestSweepDueOnlySelectsCurrentEnabledItemRevisionPairs(t *testing.T) {

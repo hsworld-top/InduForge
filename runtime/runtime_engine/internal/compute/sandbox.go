@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	maxSandboxRequestBytes  = 1 << 20
-	maxSandboxResponseBytes = 2 << 20
+	maxSandboxRequestBytes    = 1 << 20
+	maxSandboxResponseBytes   = 2 << 20
+	maxPreflightResponseBytes = 128 << 10
 )
+
+var preflightTimeout = 5 * time.Second
 
 // SandboxResolver is the sole boundary where a trusted deployment resolver
 // turns refs into an endpoint and bearer credential.  Values are intentionally
@@ -55,6 +58,250 @@ type ExecutionRequest struct {
 	Timeout                                                             time.Duration
 }
 type ExecutionResult struct{ Output json.RawMessage }
+
+// SandboxIdentity is the Engine identity that a shared compute-sandbox must
+// attest before it can be trusted to execute project artifacts.  It is kept
+// separate from Endpoint so neither a URL nor a bearer token crosses status
+// or lifecycle APIs.
+type SandboxIdentity struct {
+	SiteID, DeploymentID, ProjectID string
+}
+
+// Preflight verifies the sandbox's two public read-only endpoints.  It never
+// invokes /v1/execute, follows no redirect, bounds the total call time and
+// rejects non-canonical JSON so a proxy cannot smuggle a conflicting status.
+func (c *SandboxClient) Preflight(ctx context.Context, expected SandboxIdentity) error {
+	if c == nil || c.resolver == nil || !expected.valid() {
+		return errors.New("sandbox 预检配置非法")
+	}
+	endpoint, err := c.resolver.ResolveComputeSandbox(ctx, c.resourceRef, c.secretRef)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return errors.New("sandbox resolver 不可用")
+	}
+	callCtx, cancel := context.WithTimeout(ctx, preflightTimeout)
+	defer cancel()
+	client := &http.Client{
+		Timeout: preflightTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	if err := preflightGET(callCtx, client, endpoint, "/health", validateSandboxHealth); err != nil {
+		return err
+	}
+	if err := preflightGET(callCtx, client, endpoint, "/api/v1/status", func(raw []byte) error {
+		return validateSandboxStatus(raw, expected)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (identity SandboxIdentity) valid() bool {
+	for _, value := range []string{identity.SiteID, identity.DeploymentID, identity.ProjectID} {
+		if value == "" || len(value) > 256 || strings.TrimSpace(value) != value || strings.ContainsRune(value, '\x00') {
+			return false
+		}
+	}
+	return true
+}
+
+func preflightGET(ctx context.Context, client *http.Client, endpoint SandboxEndpoint, suffix string, validate func([]byte) error) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.url+suffix, nil)
+	if err != nil {
+		return errors.New("sandbox 预检请求创建失败")
+	}
+	request.Header.Set("Authorization", "Bearer "+endpoint.bearer)
+	response, err := client.Do(request)
+	if err != nil {
+		if ctx.Err() != nil {
+			return errors.New("sandbox 预检超时")
+		}
+		return errors.New("sandbox 预检调用失败")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return errors.New("sandbox 预检响应被拒绝")
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, maxPreflightResponseBytes+1))
+	if err != nil || len(raw) > maxPreflightResponseBytes {
+		return errors.New("sandbox 预检响应过大")
+	}
+	if err := validate(raw); err != nil {
+		return errors.New("sandbox 预检响应非法")
+	}
+	return nil
+}
+
+func validateSandboxHealth(raw []byte) error {
+	data, err := strictEnvelope(raw)
+	if err != nil {
+		return err
+	}
+	object, err := strictJSONObject(data, "status", "observedAt")
+	if err != nil || requiredString(object, "status") != "UP" || !validRFC3339(requiredString(object, "observedAt")) {
+		return errors.New("invalid health")
+	}
+	return nil
+}
+
+func validateSandboxStatus(raw []byte, expected SandboxIdentity) error {
+	data, err := strictEnvelope(raw)
+	if err != nil {
+		return err
+	}
+	object, err := strictJSONObject(data,
+		"schemaVersion", "componentRole", "siteId", "deploymentId", "accountId", "projectId", "projectCode", "deploymentStage",
+		"executionForm", "nodeId", "processId", "lifecycleState", "healthState", "version", "startedAt", "uptimeSeconds", "observedAt", "lastError", "reasonCode", "businessFreshness", "collector")
+	if err != nil {
+		return err
+	}
+	for _, field := range []string{"schemaVersion", "componentRole", "siteId", "executionForm", "lifecycleState", "healthState", "version", "startedAt", "uptimeSeconds", "observedAt", "deploymentId", "projectId"} {
+		if _, ok := object[field]; !ok {
+			return errors.New("missing status field")
+		}
+	}
+	if requiredString(object, "schemaVersion") != "runtime-health-status.v1" ||
+		requiredString(object, "componentRole") != "compute-sandbox" ||
+		requiredString(object, "lifecycleState") != "RUNNING" ||
+		(requiredString(object, "healthState") != "HEALTHY" && requiredString(object, "healthState") != "DEGRADED") ||
+		requiredString(object, "siteId") != expected.SiteID ||
+		requiredString(object, "deploymentId") != expected.DeploymentID ||
+		requiredString(object, "projectId") != expected.ProjectID ||
+		!validExecutionForm(requiredString(object, "executionForm")) ||
+		requiredString(object, "version") == "" ||
+		!validRFC3339(requiredString(object, "startedAt")) ||
+		!validRFC3339(requiredString(object, "observedAt")) ||
+		!validNonNegativeInteger(object["uptimeSeconds"]) {
+		return errors.New("invalid status")
+	}
+	// Shared sandbox instances must not impersonate a collector or a deployment
+	// business-freshness source.  These fields are not needed for execution.
+	if _, present := object["collector"]; present {
+		return errors.New("collector status forbidden")
+	}
+	if _, present := object["businessFreshness"]; present {
+		return errors.New("business freshness forbidden")
+	}
+	return nil
+}
+
+func strictEnvelope(raw []byte) (json.RawMessage, error) {
+	object, err := strictJSONObject(raw, "code", "msg", "data", "reqId")
+	if err != nil {
+		return nil, err
+	}
+	var code int
+	var message, requestID string
+	if json.Unmarshal(object["code"], &code) != nil || code != 0 || json.Unmarshal(object["msg"], &message) != nil || json.Unmarshal(object["reqId"], &requestID) != nil || message == "" || requestID == "" || len(object["data"]) == 0 {
+		return nil, errors.New("invalid envelope")
+	}
+	return object["data"], nil
+}
+
+// strictJSONObject rejects duplicate members recursively and requires exactly
+// one complete JSON object.  json.Unmarshal alone would silently retain the
+// final duplicate key, which is unsuitable for a trust decision.
+func strictJSONObject(raw []byte, allowed ...string) (map[string]json.RawMessage, error) {
+	if err := rejectDuplicateJSON(raw); err != nil {
+		return nil, err
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil || object == nil {
+		return nil, errors.New("not object")
+	}
+	permitted := make(map[string]struct{}, len(allowed))
+	for _, key := range allowed {
+		permitted[key] = struct{}{}
+	}
+	for key := range object {
+		if _, ok := permitted[key]; !ok {
+			return nil, errors.New("unknown field")
+		}
+	}
+	return object, nil
+}
+
+func rejectDuplicateJSON(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	var walk func() error
+	walk = func() error {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		switch delimiter := token.(type) {
+		case json.Delim:
+			switch delimiter {
+			case '{':
+				seen := map[string]struct{}{}
+				for decoder.More() {
+					key, err := decoder.Token()
+					if err != nil {
+						return err
+					}
+					name, ok := key.(string)
+					if !ok {
+						return errors.New("invalid object key")
+					}
+					if _, duplicate := seen[name]; duplicate {
+						return errors.New("duplicate key")
+					}
+					seen[name] = struct{}{}
+					if err := walk(); err != nil {
+						return err
+					}
+				}
+				_, err := decoder.Token()
+				return err
+			case '[':
+				for decoder.More() {
+					if err := walk(); err != nil {
+						return err
+					}
+				}
+				_, err := decoder.Token()
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(); err != nil {
+		return err
+	}
+	if token, err := decoder.Token(); err != io.EOF || token != nil {
+		return errors.New("trailing JSON")
+	}
+	return nil
+}
+
+func requiredString(object map[string]json.RawMessage, key string) string {
+	var value string
+	if raw, ok := object[key]; !ok || json.Unmarshal(raw, &value) != nil {
+		return ""
+	}
+	return value
+}
+
+func validRFC3339(value string) bool {
+	if !strings.HasSuffix(value, "Z") {
+		return false
+	}
+	_, err := time.Parse(time.RFC3339, value)
+	return err == nil
+}
+
+func validExecutionForm(value string) bool {
+	return value == "k3s-workload" || value == "native-linux" || value == "native-windows"
+}
+
+func validNonNegativeInteger(raw json.RawMessage) bool {
+	var value int64
+	return json.Unmarshal(raw, &value) == nil && value >= 0
+}
 
 func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (ExecutionResult, error) {
 	if c == nil || c.resolver == nil || request.ExecutionID == "" || request.DeploymentID == "" || request.ProjectID == "" || request.ComputeUnitID == "" || request.ArtifactDigest == "" || request.ComputeRevision < 1 || request.Timeout <= 0 || request.Timeout > 120*time.Second {

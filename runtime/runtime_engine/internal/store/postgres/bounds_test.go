@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/eventid"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 )
 
 func TestIngressBoundsRejectBeforeDatabase(t *testing.T) {
-	base := Message{DeploymentID: "dep", AccountID: "account", ConsumerKey: "consumer", Role: "writer", Token: ConsumerRoleToken{OwnerID: "owner", Epoch: 1}, EventID: strings.Repeat("a", 64), RawBody: []byte("x"), Subject: "data.raw.p", CheckpointPosition: 0, DeliveryCount: 1, OccurredAt: time.Now().UTC()}
+	base := Message{DeploymentID: "dep", AccountID: "account", ConsumerKey: "consumer", Role: "writer", Token: ConsumerRoleToken{OwnerID: "owner", Epoch: 1}, ProducerKey: "collector", ProducerToken: ProducerToken{OwnerID: "collector", Epoch: 1}, EventID: strings.Repeat("a", 64), RawBody: []byte("x"), Subject: "data.raw.p", CheckpointPosition: 0, DeliveryCount: 1, OccurredAt: time.Now().UTC()}
 	if err := validMessage(base); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +50,35 @@ func TestIngressBoundsRejectBeforeDatabase(t *testing.T) {
 	}
 }
 
+func TestPermanentFailureProducerFenceIsAllOrNothingAndReasonBound(t *testing.T) {
+	body := []byte(`{"value":"retry"}`)
+	digest := eventid.BodySHA256(body)
+	eventID := strings.Repeat("a", 64)
+	dlq, err := runtimeDLQID("dep", "consumer", "data.raw.p", eventID, FailureHandler, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := PermanentFailure{DeploymentID: "dep", AccountID: "account", ConsumerKey: "consumer", Role: "writer", Token: ConsumerRoleToken{OwnerID: "writer", Epoch: 1}, RequireProducerFence: true, ProducerKey: ProducerFenceKey("collector"), ProducerToken: ProducerToken{OwnerID: "collector", Epoch: 1}, DLQID: dlq, EventID: &eventID, Subject: "data.raw.p", RawBody: body, BodySHA256: digest, ReasonCode: FailureHandler, DeliveryCount: 2, OccurredAt: time.Now().UTC()}
+	if err := validPermanentFailure(base); err != nil {
+		t.Fatalf("已验证 handler 最终失败必须允许: %v", err)
+	}
+	missing := base
+	missing.ProducerKey = ""
+	if err := validPermanentFailure(missing); err == nil {
+		t.Fatal("RequireProducerFence 不得接受空 producer key")
+	}
+	wrongReason := base
+	wrongReason.ReasonCode = FailurePermanentValidation
+	if err := validPermanentFailure(wrongReason); err == nil {
+		t.Fatal("生产者 fence 只能随已验证业务最终失败写入")
+	}
+	unrequired := base
+	unrequired.RequireProducerFence = false
+	if err := validPermanentFailure(unrequired); err == nil {
+		t.Fatal("未要求 producer fence 时不得携带 key/token")
+	}
+}
+
 func TestClaimOutboxRejectsUnboundedOrUnstableInputs(t *testing.T) {
 	store := &Store{}
 	for _, test := range []struct {
@@ -67,6 +97,24 @@ func TestFiniteJSONRejectsTrailingValuesAndGarbage(t *testing.T) {
 		if validFiniteJSON([]byte(raw)) {
 			t.Fatalf("trailing JSON accepted: %q", raw)
 		}
+	}
+}
+
+func TestOutboxPayloadBoundsAreCheckedBeforeTransactionUse(t *testing.T) {
+	message := OutboxMessage{DeploymentID: "dep", DedupeKey: "key", Subject: "data.computed.11111111-1111-4111-8111-111111111111", Payload: make([]byte, transportlimits.MaxBodyBytes+1)}
+	if _, _, err := (&Store{}).enqueueTx(context.Background(), nil, message); !errors.Is(err, transportlimits.ErrOutboundPayloadTooLarge) {
+		t.Fatalf("data payload error=%v", err)
+	}
+	message.Subject = "dlq.writer"
+	message.Payload = make([]byte, transportlimits.MaxDLQPayloadBytes)
+	// Exact DLQ boundary gets past local validation and only then observes the
+	// intentionally nil unit-test transaction.
+	if _, _, err := (&Store{}).enqueueTx(context.Background(), nil, message); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("exact DLQ boundary must not be rejected by payload guard: %v", err)
+	}
+	message.Payload = make([]byte, transportlimits.MaxDLQPayloadBytes+1)
+	if _, _, err := (&Store{}).enqueueTx(context.Background(), nil, message); !errors.Is(err, transportlimits.ErrOutboundPayloadTooLarge) {
+		t.Fatalf("DLQ payload error=%v", err)
 	}
 }
 

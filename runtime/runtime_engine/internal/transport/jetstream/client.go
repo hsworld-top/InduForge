@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/model"
@@ -21,6 +22,13 @@ const msgIDHeader = "Nats-Msg-Id"
 const (
 	MaxFetchBatch = 32
 	MaxFetchWait  = 5 * time.Second
+)
+
+var (
+	// These sentinels let the outbox distinguish a deterministically invalid
+	// local record from a broker outage, so it never retries it forever.
+	ErrPayloadTooLarge = transportlimits.ErrOutboundPayloadTooLarge
+	ErrInvalidSubject  = transportlimits.ErrOutboundSubject
 )
 
 // AccountIdentity 是 resolver 已验证的 NATS Account 身份。它刻意不实现可读 String/Marshal。
@@ -50,8 +58,9 @@ func NewConnectionOptions(serverURL string, account AccountIdentity, options ...
 }
 
 type Client struct {
-	nc *nats.Conn
-	js js.JetStream
+	nc        *nats.Conn
+	js        js.JetStream
+	closeOnce sync.Once
 }
 
 func Open(ctx context.Context, options ConnectionOptions, expectedAccount string) (*Client, error) {
@@ -75,9 +84,14 @@ func Open(ctx context.Context, options ConnectionOptions, expectedAccount string
 }
 
 func (c *Client) Close() {
-	if c != nil && c.nc != nil {
-		c.nc.Drain()
-		c.nc.Close()
+	if c != nil {
+		c.closeOnce.Do(func() {
+			if c.nc != nil {
+				// Timeout shutdown must sever the broker immediately. Normal worker
+				// drain happened before this boundary; nats.Conn.Close is safe here.
+				c.nc.Close()
+			}
+		})
 	}
 }
 
@@ -125,6 +139,23 @@ func (c *Client) ValidateStreamsAndConsumers(ctx context.Context, config model.E
 	if !exactSubjects(dlqInfo.Config.Subjects, expectedDLQ) {
 		return errors.New("DLQ stream subjects 必须精确等于配置 deadLetterSubject 集合")
 	}
+	// A durable on either data stream is an active processing authority.  Do
+	// not merely verify that configured consumers exist: enumerate every
+	// server-side durable and reject additions (including stale query/coord
+	// consumers) before any worker or assignment is activated.
+	for _, streamName := range []string{config.JetStream.DataRawStream, config.JetStream.DataDerivedStream} {
+		stream, err := c.js.Stream(ctx, streamName)
+		if err != nil {
+			return errors.New("JetStream consumer stream 不可用")
+		}
+		expected, err := expectedDurableNames(config, streamName)
+		if err != nil {
+			return err
+		}
+		if err := validateDurableNames(ctx, stream, expected); err != nil {
+			return err
+		}
+	}
 	for _, expected := range config.JetStream.Consumers {
 		stream, err := c.js.Stream(ctx, expected.Stream)
 		if err != nil {
@@ -143,6 +174,79 @@ func (c *Client) ValidateStreamsAndConsumers(ctx context.Context, config model.E
 		}
 	}
 	return nil
+}
+
+func expectedDurableNames(config model.EngineConfig, streamName string) ([]string, error) {
+	if streamName != config.JetStream.DataRawStream && streamName != config.JetStream.DataDerivedStream {
+		return nil, errors.New("仅允许校验 data stream durable")
+	}
+	seen := map[string]struct{}{}
+	expected := make([]string, 0, len(config.JetStream.Consumers))
+	for _, consumer := range config.JetStream.Consumers {
+		if consumer.Stream != streamName {
+			continue
+		}
+		if consumer.DurableName == "" {
+			return nil, errors.New("JetStream durable consumer 配置非法")
+		}
+		if _, duplicate := seen[consumer.DurableName]; duplicate {
+			return nil, errors.New("JetStream durable consumer 配置重复")
+		}
+		seen[consumer.DurableName] = struct{}{}
+		expected = append(expected, consumer.DurableName)
+	}
+	return expected, nil
+}
+
+func validateDurableNames(ctx context.Context, stream js.Stream, expected []string) error {
+	if stream == nil {
+		return errors.New("JetStream consumer stream 不可用")
+	}
+	lister := stream.ConsumerNames(ctx)
+	actual := make([]string, 0, len(expected))
+	for name := range lister.Name() {
+		if name == "" {
+			return errors.New("JetStream durable consumer 名称非法")
+		}
+		actual = append(actual, name)
+	}
+	if err := lister.Err(); err != nil {
+		return errors.New("JetStream durable consumer 枚举失败")
+	}
+	if !exactDurableNames(actual, expected) {
+		return errors.New("JetStream data stream durable 集合与配置不匹配")
+	}
+	return nil
+}
+
+func exactDurableNames(actual, expected []string) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	seen := make(map[string]struct{}, len(actual))
+	for _, name := range actual {
+		if name == "" {
+			return false
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return false
+		}
+		seen[name] = struct{}{}
+	}
+	expectedSeen := make(map[string]struct{}, len(expected))
+	for _, name := range expected {
+		if name == "" {
+			return false
+		}
+		if _, duplicate := expectedSeen[name]; duplicate {
+			return false
+		}
+		expectedSeen[name] = struct{}{}
+		if _, present := seen[name]; !present {
+			return false
+		}
+	}
+	return true
 }
 
 func exactSubjects(actual, expected []string) bool {
@@ -268,6 +372,9 @@ type PublishMessage struct {
 func (c *Client) Publish(ctx context.Context, message PublishMessage) error {
 	if message.Subject == "" || message.DedupeKey == "" {
 		return errors.New("JetStream publish 参数非法")
+	}
+	if err := transportlimits.ValidateOutboundPayload(message.Subject, message.Payload); err != nil {
+		return err
 	}
 	var headers map[string]string
 	if len(message.Headers) > 0 && json.Unmarshal(message.Headers, &headers) != nil {

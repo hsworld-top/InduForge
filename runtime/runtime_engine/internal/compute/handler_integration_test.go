@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indu-forge/runtime-engine/internal/ingress"
 	"github.com/indu-forge/runtime-engine/internal/model"
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -390,6 +392,58 @@ func TestRunDueCancellationAfterSuccessfulExecuteStopsBeforeValidation(t *testin
 	if err = audit.QueryRow(context.Background(), `SELECT count(*) FROM runtime_engine.transactional_outbox WHERE deployment_id=$1`, handler.config.DeploymentID).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("outbox=%d err=%v, canceled transaction must stay atomic", count, err)
 	}
+}
+
+func TestOversizedComputedEnvelopeRollsBackBeforeSequenceAndOutbox(t *testing.T) {
+	dsn := os.Getenv("RUNTIME_ENGINE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("RUNTIME_ENGINE_TEST_DATABASE_URL 未设置")
+	}
+	ctx := context.Background()
+	store, audit, cleanup := computeIntegrationStore(t, ctx, dsn)
+	defer cleanup()
+	var artifact model.ProjectArtifact
+	var config model.EngineConfig
+	computeFixture(t, "runtime-project-artifact.valid.json", &artifact)
+	computeFixture(t, "runtime-engine-config.valid.json", &config)
+	unit := artifact.ComputeUnits[2]
+	unit.Outputs[0].DataType = "string"
+	artifact.ComputeUnits[2] = unit
+	handler, err := NewPostgresHandler(artifact, config, oversizedOutputExecutor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	producer := postgres.ProducerToken{OwnerID: "runtime-engine-compute-0", Epoch: 7}
+	if _, err = store.ActivateProducer(ctx, config.DeploymentID, unit.ID, producer, 0); err != nil {
+		t.Fatal(err)
+	}
+	message := ingress.ValidatedMessage{Event: ingress.Event{EventID: strings.Repeat("a", 64), SourceTimestamp: "2026-08-30T08:30:00Z"}}
+	err = store.RunProducerTransaction(ctx, config.DeploymentID, unit.ID, producer, func(ctx context.Context, tx *postgres.BusinessTx) error {
+		return handler.executeAndQueue(ctx, tx, unit, handler.producers[unit.ID], message)
+	})
+	if !errors.Is(err, ErrUnitBusiness) || !errors.Is(err, transportlimits.ErrOutboundPayloadTooLarge) {
+		var failure *UnitBusinessError
+		if errors.As(err, &failure) {
+			t.Fatalf("oversized execution error=%v cause=%v", err, failure.Cause)
+		}
+		t.Fatalf("oversized execution error=%v", err)
+	}
+	var outboxCount, sequenceCount int
+	if err = audit.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.transactional_outbox WHERE deployment_id=$1`, config.DeploymentID).Scan(&outboxCount); err != nil {
+		t.Fatal(err)
+	}
+	if err = audit.QueryRow(ctx, `SELECT count(*) FROM runtime_engine.producer_sequence WHERE deployment_id=$1 AND producer_key=$2`, config.DeploymentID, unit.ID).Scan(&sequenceCount); err != nil {
+		t.Fatal(err)
+	}
+	if outboxCount != 0 || sequenceCount != 0 {
+		t.Fatalf("oversized envelope must have no sequence/outbox side effect: outbox=%d sequence=%d", outboxCount, sequenceCount)
+	}
+}
+
+type oversizedOutputExecutor struct{}
+
+func (oversizedOutputExecutor) Execute(context.Context, ExecutionRequest) (ExecutionResult, error) {
+	return ExecutionResult{Output: json.RawMessage(`"` + strings.Repeat("x", transportlimits.MaxBodyBytes) + `"`)}, nil
 }
 
 func cancelThenReturn(cancel func()) error {

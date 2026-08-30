@@ -10,6 +10,7 @@ import (
 	"github.com/indu-forge/runtime-engine/internal/ingress"
 	"github.com/indu-forge/runtime-engine/internal/model"
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 )
 
 func TestPointInputOfflineAdapterIsOneWay(t *testing.T) {
@@ -35,6 +36,21 @@ func TestNewPostgresHandlerRequiresOnlyAlarmAssignment(t *testing.T) {
 	config.ProducerAssignments = nil
 	if _, err := NewPostgresHandler(model.ProjectArtifact{AlarmItems: []model.AlarmItem{item}}, config); err == nil {
 		t.Fatal("missing alarm producer assignment accepted")
+	}
+}
+
+func TestDeterministicAlarmOutputErrorsUseIngressRetryAndSweepPoisonPaths(t *testing.T) {
+	outputErr := retryableOutputError(transportlimits.ErrOutboundPayloadTooLarge)
+	if !errors.Is(outputErr, ingress.ErrRetryableBusiness) || !errors.Is(outputErr, transportlimits.ErrOutboundPayloadTooLarge) {
+		t.Fatalf("output error markers lost: %v", outputErr)
+	}
+	poison := sweepPersistError(outputErr)
+	var detail *postgres.AlarmSweepItemPoisonError
+	if !errors.Is(poison, postgres.ErrAlarmSweepItemPoison) || !errors.As(poison, &detail) || detail.Reason != postgres.AlarmSweepPoisonInvalidOutput {
+		t.Fatalf("sweep classification=%v", poison)
+	}
+	if got := sweepPersistError(postgres.ErrFenceStale); !errors.Is(got, postgres.ErrFenceStale) || errors.Is(got, postgres.ErrAlarmSweepItemPoison) {
+		t.Fatalf("fence must stay fatal: %v", got)
 	}
 }
 

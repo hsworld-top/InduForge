@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/eventid"
@@ -31,10 +33,20 @@ var (
 	ErrLeaseLost         = errors.New("outbox lease 已失效")
 	ErrSequenceExhausted = errors.New("producer sequence 已耗尽")
 	ErrInvalidInput      = errors.New("postgres store 输入非法")
+	// ErrStoreClosed is fatal to a delivery: timeout shutdown deliberately
+	// refuses all new database work so callers must not Ack/Nak as success.
+	ErrStoreClosed = errors.New("postgres store 已终止")
 )
 
 // Store 不保存或记录 DSN；连接池仅由调用者传入的已解析 DSN 构造。
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool      *pgxpool.Pool
+	closed    atomic.Bool
+	abortOnce sync.Once
+	closeOnce sync.Once
+	closeDone chan struct{}
+	doneOnce  sync.Once
+}
 
 func Open(ctx context.Context, dsn string) (*Store, error) {
 	if dsn == "" {
@@ -45,7 +57,7 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		// pgx/URL 解析错误的文本在不同版本中可能携带原始连接串，绝不能透传。
 		return nil, errors.New("创建 PostgreSQL 连接池失败")
 	}
-	s := &Store{pool: pool}
+	s := &Store{pool: pool, closeDone: make(chan struct{})}
 	if err := s.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, errors.New("PostgreSQL 连通性校验失败")
@@ -57,9 +69,52 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Close() { s.pool.Close() }
+// Close is the normal, synchronous close used only after workers have drained.
+func (s *Store) Close() {
+	if s == nil {
+		return
+	}
+	s.closed.Store(true)
+	if s.pool != nil {
+		s.closeOnce.Do(s.closePool)
+	}
+}
+
+// Abort is the timeout path. It immediately rejects new work, resets checked
+// out connections so they are destroyed when returned, and closes the pool in
+// the background because pgxpool.Close waits for a blocked transaction.
+func (s *Store) Abort() {
+	if s == nil {
+		return
+	}
+	s.closed.Store(true)
+	if s.pool == nil {
+		return
+	}
+	s.abortOnce.Do(func() {
+		s.pool.Reset()
+		go s.closeOnce.Do(s.closePool)
+	})
+}
+
+func (s *Store) closePool() {
+	s.pool.Close()
+	if s.closeDone != nil {
+		s.doneOnce.Do(func() { close(s.closeDone) })
+	}
+}
+
+func (s *Store) ensureOpen() error {
+	if s == nil || s.pool == nil || s.closed.Load() {
+		return ErrStoreClosed
+	}
+	return nil
+}
 
 func (s *Store) Ping(ctx context.Context) error {
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	if err := s.pool.Ping(ctx); err != nil {
 		return errors.New("PostgreSQL Ping 失败")
 	}
@@ -68,6 +123,9 @@ func (s *Store) Ping(ctx context.Context) error {
 
 // VerifySchema 只验证基线的精确版本，绝不隐式执行建表、迁移或修复。
 func (s *Store) VerifySchema(ctx context.Context) error {
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	var count int
 	var version *string
 	err := s.pool.QueryRow(ctx, `SELECT count(*), min(version) FROM runtime_engine.schema_meta`).Scan(&count, &version)
@@ -338,6 +396,9 @@ func normalizeDefinitions(definitions []string) []string {
 
 // ApplySchema 是显式部署/测试初始化动作。重复执行应因 CREATE SCHEMA 失败，不能被当作迁移机制。
 func (s *Store) ApplySchema(ctx context.Context) error {
+	if err := s.ensureOpen(); err != nil {
+		return err
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -372,6 +433,9 @@ type Fence struct {
 func (s *Store) ActivateRole(ctx context.Context, deploymentID, role string, token ConsumerRoleToken, expectedVersion int64) (Fence, error) {
 	if err := validToken(deploymentID, role, token.OwnerID, token.Epoch); err != nil || expectedVersion < 0 {
 		return Fence{}, fmt.Errorf("%w: role assignment", ErrInvalidInput)
+	}
+	if err := s.ensureOpen(); err != nil {
+		return Fence{}, err
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -410,11 +474,16 @@ func (s *Store) ActivateRole(ctx context.Context, deploymentID, role string, tok
 }
 
 type Message struct {
-	DeploymentID       string
-	AccountID          string
-	ConsumerKey        string
-	Role               string
-	Token              ConsumerRoleToken
+	DeploymentID string
+	AccountID    string
+	ConsumerKey  string
+	Role         string
+	Token        ConsumerRoleToken
+	// ProducerKey/ProducerToken come from strict ingress validation.  They are
+	// deliberately distinct from role ownership: a writer consumes facts owned
+	// by collectors or compute producers, never by itself.
+	ProducerKey        string
+	ProducerToken      ProducerToken
 	EventID            string
 	RawBody            []byte
 	Subject            string
@@ -446,12 +515,18 @@ func (s *Store) ProcessMessage(ctx context.Context, msg Message, handler Handler
 	if err := validMessage(msg); err != nil {
 		return "", err
 	}
+	if err := s.ensureOpen(); err != nil {
+		return "", err
+	}
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback(ctx)
 	if err := assertConsumerFence(ctx, tx, msg); err != nil {
+		return "", err
+	}
+	if err := assertProducerFence(ctx, tx, msg.DeploymentID, msg.ProducerKey, msg.ProducerToken); err != nil {
 		return "", err
 	}
 	digest := eventid.BodySHA256(msg.RawBody)
@@ -556,6 +631,25 @@ func assertConsumerFence(ctx context.Context, tx pgx.Tx, msg Message) error {
 	return nil
 }
 
+func assertProducerFence(ctx context.Context, tx pgx.Tx, deploymentID, producerKey string, token ProducerToken) error {
+	if err := validToken(deploymentID, producerKey, token.OwnerID, token.Epoch); err != nil {
+		return err
+	}
+	var owner string
+	var epoch int64
+	err := tx.QueryRow(ctx, `SELECT owner_id,epoch FROM runtime_engine.producer_fence WHERE deployment_id=$1 AND producer_key=$2 FOR UPDATE`, deploymentID, producerKey).Scan(&owner, &epoch)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrFenceStale
+	}
+	if err != nil {
+		return err
+	}
+	if owner != token.OwnerID || epoch != token.Epoch {
+		return ErrFenceStale
+	}
+	return nil
+}
+
 func validToken(deployment, role, owner string, epoch int64) error {
 	if deployment == "" || role == "" || owner == "" || epoch < 1 {
 		return ErrInvalidInput
@@ -576,7 +670,7 @@ func validStableID(value string) bool {
 }
 
 func validMessage(msg Message) error {
-	if err := validToken(msg.DeploymentID, msg.Role, msg.Token.OwnerID, msg.Token.Epoch); err != nil || msg.AccountID == "" || msg.ConsumerKey == "" || msg.EventID == "" || msg.Subject == "" || len(msg.Subject) > 4096 || len(msg.RawBody) > 1<<20 || len(msg.DeliveryMetadata) > 16<<10 || msg.CheckpointPosition < 0 || msg.DeliveryCount < 1 || msg.OccurredAt.IsZero() {
+	if err := validToken(msg.DeploymentID, msg.Role, msg.Token.OwnerID, msg.Token.Epoch); err != nil || validToken(msg.DeploymentID, msg.ProducerKey, msg.ProducerToken.OwnerID, msg.ProducerToken.Epoch) != nil || msg.AccountID == "" || msg.ConsumerKey == "" || msg.EventID == "" || msg.Subject == "" || len(msg.Subject) > 4096 || len(msg.RawBody) > 1<<20 || len(msg.DeliveryMetadata) > 16<<10 || msg.CheckpointPosition < 0 || msg.DeliveryCount < 1 || msg.OccurredAt.IsZero() {
 		return fmt.Errorf("%w: message", ErrInvalidInput)
 	}
 	if len(msg.EventID) != 64 || msg.EventID != strings.ToLower(msg.EventID) {
