@@ -64,6 +64,9 @@ internal static partial class CollectorV1EventValidator
         return ComputeDigest(["alarm.event.v1", "data-gap", deploymentId, collectorId, connectionId, ownerId, Decimal(epoch), Decimal(fromSequence), Decimal(toSequence), detectedAt, reason]);
     }
 
+    internal static string ComputeRawEventId(string deploymentId, string pointId, string ownerId, long epoch, long sequence) =>
+        ComputeDigest(["data.raw.v1", deploymentId, pointId, ownerId, Decimal(epoch), Decimal(sequence)]);
+
     private static void ValidateRaw(JsonElement root, WalAppendRequest request, long sequence)
     {
         RequireOnly(root, ["schemaVersion", "subject", "eventId", "deploymentId", "accountId", "pointId", "ownerId", "epoch", "sequence", "value", "quality", "sourceTimestamp", "serverTimestamp", "receivedAt", "source"]);

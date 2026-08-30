@@ -43,6 +43,15 @@ public sealed class CollectorRuntimeHost
 
     public IReadOnlyCollection<DriverDescriptor> Drivers => _drivers.Descriptors;
 
+    /// <summary>仅在完成 Artifact/Binding 预检后由采集编排器创建白名单中的会话驱动。</summary>
+    public IConnectionSessionDriver CreateSessionDriver(RuntimeDriverConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        Preflight(new CollectorRuntimeConfiguration([configuration]));
+        return _drivers.Create(configuration.DriverId) as IConnectionSessionDriver
+            ?? throw new CollectorRuntimeConfigurationException("COLLECTOR_DRIVER_SESSION_UNAVAILABLE");
+    }
+
     public static DriverHostPlatform CurrentPlatform { get; } = new("runtime", RuntimeInformation.RuntimeIdentifier);
 
     /// <summary>创建仅含认证驱动的运行态宿主，平台身份固定为当前真实 Runtime RID。</summary>

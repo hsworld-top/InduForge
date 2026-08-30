@@ -20,7 +20,7 @@
         "additionalProperties": false,
         "required": ["connectionId", "protocolFamily", "driverId", "driverVersion", "schemaVersion", "enabled", "requiredOperations", "defaultAcquisition"],
         "properties": {
-          "connectionId": { "$ref": "common.schema.json#/$defs/stableId" },
+          "connectionId": { "$ref": "common.schema.json#/$defs/uuid" },
           "protocolFamily": { "$ref": "common.schema.json#/$defs/stableId" },
           "driverId": { "$ref": "common.schema.json#/$defs/stableId" },
           "driverVersion": { "type": "string", "minLength": 1 },
@@ -53,7 +53,7 @@
           "connectionId": { "$ref": "common.schema.json#/$defs/uuid" },
           "variableId": { "$ref": "common.schema.json#/$defs/uuid" },
           "dataType": { "type": "string", "enum": ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal", "string", "bytes", "datetime"] },
-          "elementCount": { "type": "integer", "minimum": 1 },
+          "elementCount": { "type": "integer", "minimum": 1, "maximum": 4096 },
           "addressSchemaVersion": { "type": "integer", "minimum": 1 },
           "address": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "common.schema.json#/$defs/jsonValue" } },
           "readOptions": { "type": "object", "additionalProperties": { "$ref": "common.schema.json#/$defs/jsonValue" } },
@@ -87,6 +87,10 @@
           {
             "if": { "properties": { "acquisitionMode": { "const": "override" } } },
             "then": { "required": ["acquisitionOverrides"], "properties": { "acquisitionOverrides": { "type": "object", "minProperties": 1 } } }
+          },
+          {
+            "if": { "properties": { "dataType": { "const": "bytes" } } },
+            "then": { "properties": { "elementCount": { "const": 1 } } }
           }
         ]
       },

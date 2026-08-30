@@ -67,6 +67,36 @@ public sealed record WalAppendResult(bool Accepted, WalDataRecord? Record, strin
     public static WalAppendResult Backpressure() => new(false, null, "WAL_BACKPRESSURE");
 }
 
+/// <summary>读取前取得的原始事件容量 fence；未消耗额度在 Dispose 时归还，禁止半批读取。</summary>
+public sealed class WalRawBatchReservation : IDisposable
+{
+    private DurableWal? _owner;
+    private long _remaining;
+    private readonly int _perRecord;
+    public int Count { get; }
+
+    internal WalRawBatchReservation(DurableWal owner, long bytes, int perRecord, int count)
+    {
+        _owner = owner; _remaining = bytes; _perRecord = perRecord; Count = count;
+    }
+
+    internal DurableWal? Owner => _owner;
+    internal void ConsumeUnderWalLock(int actualBytes)
+    {
+        if (_owner is null || actualBytes > _perRecord || _remaining < _perRecord) throw new WalUnavailableException("WAL 批次预留失效");
+        _remaining -= _perRecord;
+        _owner.ReleaseRawAdmissionUnderLock(_perRecord);
+    }
+
+    public void Dispose()
+    {
+        var owner = Interlocked.Exchange(ref _owner, null);
+        if (owner is null) return;
+        lock (owner.AdmissionLock) owner.ReleaseRawAdmissionUnderLock(_remaining);
+        _remaining = 0;
+    }
+}
+
 public sealed record WalDiagnostic(string Code, string Message, long Offset);
 
 public sealed record WalSnapshot(
@@ -109,6 +139,10 @@ public sealed class WalUnavailableException : InvalidOperationException
 /// </summary>
 public sealed partial class DurableWal : IAsyncDisposable
 {
+    /// <summary>Collector V1 生产的完整 data.raw.v1 JSON wire payload 上限；Engine 仍可接收更大的 computed 输入。</summary>
+    public const int MaximumRawEventPayloadBytes = 64 * 1024;
+    // 3×int64、四个长度字段、最长 raw subject(9+UUID)、eventId、owner stableId、frame 与 ACK。
+    internal const int MaximumRawReservationBytes = HeaderLength + FooterLength + (3 * sizeof(long)) + (4 * sizeof(int)) + (9 + 36) + 64 + 128 + MaximumRawEventPayloadBytes + AckRecordLength;
     private const uint Magic = 0x4C574649; // "IFWL" 的 little-endian 表示。
     private const byte FormatVersion = 2;
     private const int HeaderLength = 14;
@@ -126,12 +160,19 @@ public sealed partial class DurableWal : IAsyncDisposable
     private readonly FileStream _processLock;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _stateLock = new();
+    internal object AdmissionLock => _stateLock;
     private readonly CancellationTokenSource _unavailableCancellation = new();
     // 仅保存可重放帧的位置及经验证的固定元数据。payload 不得随 backlog 常驻托管堆；
     // 回放时才在受限大小内读取一帧，避免 1GiB WAL 被一次恢复放大为 1GiB 内存。
     private readonly List<WalPendingIndex> _pending = [];
     private readonly List<WalDiagnostic> _diagnostics = [];
     private long _storedBytes;
+    private long _rawAdmissionReservedBytes;
+
+    internal void ReleaseRawAdmissionUnderLock(long bytes)
+    {
+        _rawAdmissionReservedBytes = checked(_rawAdmissionReservedBytes - bytes);
+    }
     private long _maximumSequence;
     private bool _isCorrupted;
     private bool _isBackpressured;
@@ -189,6 +230,39 @@ public sealed partial class DurableWal : IAsyncDisposable
     public async Task<WalAppendResult> AppendDataAsync(
         Func<long, WalAppendRequest> eventFactory,
         CancellationToken cancellationToken = default)
+        => await AppendDataCoreAsync(eventFactory, reservation: null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<WalRawBatchReservation?> ReserveRawBatchAsync(int recordCount, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(recordCount, 1);
+        var perRecord = MaximumRawReservationBytes;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfCorrupted();
+            lock (_stateLock)
+            {
+                var available = _options.MaxBytes - checked(UsedCapacityUnsafe() + _rawAdmissionReservedBytes);
+                var count = (int)Math.Min(recordCount, available / perRecord);
+                if (count < 1) return null;
+                var bytes = checked((long)count * perRecord);
+                _rawAdmissionReservedBytes += bytes;
+                return new WalRawBatchReservation(this, bytes, perRecord, count);
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
+    public Task<WalAppendResult> AppendReservedDataAsync(WalRawBatchReservation reservation, Func<long, WalAppendRequest> eventFactory, CancellationToken cancellationToken = default)
+    {
+        if (reservation is null || !ReferenceEquals(reservation.Owner, this)) throw new ArgumentException("WAL 批次预留不属于当前实例", nameof(reservation));
+        return AppendDataCoreAsync(eventFactory, reservation, cancellationToken);
+    }
+
+    private async Task<WalAppendResult> AppendDataCoreAsync(
+        Func<long, WalAppendRequest> eventFactory,
+        WalRawBatchReservation? reservation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(eventFactory);
         EnterOperation();
@@ -202,6 +276,7 @@ public sealed partial class DurableWal : IAsyncDisposable
                 var sequence = checked(GetMaximumSequence() + 1);
                 var request = eventFactory(sequence) ?? throw new ArgumentException("事件工厂不能返回 null", nameof(eventFactory));
                 CollectorV1EventValidator.Validate(request, sequence);
+                if (request.Subject.StartsWith("data.raw.", StringComparison.Ordinal) && request.Payload.Length > MaximumRawEventPayloadBytes) throw new ArgumentOutOfRangeException(nameof(eventFactory), "raw event 超出单条上限");
                 var record = new WalDataRecord(
                     request.Subject,
                     request.EventId,
@@ -215,12 +290,14 @@ public sealed partial class DurableWal : IAsyncDisposable
                 var isDiagnostic = string.Equals(request.Subject, "alarm.event", StringComparison.Ordinal);
                 lock (_stateLock)
                 {
+                    if (reservation is not null) reservation.ConsumeUnderWalLock(bytes.Length + AckRecordLength);
                     var ackReservedAfterAppend = checked(ReservedBytesUnsafe() + AckRecordLength);
                     var physicalAfterAppend = checked(_storedBytes + bytes.Length + ackReservedAfterAppend);
                     var diagnosticCost = checked(bytes.Length + AckRecordLength);
+                    // 诊断可使用独立 reserve，但绝不能侵占已在 Read 前授予的 raw admission。
                     var usedAfterAppend = isDiagnostic
-                        ? physicalAfterAppend
-                        : checked(physicalAfterAppend + RemainingDiagnosticReserveUnsafe());
+                        ? checked(physicalAfterAppend + _rawAdmissionReservedBytes)
+                        : checked(physicalAfterAppend + RemainingDiagnosticReserveUnsafe() + _rawAdmissionReservedBytes);
                     if ((isDiagnostic && diagnosticCost > _options.DiagnosticReserveBytes) || usedAfterAppend > _options.MaxBytes)
                     {
                         _isBackpressured = !isDiagnostic || usedAfterAppend > _options.MaxBytes;
@@ -416,7 +493,7 @@ public sealed partial class DurableWal : IAsyncDisposable
         {
             var reserved = ReservedBytesUnsafe();
             var remainingDiagnostic = RemainingDiagnosticReserveUnsafe();
-            var used = checked(_storedBytes + reserved + remainingDiagnostic);
+            var used = checked(_storedBytes + reserved + remainingDiagnostic + _rawAdmissionReservedBytes);
             var availableDiagnostic = Math.Min(remainingDiagnostic, Math.Max(0, _options.MaxBytes - checked(_storedBytes + reserved)));
             TimeSpan? oldest = _pending.Count == 0 ? null : DateTimeOffset.UtcNow - _pending[0].AppendedAt;
             return new WalSnapshot(
@@ -424,7 +501,7 @@ public sealed partial class DurableWal : IAsyncDisposable
                 _pending.Sum(record => (long)record.PayloadLength),
                 oldest,
                 _storedBytes,
-                reserved,
+                checked(reserved + _rawAdmissionReservedBytes),
                 _options.DiagnosticReserveBytes,
                 availableDiagnostic,
                 used,

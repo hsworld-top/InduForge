@@ -810,8 +810,8 @@ public sealed class DurableWalTests
     {
         await using var directory = new TemporaryDirectory();
         await using var wal = await OpenAsync(directory.Path);
-        _ = await AppendRawAsync(wal, 300 * 1024);
-        _ = await AppendRawAsync(wal, 300 * 1024);
+        _ = await AppendRawAsync(wal, 60 * 1024);
+        _ = await AppendRawAsync(wal, 60 * 1024);
         var indexType = typeof(DurableWal).GetNestedType("WalPendingIndex", System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(indexType);
         Assert.DoesNotContain(indexType!.GetProperties(), property => property.Name.Contains("Payload", StringComparison.Ordinal) && property.PropertyType == typeof(ReadOnlyMemory<byte>));
@@ -840,8 +840,8 @@ public sealed class DurableWalTests
                 _ = Interlocked.Exchange(ref inFlight, value);
                 maximum = Math.Max(maximum, value);
             }));
-        _ = await AppendRawAsync(wal, 200 * 1024);
-        _ = await AppendRawAsync(wal, 200 * 1024);
+        _ = await AppendRawAsync(wal, 60 * 1024);
+        _ = await AppendRawAsync(wal, 60 * 1024);
         await wal.CompactAsync();
         Assert.Equal(1, maximum);
         Assert.Equal(0, Volatile.Read(ref inFlight));
