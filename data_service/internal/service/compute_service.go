@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -60,6 +61,7 @@ type ComputeUnit struct {
 	Dependencies  []any           `json:"dependencies"`
 	TimeoutMS     int             `json:"timeoutMs"`
 	IsEnabled     bool            `json:"isEnabled"`
+	Revision      int64           `json:"revision"`
 	Status        string          `json:"status"`
 	Path          string          `json:"path"`
 	OutputPath    string          `json:"outputPath"`
@@ -79,6 +81,7 @@ type ComputeOutput struct {
 	NullPolicy   string  `json:"nullPolicy"`
 	Description  *string `json:"description,omitempty"`
 	SortOrder    int     `json:"sortOrder"`
+	DefaultValue *string `json:"defaultValue,omitempty"`
 }
 
 type ComputeOutputInput struct {
@@ -91,6 +94,7 @@ type ComputeOutputInput struct {
 	PrecisionNum *int    `json:"precisionNum,omitempty"`
 	NullPolicy   string  `json:"nullPolicy"`
 	Description  *string `json:"description,omitempty"`
+	DefaultValue *string `json:"defaultValue,omitempty"`
 }
 
 // ComputeFolder 表示计算单元文件夹。
@@ -1306,6 +1310,7 @@ func toComputeUnit(record repository.ComputeUnitRecord) ComputeUnit {
 		Dependencies:  cloneJSONArray(record.Dependencies),
 		TimeoutMS:     record.TimeoutMS,
 		IsEnabled:     record.IsEnabled,
+		Revision:      record.Revision,
 		Status:        status,
 		Path:          path,
 		OutputPath:    path,
@@ -1317,7 +1322,7 @@ func toComputeUnit(record repository.ComputeUnitRecord) ComputeUnit {
 func toComputeOutputs(records []repository.ComputeOutputRecord) []ComputeOutput {
 	result := make([]ComputeOutput, 0, len(records))
 	for _, item := range records {
-		result = append(result, ComputeOutput{ID: item.ID, DatapointID: item.DatapointID, Key: item.OutputKey, Name: item.Name, Path: item.Path, DataType: item.DataType, Unit: cloneOptionalString(item.Unit), PrecisionNum: cloneOptionalInt(item.PrecisionNum), NullPolicy: item.NullPolicy, Description: cloneOptionalString(item.Description), SortOrder: item.SortOrder})
+		result = append(result, ComputeOutput{ID: item.ID, DatapointID: item.DatapointID, Key: item.OutputKey, Name: item.Name, Path: item.Path, DataType: item.DataType, Unit: cloneOptionalString(item.Unit), PrecisionNum: cloneOptionalInt(item.PrecisionNum), NullPolicy: item.NullPolicy, Description: cloneOptionalString(item.Description), SortOrder: item.SortOrder, DefaultValue: cloneOptionalString(item.DefaultValue)})
 	}
 	return result
 }
@@ -2166,7 +2171,7 @@ func computeOutputParamsFromRecords(records []repository.ComputeOutputRecord) []
 		result = append(result, repository.ComputeOutputParam{
 			ID: &id, OutputKey: output.OutputKey, Name: output.Name, Path: output.Path,
 			DataType: output.DataType, Unit: cloneOptionalString(output.Unit),
-			PrecisionNum: cloneOptionalInt(output.PrecisionNum), NullPolicy: output.NullPolicy,
+			PrecisionNum: cloneOptionalInt(output.PrecisionNum), NullPolicy: output.NullPolicy, DefaultValue: cloneOptionalString(output.DefaultValue),
 			Description: cloneOptionalString(output.Description),
 		})
 	}
@@ -2195,7 +2200,16 @@ func computeRunOutputValues(unit repository.ComputeUnitRecord, output any) ([]re
 				warnings = append(warnings, "输出 "+binding.OutputKey+" 缺失或为空，已按 skip 保留旧值")
 				continue
 			}
-			return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出 "+binding.OutputKey+" 缺失或为空")
+			if binding.NullPolicy == "default" && binding.DefaultValue != nil {
+				parsed, err := repository.ParseTypedJSONDefault(*binding.DefaultValue, binding.DataType)
+				if err != nil {
+					return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出 "+binding.OutputKey+" 默认值无效")
+				}
+				value = parsed
+				warnings = append(warnings, "输出 "+binding.OutputKey+" 缺失或为空，已使用默认值")
+			} else {
+				return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出 "+binding.OutputKey+" 缺失或为空")
+			}
 		}
 		if err := validateComputeOutputValue(binding.DataType, value); err != nil {
 			return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出 "+binding.OutputKey+" 类型不匹配")
@@ -2206,46 +2220,14 @@ func computeRunOutputValues(unit repository.ComputeUnitRecord, output any) ([]re
 }
 
 func validateComputeOutputValue(dataType string, value any) error {
-	dataType, ok := canonicalDataPointType(dataType)
-	if !ok {
-		return errors.New("unsupported output type")
+	// 统一走运行制品的 UseNumber 解析器，避免把 int64/uint64 默认值降级成
+	// float64 后在 2^53 附近丢失精度。
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return err
 	}
-	switch dataType {
-	case "bool":
-		if _, ok := value.(bool); !ok {
-			return errors.New("expected bool")
-		}
-	case "string", "bytes", "datetime":
-		if _, ok := value.(string); !ok {
-			return errors.New("expected string")
-		}
-	case "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64":
-		number, ok := runtimeNumber(value)
-		if !ok || math.Trunc(number) != number || (strings.HasPrefix(dataType, "uint") && number < 0) {
-			return errors.New("expected integer")
-		}
-		bounds := map[string][2]float64{"int8": {-128, 127}, "uint8": {0, 255}, "int16": {-32768, 32767}, "uint16": {0, 65535}, "int32": {-2147483648, 2147483647}, "uint32": {0, 4294967295}, "int64": {-9007199254740991, 9007199254740991}, "uint64": {0, 9007199254740991}}
-		if bound := bounds[dataType]; number < bound[0] || number > bound[1] {
-			return errors.New("integer out of range")
-		}
-	case "float32", "float64", "decimal":
-		number, ok := runtimeNumber(value)
-		if !ok {
-			return errors.New("expected number")
-		}
-		if dataType == "float32" && math.Abs(number) > math.MaxFloat32 {
-			return errors.New("float32 out of range")
-		}
-	case "object":
-		if _, ok := value.(map[string]any); !ok {
-			return errors.New("expected object")
-		}
-	case "array":
-		if _, ok := value.([]any); !ok {
-			return errors.New("expected array")
-		}
-	}
-	return nil
+	_, err = repository.ParseTypedJSONDefault(string(payload), dataType)
+	return err
 }
 
 func datapointOutputNameFromPath(path string) string {
@@ -2286,8 +2268,8 @@ func normalizeComputeOutputInputs(inputs []ComputeOutputInput, unitName string) 
 		if nullPolicy == "" {
 			nullPolicy = "error"
 		}
-		if nullPolicy != "error" && nullPolicy != "skip" {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出空值策略仅支持 error/skip")
+		if nullPolicy != "error" && nullPolicy != "skip" && nullPolicy != "default" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出空值策略仅支持 error/skip/default")
 		}
 		name := strings.TrimSpace(input.Name)
 		if name == "" {
@@ -2323,10 +2305,22 @@ func normalizeComputeOutputInputs(inputs []ComputeOutputInput, unitName string) 
 				description = &value
 			}
 		}
+		if nullPolicy == "default" && input.DefaultValue == nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "default 空值策略必须提供默认值")
+		}
+		if nullPolicy != "default" && input.DefaultValue != nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅 default 空值策略允许默认值")
+		}
+		if input.DefaultValue != nil {
+			parsed, err := repository.ParseTypedJSONDefault(*input.DefaultValue, dataType)
+			if err != nil || (nullPolicy == "default" && parsed == nil) {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出默认值类型不匹配")
+			}
+		}
 		items = append(items, repository.ComputeOutputParam{
 			ID: id, OutputKey: key, Name: name, Path: path, DataType: dataType,
 			Unit: unit, PrecisionNum: cloneOptionalInt(input.PrecisionNum), NullPolicy: nullPolicy,
-			Description: description,
+			Description: description, DefaultValue: cloneOptionalString(input.DefaultValue),
 		})
 	}
 	return items, nil

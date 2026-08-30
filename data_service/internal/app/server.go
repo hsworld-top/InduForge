@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -261,7 +262,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttService.SetSecretRepository(connectionSecretRepository)
 	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 	dataPointService.SetMqttPublisher(mqttService)
-	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
+	projectSnapshotService := service.NewProjectSnapshotServiceWithClockAndSchemaRoot(projectSnapshotRepository, time.Now, filepath.Join(config.ResolveCollectorProtocolCatalogPath(cfg.CollectorProtocolCatalogPath), "..", "runtime"))
 	protocolConnectionService := service.NewProtocolConnectionService(protocolConnectionRepository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolConnectionRepository, service.NewDefaultProtocolPreviewAdapters())
 	protocolPreviewService.SetSecretRepository(connectionSecretRepository)

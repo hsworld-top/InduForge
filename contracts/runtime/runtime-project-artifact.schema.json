@@ -40,6 +40,7 @@
     },
     "alarmItems": {
       "type": "array",
+      "maxItems": 4096,
       "items": {
         "$ref": "#/$defs/alarmItem"
       }
@@ -68,6 +69,29 @@
         "tags",
         "attributeDefaults"
       ],
+      "oneOf": [
+        {
+          "properties": {
+            "sourceType": { "const": "manual.input" },
+            "sourceId": { "type": "null" },
+            "sourceConfig": { "$ref": "#/$defs/manualInputSourceConfig" }
+          }
+        },
+        {
+          "properties": {
+            "sourceType": { "const": "collector.point" },
+            "sourceId": { "$ref": "common.schema.json#/$defs/uuid" },
+            "sourceConfig": { "$ref": "#/$defs/collectorPointSourceConfig" }
+          }
+        },
+        {
+          "properties": {
+            "sourceType": { "const": "calc.output" },
+            "sourceId": { "$ref": "common.schema.json#/$defs/uuid" },
+            "sourceConfig": { "$ref": "#/$defs/calcOutputSourceConfig" }
+          }
+        }
+      ],
       "properties": {
         "id": {
           "$ref": "common.schema.json#/$defs/uuid"
@@ -84,8 +108,7 @@
           "$ref": "common.schema.json#/$defs/dataPointType"
         },
         "sourceType": {
-          "type": "string",
-          "minLength": 1
+          "enum": ["manual.input", "collector.point", "calc.output"]
         },
         "sourceId": {
           "anyOf": [
@@ -166,6 +189,27 @@
             "type": "string"
           }
         }
+      }
+    },
+    "manualInputSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "collectorPointSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectionId"],
+      "properties": {
+        "connectionId": { "$ref": "common.schema.json#/$defs/uuid" }
+      }
+    },
+    "calcOutputSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["computeId"],
+      "properties": {
+        "computeId": { "$ref": "common.schema.json#/$defs/uuid" }
       }
     },
     "computeUnit": {

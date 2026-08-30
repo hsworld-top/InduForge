@@ -609,6 +609,9 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工程快照连接配置包含明文密钥，请使用 connectionSecrets 密文区块")
 		}
 	}
+	if err := validateSnapshotComputeOutputTargets(snapshot); err != nil {
+		return err
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启快照写入事务失败", err)
@@ -616,6 +619,13 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+	if err := lockComputeProject(ctx, tx, projectID); err != nil {
+		return err
+	}
+	// 快照 Replace 不能信任调用方携带的 revision：以同一事务中已锁定的可执行投影为事实来源。
+	if err := r.assignSnapshotComputeRevisions(ctx, tx, projectID, &snapshot); err != nil {
+		return err
+	}
 
 	if err := r.deleteProjectSnapshot(ctx, tx, projectID); err != nil {
 		return err
@@ -682,6 +692,112 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交快照写入事务失败", err)
 	}
 	return nil
+}
+
+func (r *ProjectSnapshotRepository) assignSnapshotComputeRevisions(ctx context.Context, tx pgx.Tx, projectID string, snapshot *ProjectSnapshot) error {
+	for index := range snapshot.ComputeUnits {
+		unit := &snapshot.ComputeUnits[index]
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM data_compute_units WHERE project_id=$1 AND id=$2)`, projectID, unit.ID).Scan(&exists); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照计算单元版本失败", err)
+		}
+		if !exists {
+			unit.Revision = 1
+			continue
+		}
+		refs, err := snapshotComputeDatapointRefs(*unit)
+		if err != nil {
+			return err
+		}
+		outputs := make([]ComputeOutputParam, 0, len(unit.Outputs))
+		for _, output := range unit.Outputs {
+			outputs = append(outputs, ComputeOutputParam{ID: &output.ID, OutputKey: output.OutputKey, Name: output.Name, Path: output.Path, DataType: output.DataType, Unit: output.Unit, PrecisionNum: output.PrecisionNum, NullPolicy: output.NullPolicy, Description: output.Description, DefaultValue: output.DefaultValue})
+		}
+		trigger, err := marshalComputeObject(unit.TriggerConfig)
+		if err != nil {
+			return err
+		}
+		inputs, err := marshalComputeObject(unit.InputBindings)
+		if err != nil {
+			return err
+		}
+		dependencies, err := marshalComputeArray(unit.Dependencies)
+		if err != nil {
+			return err
+		}
+		changed, err := computeExecutableDefinitionChangedTx(ctx, tx, UpdateComputeUnitParams{ID: unit.ID, ProjectID: projectID, Language: unit.Language, ScriptCode: unit.ScriptCode, TriggerType: unit.TriggerType, TriggerConfig: unit.TriggerConfig, InputBindings: unit.InputBindings, Dependencies: unit.Dependencies, TimeoutMS: unit.TimeoutMS, IsEnabled: unit.IsEnabled, DatapointRefs: refs, Outputs: outputs}, []byte(trigger), []byte(inputs), []byte(dependencies))
+		if err != nil {
+			return err
+		}
+		if !changed {
+			changed, err = snapshotComputeOutputTargetsChangedTx(ctx, tx, projectID, *unit)
+			if err != nil {
+				return err
+			}
+		}
+		var current int64
+		if err := tx.QueryRow(ctx, `SELECT revision FROM data_compute_units WHERE project_id=$1 AND id=$2`, projectID, unit.ID).Scan(&current); err != nil {
+			return err
+		}
+		unit.Revision = current
+		if changed {
+			unit.Revision++
+		}
+	}
+	return nil
+}
+
+// validateSnapshotComputeOutputTargets 在删除旧数据前校验每个 compute output 的完整可发布投影。
+// 它和运行制品构建共用同一纯 helper，避免快照可写入但节点无法装载的定义漂移。
+func validateSnapshotComputeOutputTargets(snapshot ProjectSnapshot) error {
+	points := make(map[string]DataPointRecord, len(snapshot.DataPoints))
+	for _, point := range snapshot.DataPoints {
+		points[point.ID] = point
+	}
+	for _, unit := range snapshot.ComputeUnits {
+		for _, output := range unit.Outputs {
+			point, exists := points[output.DatapointID]
+			if !exists {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照计算输出目标数据点不存在")
+			}
+			if _, _, err := validateComputeOutputTarget(unit.ID, output, point); err != nil {
+				return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照计算输出投影无效", err)
+			}
+		}
+	}
+	return nil
+}
+
+func snapshotComputeOutputTargetsChangedTx(ctx context.Context, tx pgx.Tx, projectID string, unit ComputeUnitRecord) (bool, error) {
+	rows, err := tx.Query(ctx, `SELECT output_key,datapoint_id::text FROM data_compute_unit_outputs WHERE project_id=$1 AND compute_unit_id=$2`, projectID, unit.ID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	current := map[string]string{}
+	for rows.Next() {
+		var key, datapointID string
+		if err := rows.Scan(&key, &datapointID); err != nil {
+			return false, err
+		}
+		current[key] = datapointID
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return snapshotComputeOutputTargetsChanged(current, unit.Outputs), nil
+}
+
+func snapshotComputeOutputTargetsChanged(current map[string]string, outputs []ComputeOutputRecord) bool {
+	if len(current) != len(outputs) {
+		return true
+	}
+	for _, output := range outputs {
+		if current[output.OutputKey] != output.DatapointID {
+			return true
+		}
+	}
+	return false
 }
 
 // BuildProjectArtifactV1 基于项目快照构建 开发态协议 产物契约对象。
@@ -1343,7 +1459,7 @@ func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectI
 func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, projectID string) ([]ComputeUnitRecord, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config,
-		       input_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
+		       input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
         FROM data_compute_units
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -2188,6 +2304,9 @@ func (r *ProjectSnapshotRepository) insertDataPoints(ctx context.Context, tx pgx
 
 func (r *ProjectSnapshotRepository) insertComputeUnits(ctx context.Context, tx pgx.Tx, projectID, actorID string, units []ComputeUnitRecord) error {
 	for _, unit := range units {
+		if unit.Revision < 1 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照计算单元 revision 必须大于等于 1")
+		}
 		triggerConfigBytes, err := marshalSnapshotObject(unit.TriggerConfig)
 		if err != nil {
 			return err
@@ -2205,11 +2324,11 @@ func (r *ProjectSnapshotRepository) insertComputeUnits(ctx context.Context, tx p
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_compute_units (
                 id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config,
-				input_bindings, dependencies, timeout_ms, is_enabled, created_by, updated_by, created_at, updated_at
+				input_bindings, dependencies, timeout_ms, is_enabled, revision, created_by, updated_by, created_at, updated_at
             )
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18)
         `, unit.ID, projectID, unit.Name, unit.Description, unit.FolderID, unit.Language, unit.ScriptCode, unit.TriggerType, string(triggerConfigBytes),
-			string(inputBindingsBytes), string(dependenciesBytes), unit.TimeoutMS, unit.IsEnabled, actorID, actorID, createdAt, updatedAt); err != nil {
+			string(inputBindingsBytes), string(dependenciesBytes), unit.TimeoutMS, unit.IsEnabled, unit.Revision, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照计算单元失败", err)
 		}
 		refs, err := snapshotComputeDatapointRefs(unit)
@@ -2242,7 +2361,7 @@ func snapshotComputeDatapointRefs(unit ComputeUnitRecord) ([]ComputeDatapointRef
 			id, _ := mapped["datapointId"].(string)
 			alias, _ := mapped["alias"].(string)
 			id, alias = strings.TrimSpace(id), strings.TrimSpace(alias)
-			if id == "" || alias == "" {
+			if id == "" || alias == "" || alias == "true" || alias == "false" {
 				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照计算数据点变量缺少稳定 ID 或别名")
 			}
 			aliasCopy := alias
