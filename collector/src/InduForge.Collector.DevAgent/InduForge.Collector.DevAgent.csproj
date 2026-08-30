@@ -4,6 +4,7 @@
     <PackageReference Include="openssl-native" Version="3.5.5" GeneratePathProperty="true" ExcludeAssets="all" />
     <ProjectReference Include="..\InduForge.Collector.Adapters.Hsl\InduForge.Collector.Adapters.Hsl.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Contracts\InduForge.Collector.Contracts.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.DriverHosting\InduForge.Collector.DriverHosting.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.AllenBradleyEtherNetIp\InduForge.Collector.Drivers.AllenBradleyEtherNetIp.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.BeckhoffAds\InduForge.Collector.Drivers.BeckhoffAds.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.Cimon\InduForge.Collector.Drivers.Cimon.csproj" />
