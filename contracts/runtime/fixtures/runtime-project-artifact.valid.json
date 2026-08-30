@@ -142,6 +142,31 @@
       "defaultValue": null,
       "tags": [],
       "attributeDefaults": {}
+    },
+    {
+      "id": "99999990-0000-4000-8000-000000000004",
+      "path": "line1.status.text",
+      "name": "状态文本",
+      "dataType": "string",
+      "sourceType": "manual.input",
+      "sourceId": null,
+      "sourceConfig": {},
+      "runtimePermissions": {
+        "write": {
+          "allowRoles": [],
+          "denyRoles": [],
+          "inherit": true
+        }
+      },
+      "refreshMode": "manual",
+      "refreshIntervalMs": null,
+      "status": "active",
+      "displayOrder": 6,
+      "unit": null,
+      "precisionNum": null,
+      "defaultValue": null,
+      "tags": [],
+      "attributeDefaults": {}
     }
   ],
   "computeUnits": [
@@ -346,7 +371,7 @@
           "dataType": "float64"
         }
       ],
-      "derivedExpression": "temp > result",
+      "derivedExpression": "temp - result",
       "conditions": [
         {
           "id": "99999999-9999-4999-8999-999999999999",
@@ -414,7 +439,7 @@
           "kind": "state",
           "operator": "eq",
           "params": {
-            "expected": true
+            "expected": 1
           },
           "severity": "major",
           "triggerDelayMs": 0,
@@ -444,8 +469,8 @@
           "kind": "transition",
           "operator": "from_to",
           "params": {
-            "from": false,
-            "to": true
+            "from": 0,
+            "to": 1
           },
           "severity": "major",
           "triggerDelayMs": 0,
@@ -464,9 +489,9 @@
       "inputs": [
         {
           "alias": "temp",
-          "datapointId": "22222222-2222-4222-8222-222222222222",
-          "path": "line1.temperature",
-          "dataType": "float64"
+          "datapointId": "99999990-0000-4000-8000-000000000004",
+          "path": "line1.status.text",
+          "dataType": "string"
         }
       ],
       "conditions": [

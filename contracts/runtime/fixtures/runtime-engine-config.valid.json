@@ -128,6 +128,7 @@
     "dataRawStream": "DATA_RAW",
     "dataDerivedStream": "DATA_DERIVED",
     "eventStream": "EVENT",
+    "deadLetterStream": "RUNTIME_DLQ",
     "consumers": [
       {
         "role": "writer",
@@ -143,6 +144,11 @@
           5000,
           30000
         ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.writer"
       },
       {
@@ -159,6 +165,11 @@
           5000,
           30000
         ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.alarm"
       },
       {
@@ -175,6 +186,11 @@
           5000,
           30000
         ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.alarm-derived"
       },
       {
@@ -191,6 +207,11 @@
           5000,
           30000
         ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.compute"
       },
       {
@@ -207,6 +228,11 @@
           5000,
           30000
         ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.writer-derived"
       },
       {
@@ -223,9 +249,18 @@
           5000,
           30000
         ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.compute-derived"
       }
     ]
+  },
+  "computeSandbox": {
+    "serverResourceRef": "site-resource://site-a/compute-sandbox",
+    "credentialSecretRef": "secret://site-a/deployment-line1-prod/compute-sandbox"
   },
   "stateStore": {
     "engine": "postgresql",

@@ -152,7 +152,8 @@ Binding/Engine config 的 `artifactRef.artifactDigest` 是对挂载 Artifact 原
 
 连接声明 `requiredOperations` 且必须包含 `point.read`。构建器必须按 `(driverId, schemaVersion)` 调用
 `contracts/collector-protocols/<driverId>/address.schema.json` 与对应 connection/read-options Schema 验证 `address` 和
-`readOptions`；通用 Runtime Schema 不能替代该按驱动的验证。
+`readOptions`；通用 Runtime Schema 不能替代该按驱动的验证。V1 已认证的 `modbus.tcp` 与 `opcua.standard` 尚不消费逐点
+`readOptions`，两者的 `read-options.schema.json` 均为严格空对象；未来只有驱动实现实际支持后，才能先扩展其 Schema 再发布字段。
 
 Binding 只针对一个 deployment，引用一个固定 Artifact identity，并补充现场 `resourceRef`、可选的零到多个
 `secretRefs`、NATS credential 的 `credentialSecretRef`、`ownership` 与本 deployment/node 的 WAL 容量策略。无认证
@@ -164,15 +165,17 @@ Collector Binding 与 Engine JetStream 配置都必须引用站点 NATS 的 `ser
 `credentialSecretRef`；Account 名称不是可连接地址。Engine 的 `projectArtifact` 引用和只读 `artifactMount` 指向
 `runtime-project-artifact.v1` 文件，后者是构建期从 `ProjectArtifactV1` 1.0 规范化得到的**可执行**适配输入，而不是只含 ID 的索引：
 dataPoints 固定 id/path/name/dataType，并保留 sourceType/sourceId/sourceConfig、runtimePermissions、refresh/status、unit/default/tags/attributes 等 SDK 快照元数据；
-computeUnits 固定脚本、语言、revision、超时、依赖、标准化 datapoint 输入与完整输出/nullPolicy；alarmItems 固定 point/derived 输入别名、derivedExpression、评价模式和完整条件。它不包含现场 Binding 或 Secret。
+computeUnits 固定脚本、语言、revision、超时、依赖、标准化 datapoint 输入与完整输出/nullPolicy；alarmItems 固定 point/derived 输入别名、derivedExpression、评价模式和完整条件，V1 最多 4096 项。该上限与单个 Artifact 16MiB 文件上限分开冻结：16MiB 限制原始配置体积，4096 限制报警 sweep 的成对 allowed 集合、内存和事务候选窗口，保证恢复扫描始终有确定边界。它不包含现场 Binding 或 Secret。
+启用 `compute` role 时，Engine config 还必须带 `computeSandbox.serverResourceRef` 与 `credentialSecretRef`；它们只是受信 resolver 的引用，后续调用 `/v1/execute` 的 endpoint 和 token 不得写入 config、日志或 status。
 
 每个 dataPoint 必带 nullable `precisionNum`。`runtimePermissions` 严格等于 `{write:{allowRoles,denyRoles,inherit}}`：两个 role
 数组均唯一且元素为 stable role ID，`inherit` 为 boolean；不得编造 read/history 等平铺权限。`sourceId` 是 UUID 或 null：
-`collector.point` 指向 collector point/variable UUID，`calc.output` 指向 compute unit UUID。sourceConfig 只保留无 Secret 的来源元数据，
-例如 collector connection UUID 或 computeId；不得含现场 endpoint、凭据或其他 Secret。refreshMode 仅为 auto/manual/subscription，
+sourceType 在 Runtime V1 只允许三类且是判别联合：`manual.input` 是无 producer 的人工输入点，必须使用 null sourceId 和严格空 `{}` sourceConfig；`collector.point` 的 sourceId 是 collector point/variable UUID，sourceConfig 必须且只能是 `{connectionId:<canonical UUID>}`；`calc.output` 的 sourceId 是 compute unit UUID，sourceConfig 必须且只能是 `{computeId:<同一 canonical UUID>}`。不得含现场 endpoint、凭据、Secret 或其他扩展字段。refreshMode 仅为 auto/manual/subscription，
 status 仅为 active/inactive/invalid。
 
-compute language 只允许当前 sandbox 可执行的 `js` 与 `python`；依赖是 packageName/importName/version/language 对象。trigger 是严格判别对象：`manual` 没有附加配置；schedule 严格只有 `interval`、`daily`、`weekly`、`monthly`、`yearly` 五个分支，任何分支的无关字段都必须拒绝。interval 仅为 every/unit；daily/weekly/monthly/yearly 使用 `timezone`（必须可由装载器以 Go `time.LoadLocation` 解析的 IANA timezone）和 `time`（HH:mm:ss）；weekly 必带 weekdays；monthly/yearly 的 dayRule=day 仅带 dayOfMonth，dayRule=weekday 仅带 weekOfMonth（-1 或 1..5）和 weekday，yearly 还必带 month。startAt/endAt 是可选 `common.utcRfc3339` window，maxRuns 为 1..1000000；装载器必须解析为 UTC 并拒绝 `endAt <= startAt`。`datapoint_change` 必带 datapointId/path/dataType/mode/debounceMs；deadband 只能随数值 `value_change`、`increase`、`decrease` 出现。装载器还校验 any/value_change 只用 bool/string/数值标量、increase/decrease 只用数值、rising_edge/falling_edge 只用 bool。`condition` 必带 expression（最多 1000）、entered/active/exited phases、alias/datapointId/path/dataType variables 与不超过 3600000ms 的 debounce。报警项必须有 `enabled:boolean`。报警条件 kind 固定为 threshold、range、state、transition、text_match、rate_of_change、deviation、offline、quality、stale，每项均带 operator、专用 params、severity、triggerDelayMs、clearDelayMs、deadband；transition 的 changed/rising/falling 仅接受空 params，from_to 仅接受 from/to；deviation 的 operator 固定 gt；offline 固定 is 与空 params。装载器使用 Go RE2 编译 regex，且复核 range 的 lower < upper、from_to 的 from/to 不同。`mode=point` 只允许 single 或 highest_matching：single 恰一输入/条件，highest_matching 仅数值 threshold 分级；`mode=derived` 只允许 single、至少两个 inputs、恰一个条件且禁止 offline/quality/stale。装载器还须校验所有 datapoint/compute 引用存在、输入 alias/outputKey 唯一、依赖与输入一致、输出 path/dataType 与目标 datapoint 一致，以及不存在歧义写入。
+对 `mode=point`，已知 input dataType 必须在加载期兼容条件：threshold/range/rate_of_change/deviation 仅数值，text_match 仅 string，rising/falling 仅 bool，state 和 from_to 参数必须严格匹配 wire dataType；changed 可用于所有 V1 类型。derivedExpression 没有独立输出类型，结果的类型兼容性在执行时严格 fail-closed 校验，装载器不得伪造静态类型。
+
+compute language 只允许当前 sandbox 可执行的 `js` 与 `python`；依赖是 packageName/importName/version/language 对象。trigger 是严格判别对象：`manual` 没有附加配置；schedule 严格只有 `interval`、`daily`、`weekly`、`monthly`、`yearly` 五个分支，任何分支的无关字段都必须拒绝。interval 仅为 every/unit；daily/weekly/monthly/yearly 使用 `timezone`（必须可由装载器以 Go `time.LoadLocation` 解析的 IANA timezone）和 `time`（HH:mm:ss）；weekly 必带 weekdays；monthly/yearly 的 dayRule=day 仅带 dayOfMonth，dayRule=weekday 仅带 weekOfMonth（-1 或 1..5）和 weekday，yearly 还必带 month。startAt/endAt 是可选 `common.utcRfc3339` window，maxRuns 为 1..1000000；装载器必须解析为 UTC 并拒绝 `endAt <= startAt`。`datapoint_change` 必带 datapointId/path/dataType/mode/debounceMs；deadband 只能随数值 `value_change`、`increase`、`decrease` 出现。装载器还校验 any/value_change 只用 bool/string/数值标量、increase/decrease 只用数值、rising_edge/falling_edge 只用 bool。`condition` 必带 expression（最多 1000）、entered/active/exited phases、alias/datapointId/path/dataType variables 与不超过 3600000ms 的 debounce。报警项必须有 `enabled:boolean`。报警条件 kind 固定为 threshold、range、state、transition、text_match、rate_of_change、deviation、offline、quality、stale，每项均带 operator、专用 params、severity、triggerDelayMs、clearDelayMs、deadband；transition 的 changed/rising/falling 仅接受空 params，from_to 仅接受 from/to；deviation 的 operator 固定 gt；offline 固定 is 与空 params。装载器使用 Go RE2 编译 regex，且复核 range 的 lower < upper、from_to 的 from/to 不同。`mode=point` 只允许 single 或 highest_matching：single 恰一输入/条件，highest_matching 仅数值 threshold 分级；`mode=derived` 只允许 single、至少两个 inputs、恰一个条件且禁止 offline/quality/stale。V1 point wire 没有独立 `offline` 字段：alarm ingress 仅把 `quality=bad` 单向映射为 offline，`unknown` 不表示离线；stale 始终由缺失时间的 sweep 判定。装载器还须校验所有 datapoint/compute 引用存在、输入 alias/outputKey 唯一、依赖与输入一致、输出 path/dataType 与目标 datapoint 一致，以及不存在歧义写入。
 
 此外，装载器必须拒绝 enabled compute 对同一 output datapoint 的多写，并要求每个 enabled compute 都有唯一的
 `producerAssignments` compute fence；该 fence 的 ownership 是 producer token，不能与 consumer role token 比较或混用。
@@ -200,16 +203,25 @@ Collector 只在 Binding 的 `ownerId/epoch` 与已持久化发布决议一致�
 - `ackPolicy=explicit`；仅在本地事务成功提交后 Ack。
 - 显式提供 `AckWait`、`maxDeliver`、递增或非递减 `backoff`，以及仅本 deployment Account 可访问的
   `dlq.<consumer>` Subject。
+- 配置 `maxDeliver` 是业务 handler 尝试阈值：第 N 次仍调用 handler，失败后改为持久化 DLQ；JetStream durable
+  必须固定 `MaxDeliver=-1`，使数据库/DLQ 临时失败能恢复，但第 N+1 次绝不再调用 handler。
 - 到达 `maxDeliver` 的消息必须带原始 subject、eventId、失败原因、投递次数进入 DLQ，并使健康状态降级；DLQ failure
   记录和最终 DLQ 发布先在数据库事务中写入 Outbox，提交成功后才 Ack 原消息；不得静默丢弃或无限重试。
 - 至少一次投递是既定语义。所有副作用必须以 `eventId`、业务键和 owner/epoch 防重，不能依赖“只投递一次”。
 
 每项 `jetStream.consumers` 显式声明 `role`、稳定 `consumerKey`、配置中的实际 `stream` 名称、durableName 与 filterSubject；不得由 durableName 或 Subject 字符串猜测角色。装载器必须校验 raw/derived consumer 的 stream 分别等于 dataRawStream/dataDerivedStream、role 已启用、consumerKey 与 durableName 均唯一，writer/alarm/compute 的 raw 与 computed Subject 覆盖完整，并将 consumerKey 用作 `processed_event` 的去重命名空间；backoff 非递减且长度不得超过 maxDeliver。
+为避免 NATS 将省略的 pull 限制规范化为不受审计的服务端默认值，consumer 还必须显式固定：`maxAckPending=32`、`maxWaiting=32`、`maxRequestBatch=32`、`maxRequestExpiresMs=5000`、`maxRequestMaxBytes=1048576`；Engine Fetch 同样不得超过 32 条或 5 秒。
 
 V1 的 EVENT stream 只承载 `alarm.event.v1`（alarm transition 与 DATA_GAP）输出，不是 Engine 入站 consumer。
 因此 `jetStream.consumers` 只允许 `data.raw.>` 与 `data.computed.>`，Schema 和装载器均拒绝 event stream consumer。
 DLQ body 使用 `runtime.dlq.event.v1`：含 deployment/account/consumer、原 subject、可空 eventId、稳定 reasonCode、
 deliveryCount、原 body 的 SHA-256 与受 1MiB 解码上限约束的 base64、occurredAt；不得包含 Secret、endpoint 或 DSN。
+`originalSubject` 上限为 4096 UTF-8 字符，覆盖 NATS 接受的 control-line subject；超过此极端边界时 consumer
+必须健康降级并停止，既不能 Ack，也不能 NAK 死循环、截断或伪造原 subject。
+DATA_RAW、DATA_DERIVED、EVENT 三个 stream 的 subjects 分别必须精确为 `data.raw.>`、`data.computed.>`、
+`alarm.event`，互不重叠；DLQ stream subjects 必须精确为所有 consumer `deadLetterSubject` 的去重集合。DATA stream
+必须显式 `MaxMsgSize <= 1MiB`；DLQ stream 和 server `MaxPayload` 均不得低于冻结的 `1,424,000` bytes，以容纳最大合法
+UTF-8/base64 DLQ envelope（极值 JSON 实测 1,423,548 bytes）。
 `dlqId`/Outbox dedupe key 为 `SHA-256(schemaVersion, deploymentId, consumerKey, originalSubject, eventId 或空字段,
 reasonCode, bodySha256)`，字段以 0x1f 拼接，忽略会随重试变化的 deliveryCount/occurredAt，以避免同一失败重复创建 Outbox。
 
@@ -247,6 +259,11 @@ pointId、非递减 backoff 不满足、backoff 长度超过 maxDeliver，以及
 不一致。
 
 ## 9. Collector WAL 与数据缺口
+
+Collector V1 作为 `data.raw.v1` 生产者，冻结完整 UTF-8 JSON wire payload（不含 NATS header）上限为 **64KiB**。
+该限制只适用于工业 Collector 原始采样；Engine 入站的总体 1MiB 限制及 `data.computed.v1` 不受此较小上限约束。
+动态 string、bytes 或数组值超过上限时，Collector 不得截断或丢弃：必须以相同 source/server/received 时间写入
+`value=null`、`quality=bad` 的转换失败原始事实。
 
 Collector 对每个 deployment 使用隔离 WAL。每条记录在发布前必须完成 fsync，带 CRC32C；只有取得 JetStream
 PubAck 后才能写 `after-jetstream-puback` commit marker 并允许回收。重连后的补投按 WAL 顺序发送，保留整个原始
