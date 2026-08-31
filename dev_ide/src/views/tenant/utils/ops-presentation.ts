@@ -1,10 +1,12 @@
 import type {
+  DeploymentWorkload,
   DeploymentRunEvent,
   HostNode,
   OpsHealth,
   OpsLifecycle,
   OpsNodeRole,
   OpsWorkloadRole,
+  ProjectDeployment,
   RuntimeCluster,
 } from '@/api/ops.api'
 
@@ -16,6 +18,21 @@ export const nodeRoleLabel: Record<OpsNodeRole, string> = {
   collector_linux: 'Linux 采集节点',
   collector_windows: 'Windows 采集节点',
 }
+
+/**
+ * 节点页只展示用户能理解的运行位置：运行节点归属资源池，
+ * 采集节点的原生进程则直接在当前服务器上运行。
+ */
+export const nodeLocationPresentation = (
+  node: Pick<HostNode, 'role' | 'runtimeClusterId' | 'runtimeClusterName'>,
+) => {
+  if (node.role !== 'runtime_linux') return '该服务器'
+  if (node.runtimeClusterName?.trim()) return node.runtimeClusterName.trim()
+  return node.runtimeClusterId ? '运行资源池' : '未分配运行位置'
+}
+
+export const nodeServicePresentation = (node: Pick<HostNode, 'role'>) =>
+  node.role === 'runtime_linux' ? '运行工程服务' : '运行采集服务'
 
 export const workloadRoleLabel: Record<OpsWorkloadRole, string> = {
   compute: '计算服务',
@@ -31,10 +48,17 @@ export const healthPresentation = (health?: OpsHealth | string) => {
       degraded: { label: '需关注', type: 'warning' },
       unavailable: { label: '不可用', type: 'danger' },
       maintenance: { label: '维护中', type: 'info' },
-      unknown: { label: '待确认', type: 'info' },
+      unknown: { label: '状态待更新', type: 'info' },
     }
   // 后端滚动升级或脏数据不应导致整页渲染中断，未知值统一降级展示。
   return map[value as OpsHealth] || map.unknown
+}
+
+/** 优先展示可确认的节点状态，避免将撤销、离线和普通不可用混为一谈。 */
+export const nodeHealthPresentation = (health?: OpsHealth | string, observedStatus?: string) => {
+  if (observedStatus === 'revoked') return { label: '已撤销', type: 'danger' as const }
+  if (observedStatus === 'offline') return { label: '未连接', type: 'danger' as const }
+  return healthPresentation(health)
 }
 
 export const lifecyclePresentation = (status?: OpsLifecycle | string) => {
@@ -49,32 +73,138 @@ export const lifecyclePresentation = (status?: OpsLifecycle | string) => {
     ready: '已就绪',
     degraded: '需关注',
     offline: '已离线',
+    online: '在线',
+    pending_approval: '待确认',
+    active: '已启用',
+    revoked: '已撤销',
     maintenance: '维护中',
     disabled: '已禁用',
   }
-  return map[String(status || '').toLowerCase()] || '待确认'
+  return map[String(status || '').toLowerCase()] || '状态待更新'
 }
 
 export const lifecycleTagType = (status?: OpsLifecycle | string) => {
   const value = String(status || '').toLowerCase()
-  if (value === 'running') return 'success' as const
-  if (value === 'failed') return 'danger' as const
-  if (['pending', 'starting', 'stopping'].includes(value)) return 'warning' as const
+  if (['running', 'online', 'ready', 'active'].includes(value)) return 'success' as const
+  if (['failed', 'offline', 'revoked'].includes(value)) return 'danger' as const
+  if (['pending', 'starting', 'stopping', 'pending_approval', 'degraded'].includes(value))
+    return 'warning' as const
   return 'info' as const
+}
+
+export const deploymentHasCollectorNode = (deployment: Pick<ProjectDeployment, 'workloads'>) =>
+  Boolean(
+    deployment.workloads?.some(
+      (workload) => workload.role === 'collector' && Boolean(workload.hostNodeId),
+    ),
+  )
+
+export const deploymentCollectorNodeId = (deployment: Pick<ProjectDeployment, 'workloads'>) =>
+  deployment.workloads?.find((workload) => workload.role === 'collector')?.hostNodeId || ''
+
+export const deploymentNeedsAttention = (
+  deployment: Pick<ProjectDeployment, 'workloads' | 'health'>,
+  collectorNode?: Pick<HostNode, 'health'>,
+  runtimeCluster?: Pick<RuntimeCluster, 'health'>,
+) =>
+  !deploymentHasCollectorNode(deployment) ||
+  ['degraded', 'unavailable'].includes(String(collectorNode?.health || '')) ||
+  ['degraded', 'unavailable'].includes(String(runtimeCluster?.health || '')) ||
+  ['degraded', 'unavailable'].includes(String(deployment.health || ''))
+
+export const deploymentStatePresentation = (
+  deployment: Pick<ProjectDeployment, 'workloads' | 'health' | 'observedStatus'>,
+  collectorNode?: Pick<HostNode, 'health'>,
+  runtimeCluster?: Pick<RuntimeCluster, 'health'>,
+) => {
+  if (!deploymentHasCollectorNode(deployment)) {
+    return { label: '配置不完整', detail: '采集服务不可用', type: 'warning' as const }
+  }
+  if (runtimeCluster?.health === 'unavailable' && collectorNode?.health === 'unavailable') {
+    return { label: '需关注', detail: '运行节点和采集节点未连接', type: 'danger' as const }
+  }
+  if (runtimeCluster?.health === 'unavailable') {
+    return { label: '需关注', detail: '运行节点未连接', type: 'danger' as const }
+  }
+  if (collectorNode?.health === 'unavailable') {
+    return { label: '需关注', detail: '采集节点未连接', type: 'danger' as const }
+  }
+  if (runtimeCluster?.health === 'degraded' || collectorNode?.health === 'degraded') {
+    return { label: '需关注', detail: '部分节点状态异常', type: 'warning' as const }
+  }
+  if (deployment.observedStatus === 'failed' || deployment.health === 'unavailable') {
+    return { label: '运行失败', detail: '请查看操作记录', type: 'danger' as const }
+  }
+  if (deployment.health === 'degraded') {
+    return { label: '需关注', detail: '部分服务状态异常', type: 'warning' as const }
+  }
+  if (['pending', 'starting'].includes(String(deployment.observedStatus || ''))) {
+    return { label: '发布中', detail: '状态更新中', type: 'warning' as const }
+  }
+  if (deployment.observedStatus === 'running' && deployment.health === 'healthy') {
+    return { label: '运行中', detail: '状态正常', type: 'success' as const }
+  }
+  return {
+    label: lifecyclePresentation(deployment.observedStatus),
+    detail: healthPresentation(deployment.health).label,
+    type: lifecycleTagType(deployment.observedStatus),
+  }
+}
+
+export const workloadStatePresentation = (
+  workload: Pick<
+    DeploymentWorkload,
+    'role' | 'health' | 'observedStatus' | 'lastError' | 'lastMessage' | 'version'
+  >,
+  hostHealth?: OpsHealth | string,
+) => {
+  const locationLabel = workload.role === 'collector' ? '采集节点' : '运行节点'
+  if (hostHealth === 'unavailable') {
+    return { label: '未连接', detail: `${locationLabel}未连接`, type: 'danger' as const }
+  }
+  if (hostHealth === 'degraded') {
+    return { label: '需关注', detail: `${locationLabel}状态异常`, type: 'warning' as const }
+  }
+  if (hostHealth === 'maintenance') {
+    return { label: '维护中', detail: `${locationLabel}正在维护`, type: 'info' as const }
+  }
+  if (
+    workload.lastError ||
+    workload.health === 'unavailable' ||
+    workload.observedStatus === 'failed'
+  ) {
+    return {
+      label: '运行异常',
+      detail: '服务运行异常，可尝试重新启动；如仍失败，请联系管理员。',
+      type: 'danger' as const,
+    }
+  }
+  if (workload.health === 'degraded') {
+    return { label: '需关注', detail: '服务状态异常', type: 'warning' as const }
+  }
+  return {
+    label: lifecyclePresentation(workload.observedStatus),
+    detail: workload.lastMessage
+      ? runEventMessagePresentation(workload.lastMessage)
+      : workload.version
+        ? `版本 ${workload.version}`
+        : '等待状态更新',
+    type: lifecycleTagType(workload.observedStatus),
+  }
 }
 
 export const enrollmentStatusPresentation = (status?: string) => {
   const map: Record<string, string> = {
     created: '等待安装',
-    downloaded: '已下载安装包',
-    registered: '已注册，等待确认',
+    downloaded: '安装包已下载',
+    registered: '正在注册',
     claimed: '待确认',
     approved: '接入完成',
     rejected: '已拒绝',
     expired: '接入码已过期',
     failed: '接入失败',
   }
-  return map[status || ''] || '等待安装'
+  return map[status || ''] || '状态待更新'
 }
 
 export const sortRunEvents = (events: DeploymentRunEvent[] = []) =>
@@ -86,26 +216,26 @@ export const sortRunEvents = (events: DeploymentRunEvent[] = []) =>
 
 export const runEventStagePresentation = (stage?: string) => {
   const map: Record<string, string> = {
-    queued: '任务已提交',
-    dispatched: '命令已下发',
-    observed: '目标状态已生效',
+    queued: '等待执行',
+    dispatched: '正在执行',
+    observed: '已完成',
     failed: '执行失败',
   }
-  return map[String(stage || '').toLowerCase()] || stage || '状态更新'
+  return map[String(stage || '').toLowerCase()] || '状态更新'
 }
 
 export const runEventMessagePresentation = (message?: string) => {
   const map: Record<string, string> = {
-    'deployment queued': '工程部署已进入执行队列',
-    'agent fetched desired workload': '节点已领取工作负载目标',
-    'agent observed desired state': '节点已上报目标状态',
-    'agent reported workload failure': '节点上报工作负载执行失败',
-    'deploy queued': '部署任务已进入执行队列',
-    'start queued': '启动任务已进入执行队列',
-    'stop queued': '停止任务已进入执行队列',
-    'restart queued': '重启任务已进入执行队列',
+    'deployment queued': '工程发布等待执行',
+    'agent fetched desired workload': '正在应用服务配置',
+    'agent observed desired state': '服务状态已更新',
+    'agent reported workload failure': '服务运行失败，可尝试重新启动',
+    'deploy queued': '发布操作等待执行',
+    'start queued': '启动操作等待执行',
+    'stop queued': '停止操作等待执行',
+    'restart queued': '重启操作等待执行',
   }
-  return map[String(message || '').toLowerCase()] || message || '状态已更新'
+  return map[String(message || '').toLowerCase()] || '状态已更新'
 }
 
 /**

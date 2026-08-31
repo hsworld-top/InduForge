@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	ErrNotFound              = errors.New("运维资源不存在")
-	ErrEnrollmentUnavailable = errors.New("接入码无效、已使用或已过期")
-	ErrAgentUnauthorized     = errors.New("节点代理令牌无效")
-	ErrDeploymentBusy        = errors.New("当前部署操作尚未完成，请等待节点返回结果后重试")
-	ErrDeploymentExists      = errors.New("该工程在目标运行集群已有部署，请使用现有部署进行操作")
+	ErrNotFound                        = errors.New("运维资源不存在")
+	ErrEnrollmentUnavailable           = errors.New("接入码无效、已使用或已过期")
+	ErrAgentUnauthorized               = errors.New("节点代理令牌无效")
+	ErrRuntimeClusterSelectionRequired = errors.New("租户已有运行资源池，运行节点必须明确选择运行资源池")
+	ErrDeploymentBusy                  = errors.New("当前部署操作尚未完成，请等待节点返回结果后重试")
+	ErrDeploymentExists                = errors.New("该工程在目标运行集群已有部署，请使用现有部署进行操作")
 )
 
 type Repository interface {
@@ -106,9 +107,6 @@ func (s *Service) CreateEnrollment(ctx context.Context, actor auth.User, input C
 	input.RuntimeClusterID = strings.TrimSpace(input.RuntimeClusterID)
 	if !validNodeRole(input.Role) {
 		return Enrollment{}, "", fmt.Errorf("节点角色不支持")
-	}
-	if input.Role == RoleRuntimeLinux && input.RuntimeClusterID == "" {
-		return Enrollment{}, "", fmt.Errorf("运行节点必须选择运行集群")
 	}
 	if input.RuntimeClusterID != "" && !validUUID(input.RuntimeClusterID) {
 		return Enrollment{}, "", fmt.Errorf("运行集群 ID 格式无效")

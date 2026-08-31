@@ -381,7 +381,7 @@ func (h *Handler) err(w http.ResponseWriter, r *http.Request, e error) {
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeNotFound, e.Error())
 		return
 	}
-	if errors.Is(e, ErrDeploymentBusy) {
+	if errors.Is(e, ErrDeploymentBusy) || errors.Is(e, ErrRuntimeClusterSelectionRequired) {
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, e.Error())
 		return
 	}
@@ -419,7 +419,7 @@ func nodePayload(x HostNode) map[string]any {
 		"memoryPercent": resourceMetric(x.ResourceSummary, "memory"),
 		"diskPercent":   resourceMetric(x.ResourceSummary, "disk"),
 	}
-	return map[string]any{"id": x.ID, "runtimeClusterId": x.RuntimeClusterID, "enrollmentId": x.EnrollmentID, "role": x.Role, "displayName": x.DisplayName, "name": x.DisplayName, "hostname": x.Hostname, "os": x.OS, "architecture": x.Architecture, "machineFingerprint": x.MachineFingerprint, "ipAddress": x.IPAddress, "agentVersion": x.AgentVersion, "desiredStatus": x.DesiredStatus, "observedStatus": status, "health": normalizeNodeHealth(status), "resourceSummary": x.ResourceSummary, "metrics": metrics, "capabilities": x.Capabilities, "lastHeartbeatAt": x.LastHeartbeatAt, "approvedAt": x.ApprovedAt}
+	return map[string]any{"id": x.ID, "runtimeClusterId": x.RuntimeClusterID, "runtimeClusterName": x.RuntimeClusterName, "enrollmentId": x.EnrollmentID, "role": x.Role, "displayName": x.DisplayName, "name": x.DisplayName, "hostname": x.Hostname, "os": x.OS, "architecture": x.Architecture, "machineFingerprint": x.MachineFingerprint, "ipAddress": x.IPAddress, "agentVersion": x.AgentVersion, "desiredStatus": x.DesiredStatus, "observedStatus": status, "health": normalizeNodeHealth(status), "resourceSummary": x.ResourceSummary, "metrics": metrics, "capabilities": x.Capabilities, "lastHeartbeatAt": x.LastHeartbeatAt, "approvedAt": x.ApprovedAt}
 }
 
 func resourceMetric(summary map[string]any, section string) any {

@@ -32,12 +32,12 @@ type Enrollment struct {
 }
 
 type HostNode struct {
-	ID, TenantID, RuntimeClusterID, EnrollmentID, Role, DisplayName         string
-	Hostname, OS, Architecture, AgentVersion, MachineFingerprint, IPAddress string
-	DesiredStatus, ObservedStatus                                           string
-	ResourceSummary, Capabilities                                           map[string]any
-	LastHeartbeatAt, ApprovedAt                                             *time.Time
-	CreatedAt, UpdatedAt                                                    time.Time
+	ID, TenantID, RuntimeClusterID, RuntimeClusterName, EnrollmentID, Role, DisplayName string
+	Hostname, OS, Architecture, AgentVersion, MachineFingerprint, IPAddress             string
+	DesiredStatus, ObservedStatus                                                       string
+	ResourceSummary, Capabilities                                                       map[string]any
+	LastHeartbeatAt, ApprovedAt                                                         *time.Time
+	CreatedAt, UpdatedAt                                                                time.Time
 }
 
 type ProjectDeployment struct {

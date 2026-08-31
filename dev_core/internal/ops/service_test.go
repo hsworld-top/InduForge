@@ -41,7 +41,7 @@ func TestOpsPublicValuesUseLowerCamelJSON(t *testing.T) {
 
 func TestManagementPayloadsExposeApprovalAndListPresentationFields(t *testing.T) {
 	node := HostNode{
-		ID: "node-1", Hostname: "edge-a", MachineFingerprint: "fingerprint", IPAddress: "10.0.0.8", ObservedStatus: "online",
+		ID: "node-1", RuntimeClusterName: "默认运行资源池", Hostname: "edge-a", MachineFingerprint: "fingerprint", IPAddress: "10.0.0.8", ObservedStatus: "online",
 		ResourceSummary: map[string]any{
 			"cpu":    map[string]any{"usedPercent": 12.5},
 			"memory": map[string]any{"usedPercent": 34.5},
@@ -62,7 +62,7 @@ func TestManagementPayloadsExposeApprovalAndListPresentationFields(t *testing.T)
 	}
 	nodeResult := nodePayload(node)
 	metrics := nodeResult["metrics"].(map[string]any)
-	if nodeResult["health"] != "healthy" || metrics["cpuPercent"] != 12.5 || metrics["memoryPercent"] != 34.5 || metrics["diskPercent"] != 56.5 {
+	if nodeResult["runtimeClusterName"] != "默认运行资源池" || nodeResult["health"] != "healthy" || metrics["cpuPercent"] != 12.5 || metrics["memoryPercent"] != 34.5 || metrics["diskPercent"] != 56.5 {
 		t.Fatalf("节点健康度或资源指标映射错误: %#v", nodeResult)
 	}
 }
@@ -133,6 +133,32 @@ func TestCreateEnrollmentRejectsMalformedRuntimeClusterIDBeforeRepository(t *tes
 	_, _, err := NewService(repo, nil).CreateEnrollment(context.Background(), actor, CreateEnrollmentInput{Role: RoleRuntimeLinux, RuntimeClusterID: "not-a-uuid"})
 	if err == nil || !strings.Contains(err.Error(), "格式无效") {
 		t.Fatalf("want malformed runtime cluster ID error, got %v", err)
+	}
+}
+
+type enrollmentRepository struct {
+	Repository
+	created bool
+	input   CreateEnrollmentInput
+}
+
+func (r *enrollmentRepository) CreateEnrollment(_ context.Context, tenant, _ string, input CreateEnrollmentInput, _ string) (Enrollment, error) {
+	r.created, r.input = true, input
+	return Enrollment{ID: "enrollment-1", TenantID: tenant, RuntimeClusterID: testClusterID, Role: input.Role}, nil
+}
+
+func TestCreateEnrollmentDelegatesMissingFirstRuntimeClusterToRepository(t *testing.T) {
+	actor := auth.User{ID: "user-1", TenantID: "tenant-1", Role: "OPS_ADMIN"}
+	repo := &enrollmentRepository{}
+	enrollment, code, err := NewService(repo, nil).CreateEnrollment(context.Background(), actor, CreateEnrollmentInput{Role: RoleRuntimeLinux})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !repo.created || repo.input.RuntimeClusterID != "" {
+		t.Fatalf("首个运行节点的空集群应交由仓储原子解析: created=%v input=%#v", repo.created, repo.input)
+	}
+	if enrollment.RuntimeClusterID != testClusterID || code == "" {
+		t.Fatalf("接入任务应返回自动绑定的集群和明文接入码: enrollment=%#v code=%q", enrollment, code)
 	}
 }
 

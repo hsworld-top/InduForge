@@ -15,6 +15,16 @@ import (
 
 type PostgreSQLRepository struct{ pool *pgxpool.Pool }
 
+const (
+	defaultRuntimeClusterName        = "默认运行资源池"
+	defaultRuntimeClusterCode        = "default-runtime"
+	defaultRuntimeClusterDescription = "由首台 Linux 运行节点接入任务自动创建"
+)
+
+type rowQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
 	return &PostgreSQLRepository{pool: pool}
 }
@@ -38,9 +48,25 @@ func (r *PostgreSQLRepository) ListClusters(ctx context.Context, tenant string, 
 	return items, total, err
 }
 func (r *PostgreSQLRepository) CreateCluster(ctx context.Context, tenant, user string, in CreateClusterInput) (RuntimeCluster, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return RuntimeCluster{}, err
+	}
+	defer tx.Rollback(ctx)
+	// 显式创建与首次接入的自动创建共用租户行锁，避免并发产生两个“首个”集群。
+	if err = lockTenantForClusterChange(ctx, tx, tenant); err != nil {
+		return RuntimeCluster{}, err
+	}
 	meta, _ := json.Marshal(in.Metadata)
-	row := r.pool.QueryRow(ctx, `INSERT INTO runtime_clusters(tenant_id,name,code,description,topology,metadata,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,tenant_id,name,code,COALESCE(description,''),topology,desired_status,observed_status,controller_status,metadata,created_at,updated_at,0,0,'unknown'`, tenant, in.Name, in.Code, in.Description, in.Topology, meta, user)
-	return scanCluster(row)
+	row := tx.QueryRow(ctx, `INSERT INTO runtime_clusters(tenant_id,name,code,description,topology,metadata,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,tenant_id,name,code,COALESCE(description,''),topology,desired_status,observed_status,controller_status,metadata,created_at,updated_at,0,0,'unknown'`, tenant, in.Name, in.Code, in.Description, in.Topology, meta, user)
+	cluster, err := scanCluster(row)
+	if err != nil {
+		return RuntimeCluster{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return RuntimeCluster{}, err
+	}
+	return cluster, nil
 }
 func (r *PostgreSQLRepository) GetCluster(ctx context.Context, tenant, id string) (RuntimeCluster, error) {
 	x, err := scanCluster(r.pool.QueryRow(ctx, `SELECT c.id,c.tenant_id,c.name,c.code,COALESCE(c.description,''),c.topology,c.desired_status,c.observed_status,c.controller_status,c.metadata,c.created_at,c.updated_at,(SELECT count(*) FROM host_nodes n WHERE n.runtime_cluster_id=c.id),(SELECT count(*) FROM host_nodes n WHERE n.runtime_cluster_id=c.id AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds'),CASE WHEN (SELECT count(*) FROM host_nodes n WHERE n.runtime_cluster_id=c.id)=0 THEN 'unknown' WHEN (SELECT count(*) FROM host_nodes n WHERE n.runtime_cluster_id=c.id AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds')=(SELECT count(*) FROM host_nodes n WHERE n.runtime_cluster_id=c.id) THEN 'healthy' WHEN (SELECT count(*) FROM host_nodes n WHERE n.runtime_cluster_id=c.id AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds')>0 THEN 'degraded' ELSE 'unavailable' END FROM runtime_clusters c WHERE c.tenant_id=$1 AND c.id=$2`, tenant, id))
@@ -68,8 +94,55 @@ func (r *PostgreSQLRepository) ListEnrollments(ctx context.Context, tenant strin
 	return items, total, err
 }
 func (r *PostgreSQLRepository) CreateEnrollment(ctx context.Context, tenant, user string, in CreateEnrollmentInput, hash string) (Enrollment, error) {
-	x, e := scanEnrollment(r.pool.QueryRow(ctx, `INSERT INTO node_enrollments(tenant_id,runtime_cluster_id,role,display_name,code_hash,expires_at,created_by) VALUES($1,NULLIF($2,'')::uuid,$3,$4,$5,now()+$6::interval,$7) RETURNING id,tenant_id,COALESCE(runtime_cluster_id::text,''),role,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, tenant, in.RuntimeClusterID, in.Role, in.DisplayName, hash, in.TTL.String(), user))
-	return x, mapNotFound(e)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Enrollment{}, err
+	}
+	defer tx.Rollback(ctx)
+	enrollment, err := createEnrollmentRecord(ctx, tx, tenant, user, in, hash)
+	if err != nil {
+		return Enrollment{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Enrollment{}, err
+	}
+	return enrollment, nil
+}
+
+// createEnrollmentRecord 在同一个事务内解析运行集群并写入接入任务。
+// 只有租户完全没有运行集群时才自动创建；已有集群时不猜测目标。
+func createEnrollmentRecord(ctx context.Context, query rowQuerier, tenant, user string, in CreateEnrollmentInput, hash string) (Enrollment, error) {
+	if in.Role == RoleRuntimeLinux && in.RuntimeClusterID == "" {
+		if err := lockTenantForClusterChange(ctx, query, tenant); err != nil {
+			return Enrollment{}, err
+		}
+		var clusterExists bool
+		if err := query.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM runtime_clusters WHERE tenant_id=$1)`, tenant).Scan(&clusterExists); err != nil {
+			return Enrollment{}, err
+		}
+		if clusterExists {
+			return Enrollment{}, ErrRuntimeClusterSelectionRequired
+		}
+		metadata, err := json.Marshal(map[string]any{
+			"systemManaged": true,
+			"isDefault":     true,
+			"createdFrom":   "first_runtime_enrollment",
+		})
+		if err != nil {
+			return Enrollment{}, err
+		}
+		if err = query.QueryRow(ctx, `INSERT INTO runtime_clusters(tenant_id,name,code,description,topology,metadata,created_by) VALUES($1,$2,$3,$4,'single_node',$5,$6) RETURNING id::text`, tenant, defaultRuntimeClusterName, defaultRuntimeClusterCode, defaultRuntimeClusterDescription, metadata, user).Scan(&in.RuntimeClusterID); err != nil {
+			return Enrollment{}, err
+		}
+	}
+	enrollment, err := scanEnrollment(query.QueryRow(ctx, `INSERT INTO node_enrollments(tenant_id,runtime_cluster_id,role,display_name,code_hash,expires_at,created_by) VALUES($1,NULLIF($2,'')::uuid,$3,$4,$5,now()+$6::interval,$7) RETURNING id,tenant_id,COALESCE(runtime_cluster_id::text,''),role,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, tenant, in.RuntimeClusterID, in.Role, in.DisplayName, hash, in.TTL.String(), user))
+	return enrollment, mapNotFound(err)
+}
+
+func lockTenantForClusterChange(ctx context.Context, query rowQuerier, tenant string) error {
+	var lockedTenant string
+	err := query.QueryRow(ctx, `SELECT id::text FROM tenants WHERE id=$1 FOR UPDATE`, tenant).Scan(&lockedTenant)
+	return mapNotFound(err)
 }
 func (r *PostgreSQLRepository) GetEnrollment(ctx context.Context, tenant, id string) (Enrollment, error) {
 	_, _ = r.pool.Exec(ctx, `UPDATE node_enrollments SET status='expired',updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status='created' AND expires_at<=now()`, tenant, id)
@@ -173,16 +246,16 @@ func (r *PostgreSQLRepository) ClaimEnrollment(ctx context.Context, in ClaimEnro
 }
 
 func (r *PostgreSQLRepository) ListHostNodes(ctx context.Context, tenant string, f PageFilter) ([]HostNode, int64, error) {
-	rows, e := r.pool.Query(ctx, `SELECT id,tenant_id,COALESCE(runtime_cluster_id::text,''),enrollment_id,role,display_name,hostname,os,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,resource_summary,capabilities,last_heartbeat_at,approved_at,created_at,updated_at FROM host_nodes WHERE tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR hostname ILIKE '%'||$2||'%') ORDER BY updated_at DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
+	rows, e := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,COALESCE(n.runtime_cluster_id::text,''),n.enrollment_id,n.role,n.display_name,n.hostname,n.os,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.resource_summary,n.capabilities,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(c.name,'') FROM host_nodes n LEFT JOIN runtime_clusters c ON c.id=n.runtime_cluster_id AND c.tenant_id=n.tenant_id WHERE n.tenant_id=$1 AND ($2='' OR n.display_name ILIKE '%'||$2||'%' OR n.hostname ILIKE '%'||$2||'%') ORDER BY n.updated_at DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
 	if e != nil {
 		return nil, 0, e
 	}
 	defer rows.Close()
 	items := []HostNode{}
 	for rows.Next() {
-		var x HostNode
-		if e = rows.Scan(hostScanArgs(&x)...); e != nil {
-			return nil, 0, e
+		x, scanErr := scanManagementHostNode(rows)
+		if scanErr != nil {
+			return nil, 0, scanErr
 		}
 		items = append(items, x)
 	}
@@ -191,8 +264,7 @@ func (r *PostgreSQLRepository) ListHostNodes(ctx context.Context, tenant string,
 	return items, total, e
 }
 func (r *PostgreSQLRepository) GetHostNode(ctx context.Context, tenant, id string) (HostNode, error) {
-	var x HostNode
-	e := r.pool.QueryRow(ctx, `SELECT id,tenant_id,COALESCE(runtime_cluster_id::text,''),enrollment_id,role,display_name,hostname,os,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,resource_summary,capabilities,last_heartbeat_at,approved_at,created_at,updated_at FROM host_nodes WHERE tenant_id=$1 AND id=$2`, tenant, id).Scan(hostScanArgs(&x)...)
+	x, e := scanManagementHostNode(r.pool.QueryRow(ctx, `SELECT n.id,n.tenant_id,COALESCE(n.runtime_cluster_id::text,''),n.enrollment_id,n.role,n.display_name,n.hostname,n.os,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.resource_summary,n.capabilities,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(c.name,'') FROM host_nodes n LEFT JOIN runtime_clusters c ON c.id=n.runtime_cluster_id AND c.tenant_id=n.tenant_id WHERE n.tenant_id=$1 AND n.id=$2`, tenant, id))
 	return x, mapNotFound(e)
 }
 
@@ -589,6 +661,12 @@ func scanEnrollment(s scanner) (Enrollment, error) {
 }
 func hostScanArgs(x *HostNode) []any {
 	return []any{&x.ID, &x.TenantID, &x.RuntimeClusterID, &x.EnrollmentID, &x.Role, &x.DisplayName, &x.Hostname, &x.OS, &x.Architecture, &x.AgentVersion, &x.MachineFingerprint, &x.IPAddress, &x.DesiredStatus, &x.ObservedStatus, jsonTarget(&x.ResourceSummary), jsonTarget(&x.Capabilities), &x.LastHeartbeatAt, &x.ApprovedAt, &x.CreatedAt, &x.UpdatedAt}
+}
+func scanManagementHostNode(s scanner) (HostNode, error) {
+	var x HostNode
+	args := append(hostScanArgs(&x), &x.RuntimeClusterName)
+	err := s.Scan(args...)
+	return x, err
 }
 func workloadScanArgs(x *Workload) []any {
 	return []any{&x.ID, &x.TenantID, &x.ProjectDeploymentID, &x.HostNodeID, &x.Role, &x.DesiredStatus, &x.ObservedStatus, &x.ReplicasDesired, &x.ReplicasObserved, &x.DesiredGeneration, &x.ObservedGeneration, &x.LastOperation, &x.LastMessage, &x.ObservedAt, &x.CreatedAt, &x.UpdatedAt}

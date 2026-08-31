@@ -103,6 +103,7 @@ export interface NodeEnrollment {
 
 export interface DeploymentWorkload {
   role: OpsWorkloadRole
+  hostNodeId?: OpsId | null
   displayName?: string
   health?: OpsHealth
   desiredStatus?: OpsLifecycle
@@ -122,7 +123,6 @@ export interface ProjectDeployment {
   deploymentMode?: 'development' | 'production'
   runtimeClusterId?: OpsId | null
   runtimeClusterName?: string | null
-  hostNodeId?: OpsId | null
   version?: string
   health?: OpsHealth
   desiredStatus?: OpsLifecycle

@@ -2889,7 +2889,10 @@ components:
       type: object
       required: [role]
       properties:
-        runtimeClusterId: {type: string, format: uuid}
+        runtimeClusterId:
+          type: string
+          format: uuid
+          description: Linux 运行节点的目标运行资源池；租户尚无运行资源池时可省略，中心将在同一事务内创建默认单节点资源池并绑定
         role: {type: string, enum: [runtime_linux, collector_linux, collector_windows]}
         displayName: {type: string, maxLength: 120}
         ttlMinutes: {type: integer, minimum: 1, maximum: 1440}
