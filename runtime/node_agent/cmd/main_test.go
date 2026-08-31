@@ -56,16 +56,34 @@ func TestGenerateDefaultConfigProducesValidOpsYAML(t *testing.T) {
 	var parsed struct {
 		Agent struct {
 			Ops struct {
-				Role           string `yaml:"role"`
 				HeartbeatEvery string `yaml:"heartbeatEvery"`
+				Services       []any  `yaml:"services"`
 			} `yaml:"ops"`
 		} `yaml:"agent"`
 	}
 	if err := yaml.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("default config must be valid YAML: %v", err)
 	}
-	if parsed.Agent.Ops.Role != "collector_linux" || parsed.Agent.Ops.HeartbeatEvery != "10s" {
+	if parsed.Agent.Ops.HeartbeatEvery != "10s" || parsed.Agent.Ops.Services == nil {
 		t.Fatalf("unexpected default ops config: %+v", parsed.Agent.Ops)
+	}
+}
+
+func TestLinuxPackageConfigDeclaresInstalledCapabilities(t *testing.T) {
+	configPath, err := filepath.Abs(filepath.Join("..", "packaging", "config-linux.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NODE_AGENT_CONFIG", configPath)
+	config, err := loadConfig()
+	if err != nil {
+		t.Fatalf("read Linux package config: %v", err)
+	}
+	if config.Agent.Ops.AgentVersion != "__BUILD_VERSION__" || len(config.Agent.Ops.Services) != 4 {
+		t.Fatalf("unexpected package ops config: %+v", config.Agent.Ops)
+	}
+	if !config.Agent.Ops.Services[0].Installed || config.Agent.Ops.Services[0].Enabled || config.Agent.Ops.Services[3].Installed {
+		t.Fatalf("installed/enabled templates were parsed incorrectly: %+v", config.Agent.Ops.Services)
 	}
 }
 

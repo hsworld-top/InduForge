@@ -38,15 +38,15 @@ type AgentConfig struct {
 	Ops      OpsConfig      `mapstructure:"ops"`
 }
 
-// OpsConfig 是运维控制面连接配置；包安装器会写入 serverUrl/code/role，身份凭据单独持久化。
+// OpsConfig 是运维控制面连接配置；包安装器会写入 serverUrl/code，身份凭据单独持久化。
 type OpsConfig struct {
-	Enabled        bool   `mapstructure:"enabled"`
-	ServerURL      string `mapstructure:"serverUrl"`
-	EnrollmentCode string `mapstructure:"enrollmentCode"`
-	Role           string `mapstructure:"role"`
-	HeartbeatEvery string `mapstructure:"heartbeatEvery"`
-	DataDir        string `mapstructure:"dataDir"`
-	DemoRuntime    bool   `mapstructure:"demoRuntime"`
+	Enabled        bool                `mapstructure:"enabled"`
+	ServerURL      string              `mapstructure:"serverUrl"`
+	EnrollmentCode string              `mapstructure:"enrollmentCode"`
+	AgentVersion   string              `mapstructure:"agentVersion"`
+	HeartbeatEvery string              `mapstructure:"heartbeatEvery"`
+	DataDir        string              `mapstructure:"dataDir"`
+	Services       []ops.ServiceConfig `mapstructure:"services"`
 }
 
 type ListenConfig struct {
@@ -128,10 +128,6 @@ func nodeAgentExecutable() string {
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--service" {
 		runWindowsService()
-		return
-	}
-	if len(os.Args) >= 3 && os.Args[1] == "demo-workload" {
-		runDemoWorkload(os.Args[2])
 		return
 	}
 	// 开发模式：跳过交互，直接运行服务
@@ -378,7 +374,15 @@ func runDaemon() {
 // runHTTPServer 运行 HTTP 服务（后台模式）
 func runHTTPServer(config Config, storeInstance *store.LocalStore, orchInstance *orchestrator.Orchestrator, healthChecker *health.HealthChecker, nodeMode pkgConfig.NodeMode, configPath string) {
 	// 创建 API 处理器
-	supervisor := ops.NewSupervisor(nodeAgentExecutable(), config.Agent.Executor.Process.WorkDir, config.Agent.Executor.Process.LogDir)
+	supervisor, supervisorErr := ops.NewSupervisorWithConfig(ops.SupervisorConfig{
+		StateDir: filepath.Join(storeInstance.DataDir(), "managed-processes"),
+		LogDir:   config.Agent.Executor.Process.LogDir,
+		Services: config.Agent.Ops.Services,
+	})
+	if supervisorErr != nil {
+		fileLogger.Error("本机服务组配置无效，拒绝启动", "error", supervisorErr)
+		return
+	}
 	apiHandler := handler.NewAPIHandler(orchInstance, storeInstance).WithSupervisor(supervisor)
 	opsContext, cancelOps := context.WithCancel(context.Background())
 	if agent, err := newOpsAgent(config, supervisor, storeInstance.DataDir()); err != nil {
@@ -459,7 +463,7 @@ func newOpsAgent(config Config, supervisor *ops.Supervisor, defaultDataDir strin
 	if err != nil {
 		return nil, fmt.Errorf("ops heartbeatEvery 无效: %w", err)
 	}
-	return ops.NewAgent(ops.Config{Enabled: true, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, Role: config.Agent.Ops.Role, HeartbeatEvery: interval, DataDir: defaultDataDir, DemoRuntime: config.Agent.Ops.DemoRuntime, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }}, supervisor)
+	return ops.NewAgent(ops.Config{Enabled: true, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, AgentVersion: config.Agent.Ops.AgentVersion, HeartbeatEvery: interval, DataDir: defaultDataDir, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }}, supervisor)
 }
 
 // notifyCenterOffline 在 Agent 正常退出时主动通知运维中心离线。
@@ -723,10 +727,9 @@ func generateDefaultConfig(configPath string) error {
         enabled: false
         serverUrl: ""
         enrollmentCode: ""
-        role: collector_linux
         heartbeatEvery: 10s
         dataDir: ./data
-        demoRuntime: true
+        services: []
     runtime:
         healthCheck:
             enabled: true
@@ -747,28 +750,6 @@ storage:
 `
 
 	return os.WriteFile(configPath, []byte(defaultConfig), 0644)
-}
-
-// runDemoWorkload 是可被三类安装包共同托管的小型长期进程，用于验证 supervisor 的
-// start/stop/restart/status/log 链路；它不模拟业务计算或工业协议。
-func runDemoWorkload(role string) {
-	if role != "compute" && role != "alert" && role != "collector" {
-		os.Exit(2)
-	}
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	fmt.Printf("demo workload started role=%s pid=%d\n", role, os.Getpid())
-	for {
-		select {
-		case <-quit:
-			fmt.Printf("demo workload stopped role=%s\n", role)
-			return
-		case now := <-ticker.C:
-			fmt.Printf("demo workload heartbeat role=%s at=%s\n", role, now.UTC().Format(time.RFC3339))
-		}
-	}
 }
 
 // waitForKeyPress 等待用户按键

@@ -1,11 +1,39 @@
 import { createPreviewBridgeRuntime } from './preview-bridge.js'
 
+export { createHttpRuntime } from './http-runtime.js'
+
 const POINT_OPERATIONS = new Set([
-  'get', 'read', 'peek', 'set', 'subscribe', 'history', 'refresh', 'run', 'execute', 'publish', 'sub', 'pub',
+  'get',
+  'read',
+  'peek',
+  'set',
+  'subscribe',
+  'history',
+  'refresh',
+  'run',
+  'execute',
+  'publish',
+  'sub',
+  'pub',
 ])
 const POINT_METADATA = new Set([
-  'id', 'ref', 'path', 'name', 'displayName', 'dataType', 'schema', 'source', 'status', 'unit',
-  'precision', 'min', 'max', 'defaultValue', 'tags', 'attributes', 'capabilities',
+  'id',
+  'ref',
+  'path',
+  'name',
+  'displayName',
+  'dataType',
+  'schema',
+  'source',
+  'status',
+  'unit',
+  'precision',
+  'min',
+  'max',
+  'defaultValue',
+  'tags',
+  'attributes',
+  'capabilities',
 ])
 
 let configuredRuntime = null
@@ -27,10 +55,14 @@ function sdkResult(code, msg, data, reqId) {
 
 function normalizeResult(value) {
   if (
-    value && typeof value === 'object' && !Array.isArray(value) &&
-    typeof value.code === 'number' && typeof value.msg === 'string' &&
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof value.code === 'number' &&
+    typeof value.msg === 'string' &&
     Object.prototype.hasOwnProperty.call(value, 'data')
-  ) return value
+  )
+    return value
   return sdkResult(0, 'ok', value ?? null)
 }
 
@@ -61,7 +93,7 @@ function pointContracts(runtimeProvider) {
 
 function pointContract(runtimeProvider, path) {
   const contracts = pointContracts(runtimeProvider)
-  return contracts && typeof contracts === 'object' ? contracts[path] ?? null : null
+  return contracts && typeof contracts === 'object' ? (contracts[path] ?? null) : null
 }
 
 function pointMetadata(runtimeProvider, path, property) {
@@ -90,7 +122,8 @@ function pointMetadata(runtimeProvider, path, property) {
 
 function createPointOperation(runtimeProvider, path, operation) {
   if (!path) throw new Error(`points.${operation}() 必须在具体数据点路径上调用`)
-  const adapterMethod = operation === 'sub' ? 'subscribe' : operation === 'pub' ? 'publish' : operation
+  const adapterMethod =
+    operation === 'sub' ? 'subscribe' : operation === 'pub' ? 'publish' : operation
   return (...args) => {
     if (adapterMethod === 'subscribe' && typeof args[0] !== 'function') {
       throw new TypeError('point.subscribe(handler) 的 handler 必须是函数')
@@ -109,7 +142,8 @@ function createPoint(runtimeProvider, path = '') {
       if (!path && (property === 'byPath' || property === 'resolve')) {
         return (targetPath) => createPoint(runtimeProvider, String(targetPath || ''))
       }
-      if (POINT_OPERATIONS.has(property)) return createPointOperation(runtimeProvider, path, property)
+      if (POINT_OPERATIONS.has(property))
+        return createPointOperation(runtimeProvider, path, property)
       if (path && POINT_METADATA.has(property) && pointContract(runtimeProvider, path)) {
         return pointMetadata(runtimeProvider, path, property)
       }
@@ -139,7 +173,8 @@ function createAlarmDomain(runtimeProvider) {
     }),
     changes: Object.freeze({
       subscribe(handler, options) {
-        if (typeof handler !== 'function') throw new TypeError('alarms.changes.subscribe(handler) 的 handler 必须是函数')
+        if (typeof handler !== 'function')
+          throw new TypeError('alarms.changes.subscribe(handler) 的 handler 必须是函数')
         return invoke('subscribeChanges', handler, options)
       },
     }),
@@ -205,10 +240,18 @@ function createAccess(runtimeProvider) {
 function createScenes(runtimeProvider) {
   return Object.freeze({
     open2D(sceneId, options) {
-      return requireMethod(resolveRuntime(runtimeProvider()).navigation, 'open2D', 'navigation adapter')(sceneId, options)
+      return requireMethod(
+        resolveRuntime(runtimeProvider()).navigation,
+        'open2D',
+        'navigation adapter',
+      )(sceneId, options)
     },
     open3D(sceneId, options) {
-      return requireMethod(resolveRuntime(runtimeProvider()).navigation, 'open3D', 'navigation adapter')(sceneId, options)
+      return requireMethod(
+        resolveRuntime(runtimeProvider()).navigation,
+        'open3D',
+        'navigation adapter',
+      )(sceneId, options)
     },
   })
 }

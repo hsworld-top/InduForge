@@ -31,13 +31,14 @@ func TestEmbeddedSchemasAcceptAndRejectContractFixtures(t *testing.T) {
 		valid        bool
 	}{
 		{"runtime-engine-config.valid.json", "runtime-engine-config.schema.json", true}, {"runtime-engine-config.invalid.json", "runtime-engine-config.schema.json", false}, {"runtime-engine-config.invalid.event-consumer.json", "runtime-engine-config.schema.json", false},
+		{"runtime-engine-config-v2.valid.json", "runtime-engine-config-v2.schema.json", true}, {"runtime-engine-config-v2.invalid-writable.json", "runtime-engine-config-v2.schema.json", false},
 		{"runtime-dlq-event.valid.json", "runtime-dlq-event.schema.json", true}, {"runtime-dlq-event.invalid.json", "runtime-dlq-event.schema.json", false},
 		{"runtime-project-artifact.valid.json", "runtime-project-artifact.schema.json", true}, {"runtime-project-artifact.invalid.json", "runtime-project-artifact.schema.json", false}, {"runtime-project-artifact.invalid-derived.json", "runtime-project-artifact.schema.json", false}, {"runtime-project-artifact.invalid.schedule.json", "runtime-project-artifact.schema.json", false},
 		{"point-event.valid.raw.json", "point-event.schema.json", true}, {"point-event.valid.computed.json", "point-event.schema.json", true}, {"point-event.invalid.json", "point-event.schema.json", false}, {"point-event.invalid.raw-computation.json", "point-event.schema.json", false}, {"point-event.invalid.computed-source.json", "point-event.schema.json", false},
 		{"alarm-event.valid.json", "alarm-event.schema.json", true}, {"alarm-event.valid.data-gap.json", "alarm-event.schema.json", true}, {"alarm-event.invalid.json", "alarm-event.schema.json", false}, {"alarm-event.invalid-clear.json", "alarm-event.schema.json", false}, {"alarm-event.invalid-severity-change.json", "alarm-event.schema.json", false},
 		{"collector-runtime-artifact.valid.json", "collector-runtime-artifact.schema.json", true}, {"collector-runtime-artifact.invalid.json", "collector-runtime-artifact.schema.json", false}, {"collector-runtime-artifact.invalid.inherit-overrides.json", "collector-runtime-artifact.schema.json", false}, {"collector-runtime-artifact.invalid.object-data-type.json", "collector-runtime-artifact.schema.json", false},
 		{"collector-runtime-binding.valid.json", "collector-runtime-binding.schema.json", true}, {"collector-runtime-binding.valid.no-secret.json", "collector-runtime-binding.schema.json", true}, {"collector-runtime-binding.invalid.json", "collector-runtime-binding.schema.json", false}, {"collector-runtime-binding.invalid.missing-wal.json", "collector-runtime-binding.schema.json", false},
-		{"runtime-health-status.valid.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.valid.compute-sandbox.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.invalid.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.collector-missing.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.engine-missing-deployment.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.noncollector-details.json", "runtime-health-status.schema.json", false},
+		{"runtime-health-status.valid.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.valid.compute-sandbox.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.valid.native-engine.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.valid.native-project-gateway.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.valid.native-runtime-api.json", "runtime-health-status.schema.json", true}, {"runtime-health-status.invalid.native-engine-missing-process.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.collector-missing.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.engine-missing-deployment.json", "runtime-health-status.schema.json", false}, {"runtime-health-status.invalid.noncollector-details.json", "runtime-health-status.schema.json", false},
 	}
 	for _, test := range cases {
 		t.Run(test.file, func(t *testing.T) {
@@ -258,6 +259,52 @@ func TestLoadValidArtifactAndRejectDigestOrSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestLoadNativeV2RequiresReadOnlyReleaseRootAndRejectsSymlink(t *testing.T) {
+	temporary, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseRoot := filepath.Join(temporary, "release-v2")
+	if err := os.Mkdir(releaseRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	artifact := fixture(t, "runtime-project-artifact.valid.json")
+	if err := os.WriteFile(filepath.Join(releaseRoot, "artifact.json"), artifact, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(temporary, "config-v2.json")
+	if err := os.WriteFile(configPath, fixtureConfigFrom(t, "runtime-engine-config-v2.valid.json", releaseRoot, "artifact.json", artifact), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(testOptions(configPath, temporary))
+	if err != nil {
+		t.Fatalf("native v2 load failed: %v", err)
+	}
+	if loaded.Config.SchemaVersion != "runtime-engine.config.v2" || loaded.Config.NodeID != "node-line1-01" {
+		t.Fatalf("native config was not selected: %+v", loaded.Config)
+	}
+
+	mountInfoPath := filepath.Join(temporary, "mountinfo")
+	if err := os.WriteFile(mountInfoPath, []byte("36 25 0:32 / "+releaseRoot+" rw - tmpfs tmpfs rw\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requireReadOnly := true
+	if _, err := Load(Options{ConfigPath: configPath, ConfigRoot: temporary, RequireReadOnlyMount: &requireReadOnly, MountInfoPath: mountInfoPath}); err == nil || !strings.Contains(err.Error(), "native-release 根必须为只读") {
+		t.Fatalf("writable native release root was accepted: %v", err)
+	}
+
+	linkedRoot := filepath.Join(temporary, "release-link")
+	if err := os.Symlink(releaseRoot, linkedRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, fixtureConfigFrom(t, "runtime-engine-config-v2.valid.json", linkedRoot, "artifact.json", artifact), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(testOptions(configPath, temporary)); err == nil || !strings.Contains(err.Error(), "符号链接") {
+		t.Fatalf("symlink native release root was accepted: %v", err)
+	}
+}
+
 func testOptions(configPath, configRoot string) Options {
 	requireReadOnlyMount := false
 	return Options{ConfigPath: configPath, ConfigRoot: configRoot, RequireReadOnlyMount: &requireReadOnlyMount}
@@ -302,9 +349,13 @@ func TestReadRegularFileRejectsDuplicateKeysAndInsideRootSymlink(t *testing.T) {
 }
 
 func fixtureConfig(t *testing.T, mount, artifactFile string, artifact []byte) []byte {
+	return fixtureConfigFrom(t, "runtime-engine-config.valid.json", mount, artifactFile, artifact)
+}
+
+func fixtureConfigFrom(t *testing.T, fixtureName, mount, artifactFile string, artifact []byte) []byte {
 	t.Helper()
 	var value map[string]any
-	if err := json.Unmarshal(fixture(t, "runtime-engine-config.valid.json"), &value); err != nil {
+	if err := json.Unmarshal(fixture(t, fixtureName), &value); err != nil {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(artifact)

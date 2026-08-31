@@ -2,10 +2,7 @@
   "schemaVersion": "runtime-fixtures.v1",
   "schemas": {
     "point-event": {
-      "valid": [
-        "point-event.valid.raw.json",
-        "point-event.valid.computed.json"
-      ],
+      "valid": ["point-event.valid.raw.json", "point-event.valid.computed.json"],
       "invalid": [
         "point-event.invalid.json",
         "point-event.invalid.raw-computation.json",
@@ -13,10 +10,7 @@
       ]
     },
     "alarm-event": {
-      "valid": [
-        "alarm-event.valid.json",
-        "alarm-event.valid.data-gap.json"
-      ],
+      "valid": ["alarm-event.valid.json", "alarm-event.valid.data-gap.json"],
       "invalid": [
         "alarm-event.invalid.json",
         "alarm-event.invalid-clear.json",
@@ -24,9 +18,7 @@
       ]
     },
     "collector-runtime-artifact": {
-      "valid": [
-        "collector-runtime-artifact.valid.json"
-      ],
+      "valid": ["collector-runtime-artifact.valid.json"],
       "invalid": [
         "collector-runtime-artifact.invalid.json",
         "collector-runtime-artifact.invalid.inherit-overrides.json",
@@ -45,13 +37,15 @@
       ]
     },
     "runtime-engine-config": {
-      "valid": [
-        "runtime-engine-config.valid.json"
-      ],
+      "valid": ["runtime-engine-config.valid.json"],
       "invalid": [
         "runtime-engine-config.invalid.json",
         "runtime-engine-config.invalid.event-consumer.json"
       ]
+    },
+    "runtime-engine-config-v2": {
+      "valid": ["runtime-engine-config-v2.valid.json"],
+      "invalid": ["runtime-engine-config-v2.invalid-writable.json"]
     },
     "runtime-project-artifact": {
       "valid": [
@@ -78,22 +72,22 @@
     "runtime-health-status": {
       "valid": [
         "runtime-health-status.valid.json",
-        "runtime-health-status.valid.compute-sandbox.json"
+        "runtime-health-status.valid.compute-sandbox.json",
+        "runtime-health-status.valid.native-engine.json",
+        "runtime-health-status.valid.native-project-gateway.json",
+        "runtime-health-status.valid.native-runtime-api.json"
       ],
       "invalid": [
         "runtime-health-status.invalid.json",
         "runtime-health-status.invalid.collector-missing.json",
         "runtime-health-status.invalid.engine-missing-deployment.json",
-        "runtime-health-status.invalid.noncollector-details.json"
+        "runtime-health-status.invalid.noncollector-details.json",
+        "runtime-health-status.invalid.native-engine-missing-process.json"
       ]
     },
     "runtime-dlq-event": {
-      "valid": [
-        "runtime-dlq-event.valid.json"
-      ],
-      "invalid": [
-        "runtime-dlq-event.invalid.json"
-      ]
+      "valid": ["runtime-dlq-event.valid.json"],
+      "invalid": ["runtime-dlq-event.invalid.json"]
     }
   }
 }

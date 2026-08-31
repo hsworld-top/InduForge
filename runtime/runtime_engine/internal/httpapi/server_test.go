@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/indu-forge/runtime-engine/internal/loader"
+	"github.com/indu-forge/runtime-engine/internal/model"
 )
 
 func TestStatusUsesStrictSuccessEnvelope(t *testing.T) {
@@ -88,6 +91,17 @@ func TestStatusReportsValidationFailure(t *testing.T) {
 	}
 	if body.Code == 0 || body.Data.Status != "DOWN" {
 		t.Fatalf("failure state=%+v", body)
+	}
+}
+
+func TestNativeEngineStatusReportsNodeAndProcess(t *testing.T) {
+	state := NewEngineState("test", &loader.Loaded{Config: model.EngineConfig{
+		SiteID: "site-a", NodeID: "node-line1-01", ProjectID: "11111111-1111-4111-8111-111111111111",
+		DeploymentID: "deployment-line1-prod", AccountID: "account-line1", ExecutionForm: "native-linux",
+	}}, nil)
+	value := state.snapshot()
+	if value.NodeID != "node-line1-01" || value.ProcessID < 1 {
+		t.Fatalf("native status missing process identity: %+v", value)
 	}
 }
 

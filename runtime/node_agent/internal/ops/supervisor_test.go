@@ -1,147 +1,204 @@
 package ops
 
 import (
-	"fmt"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-func TestSupervisorHelperProcess(t *testing.T) {
-	if !strings.Contains(strings.Join(os.Args, " "), "demo-workload") {
+func TestProductionServiceHelper(t *testing.T) {
+	if !strings.Contains(strings.Join(os.Args, " "), "local-service-helper") {
 		return
 	}
-	fmt.Println("demo workload started")
 	for {
 		time.Sleep(time.Second)
 	}
 }
 
 func testSupervisor(t *testing.T) *Supervisor {
-	s := NewSupervisor(os.Args[0], t.TempDir(), t.TempDir())
-	s.command = func(role WorkloadRole, id string) *exec.Cmd {
-		return exec.Command(os.Args[0], "-test.run=TestSupervisorHelperProcess", "--", "demo-workload", string(role), id)
+	return NewSupervisor("unused", t.TempDir(), t.TempDir())
+}
+
+func configuredSupervisor(t *testing.T, group ServiceGroup) *Supervisor {
+	t.Helper()
+	health := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "msg": "ok", "data": map[string]string{"status": "UP"}, "reqId": "test"})
+	}))
+	t.Cleanup(health.Close)
+	root := t.TempDir()
+	release := filepath.Join(root, "releases", "v1")
+	if err := os.MkdirAll(filepath.Join(release, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(os.Args[0], filepath.Join(release, "bin", "service")); err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(`{"release":"test"}`)
+	if err := os.WriteFile(filepath.Join(release, "release-manifest.json"), manifest, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("releases", "v1"), filepath.Join(root, "current")); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(manifest)
+	s, err := NewSupervisorWithConfig(SupervisorConfig{StateDir: filepath.Join(root, "state"), LogDir: filepath.Join(root, "logs"), Services: []ServiceConfig{{Group: group, Component: "test-service", Enabled: true, ReleaseRoot: root, Current: "current", ReleaseDigest: "sha256:" + hex.EncodeToString(digest[:]), Executable: "bin/service", Arguments: []string{"-test.run=TestProductionServiceHelper", "--", "local-service-helper"}, HealthURL: health.URL, HealthTimeout: time.Second, DrainTimeout: time.Second}}})
+	if err != nil {
+		t.Fatal(err)
 	}
 	return s
 }
 
-func TestSupervisorStartStopAndReap(t *testing.T) {
-	s := testSupervisor(t)
-	started, err := s.Start("workload-a", WorkloadCollector, 2)
+func TestSupervisorStartsConfiguredProductionServiceNotDemo(t *testing.T) {
+	s := configuredSupervisor(t, ServiceCollector)
+	started, err := s.Start("collector-a", ServiceCollector, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if started.State != "running" || started.PID <= 0 || started.Generation != 2 {
 		t.Fatalf("unexpected: %+v", started)
 	}
-	deadline := time.Now().Add(time.Second)
-	for {
-		logs, _ := s.Logs("workload-a", 10)
-		if len(logs) > 0 || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	logs, err := s.Logs("collector-a", 10)
+	if err != nil || strings.Contains(strings.Join(logs, "\n"), "demo-workload") {
+		t.Fatalf("production command must not use demo: logs=%v err=%v", logs, err)
 	}
-	stopped, err := s.Stop("workload-a", 3)
+	stopped, err := s.Stop("collector-a", 3)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if stopped.State != "stopped" || stopped.Generation != 3 {
 		t.Fatalf("unexpected: %+v", stopped)
 	}
-	logs, err := s.Logs("workload-a", 10)
-	if err != nil || len(logs) == 0 {
-		t.Fatalf("logs=%v err=%v", logs, err)
+}
+
+func TestSupervisorRejectsUnknownOrUnassignedService(t *testing.T) {
+	s := configuredSupervisor(t, ServiceCollector)
+	if _, err := s.Start("unknown", "shell", 1); err == nil {
+		t.Fatal("expected unknown service group rejection")
+	}
+	if _, err := s.Start("not-local", ServiceDataRuntime, 1); err == nil {
+		t.Fatal("expected unassigned service group rejection")
 	}
 }
 
-func TestSupervisorUsesWorkloadIDInsteadOfRole(t *testing.T) {
-	s := testSupervisor(t)
-	if _, err := s.Start("a", WorkloadCollector, 1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Start("b", WorkloadCollector, 1); err != nil {
-		t.Fatal(err)
-	}
-	if len(s.List()) != 2 {
-		t.Fatalf("expected separate same-role workloads: %+v", s.List())
-	}
-	s.Shutdown()
-}
-
-func TestSupervisorRejectsUnknownRole(t *testing.T) {
-	if _, err := testSupervisor(t).Start("a", "alarm", 1); err == nil {
-		t.Fatal("expected role error")
-	}
-}
-
-func TestSupervisorReportsObservedReplicasFromProcessState(t *testing.T) {
-	s := testSupervisor(t)
-	started, err := s.Start("replica-test", WorkloadCollector, 1)
+func TestInstalledTemplatesClaimCapabilitiesButCannotStartWithoutRelease(t *testing.T) {
+	s, err := NewSupervisorWithConfig(SupervisorConfig{
+		StateDir: t.TempDir(),
+		LogDir:   t.TempDir(),
+		Services: []ServiceConfig{
+			{Group: ServiceProjectEntry, Component: "project-gateway", Installed: true},
+			{Group: ServiceProjectEntry, Component: "runtime-api", Installed: true},
+			{Group: ServiceDataRuntime, Component: "runtime-engine", Installed: true},
+			{Group: ServiceCollector, Component: "collector", Installed: false},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if started.ReplicasObserved != 1 {
-		t.Fatalf("running replicasObserved=%d", started.ReplicasObserved)
+	if got := strings.Join(s.Capabilities(), ","); got != "project_entry,data_runtime" {
+		t.Fatalf("capabilities=%s", got)
 	}
-	stopped, err := s.Stop("replica-test", 2)
-	if err != nil {
-		t.Fatal(err)
+	if s.HasService(ServiceProjectEntry) || s.HasService(ServiceDataRuntime) {
+		t.Fatal("disabled templates must not be runnable services")
 	}
-	if stopped.ReplicasObserved != 0 {
-		t.Fatalf("stopped replicasObserved=%d", stopped.ReplicasObserved)
-	}
-	failed := ProcessStatus{State: "failed"}
-	if withObservedReplicas(failed).ReplicasObserved != 0 {
-		t.Fatal("failed workload must report zero replicas")
+	if _, err := s.Start("service-a", ServiceProjectEntry, 1); err == nil {
+		t.Fatal("template without local release config must fail closed")
 	}
 }
 
-func TestSupervisorRestartStartsWorkloadMissingFromMemory(t *testing.T) {
-	s := testSupervisor(t)
-	restarted, err := s.Restart("restored-workload", WorkloadCompute, 5)
-	if err != nil {
-		t.Fatal(err)
+func TestSupervisorRejectsNonLoopbackHealthProbe(t *testing.T) {
+	service := ServiceConfig{Group: ServiceCollector, Component: "collector", Enabled: true, ReleaseRoot: t.TempDir(), Current: "current", ReleaseDigest: "sha256:" + strings.Repeat("0", 64), Executable: "bin/collector", HealthURL: "http://example.invalid/health"}
+	if _, err := NewSupervisorWithConfig(SupervisorConfig{StateDir: t.TempDir(), LogDir: t.TempDir(), Services: []ServiceConfig{service}}); err == nil {
+		t.Fatal("expected non-loopback health URL rejection")
 	}
-	if restarted.State != "running" || restarted.PID <= 0 || restarted.Generation != 5 {
-		t.Fatalf("unexpected restarted status: %+v", restarted)
-	}
-	s.Shutdown()
 }
 
-func TestSupervisorStopMissingWorkloadIsIdempotent(t *testing.T) {
-	s := testSupervisor(t)
-	for generation := int64(1); generation <= 2; generation++ {
-		stopped, err := s.Stop("missing-workload", generation)
-		if err != nil {
-			t.Fatal(err)
+func TestProjectGatewayPublicURLIsLocalAndExclusive(t *testing.T) {
+	base := ServiceConfig{
+		Group:         ServiceProjectEntry,
+		Component:     "project-gateway",
+		Enabled:       true,
+		ReleaseRoot:   t.TempDir(),
+		Current:       "current",
+		ReleaseDigest: "sha256:" + strings.Repeat("0", 64),
+		Executable:    "bin/project-gateway",
+		HealthURL:     "http://127.0.0.1:18080/health",
+		PublicURL:     "https://gateway.example.com/engineering",
+	}
+	if err := validateServiceConfig(base); err != nil {
+		t.Fatalf("valid project gateway URL rejected: %v", err)
+	}
+	invalid := []ServiceConfig{
+		func() ServiceConfig { value := base; value.Group = ServiceCollector; return value }(),
+		func() ServiceConfig {
+			value := base
+			value.PublicURL = "https://user:pass@gateway.example.com"
+			return value
+		}(),
+		func() ServiceConfig {
+			value := base
+			value.PublicURL = "https://gateway.example.com/#fragment"
+			return value
+		}(),
+	}
+	for _, candidate := range invalid {
+		if err := validateServiceConfig(candidate); err == nil {
+			t.Fatalf("invalid public URL configuration was accepted: %+v", candidate)
 		}
-		if stopped.State != "stopped" || stopped.Generation != generation {
-			t.Fatalf("generation=%d unexpected status: %+v", generation, stopped)
-		}
 	}
 }
 
-func TestSupervisorStopClearsPreviousFailure(t *testing.T) {
-	s := testSupervisor(t)
-	s.RecordFailure("failed-workload", WorkloadAlert, 3, fmt.Errorf("启动失败"))
+func TestSupervisorRejectsReleaseDigestMismatch(t *testing.T) {
+	s := configuredSupervisor(t, ServiceCollector)
+	service := s.services[ServiceCollector][0]
+	service.ReleaseDigest = "sha256:" + strings.Repeat("0", 64)
+	s.services[ServiceCollector] = []ServiceConfig{service}
+	if _, err := s.Start("collector-b", ServiceCollector, 1); err == nil {
+		t.Fatal("expected digest rejection")
+	}
+}
 
-	stopped, err := s.Stop("failed-workload", 4)
+func TestSupervisorPersistsAndRecoversPIDStatus(t *testing.T) {
+	s := configuredSupervisor(t, ServiceCollector)
+	started, err := s.Start("collector-recover", ServiceCollector, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stopped.State != "stopped" || stopped.Generation != 4 || stopped.ReplicasObserved != 0 || stopped.LastError != "" || stopped.StoppedAt == nil {
-		t.Fatalf("unexpected stopped status: %+v", stopped)
+	state, err := os.ReadFile(s.statePath())
+	if err != nil || !strings.Contains(string(state), "collector-recover") {
+		t.Fatalf("state not persisted: %s err=%v", state, err)
 	}
-
-	restarted, err := s.Start("failed-workload", WorkloadAlert, 5)
+	// The persisted record is intentionally only recovered for a locally
+	// configured service group. A changed/removed config cannot adopt it.
+	recovered, err := NewSupervisorWithConfig(SupervisorConfig{StateDir: s.stateDir, LogDir: s.logDir, Services: s.services[ServiceCollector]})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restarted.State != "running" || restarted.Generation != 5 || restarted.ReplicasObserved != 1 {
-		t.Fatalf("unexpected recovered status: %+v", restarted)
+	status, err := recovered.Status("collector-recover")
+	if err != nil || status.PID != started.PID || status.State != "running" {
+		t.Fatalf("not recovered: %+v err=%v", status, err)
 	}
-	s.Shutdown()
+	_, _ = recovered.Stop("collector-recover", 2)
+}
+
+func TestProjectEntryStartsEveryDeclaredComponent(t *testing.T) {
+	s := configuredSupervisor(t, ServiceProjectEntry)
+	base := s.services[ServiceProjectEntry][0]
+	api := base
+	api.Component = "runtime-api"
+	s.services[ServiceProjectEntry] = []ServiceConfig{base, api}
+	started, err := s.Start("project-a", ServiceProjectEntry, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(started.ComponentPIDs) != 2 || started.ComponentPIDs["test-service"] == 0 || started.ComponentPIDs["runtime-api"] == 0 {
+		t.Fatalf("all project_entry components must run: %+v", started)
+	}
+	_, _ = s.Stop("project-a", 2)
 }

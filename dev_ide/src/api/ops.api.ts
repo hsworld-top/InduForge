@@ -1,12 +1,12 @@
 import request, { type RawResponseConfig, type RequestConfig } from '@/utils/request'
 
 export type OpsId = string
-
-export type OpsHealth = 'healthy' | 'degraded' | 'unavailable' | 'maintenance' | 'unknown'
-export type OpsLifecycle = 'starting' | 'running' | 'stopping' | 'stopped' | 'failed' | 'pending'
-export type OpsNodeRole = 'runtime_linux' | 'collector_linux' | 'collector_windows'
-export type OpsWorkloadRole = 'compute' | 'alert' | 'collector'
-export type OpsWorkloadAction = 'start' | 'stop' | 'restart'
+export type OpsPlatform = 'linux' | 'windows'
+export type OpsCapability = 'project_entry' | 'data_runtime' | 'collector'
+export type OpsServiceType = OpsCapability
+export type OpsServiceAction = 'start' | 'stop' | 'restart'
+export type OpsHealth = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
+export type OpsLifecycle = 'running' | 'stopped' | 'failed' | 'pending' | 'online' | 'offline'
 
 export interface OpsApiEnvelope<T> {
   code?: number
@@ -14,325 +14,256 @@ export interface OpsApiEnvelope<T> {
   data: T
   reqId?: string
 }
-
-export interface RuntimeCluster {
-  id: OpsId
-  name: string
-  code?: string
-  topology?: 'single_node' | 'high_availability'
-  description?: string
-  health?: OpsHealth
-  desiredStatus?: 'ready' | 'maintenance' | 'disabled'
-  observedStatus?: 'pending' | 'initializing' | 'ready' | 'degraded' | 'offline'
-  controllerStatus?: 'pending' | 'ready' | 'offline'
-  nodeCount?: number
-  onlineNodeCount?: number
-  version?: string
-  createdAt?: string
-  updatedAt?: string
-}
-
-export interface HostNodeMetrics {
-  cpuPercent?: number
-  memoryPercent?: number
-  diskPercent?: number
-}
-
-export interface HostNode {
+export interface OpsNode {
   id: OpsId
   name: string
   displayName?: string
-  role: OpsNodeRole
-  runtimeClusterId?: OpsId | null
-  runtimeClusterName?: string | null
-  health?: OpsHealth
-  desiredStatus?: OpsLifecycle | 'active' | 'revoked'
-  observedStatus?: OpsLifecycle | 'online' | 'offline' | 'degraded' | 'pending_approval' | 'revoked'
-  ipAddress?: string
-  os?: string
+  hostname?: string
+  platform: OpsPlatform
   architecture?: string
+  capabilities: OpsCapability[]
+  desiredStatus?: string
+  observedStatus?: string
   lastHeartbeatAt?: string
-  /** 控制面审批完成时间；未审批节点不能作为采集调度目标。 */
   approvedAt?: string
   agentVersion?: string
-  k3sStatus?: string
-  collectorStatus?: string
-  metrics?: HostNodeMetrics
-  createdAt?: string
-  updatedAt?: string
+  resourceSummary?: Record<string, unknown>
+  assignedDeploymentId?: OpsId
+  assignedProjectId?: OpsId
+  assignedProjectName?: string
 }
-
 export interface NodePackage {
   id: OpsId
   name?: string
-  role: OpsNodeRole
-  version?: string
-  platform?: 'linux' | 'windows'
+  platform: OpsPlatform
   architecture?: string
+  version?: string
   fileName?: string
   available?: boolean
   size?: number
 }
-
 export interface NodeEnrollment {
   id: OpsId
-  role: OpsNodeRole
+  platform: OpsPlatform
+  capabilities: OpsCapability[]
   displayName?: string
-  runtimeClusterId?: OpsId | null
-  packageId?: OpsId
-  packageName?: string
+  status: string
   enrollmentCode?: string
-  /** 接入码只在创建结果中短暂可见，后续查询应为空。 */
   expiresAt?: string
-  status:
-    | 'created'
-    | 'downloaded'
-    | 'registered'
-    | 'claimed'
-    | 'approved'
-    | 'rejected'
-    | 'expired'
-    | 'failed'
   reportedHostName?: string
   machineFingerprint?: string
   ipAddress?: string
-  node?: HostNode | null
+  node?: OpsNode | null
   createdAt?: string
   updatedAt?: string
 }
-
-export interface DeploymentWorkload {
-  role: OpsWorkloadRole
-  hostNodeId?: OpsId | null
-  displayName?: string
-  health?: OpsHealth
-  desiredStatus?: OpsLifecycle
-  observedStatus?: OpsLifecycle
-  version?: string
-  lastError?: string | null
-  lastMessage?: string | null
+export interface DeploymentService {
+  id?: OpsId
+  serviceType: OpsServiceType
+  desiredStatus?: string
+  observedStatus?: string
+  lastMessage?: string
+  endpoint?: string | null
+  desiredGeneration?: number
+  observedGeneration?: number
+  observedAt?: string
   updatedAt?: string
 }
-
 export interface ProjectDeployment {
   id: OpsId
   projectId: OpsId
   projectName: string
-  displayName?: string
-  mode: 'development' | 'production'
-  deploymentMode?: 'development' | 'production'
-  runtimeClusterId?: OpsId | null
-  runtimeClusterName?: string | null
+  nodeId: OpsId
+  nodeName?: string
+  applicationVersionId: OpsId
   version?: string
+  desiredStatus?: string
+  observedStatus?: string
   health?: OpsHealth
-  desiredStatus?: OpsLifecycle
-  observedStatus?: OpsLifecycle
   progress?: number
-  updatedAt?: string
-  workloads?: DeploymentWorkload[]
-  runId?: OpsId
+  entryStatus?: string
+  accessUrl?: string | null
+  services?: DeploymentService[]
   latestRunId?: OpsId
-}
-
-export interface DeploymentRunEvent {
-  id?: OpsId
-  stage?: string
-  status?: OpsLifecycle | string
-  message?: string
-  createdAt?: string
   updatedAt?: string
 }
-
+export interface ReleaseArtifactDescriptor {
+  file?: string
+  checksum?: string
+}
+export interface ApplicationVersionManifest {
+  schemaVersion?: string
+  artifacts?: {
+    client?: ReleaseArtifactDescriptor
+    runtime?: ReleaseArtifactDescriptor
+    collector?: ReleaseArtifactDescriptor
+  }
+  [key: string]: unknown
+}
+export interface ApplicationVersion {
+  id: OpsId
+  projectId: OpsId
+  version: string
+  name?: string
+  status?: string
+  artifactHash?: string
+  manifest?: ApplicationVersionManifest | null
+  completedAt?: string
+  createdAt?: string
+}
 export interface DeploymentRun {
   id: OpsId
   deploymentId?: OpsId
-  status?: OpsLifecycle | string
-  observedStatus?: OpsLifecycle | string
+  observedStatus?: string
+  status?: string
   progress?: number
-  startedAt?: string
-  /** 终态任务会由后端写入完成时间，轮询必须以它为准停止。 */
   completedAt?: string | null
-  events?: DeploymentRunEvent[]
 }
-
-type EnrollmentCreateResult = { enrollment: NodeEnrollment; code?: string }
-type DeploymentCreateResult = { deployment: ProjectDeployment; run?: DeploymentRun }
-
+export interface DeploymentRunEvent {
+  id?: OpsId
+  stage?: string
+  message?: string
+  createdAt?: string
+}
 export interface ListParams {
   page?: number
   pageSize?: number
   keyword?: string
+  projectId?: OpsId
 }
-
 export interface ListResult<T> {
   items: T[]
   total: number
 }
-
+type EnrollmentCreateResult = { enrollment: NodeEnrollment; code?: string }
+type DeploymentCreateResult = { deployment: ProjectDeployment; run: DeploymentRun }
+const config: RequestConfig = { skipErrorToast: true }
+const normalizeParams = (value: ListParams) => {
+  const { keyword, ...params } = value
+  return keyword ? { ...params, search: keyword } : params
+}
 const unpack = <T>(payload: OpsApiEnvelope<T> | T): T =>
   payload && typeof payload === 'object' && 'data' in payload
     ? (payload as OpsApiEnvelope<T>).data
     : (payload as T)
-
-const normalizeList = <T>(
+const list = <T>(
   payload: OpsApiEnvelope<ListResult<T> | T[]> | ListResult<T> | T[],
 ): ListResult<T> => {
   const data = unpack(payload)
-  if (Array.isArray(data)) return { items: data, total: data.length }
-  return {
-    items: Array.isArray(data?.items) ? data.items : [],
-    total: typeof data?.total === 'number' ? data.total : data?.items?.length || 0,
-  }
+  return Array.isArray(data)
+    ? { items: data, total: data.length }
+    : {
+        items: Array.isArray(data.items) ? data.items : [],
+        total: typeof data.total === 'number' ? data.total : data.items?.length || 0,
+      }
 }
-
-const normalizeHostNode = (node: HostNode): HostNode => ({
-  ...node,
-  name: node.displayName || node.name || String(node.id),
+const node = (value: OpsNode): OpsNode => ({
+  ...value,
+  name: value.displayName || value.name || value.hostname || value.id,
 })
-
-const normalizeDeployment = (deployment: ProjectDeployment): ProjectDeployment => ({
-  ...deployment,
-  projectName: deployment.displayName || deployment.projectName || String(deployment.projectId),
-  mode: deployment.deploymentMode || deployment.mode || 'development',
-  runId: deployment.latestRunId || deployment.runId,
+const deployment = (value: ProjectDeployment): ProjectDeployment => ({
+  ...value,
+  projectName: value.projectName || value.projectId,
 })
-
-const normalizeRun = (run: DeploymentRun): DeploymentRun => ({
-  ...run,
-  status: run.status || run.observedStatus,
-})
-
-/** 运维页统一在业务层展示错误，避免 HTTP 拦截器与页面 catch 重复弹窗。 */
-const opsRequestConfig: RequestConfig = { skipErrorToast: true }
 
 export const opsAPI = {
-  async listRuntimeClusters(params: ListParams = {}) {
-    return normalizeList<RuntimeCluster>(
-      await request.get('/ops/runtime-clusters', { params, ...opsRequestConfig }),
-    )
-  },
-  async getRuntimeCluster(id: OpsId) {
-    return unpack<RuntimeCluster>(
-      await request.get(`/ops/runtime-clusters/${id}`, opsRequestConfig),
-    )
-  },
-  async createRuntimeCluster(
-    payload: Pick<RuntimeCluster, 'name' | 'code' | 'description' | 'topology'>,
-  ) {
-    return unpack<RuntimeCluster>(
-      await request.post('/ops/runtime-clusters', payload, opsRequestConfig),
-    )
-  },
   async listEnrollments(params: ListParams = {}) {
-    return normalizeList<NodeEnrollment>(
-      await request.get('/ops/node-enrollments', { params, ...opsRequestConfig }),
+    return list<NodeEnrollment>(
+      await request.get('/ops/node-enrollments', { params: normalizeParams(params), ...config }),
     )
   },
   async getEnrollment(id: OpsId) {
-    return unpack<NodeEnrollment>(
-      await request.get(`/ops/node-enrollments/${id}`, opsRequestConfig),
-    )
+    return unpack<NodeEnrollment>(await request.get(`/ops/node-enrollments/${id}`, config))
   },
   async createEnrollment(payload: {
-    role: OpsNodeRole
+    platform: OpsPlatform
+    capabilities: OpsCapability[]
     displayName: string
     ttlMinutes: number
-    runtimeClusterId?: OpsId | null
-    packageId?: OpsId
   }) {
     const result = unpack<EnrollmentCreateResult>(
-      await request.post('/ops/node-enrollments', payload, opsRequestConfig),
+      await request.post('/ops/node-enrollments', payload, config),
     )
-    return {
-      ...result.enrollment,
-      enrollmentCode: result.code,
-      packageId: payload.packageId,
-    }
+    return { ...result.enrollment, enrollmentCode: result.code }
   },
   async approveEnrollment(id: OpsId) {
     return unpack<NodeEnrollment>(
-      await request.post(`/ops/node-enrollments/${id}/approve`, undefined, opsRequestConfig),
+      await request.post(`/ops/node-enrollments/${id}/approve`, undefined, config),
     )
   },
   async rejectEnrollment(id: OpsId) {
     return unpack<NodeEnrollment>(
-      await request.post(`/ops/node-enrollments/${id}/reject`, undefined, opsRequestConfig),
+      await request.post(`/ops/node-enrollments/${id}/reject`, undefined, config),
     )
   },
-  async listHostNodes(params: ListParams = {}) {
-    const result = normalizeList<HostNode>(
-      await request.get('/ops/host-nodes', { params, ...opsRequestConfig }),
+  async listNodes(params: ListParams = {}) {
+    const result = list<OpsNode>(
+      await request.get('/ops/nodes', { params: normalizeParams(params), ...config }),
     )
-    return { ...result, items: result.items.map(normalizeHostNode) }
+    return { ...result, items: result.items.map(node) }
   },
-  async getHostNode(id: OpsId) {
-    return normalizeHostNode(
-      unpack<HostNode>(await request.get(`/ops/host-nodes/${id}`, opsRequestConfig)),
-    )
+  async getNode(id: OpsId) {
+    return node(unpack<OpsNode>(await request.get(`/ops/nodes/${id}`, config)))
   },
-  async listNodePackages(params: ListParams = {}) {
-    const result = normalizeList<NodePackage>(
-      await request.get('/ops/node-packages', { params, ...opsRequestConfig }),
-    )
+  async listNodePackages() {
+    const result = list<NodePackage>(await request.get('/ops/node-packages', config))
     return {
       ...result,
-      items: result.items.map((item) => ({
-        ...item,
-        name: item.name || item.fileName || item.role,
-      })),
+      items: result.items.map((item) => ({ ...item, name: item.name || item.fileName || item.id })),
     }
   },
-  downloadNodePackage(packageId: OpsId) {
-    return request.get(`/ops/node-packages/${packageId}/download`, {
+  downloadNodePackage(id: OpsId) {
+    return request.get(`/ops/node-packages/${id}/download`, {
       responseType: 'blob',
       returnRawResponse: true,
-      ...opsRequestConfig,
+      ...config,
     } as RawResponseConfig)
   },
   async listProjectDeployments(params: ListParams = {}) {
-    const result = normalizeList<ProjectDeployment>(
-      await request.get('/ops/project-deployments', { params, ...opsRequestConfig }),
+    const result = list<ProjectDeployment>(
+      await request.get('/ops/project-deployments', { params: normalizeParams(params), ...config }),
     )
-    return { ...result, items: result.items.map(normalizeDeployment) }
+    return { ...result, items: result.items.map(deployment) }
+  },
+  async listProjectVersions(projectId: OpsId, query: ListParams = {}) {
+    return list<ApplicationVersion>(
+      await request.get(`/publish/${projectId}/versions`, {
+        params: normalizeParams(query),
+        ...config,
+      }),
+    )
   },
   async getProjectDeployment(id: OpsId) {
-    return normalizeDeployment(
-      unpack<ProjectDeployment>(
-        await request.get(`/ops/project-deployments/${id}`, opsRequestConfig),
-      ),
+    return deployment(
+      unpack<ProjectDeployment>(await request.get(`/ops/project-deployments/${id}`, config)),
     )
   },
   async createProjectDeployment(payload: {
     projectId: OpsId
-    deploymentMode: 'development' | 'production'
-    runtimeClusterId: OpsId
-    workloads: Array<{ role: OpsWorkloadRole; hostNodeId?: OpsId | null }>
+    nodeId: OpsId
+    applicationVersionId: OpsId
+    enableCollector: boolean
   }) {
     const result = unpack<DeploymentCreateResult>(
-      await request.post('/ops/project-deployments', payload, opsRequestConfig),
+      await request.post('/ops/project-deployments', payload, config),
     )
-    return normalizeDeployment({ ...result.deployment, runId: result.run?.id })
+    return { ...deployment(result.deployment), latestRunId: result.run?.id }
   },
-  async runWorkloadAction(id: OpsId, role: OpsWorkloadRole, action: OpsWorkloadAction) {
+  async runServiceAction(id: OpsId, service: OpsServiceType, action: OpsServiceAction) {
     const result = unpack<DeploymentCreateResult>(
       await request.post(
-        `/ops/project-deployments/${id}/workloads/${role}/${action}`,
+        `/ops/project-deployments/${id}/services/${service}/${action}`,
         undefined,
-        opsRequestConfig,
+        config,
       ),
     )
-    return result.run ? normalizeRun(result.run) : result.run
+    return result.run
   },
   async getDeploymentRun(id: OpsId) {
-    return normalizeRun(
-      unpack<DeploymentRun>(await request.get(`/ops/deployment-runs/${id}`, opsRequestConfig)),
-    )
+    const result = unpack<DeploymentRun>(await request.get(`/ops/deployment-runs/${id}`, config))
+    return { ...result, status: result.status || result.observedStatus }
   },
   async listDeploymentRunEvents(id: OpsId) {
-    return normalizeList<DeploymentRunEvent>(
-      await request.get(`/ops/deployment-runs/${id}/events`, opsRequestConfig),
-    )
+    return list<DeploymentRunEvent>(await request.get(`/ops/deployment-runs/${id}/events`, config))
   },
 }
-
-export { normalizeList, unpack }

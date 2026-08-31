@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { access, alarms, computes, configureRuntime, createRuntimeClient, points, scenes } from './index.js'
+import {
+  access,
+  alarms,
+  computes,
+  configureRuntime,
+  createHttpRuntime,
+  createRuntimeClient,
+  points,
+  scenes,
+} from './index.js'
 
 test('points 转发完整数据点方法并统一返回 SDKResult', async () => {
   const calls = []
@@ -36,14 +45,21 @@ test('points 转发完整数据点方法并统一返回 SDKResult', async () => 
   assert.equal((await point.read()).data.quality, 'good')
   assert.deepEqual(await point.set(80), { code: 0, msg: 'ok', data: { accepted: true } })
   assert.equal(typeof (await point.sub(handler)).data, 'function')
-  assert.deepEqual(await client.points.factory.events.pub({ code: 1 }), { code: 0, msg: 'ok', data: 'published' })
-  assert.deepEqual(calls.map((item) => item.slice(0, 2)), [
-    ['get', 'factory.line1.temperature'],
-    ['read', 'factory.line1.temperature'],
-    ['set', 'factory.line1.temperature'],
-    ['subscribe', 'factory.line1.temperature'],
-    ['publish', 'factory.events'],
-  ])
+  assert.deepEqual(await client.points.factory.events.pub({ code: 1 }), {
+    code: 0,
+    msg: 'ok',
+    data: 'published',
+  })
+  assert.deepEqual(
+    calls.map((item) => item.slice(0, 2)),
+    [
+      ['get', 'factory.line1.temperature'],
+      ['read', 'factory.line1.temperature'],
+      ['set', 'factory.line1.temperature'],
+      ['subscribe', 'factory.line1.temperature'],
+      ['publish', 'factory.events'],
+    ],
+  )
 })
 
 test('points 暴露宿主注入的数据点稳定属性', () => {
@@ -113,11 +129,15 @@ test('alarms 区分配置、当前状态、变化、动作和历史', async () =
   assert.equal((await client.alarms.items.list({ enabled: true })).data[0].id, 'item-1')
   assert.equal((await client.alarms.current.list({ status: 'active' })).data[0].id, 'current-1')
   assert.equal(typeof (await client.alarms.changes.subscribe(handler)).data, 'function')
-  assert.equal((await client.alarms.actions.acknowledge('current-1', { comment: '已处理' })).code, 0)
+  assert.equal(
+    (await client.alarms.actions.acknowledge('current-1', { comment: '已处理' })).code,
+    0,
+  )
   assert.deepEqual((await client.alarms.history.list({ page: 1 })).data, [])
-  assert.deepEqual(calls.map((item) => item[0]), [
-    'listItems', 'listCurrent', 'subscribeChanges', 'acknowledge', 'listHistory',
-  ])
+  assert.deepEqual(
+    calls.map((item) => item[0]),
+    ['listItems', 'listCurrent', 'subscribeChanges', 'acknowledge', 'listHistory'],
+  )
 })
 
 test('computes 转发运行和描述请求', async () => {
@@ -131,7 +151,10 @@ test('computes 转发运行和描述请求', async () => {
       },
     },
   })
-  assert.equal((await client.computes.temperatureConvert.run({ value: 10 })).data.ref, 'temperatureConvert')
+  assert.equal(
+    (await client.computes.temperatureConvert.run({ value: 10 })).data.ref,
+    'temperatureConvert',
+  )
   assert.equal((await client.computes.byRef('folder.compute').describe()).data.language, 'js')
 })
 
@@ -218,9 +241,10 @@ test('预览 iframe 默认通过宿主桥接读取并订阅数据点', async () 
             result: {
               code: 0,
               msg: 'ok',
-              data: message.operation === 'read'
-                ? { value: 26.5, quality: 'good' }
-                : { path: message.path, subscribed: message.operation === 'subscribe' },
+              data:
+                message.operation === 'read'
+                  ? { value: 26.5, quality: 'good' }
+                  : { path: message.path, subscribed: message.operation === 'subscribe' },
             },
           },
         })
@@ -252,7 +276,9 @@ test('预览 iframe 默认通过宿主桥接读取并订阅数据点', async () 
     assert.equal(requests[0].message.operation, 'read')
 
     let pushedValue = null
-    const subscription = await point.subscribe((value) => { pushedValue = value })
+    const subscription = await point.subscribe((value) => {
+      pushedValue = value
+    })
     const subscribeRequest = requests.find(({ message }) => message.operation === 'subscribe')
     listeners.get('message')({
       source: parent,
@@ -277,4 +303,156 @@ test('预览 iframe 默认通过宿主桥接读取并订阅数据点', async () 
 test('配置入口拒绝无效参数', () => {
   assert.throws(() => configureRuntime(null), /runtime 必须是对象/)
   assert.throws(() => createRuntimeClient([]), /runtime 必须是对象/)
+})
+
+function runtimeResponse(data, { code = 0, msg = 'ok', reqId = 'req-test', status = 200 } = {}) {
+  return new Response(JSON.stringify({ code, msg, data, reqId }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+test('HTTP Runtime 适配器使用会话、当前值、历史、报警和计算目录', async () => {
+  const requests = []
+  const fetch = async (url, init) => {
+    requests.push({ url, init })
+    const target = String(url)
+    if (target.endsWith('/session') && init.method === 'POST') {
+      return runtimeResponse({
+        subjectId: 'user-1',
+        roles: ['viewer'],
+        expiresAt: '2026-09-01T00:00:00Z',
+      })
+    }
+    if (target.endsWith('/points/line.temperature')) {
+      return runtimeResponse({ path: 'line.temperature', value: 42.5, quality: 'good' })
+    }
+    if (target.includes('/points/line.temperature/history')) {
+      return runtimeResponse({
+        items: [{ path: 'line.temperature', value: 41, quality: 'good' }],
+        total: 1,
+      })
+    }
+    if (target.endsWith('/alarms/current?limit=20'))
+      return runtimeResponse({ items: [{ id: 'alarm-1' }], total: 1 })
+    if (target.endsWith('/catalog')) {
+      return runtimeResponse({
+        schemaVersion: 'runtime-project-artifact.v1',
+        artifactDigest: 'sha256:test',
+        points: [{ path: 'line.temperature', id: 'point-1', unit: 'C' }],
+        computes: [{ id: 'compute-1', name: 'temperatureConvert', enabled: true, revision: 1 }],
+        alarms: [],
+      })
+    }
+    if (
+      target.endsWith('/points/line.temperature/write') ||
+      target.endsWith('/computes/compute-1/run')
+    ) {
+      return runtimeResponse(null, {
+        code: 50031,
+        msg: '当前 Runtime V1 未启用受控写入/人工计算命令链路',
+        status: 501,
+      })
+    }
+    throw new Error(`unexpected URL ${target}`)
+  }
+  const runtime = createHttpRuntime({
+    baseUrl: 'https://gateway.test/api/v1/runtime',
+    accessToken: 'runtime-token',
+    identity: { deploymentId: 'deployment-1', projectId: 'project-1' },
+    fetch,
+  })
+  const client = createRuntimeClient(runtime)
+
+  assert.equal((await runtime.session.establish()).data.subjectId, 'user-1')
+  assert.equal(client.access.hasRole('viewer'), true)
+  assert.equal(client.access.hasRole('operator'), false)
+  assert.equal(requests[0].init.headers.get('Authorization'), 'Bearer runtime-token')
+  assert.equal(requests[0].init.headers.get('X-InduForge-Deployment-Id'), 'deployment-1')
+  assert.equal((await client.points.line.temperature.get()).data, 42.5)
+  assert.equal((await client.points.line.temperature.read()).data.quality, 'good')
+  assert.deepEqual((await client.points.line.temperature.history({ limit: 10 })).data, [
+    { path: 'line.temperature', value: 41, quality: 'good' },
+  ])
+  assert.equal((await client.alarms.current.list({ limit: 20 })).data.items[0].id, 'alarm-1')
+  assert.equal((await runtime.catalog.get()).data.computes[0].id, 'compute-1')
+  assert.equal(client.points.line.temperature.unit, 'C')
+  assert.equal((await client.computes.temperatureConvert.describe()).data.id, 'compute-1')
+  assert.equal((await client.points.line.temperature.set(60)).code, 50031)
+  assert.equal((await client.computes.byRef('compute-1').run({})).code, 50031)
+  assert.equal(
+    requests.find(({ url }) => String(url).endsWith('/points/line.temperature/write')).init.body,
+    '{"value":60}',
+  )
+  assert.equal(
+    requests.find(({ url }) => String(url).endsWith('/computes/compute-1/run')).init.body,
+    '{"input":{}}',
+  )
+})
+
+test('HTTP Runtime 适配器将取消和非标准响应归一为 SDKResult', async () => {
+  const runtime = createHttpRuntime({
+    fetch: (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal.addEventListener(
+          'abort',
+          () => reject(new DOMException('cancelled', 'AbortError')),
+          { once: true },
+        )
+      }),
+  })
+  const controller = new AbortController()
+  const pending = runtime.session.query({ signal: controller.signal })
+  controller.abort()
+  const result = await pending
+  assert.equal(result.code, 50031)
+  assert.match(result.msg, /取消/)
+})
+
+test('HTTP Runtime WebSocket 订阅交付实时点位并传播关闭和错误', async () => {
+  let socket
+  class FakeWebSocket {
+    constructor(url) {
+      this.url = url
+      socket = this
+      queueMicrotask(() => this.onopen?.())
+    }
+
+    send(payload) {
+      this.sent = JSON.parse(payload)
+      queueMicrotask(() =>
+        this.onmessage?.({ data: JSON.stringify({ type: 'subscribed', paths: this.sent.paths }) }),
+      )
+    }
+
+    close(code = 1000, reason = '') {
+      this.onclose?.({ code, reason, wasClean: code === 1000 })
+    }
+  }
+  const received = []
+  const errors = []
+  const closes = []
+  const runtime = createHttpRuntime({
+    baseUrl: 'https://gateway.test/api/v1/runtime',
+    WebSocket: FakeWebSocket,
+  })
+  const subscription = await runtime.adapter.subscribe(
+    'line.temperature',
+    (event) => received.push(event),
+    {
+      onError: (error) => errors.push(error),
+      onClose: (event) => closes.push(event),
+    },
+  )
+
+  assert.equal(subscription.code, 0)
+  assert.equal(socket.url, 'wss://gateway.test/ws/v1/points')
+  assert.deepEqual(socket.sent, { action: 'subscribe', paths: ['line.temperature'] })
+  socket.onmessage({
+    data: JSON.stringify({ type: 'point', data: { path: 'line.temperature', value: 42.5 } }),
+  })
+  assert.deepEqual(received, [{ path: 'line.temperature', value: 42.5 }])
+  socket.onmessage({ data: JSON.stringify({ type: 'error', code: 50031, msg: '订阅不可用' }) })
+  assert.equal(errors[0].message, '订阅不可用')
+  assert.equal(closes[0].wasClean, true)
 })

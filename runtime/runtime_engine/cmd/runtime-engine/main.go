@@ -21,7 +21,7 @@ func main() {
 	configPath := flag.String("config", "", "runtime-engine.config.v1 的绝对路径")
 	configRoot := flag.String("config-root", "", "可信配置根目录（绝对路径）")
 	indexPath := flag.String("index", "", "collector-runtime-index.v1 的绝对路径")
-	listen := flag.String("listen", ":8080", "HTTP 监听地址")
+	listen := flag.String("listen", "127.0.0.1:17802", "HTTP 监听地址")
 	production := flag.Bool("production", true, "生产模式：要求只读安全挂载并禁止 NATS none 凭据")
 	flag.Parse()
 	host := runtimeengine.New(runtimeengine.Options{ConfigPath: *configPath, ConfigRoot: *configRoot, IndexPath: *indexPath, Production: *production, Version: version})

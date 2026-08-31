@@ -33,7 +33,7 @@ func TestOpsProcessesAllowsLoopback(t *testing.T) {
 
 func TestOpsProcessMutationRequiresConfirmationHeader(t *testing.T) {
 	h := createTestHandler(t).WithSupervisor(ops.NewSupervisor("unused", t.TempDir(), t.TempDir()))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ops/processes/workload-1/start?role=compute", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ops/processes/workload-1/start?role=project_entry", nil)
 	req = mux.SetURLVars(req, map[string]string{"workloadId": "workload-1", "action": "start"})
 	req.RemoteAddr = "127.0.0.1:1234"
 	rec := httptest.NewRecorder()

@@ -7,7 +7,7 @@
   "required": ["schemaVersion", "componentRole", "siteId", "executionForm", "lifecycleState", "healthState", "version", "startedAt", "uptimeSeconds", "observedAt"],
   "properties": {
     "schemaVersion": { "const": "runtime-health-status.v1" },
-    "componentRole": { "type": "string", "enum": ["runtime-api", "runtime-engine", "industrial-collector", "compute-sandbox"] },
+    "componentRole": { "type": "string", "enum": ["project-gateway", "runtime-api", "runtime-engine", "industrial-collector", "compute-sandbox"] },
     "siteId": { "$ref": "common.schema.json#/$defs/stableId" }, "deploymentId": { "$ref": "common.schema.json#/$defs/stableId" }, "accountId": { "$ref": "common.schema.json#/$defs/stableId" },
     "projectId": { "$ref": "common.schema.json#/$defs/stableId" }, "projectCode": { "type": "string", "minLength": 1 }, "deploymentStage": { "type": "string", "enum": ["development", "staging", "production"] },
     "executionForm": { "type": "string", "enum": ["k3s-workload", "native-linux", "native-windows"] }, "nodeId": { "$ref": "common.schema.json#/$defs/stableId" }, "processId": { "type": "integer", "minimum": 1 },
@@ -27,8 +27,9 @@
     }
   },
   "allOf": [
-    { "if": { "properties": { "componentRole": { "enum": ["runtime-api", "runtime-engine", "industrial-collector"] } } }, "then": { "required": ["deploymentId", "accountId", "businessFreshness"], "properties": { "deploymentId": {}, "accountId": {}, "businessFreshness": {} } } },
+    { "if": { "properties": { "componentRole": { "enum": ["project-gateway", "runtime-api", "runtime-engine", "industrial-collector"] } } }, "then": { "required": ["deploymentId", "accountId", "businessFreshness"], "properties": { "deploymentId": {}, "accountId": {}, "businessFreshness": {} } } },
     { "if": { "properties": { "componentRole": { "const": "industrial-collector" } } }, "then": { "required": ["nodeId", "processId", "collector"], "properties": { "nodeId": {}, "processId": {}, "collector": {}, "executionForm": { "enum": ["native-linux", "native-windows"] } } } },
-    { "if": { "properties": { "componentRole": { "enum": ["runtime-api", "runtime-engine", "compute-sandbox"] } } }, "then": { "not": { "properties": { "collector": {} }, "required": ["collector"] } } }
+    { "if": { "properties": { "componentRole": { "enum": ["project-gateway", "runtime-api", "runtime-engine", "compute-sandbox"] } } }, "then": { "not": { "properties": { "collector": {} }, "required": ["collector"] } } },
+    { "if": { "properties": { "componentRole": { "enum": ["project-gateway", "runtime-engine"] }, "executionForm": { "const": "native-linux" } } }, "then": { "required": ["nodeId", "processId"], "properties": { "nodeId": {}, "processId": {} } } }
   ]
 }

@@ -123,6 +123,7 @@ type StateStore struct {
 type EngineConfig struct {
 	SchemaVersion       string               `json:"schemaVersion"`
 	SiteID              string               `json:"siteId"`
+	NodeID              string               `json:"nodeId,omitempty"`
 	ProjectID           string               `json:"projectId"`
 	ExecutionForm       string               `json:"executionForm"`
 	DeploymentID        string               `json:"deploymentId"`

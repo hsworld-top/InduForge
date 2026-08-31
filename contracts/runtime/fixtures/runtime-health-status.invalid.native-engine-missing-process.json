@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "runtime-health-status.v1",
+  "componentRole": "runtime-engine",
+  "siteId": "site-a",
+  "nodeId": "node-line1-01",
+  "deploymentId": "deployment-line1-prod",
+  "accountId": "account-deployment-line1-prod",
+  "executionForm": "native-linux",
+  "lifecycleState": "RUNNING",
+  "healthState": "HEALTHY",
+  "version": "1.0.0",
+  "startedAt": "2026-08-30T09:00:00Z",
+  "uptimeSeconds": 3600,
+  "observedAt": "2026-08-30T10:20:30Z",
+  "businessFreshness": {
+    "state": "UNKNOWN",
+    "lastBusinessEventAt": null,
+    "evaluatedAt": "2026-08-30T10:20:30Z"
+  }
+}

@@ -15,6 +15,19 @@ var canonicalUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3
 
 // ValidateEngineConfig 只处理 Schema 无法表达的集合、fencing 和消费者拓扑约束。
 func ValidateEngineConfig(config EngineConfig) error {
+	// 配置版本决定部署边界，不能把 v1 的 k3s/release-pvc 语义隐式解释为本机进程。
+	switch config.SchemaVersion {
+	case "runtime-engine.config.v1":
+		if config.ExecutionForm != "k3s-workload" || config.ArtifactMount.Source != "release-pvc" || config.NodeID != "" {
+			return fmt.Errorf("runtime-engine.config.v1 必须使用 k3s-workload/release-pvc 且不得声明 nodeId")
+		}
+	case "runtime-engine.config.v2":
+		if config.ExecutionForm != "native-linux" || config.ArtifactMount.Source != "native-release" || config.NodeID == "" {
+			return fmt.Errorf("runtime-engine.config.v2 必须使用 nodeId、native-linux 和 native-release")
+		}
+	default:
+		return fmt.Errorf("不支持的 runtime-engine config schemaVersion %q", config.SchemaVersion)
+	}
 	streams := []string{config.JetStream.DataRawStream, config.JetStream.DataDerivedStream, config.JetStream.EventStream, config.JetStream.DeadLetterStream}
 	seenStreams := map[string]struct{}{}
 	for _, stream := range streams {

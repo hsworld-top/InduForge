@@ -1,0 +1,19 @@
+agent:
+  listen: { host: 127.0.0.1, port: 17601 }
+  executor:
+    { type: process, process: { workDir: ./runtime, logDir: ./logs, binary: runtime_engine } }
+  ops:
+    enabled: true
+    serverUrl: ''
+    enrollmentCode: ''
+    agentVersion: '__BUILD_VERSION__'
+    heartbeatEvery: 10s
+    dataDir: ./data
+    # Windows 包安装 collector。只有补齐本机 release 配置后才能启用子进程；
+    # installed 能力仍可先完成节点领取，中心不能下发执行路径或环境变量。
+    services:
+      - group: collector
+        component: collector
+        installed: true
+        enabled: false
+logging: { file: ./logs/agent.log, level: info }

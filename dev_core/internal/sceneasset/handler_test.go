@@ -45,6 +45,7 @@ func TestSceneRoutesRequireAuthentication(t *testing.T) {
 	assertUnauthorized(t, router, http.MethodGet, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/datapoints")
 	assertUnauthorized(t, router, http.MethodGet, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/assets")
 	assertUnauthorized(t, router, http.MethodPost, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/assets/import")
+	assertUnauthorized(t, router, http.MethodPost, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/assets/from-selection")
 	assertUnauthorized(t, router, http.MethodPost, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/assets/actions")
 	assertUnauthorized(t, router, http.MethodPost, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/assets/00000000-0000-0000-0000-000000000002/replace")
 	assertUnauthorized(t, router, http.MethodDelete, "/api/v1/scene-editor-sessions/00000000-0000-0000-0000-000000000003/assets/00000000-0000-0000-0000-000000000002")

@@ -1,203 +1,169 @@
 import { describe, expect, it } from 'vitest'
 import {
-  deploymentCollectorNodeId,
-  deploymentHasCollectorNode,
-  deploymentNeedsAttention,
+  capabilityLabel,
   deploymentStatePresentation,
-  healthPresentation,
-  isDeployableRuntimeCluster,
+  enrollmentCapabilities,
+  enrollmentInstallCommand,
+  isDeployableNode,
+  isDeployableReleaseVersion,
   isFreshNodeHeartbeat,
-  isSchedulableCollectorNode,
-  isDeploymentRunActive,
-  lifecyclePresentation,
-  lifecycleTagType,
-  nodeHealthPresentation,
-  nodeLocationPresentation,
-  nodeServicePresentation,
-  runEventMessagePresentation,
-  runEventStagePresentation,
-  workloadStatePresentation,
+  runEventPresentation,
+  serviceLabel,
+  validateEnrollmentServerUrl,
 } from '@/views/tenant/utils/ops-presentation'
-
 describe('ops presentation', () => {
-  it('仅对仍在进行的异步任务保持轮询', () => {
-    expect(isDeploymentRunActive('pending')).toBe(true)
-    expect(isDeploymentRunActive('starting')).toBe(true)
-    expect(isDeploymentRunActive('running')).toBe(false)
-    expect(isDeploymentRunActive('pending', '2026-08-30T00:00:00Z')).toBe(false)
-    expect(isDeploymentRunActive('completed')).toBe(false)
-    expect(isDeploymentRunActive('failed')).toBe(false)
-  })
-
-  it('只允许已审批、启用、在线且心跳新鲜的采集节点进入发布选择器', () => {
+  it('只将已审批、在线且拥有入口和数据运行能力的物理节点作为部署目标', () => {
     const now = new Date('2026-08-30T08:00:00Z').getTime()
-    const candidate = {
-      id: 'collector-1',
-      name: '采集节点 01',
-      role: 'collector_linux' as const,
-      desiredStatus: 'active' as const,
-      observedStatus: 'online' as const,
-      health: 'healthy' as const,
-      approvedAt: '2026-08-30T07:00:00Z',
+    const node = {
+      id: 'n1',
+      name: '节点',
+      platform: 'linux' as const,
+      capabilities: ['project_entry', 'data_runtime'] as Array<'project_entry' | 'data_runtime'>,
+      approvedAt: 'x',
+      desiredStatus: 'active',
+      observedStatus: 'online',
       lastHeartbeatAt: '2026-08-30T07:59:30Z',
     }
-    expect(isFreshNodeHeartbeat(candidate.lastHeartbeatAt, now)).toBe(true)
-    expect(isSchedulableCollectorNode(candidate, now)).toBe(true)
-    expect(
-      isSchedulableCollectorNode({ ...candidate, lastHeartbeatAt: '2026-08-30T07:59:00Z' }, now),
-    ).toBe(false)
-    expect(isSchedulableCollectorNode({ ...candidate, approvedAt: undefined }, now)).toBe(false)
-    expect(isSchedulableCollectorNode({ ...candidate, observedStatus: 'offline' }, now)).toBe(false)
+    expect(isFreshNodeHeartbeat(node.lastHeartbeatAt, now)).toBe(true)
+    expect(isDeployableNode(node, now)).toBe(true)
+    expect(isDeployableNode({ ...node, assignedDeploymentId: 'd1' }, now)).toBe(false)
+    expect(isDeployableNode({ ...node, capabilities: ['project_entry'] }, now)).toBe(false)
+    expect(isDeployableNode({ ...node, observedStatus: 'offline' }, now)).toBe(false)
   })
-
-  it('发布目标只接受已就绪的单节点运行集群', () => {
-    const cluster = {
-      id: 'cluster-1',
-      name: '开发运行集群',
-      topology: 'single_node' as const,
-      desiredStatus: 'ready' as const,
-    }
-    expect(isDeployableRuntimeCluster(cluster)).toBe(true)
-    expect(isDeployableRuntimeCluster({ ...cluster, topology: 'high_availability' })).toBe(false)
-    expect(isDeployableRuntimeCluster({ ...cluster, desiredStatus: 'maintenance' })).toBe(false)
-  })
-
-  it('以用户可读文案区分运行服务与采集服务', () => {
+  it('使用工程服务而不是运行角色文案', () => {
+    expect(capabilityLabel.project_entry).toBe('工程入口')
+    expect(serviceLabel.data_runtime).toBe('数据运行')
     expect(
-      nodeLocationPresentation({
-        role: 'runtime_linux',
-        runtimeClusterId: 'cluster-1',
-        runtimeClusterName: '产线 A 资源池',
+      deploymentStatePresentation({ observedStatus: 'running', entryStatus: 'running' }),
+    ).toMatchObject({ label: '运行中' })
+    expect(
+      deploymentStatePresentation({ observedStatus: 'running', entryStatus: 'failed' }),
+    ).toMatchObject({ label: '运行失败' })
+    expect(runEventPresentation('queued', 'deployment queued')).toEqual({
+      stage: '已受理',
+      message: '部署任务已创建，等待目标节点执行',
+    })
+  })
+  it('按平台固定节点能力，不允许生成不完整的运行节点', () => {
+    expect(enrollmentCapabilities('linux')).toEqual(['project_entry', 'data_runtime'])
+    expect(enrollmentCapabilities('linux', true)).toEqual([
+      'project_entry',
+      'data_runtime',
+      'collector',
+    ])
+    expect(enrollmentCapabilities('windows', false)).toEqual(['collector'])
+    expect(enrollmentCapabilities('windows', true)).toEqual(['collector'])
+  })
+  it('生成需要用户主动复制执行的平台安装命令', () => {
+    expect(
+      enrollmentInstallCommand({
+        platform: 'linux',
+        serverUrl: 'https://center.example.com',
+        enrollmentCode: 'one-time-code',
+        enableCollector: true,
       }),
-    ).toBe('产线 A 资源池')
-    expect(nodeLocationPresentation({ role: 'runtime_linux', runtimeClusterId: 'cluster-1' })).toBe(
-      '运行资源池',
+    ).toBe(
+      "sudo ./install.sh --enable-collector --server-url 'https://center.example.com' --enrollment-code 'one-time-code'",
     )
-    expect(nodeLocationPresentation({ role: 'collector_linux', runtimeClusterId: null })).toBe(
-      '该服务器',
-    )
-    expect(nodeLocationPresentation({ role: 'runtime_linux', runtimeClusterId: null })).toBe(
-      '未分配运行位置',
-    )
-    expect(nodeServicePresentation({ role: 'runtime_linux' })).toBe('运行工程服务')
-    expect(nodeServicePresentation({ role: 'collector_windows' })).toBe('运行采集服务')
-  })
-
-  it('未知健康状态降级展示而不是中断页面渲染', () => {
-    expect(healthPresentation('healthy')).toEqual({ label: '健康', type: 'success' })
-    expect(healthPresentation('pending')).toEqual({ label: '状态待更新', type: 'info' })
-    expect(healthPresentation(undefined)).toEqual({ label: '状态待更新', type: 'info' })
-  })
-
-  it('节点未上报时展示连接状态而不是推断服务器故障', () => {
-    expect(nodeHealthPresentation('unavailable')).toEqual({ label: '不可用', type: 'danger' })
-    expect(nodeHealthPresentation('unavailable', 'offline')).toEqual({
-      label: '未连接',
-      type: 'danger',
-    })
-    expect(nodeHealthPresentation('unavailable', 'revoked')).toEqual({
-      label: '已撤销',
-      type: 'danger',
-    })
-    expect(nodeHealthPresentation('healthy')).toEqual({ label: '健康', type: 'success' })
-  })
-
-  it('采集节点未配置时不把工程服务展示为健康运行', () => {
-    const incomplete = {
-      workloads: [{ role: 'collector' as const, hostNodeId: '' }],
-      health: 'healthy' as const,
-      observedStatus: 'running' as const,
-    }
-    expect(deploymentHasCollectorNode(incomplete)).toBe(false)
-    expect(deploymentCollectorNodeId(incomplete)).toBe('')
-    expect(deploymentNeedsAttention(incomplete)).toBe(true)
-    expect(deploymentStatePresentation(incomplete)).toEqual({
-      label: '配置不完整',
-      detail: '采集服务不可用',
-      type: 'warning',
-    })
     expect(
-      deploymentStatePresentation({
-        workloads: [{ role: 'collector', hostNodeId: 'node-1' }],
-        health: 'healthy',
-        observedStatus: 'running',
+      enrollmentInstallCommand({
+        platform: 'windows',
+        serverUrl: 'https://center.example.com',
+        enrollmentCode: 'one-time-code',
       }),
-    ).toEqual({ label: '运行中', detail: '状态正常', type: 'success' })
-    expect(
-      deploymentStatePresentation({
-        workloads: [{ role: 'collector', hostNodeId: 'node-1' }],
-        health: 'unavailable',
-        observedStatus: 'failed',
+    ).toBe(
+      "& .\\install.ps1 -ServerUrl 'https://center.example.com' -EnrollmentCode 'one-time-code'",
+    )
+  })
+  it('仅接受 HTTPS 或 loopback HTTP 的无参数中心根地址', () => {
+    expect(validateEnrollmentServerUrl('https://center.example.com/')).toEqual({
+      valid: true,
+      normalized: 'https://center.example.com',
+      loopback: false,
+      error: '',
+    })
+    expect(validateEnrollmentServerUrl('http://localhost:18601')).toMatchObject({
+      valid: true,
+      normalized: 'http://localhost:18601',
+      loopback: true,
+    })
+    expect(validateEnrollmentServerUrl('http://127.0.0.2:18601')).toMatchObject({
+      valid: true,
+      loopback: true,
+    })
+    expect(validateEnrollmentServerUrl('http://[::1]:18601')).toMatchObject({
+      valid: true,
+      loopback: true,
+    })
+
+    for (const value of [
+      'http://center.example.com',
+      'http://sub.localhost:18601',
+      'center.example.com',
+      'ftp://center.example.com',
+      'https://user:secret@center.example.com',
+      'https://center.example.com/api',
+      'https://center.example.com?token=secret',
+      'https://center.example.com/?',
+      'https://center.example.com#fragment',
+    ]) {
+      expect(validateEnrollmentServerUrl(value).valid, value).toBe(false)
+    }
+    expect(() =>
+      enrollmentInstallCommand({
+        platform: 'linux',
+        serverUrl: 'http://center.example.com',
+        enrollmentCode: 'one-time-code',
       }),
-    ).toEqual({ label: '运行失败', detail: '请查看操作记录', type: 'danger' })
-    const configured = {
-      workloads: [{ role: 'collector' as const, hostNodeId: 'node-1' }],
-      health: 'healthy' as const,
-      observedStatus: 'running' as const,
-    }
-    expect(deploymentCollectorNodeId(configured)).toBe('node-1')
-    expect(deploymentNeedsAttention(configured, { health: 'unavailable' })).toBe(true)
-    expect(deploymentStatePresentation(configured, { health: 'unavailable' })).toEqual({
-      label: '需关注',
-      detail: '采集节点未连接',
-      type: 'danger',
-    })
-    expect(
-      deploymentStatePresentation(configured, { health: 'unavailable' }, { health: 'unavailable' }),
-    ).toEqual({ label: '需关注', detail: '运行节点和采集节点未连接', type: 'danger' })
+    ).toThrow('必须使用 HTTPS')
   })
-
-  it('工作负载状态使用明确的标签颜色', () => {
-    expect(lifecycleTagType('running')).toBe('success')
-    expect(lifecycleTagType('online')).toBe('success')
-    expect(lifecycleTagType('pending')).toBe('warning')
-    expect(lifecycleTagType('pending_approval')).toBe('warning')
-    expect(lifecycleTagType('failed')).toBe('danger')
-    expect(lifecycleTagType('offline')).toBe('danger')
-    expect(lifecycleTagType('stopped')).toBe('info')
-    expect(lifecyclePresentation('online')).toBe('在线')
-    expect(lifecyclePresentation('pending_approval')).toBe('待确认')
-    expect(lifecyclePresentation('unexpected')).toBe('状态待更新')
-    expect(lifecycleTagType('degraded')).toBe('warning')
-  })
-
-  it('服务状态优先反映实际运行节点的连通性', () => {
-    const workload = {
-      role: 'compute' as const,
-      health: 'healthy' as const,
-      observedStatus: 'running' as const,
-      lastMessage: 'agent observed desired state',
+  it('只将结构完整且摘要合法的正式 Release 作为部署候选', () => {
+    const release = {
+      id: 'v1',
+      projectId: 'p1',
+      version: '1.0.0',
+      status: 'success',
+      artifactHash: 'a'.repeat(64),
+      manifest: {
+        schemaVersion: '2.0',
+        artifacts: {
+          client: { file: 'client-assets.tar.zst', checksum: `sha256:${'b'.repeat(64)}` },
+          runtime: { file: 'runtime-artifact.tar.zst', checksum: `sha256:${'c'.repeat(64)}` },
+        },
+      },
     }
-    expect(workloadStatePresentation(workload, 'unavailable')).toEqual({
-      label: '未连接',
-      detail: '运行节点未连接',
-      type: 'danger',
-    })
-    expect(workloadStatePresentation({ ...workload, role: 'collector' }, 'degraded')).toEqual({
-      label: '需关注',
-      detail: '采集节点状态异常',
-      type: 'warning',
-    })
-    expect(workloadStatePresentation(workload, 'healthy')).toEqual({
-      label: '运行中',
-      detail: '服务状态已更新',
-      type: 'success',
-    })
+
+    expect(isDeployableReleaseVersion(release)).toBe(true)
+    expect(isDeployableReleaseVersion(release, true)).toBe(false)
     expect(
-      workloadStatePresentation(
-        { ...workload, observedStatus: 'failed', lastMessage: null },
-        'healthy',
+      isDeployableReleaseVersion(
+        {
+          ...release,
+          manifest: {
+            ...release.manifest,
+            artifacts: {
+              ...release.manifest.artifacts,
+              collector: {
+                file: 'collector-artifact.tar.zst',
+                checksum: `sha256:${'d'.repeat(64)}`,
+              },
+            },
+          },
+        },
+        true,
       ),
-    ).toEqual({
-      label: '运行异常',
-      detail: '服务运行异常，可尝试重新启动；如仍失败，请联系管理员。',
-      type: 'danger',
-    })
-  })
-
-  it('发布任务的内部阶段和固定消息转为用户可读文案', () => {
-    expect(runEventStagePresentation('dispatched')).toBe('正在执行')
-    expect(runEventMessagePresentation('agent observed desired state')).toBe('服务状态已更新')
-    expect(runEventMessagePresentation('自定义错误')).toBe('状态已更新')
+    ).toBe(true)
+    expect(isDeployableReleaseVersion({ ...release, status: 'ready' })).toBe(true)
+    expect(isDeployableReleaseVersion({ ...release, status: 'failed' })).toBe(false)
+    expect(isDeployableReleaseVersion({ ...release, artifactHash: 'A'.repeat(64) })).toBe(true)
+    expect(isDeployableReleaseVersion({ ...release, artifactHash: 'g'.repeat(64) })).toBe(false)
+    expect(isDeployableReleaseVersion({ ...release, artifactHash: 'a'.repeat(63) })).toBe(false)
+    expect(isDeployableReleaseVersion({ ...release, manifest: undefined })).toBe(false)
+    expect(
+      isDeployableReleaseVersion({
+        ...release,
+        manifest: { ...release.manifest, artifacts: { client: release.manifest.artifacts.client } },
+      }),
+    ).toBe(false)
   })
 })

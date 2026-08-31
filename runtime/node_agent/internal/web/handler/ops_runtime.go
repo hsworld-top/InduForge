@@ -37,7 +37,7 @@ func (h *APIHandler) ManageProcess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workloadID := mux.Vars(r)["workloadId"]
-	role := ops.WorkloadRole(r.URL.Query().Get("role"))
+	role := ops.ServiceGroup(r.URL.Query().Get("role"))
 	generation, _ := strconv.ParseInt(r.URL.Query().Get("generation"), 10, 64)
 	var (
 		status ops.ProcessStatus

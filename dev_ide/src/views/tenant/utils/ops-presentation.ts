@@ -1,270 +1,198 @@
 import type {
-  DeploymentWorkload,
-  DeploymentRunEvent,
-  HostNode,
-  OpsHealth,
-  OpsLifecycle,
-  OpsNodeRole,
-  OpsWorkloadRole,
+  ApplicationVersion,
+  DeploymentService,
+  OpsCapability,
+  OpsNode,
+  OpsPlatform,
+  OpsServiceType,
   ProjectDeployment,
-  RuntimeCluster,
 } from '@/api/ops.api'
 
-/** 与控制面离线判定保持一致，超过该间隔的心跳不得用于调度。 */
 export const NODE_HEARTBEAT_FRESH_MS = 45_000
-
-export const nodeRoleLabel: Record<OpsNodeRole, string> = {
-  runtime_linux: 'Linux 运行节点',
-  collector_linux: 'Linux 采集节点',
-  collector_windows: 'Windows 采集节点',
+export const capabilityLabel: Record<OpsCapability, string> = {
+  project_entry: '工程入口',
+  data_runtime: '数据运行',
+  collector: '数据采集',
 }
+export const serviceLabel: Record<OpsServiceType, string> = capabilityLabel
+export const platformLabel = (platform?: string) =>
+  platform === 'windows' ? 'Windows' : platform === 'linux' ? 'Linux' : '未知平台'
 
-/**
- * 节点页只展示用户能理解的运行位置：运行节点归属资源池，
- * 采集节点的原生进程则直接在当前服务器上运行。
- */
-export const nodeLocationPresentation = (
-  node: Pick<HostNode, 'role' | 'runtimeClusterId' | 'runtimeClusterName'>,
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+/** 仅在下拉中展示具备正式 Release 基本特征的版本，部署时仍由后端完整验证。 */
+export const isDeployableReleaseVersion = (
+  version: ApplicationVersion,
+  requireCollector = false,
 ) => {
-  if (node.role !== 'runtime_linux') return '该服务器'
-  if (node.runtimeClusterName?.trim()) return node.runtimeClusterName.trim()
-  return node.runtimeClusterId ? '运行资源池' : '未分配运行位置'
-}
-
-export const nodeServicePresentation = (node: Pick<HostNode, 'role'>) =>
-  node.role === 'runtime_linux' ? '运行工程服务' : '运行采集服务'
-
-export const workloadRoleLabel: Record<OpsWorkloadRole, string> = {
-  compute: '计算服务',
-  alert: '报警服务',
-  collector: '采集服务',
-}
-
-export const healthPresentation = (health?: OpsHealth | string) => {
-  const value = health || 'unknown'
-  const map: Record<OpsHealth, { label: string; type: 'success' | 'warning' | 'danger' | 'info' }> =
-    {
-      healthy: { label: '健康', type: 'success' },
-      degraded: { label: '需关注', type: 'warning' },
-      unavailable: { label: '不可用', type: 'danger' },
-      maintenance: { label: '维护中', type: 'info' },
-      unknown: { label: '状态待更新', type: 'info' },
-    }
-  // 后端滚动升级或脏数据不应导致整页渲染中断，未知值统一降级展示。
-  return map[value as OpsHealth] || map.unknown
-}
-
-/** 优先展示可确认的节点状态，避免将撤销、离线和普通不可用混为一谈。 */
-export const nodeHealthPresentation = (health?: OpsHealth | string, observedStatus?: string) => {
-  if (observedStatus === 'revoked') return { label: '已撤销', type: 'danger' as const }
-  if (observedStatus === 'offline') return { label: '未连接', type: 'danger' as const }
-  return healthPresentation(health)
-}
-
-export const lifecyclePresentation = (status?: OpsLifecycle | string) => {
-  const map: Record<string, string> = {
-    pending: '等待中',
-    starting: '启动中',
-    running: '运行中',
-    stopping: '停止中',
-    stopped: '已停止',
-    failed: '失败',
-    initializing: '初始化中',
-    ready: '已就绪',
-    degraded: '需关注',
-    offline: '已离线',
-    online: '在线',
-    pending_approval: '待确认',
-    active: '已启用',
-    revoked: '已撤销',
-    maintenance: '维护中',
-    disabled: '已禁用',
-  }
-  return map[String(status || '').toLowerCase()] || '状态待更新'
-}
-
-export const lifecycleTagType = (status?: OpsLifecycle | string) => {
-  const value = String(status || '').toLowerCase()
-  if (['running', 'online', 'ready', 'active'].includes(value)) return 'success' as const
-  if (['failed', 'offline', 'revoked'].includes(value)) return 'danger' as const
-  if (['pending', 'starting', 'stopping', 'pending_approval', 'degraded'].includes(value))
-    return 'warning' as const
-  return 'info' as const
-}
-
-export const deploymentHasCollectorNode = (deployment: Pick<ProjectDeployment, 'workloads'>) =>
-  Boolean(
-    deployment.workloads?.some(
-      (workload) => workload.role === 'collector' && Boolean(workload.hostNodeId),
-    ),
+  const artifacts = version.manifest?.artifacts
+  return (
+    ['ready', 'success'].includes(String(version.status || '').toLowerCase()) &&
+    /^[0-9a-fA-F]{64}$/.test(version.artifactHash || '') &&
+    version.manifest?.schemaVersion === '2.0' &&
+    isRecord(artifacts?.client) &&
+    isRecord(artifacts?.runtime) &&
+    (!requireCollector || isRecord(artifacts?.collector))
   )
-
-export const deploymentCollectorNodeId = (deployment: Pick<ProjectDeployment, 'workloads'>) =>
-  deployment.workloads?.find((workload) => workload.role === 'collector')?.hostNodeId || ''
-
-export const deploymentNeedsAttention = (
-  deployment: Pick<ProjectDeployment, 'workloads' | 'health'>,
-  collectorNode?: Pick<HostNode, 'health'>,
-  runtimeCluster?: Pick<RuntimeCluster, 'health'>,
-) =>
-  !deploymentHasCollectorNode(deployment) ||
-  ['degraded', 'unavailable'].includes(String(collectorNode?.health || '')) ||
-  ['degraded', 'unavailable'].includes(String(runtimeCluster?.health || '')) ||
-  ['degraded', 'unavailable'].includes(String(deployment.health || ''))
-
-export const deploymentStatePresentation = (
-  deployment: Pick<ProjectDeployment, 'workloads' | 'health' | 'observedStatus'>,
-  collectorNode?: Pick<HostNode, 'health'>,
-  runtimeCluster?: Pick<RuntimeCluster, 'health'>,
-) => {
-  if (!deploymentHasCollectorNode(deployment)) {
-    return { label: '配置不完整', detail: '采集服务不可用', type: 'warning' as const }
-  }
-  if (runtimeCluster?.health === 'unavailable' && collectorNode?.health === 'unavailable') {
-    return { label: '需关注', detail: '运行节点和采集节点未连接', type: 'danger' as const }
-  }
-  if (runtimeCluster?.health === 'unavailable') {
-    return { label: '需关注', detail: '运行节点未连接', type: 'danger' as const }
-  }
-  if (collectorNode?.health === 'unavailable') {
-    return { label: '需关注', detail: '采集节点未连接', type: 'danger' as const }
-  }
-  if (runtimeCluster?.health === 'degraded' || collectorNode?.health === 'degraded') {
-    return { label: '需关注', detail: '部分节点状态异常', type: 'warning' as const }
-  }
-  if (deployment.observedStatus === 'failed' || deployment.health === 'unavailable') {
-    return { label: '运行失败', detail: '请查看操作记录', type: 'danger' as const }
-  }
-  if (deployment.health === 'degraded') {
-    return { label: '需关注', detail: '部分服务状态异常', type: 'warning' as const }
-  }
-  if (['pending', 'starting'].includes(String(deployment.observedStatus || ''))) {
-    return { label: '发布中', detail: '状态更新中', type: 'warning' as const }
-  }
-  if (deployment.observedStatus === 'running' && deployment.health === 'healthy') {
-    return { label: '运行中', detail: '状态正常', type: 'success' as const }
-  }
-  return {
-    label: lifecyclePresentation(deployment.observedStatus),
-    detail: healthPresentation(deployment.health).label,
-    type: lifecycleTagType(deployment.observedStatus),
-  }
 }
 
-export const workloadStatePresentation = (
-  workload: Pick<
-    DeploymentWorkload,
-    'role' | 'health' | 'observedStatus' | 'lastError' | 'lastMessage' | 'version'
-  >,
-  hostHealth?: OpsHealth | string,
-) => {
-  const locationLabel = workload.role === 'collector' ? '采集节点' : '运行节点'
-  if (hostHealth === 'unavailable') {
-    return { label: '未连接', detail: `${locationLabel}未连接`, type: 'danger' as const }
-  }
-  if (hostHealth === 'degraded') {
-    return { label: '需关注', detail: `${locationLabel}状态异常`, type: 'warning' as const }
-  }
-  if (hostHealth === 'maintenance') {
-    return { label: '维护中', detail: `${locationLabel}正在维护`, type: 'info' as const }
-  }
-  if (
-    workload.lastError ||
-    workload.health === 'unavailable' ||
-    workload.observedStatus === 'failed'
-  ) {
-    return {
-      label: '运行异常',
-      detail: '服务运行异常，可尝试重新启动；如仍失败，请联系管理员。',
-      type: 'danger' as const,
-    }
-  }
-  if (workload.health === 'degraded') {
-    return { label: '需关注', detail: '服务状态异常', type: 'warning' as const }
-  }
-  return {
-    label: lifecyclePresentation(workload.observedStatus),
-    detail: workload.lastMessage
-      ? runEventMessagePresentation(workload.lastMessage)
-      : workload.version
-        ? `版本 ${workload.version}`
-        : '等待状态更新',
-    type: lifecycleTagType(workload.observedStatus),
-  }
+/** 节点用途由安装平台派生，避免用户拼出无法运行的能力组合。 */
+export const enrollmentCapabilities = (
+  platform: OpsPlatform,
+  enableCollector = false,
+): OpsCapability[] => {
+  if (platform === 'windows') return ['collector']
+  return enableCollector
+    ? ['project_entry', 'data_runtime', 'collector']
+    : ['project_entry', 'data_runtime']
 }
 
-export const enrollmentStatusPresentation = (status?: string) => {
-  const map: Record<string, string> = {
-    created: '等待安装',
-    downloaded: '安装包已下载',
-    registered: '正在注册',
-    claimed: '待确认',
-    approved: '接入完成',
-    rejected: '已拒绝',
-    expired: '接入码已过期',
-    failed: '接入失败',
+const installValue = (value: string, field: string) => {
+  const normalized = value.trim()
+  if (!normalized || /[\r\n]/.test(normalized)) {
+    throw new TypeError(`${field} 必须是非空单行文本`)
   }
-  return map[status || ''] || '状态待更新'
+  return normalized
+}
+const bashQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`
+const powershellQuote = (value: string) => `'${value.replaceAll("'", "''")}'`
+
+export interface EnrollmentServerUrlValidation {
+  valid: boolean
+  normalized: string
+  loopback: boolean
+  error: string
 }
 
-export const sortRunEvents = (events: DeploymentRunEvent[] = []) =>
-  [...events].sort((left, right) => {
-    const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime()
-    const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime()
-    return leftTime - rightTime
-  })
+const invalidServerUrl = (error: string): EnrollmentServerUrlValidation => ({
+  valid: false,
+  normalized: '',
+  loopback: false,
+  error,
+})
 
-export const runEventStagePresentation = (stage?: string) => {
-  const map: Record<string, string> = {
-    queued: '等待执行',
-    dispatched: '正在执行',
-    observed: '已完成',
-    failed: '执行失败',
+const isLoopbackHostname = (hostname: string) =>
+  hostname === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(hostname) || hostname === '[::1]'
+
+/** 节点安装只接受安全、无敏感参数的中心根地址。 */
+export const validateEnrollmentServerUrl = (value: string): EnrollmentServerUrlValidation => {
+  const input = value.trim()
+  if (!input || /[\r\n]/.test(input)) {
+    return invalidServerUrl('请输入非空单行的节点可访问中心地址')
   }
-  return map[String(stage || '').toLowerCase()] || '状态更新'
-}
 
-export const runEventMessagePresentation = (message?: string) => {
-  const map: Record<string, string> = {
-    'deployment queued': '工程发布等待执行',
-    'agent fetched desired workload': '正在应用服务配置',
-    'agent observed desired state': '服务状态已更新',
-    'agent reported workload failure': '服务运行失败，可尝试重新启动',
-    'deploy queued': '发布操作等待执行',
-    'start queued': '启动操作等待执行',
-    'stop queued': '停止操作等待执行',
-    'restart queued': '重启操作等待执行',
+  let url: URL
+  try {
+    url = new URL(input)
+  } catch {
+    return invalidServerUrl('请输入完整的 HTTP/HTTPS 绝对地址')
   }
-  return map[String(message || '').toLowerCase()] || '状态已更新'
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return invalidServerUrl('中心地址仅支持 HTTPS，仅 loopback 地址可使用 HTTP')
+  }
+  if (url.username || url.password) {
+    return invalidServerUrl('中心地址不能包含用户名或密码')
+  }
+  if (url.pathname !== '/') {
+    return invalidServerUrl('中心地址必须使用根路径，不能包含子路径')
+  }
+  const suffix = url.href.slice(url.origin.length)
+  if (suffix.includes('?')) {
+    return invalidServerUrl('中心地址不能包含查询参数')
+  }
+  if (suffix.includes('#')) {
+    return invalidServerUrl('中心地址不能包含片段')
+  }
+
+  const loopback = isLoopbackHostname(url.hostname.toLowerCase())
+  if (url.protocol === 'http:' && !loopback) {
+    return invalidServerUrl('远程物理节点的中心地址必须使用 HTTPS')
+  }
+  return { valid: true, normalized: url.origin, loopback, error: '' }
 }
 
-/**
- * 只有控制面尚未完成、且正处于队列或状态切换阶段的任务才轮询。
- * `running` 是部署成功后的常见终态，不能据此持续轮询。
- */
-export const isDeploymentRunActive = (status?: string, completedAt?: string | null) => {
-  if (completedAt) return false
-  return ['pending', 'queued', 'starting', 'stopping'].includes(String(status || '').toLowerCase())
+/** 仅生成供用户复制的安装命令，不执行、不记录接入码。 */
+export const enrollmentInstallCommand = (input: {
+  platform: OpsPlatform
+  serverUrl: string
+  enrollmentCode: string
+  enableCollector?: boolean
+}) => {
+  const serverUrlValidation = validateEnrollmentServerUrl(input.serverUrl)
+  if (!serverUrlValidation.valid) throw new TypeError(serverUrlValidation.error)
+  const serverUrl = serverUrlValidation.normalized
+  const enrollmentCode = installValue(input.enrollmentCode, '接入码')
+  if (input.platform === 'windows') {
+    return `& .\\install.ps1 -ServerUrl ${powershellQuote(serverUrl)} -EnrollmentCode ${powershellQuote(enrollmentCode)}`
+  }
+  const collectorOption = input.enableCollector ? ' --enable-collector' : ''
+  return `sudo ./install.sh${collectorOption} --server-url ${bashQuote(serverUrl)} --enrollment-code ${bashQuote(enrollmentCode)}`
 }
 
-export const isDeploymentPending = (status?: string) =>
-  String(status || '').toLowerCase() === 'pending'
-
-/** 首版发布只接受已就绪的单节点运行集群，高可用集群待调度器支持后再开放。 */
-export const isDeployableRuntimeCluster = (cluster: RuntimeCluster) =>
-  cluster.topology === 'single_node' && cluster.desiredStatus === 'ready'
-
-export const isFreshNodeHeartbeat = (value?: string, now = Date.now()) => {
-  if (!value) return false
-  const timestamp = new Date(value).getTime()
-  return Number.isFinite(timestamp) && Math.abs(now - timestamp) <= NODE_HEARTBEAT_FRESH_MS
-}
-
-/** 仅将已审批、启用、在线且心跳新鲜的原生采集节点暴露给工程发布。 */
-export const isSchedulableCollectorNode = (node: HostNode, now = Date.now()) =>
-  ['collector_linux', 'collector_windows'].includes(node.role) &&
+export const isFreshNodeHeartbeat = (value?: string, now = Date.now()) =>
+  Boolean(value) && Math.abs(now - new Date(value!).getTime()) <= NODE_HEARTBEAT_FRESH_MS
+export const isDeployableNode = (node: OpsNode, now = Date.now()) =>
+  !node.assignedDeploymentId &&
   node.approvedAt != null &&
   node.desiredStatus === 'active' &&
   node.observedStatus === 'online' &&
-  node.health === 'healthy' &&
-  isFreshNodeHeartbeat(node.lastHeartbeatAt, now)
+  isFreshNodeHeartbeat(node.lastHeartbeatAt, now) &&
+  node.capabilities.includes('project_entry') &&
+  node.capabilities.includes('data_runtime')
+export const lifecyclePresentation = (status?: string) =>
+  ({
+    running: '运行中',
+    stopped: '已停止',
+    failed: '失败',
+    pending: '等待中',
+    online: '在线',
+    offline: '未连接',
+    pending_approval: '待确认',
+    created: '等待领取',
+    claimed: '待确认',
+    approved: '已接入',
+    rejected: '已拒绝',
+    expired: '已过期',
+    active: '已启用',
+    revoked: '已撤销',
+  })[String(status || '').toLowerCase()] || '状态待更新'
+export const lifecycleTagType = (status?: string) =>
+  ['running', 'online', 'active', 'approved'].includes(String(status).toLowerCase())
+    ? ('success' as const)
+    : ['failed', 'offline', 'revoked', 'rejected', 'expired'].includes(String(status).toLowerCase())
+      ? ('danger' as const)
+      : ['pending', 'degraded', 'pending_approval', 'claimed'].includes(
+            String(status).toLowerCase(),
+          )
+        ? ('warning' as const)
+        : ('info' as const)
+export const serviceStatePresentation = (service: DeploymentService) => ({
+  label: lifecyclePresentation(service.observedStatus),
+  detail: service.lastMessage || '等待状态更新',
+  type: lifecycleTagType(service.observedStatus),
+})
+export const runEventPresentation = (stage?: string, message?: string) => {
+  const normalizedMessage = String(message || '').toLowerCase()
+  const queuedMessages: Record<string, string> = {
+    'deployment queued': '部署任务已创建，等待目标节点执行',
+    'start queued': '启动任务已创建，等待目标节点执行',
+    'stop queued': '停止任务已创建，等待目标节点执行',
+    'restart queued': '重启任务已创建，等待目标节点执行',
+  }
+  return {
+    stage: stage === 'queued' ? '已受理' : stage || '状态更新',
+    message: queuedMessages[normalizedMessage] || message || '状态已更新',
+  }
+}
+export const deploymentStatePresentation = (
+  deployment: Pick<ProjectDeployment, 'observedStatus' | 'entryStatus' | 'health'>,
+) =>
+  deployment.observedStatus === 'failed' || deployment.entryStatus === 'failed'
+    ? { label: '运行失败', type: 'danger' as const }
+    : deployment.observedStatus === 'running' && deployment.entryStatus === 'running'
+      ? { label: '运行中', type: 'success' as const }
+      : {
+          label: lifecyclePresentation(deployment.observedStatus),
+          type: lifecycleTagType(deployment.observedStatus),
+        }

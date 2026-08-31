@@ -19,6 +19,7 @@
   "files": [
     "index.js",
     "index.d.ts",
+    "http-runtime.js",
     "preview-bridge.js",
     "scene-elements.js",
     "scene-elements.d.ts"

@@ -1,4 +1,4 @@
-# InduForge NodeAgent（Windows 采集节点）
+# InduForge NodeAgent（Windows）
 
 请使用“以管理员身份运行”的 PowerShell 解压并安装：
 
@@ -25,3 +25,8 @@ Restart-Service InduForgeNodeAgent
 
 当前仓库只完成了 Windows 二进制交叉构建和安装器静态校验，正式交付前仍需在真实 Windows
 主机完成安装、启动、停止、重装与接入测试。
+
+Windows 包安装并声明 collector 能力，但默认不会启动 collector。领取节点不要求已有工程
+release；要允许中心的部署命令启动 collector，仍须由本机运维人员在 `config.yaml` 为该服务
+补齐 `releaseRoot`、`releaseDigest`、`executable`、`healthUrl` 等受控 release 配置。中心不会
+下发命令、路径、环境变量或密钥；缺少物料时 NodeAgent 会拒绝启动服务而不伪报运行。

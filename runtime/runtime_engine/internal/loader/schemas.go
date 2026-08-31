@@ -16,7 +16,8 @@ import (
 var schemaFiles embed.FS
 
 type schemaSet struct {
-	engineConfig      *jsonschema.Schema
+	engineConfigV1    *jsonschema.Schema
+	engineConfigV2    *jsonschema.Schema
 	projectArtifact   *jsonschema.Schema
 	collectorArtifact *jsonschema.Schema
 	all               map[string]*jsonschema.Schema
@@ -68,7 +69,31 @@ func compileSchemasOnce() (*schemaSet, error) {
 		}
 		all[entry.Name()] = schema
 	}
-	return &schemaSet{engineConfig: all["runtime-engine-config.schema.json"], projectArtifact: all["runtime-project-artifact.schema.json"], collectorArtifact: all["collector-runtime-artifact.schema.json"], all: all}, nil
+	return &schemaSet{engineConfigV1: all["runtime-engine-config.schema.json"], engineConfigV2: all["runtime-engine-config-v2.schema.json"], projectArtifact: all["runtime-project-artifact.schema.json"], collectorArtifact: all["collector-runtime-artifact.schema.json"], all: all}, nil
+}
+
+// engineConfigSchema 先读取最小版本头，再选择对应冻结契约。v1 与 v2 绝不互相降级。
+func (s *schemaSet) engineConfigSchema(raw []byte) (*jsonschema.Schema, error) {
+	value, err := strictSchemaJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("runtime-engine-config 不是合法 JSON: %w", err)
+	}
+	document, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("runtime-engine-config 必须是 JSON 对象")
+	}
+	version, ok := document["schemaVersion"].(string)
+	if !ok {
+		return nil, fmt.Errorf("runtime-engine-config 缺少字符串 schemaVersion")
+	}
+	switch version {
+	case "runtime-engine.config.v1":
+		return s.engineConfigV1, nil
+	case "runtime-engine.config.v2":
+		return s.engineConfigV2, nil
+	default:
+		return nil, fmt.Errorf("不支持的 runtime-engine config schemaVersion %q", version)
+	}
 }
 
 func validateJSON(schema *jsonschema.Schema, raw []byte, name string) error {
@@ -77,7 +102,7 @@ func validateJSON(schema *jsonschema.Schema, raw []byte, name string) error {
 		return fmt.Errorf("%s 不是合法 JSON: %w", name, err)
 	}
 	if err := schema.Validate(value); err != nil {
-		return fmt.Errorf("%s 未通过 Runtime V1 Schema 校验: %w", name, err)
+		return fmt.Errorf("%s 未通过 Runtime Schema 校验: %w", name, err)
 	}
 	return nil
 }

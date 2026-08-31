@@ -7,34 +7,33 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
-	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
 )
 
 var (
-	ErrNotFound                        = errors.New("运维资源不存在")
-	ErrEnrollmentUnavailable           = errors.New("接入码无效、已使用或已过期")
-	ErrAgentUnauthorized               = errors.New("节点代理令牌无效")
-	ErrRuntimeClusterSelectionRequired = errors.New("租户已有运行资源池，运行节点必须明确选择运行资源池")
-	ErrDeploymentBusy                  = errors.New("当前部署操作尚未完成，请等待节点返回结果后重试")
-	ErrDeploymentExists                = errors.New("该工程在目标运行集群已有部署，请使用现有部署进行操作")
+	ErrNotFound              = errors.New("运维资源不存在")
+	ErrEnrollmentUnavailable = errors.New("接入码无效、已使用或已过期")
+	ErrAgentUnauthorized     = errors.New("节点代理令牌无效")
+	ErrDeploymentBusy        = errors.New("当前部署操作尚未完成，请等待节点返回结果后重试")
+	ErrDeploymentExists      = errors.New("该工程已有正式单节点部署，请使用现有部署进行操作")
+	ErrNodeProjectConflict   = errors.New("该物理节点已承载另一个工程；在 DeploymentBinding 和端口隔离交付前，每个节点仅能部署一个工程")
+	ErrReleaseNotDeployable  = errors.New("该版本不是可部署的正式 Release")
 )
 
 type Repository interface {
-	ListClusters(context.Context, string, PageFilter) ([]RuntimeCluster, int64, error)
-	CreateCluster(context.Context, string, string, CreateClusterInput) (RuntimeCluster, error)
-	GetCluster(context.Context, string, string) (RuntimeCluster, error)
 	ListEnrollments(context.Context, string, PageFilter) ([]Enrollment, int64, error)
 	CreateEnrollment(context.Context, string, string, CreateEnrollmentInput, string) (Enrollment, error)
 	GetEnrollment(context.Context, string, string) (Enrollment, error)
 	ApproveEnrollment(context.Context, string, string, string, bool) (Enrollment, error)
-	ClaimEnrollment(context.Context, ClaimEnrollmentInput, string) (Enrollment, HostNode, error)
-	ListHostNodes(context.Context, string, PageFilter) ([]HostNode, int64, error)
-	GetHostNode(context.Context, string, string) (HostNode, error)
-	Heartbeat(context.Context, string, string, HeartbeatInput) (HostNode, []Workload, error)
+	ClaimEnrollment(context.Context, ClaimEnrollmentInput, string) (Enrollment, Node, error)
+	ListNodes(context.Context, string, PageFilter) ([]Node, int64, error)
+	GetNode(context.Context, string, string) (Node, error)
+	Heartbeat(context.Context, string, string, HeartbeatInput) (Node, []DeploymentService, error)
 	AgentCommands(context.Context, string, string) ([]AgentCommand, error)
 	ListDeployments(context.Context, string, PageFilter) ([]ProjectDeployment, int64, error)
 	CreateDeployment(context.Context, string, string, CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error)
@@ -42,57 +41,22 @@ type Repository interface {
 	GetDeployment(context.Context, string, string) (ProjectDeployment, error)
 	GetRun(context.Context, string, string) (DeploymentRun, error)
 	ListRunEvents(context.Context, string, string) ([]DeploymentRunEvent, error)
-	OperateWorkload(context.Context, string, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
-	CompleteDemoRun(context.Context, string) error
+	OperateService(context.Context, string, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
 }
 
-type Service struct {
-	repository Repository
-	packages   PackageStore
-}
 type PackageStore interface {
 	List() []NodePackage
 	Open(string) (NodePackage, string, error)
+}
+type Service struct {
+	repository Repository
+	packages   PackageStore
 }
 
 func NewService(repository Repository, packages PackageStore) *Service {
 	return &Service{repository: repository, packages: packages}
 }
 
-func (s *Service) ListClusters(ctx context.Context, actor auth.User, filter PageFilter) ([]RuntimeCluster, int64, error) {
-	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
-		return nil, 0, err
-	}
-	return s.repository.ListClusters(ctx, actor.TenantID, normalizePage(filter))
-}
-func (s *Service) CreateCluster(ctx context.Context, actor auth.User, input CreateClusterInput) (RuntimeCluster, error) {
-	if err := auth.RequireCapability(actor, auth.CapabilityNodeApprove); err != nil {
-		return RuntimeCluster{}, err
-	}
-	input.Name, input.Code, input.Topology = strings.TrimSpace(input.Name), strings.TrimSpace(input.Code), strings.TrimSpace(input.Topology)
-	if input.Name == "" || input.Code == "" {
-		return RuntimeCluster{}, fmt.Errorf("集群名称和编码不能为空")
-	}
-	if utf8.RuneCountInString(input.Name) > 120 {
-		return RuntimeCluster{}, fmt.Errorf("集群名称不能超过 120 个字符")
-	}
-	if !validClusterCode(input.Code) {
-		return RuntimeCluster{}, fmt.Errorf("集群编码仅支持小写字母开头的 2-63 位小写字母、数字和连字符")
-	}
-	if input.Topology == "" {
-		input.Topology = "single_node"
-	}
-	if input.Topology != "single_node" && input.Topology != "high_availability" {
-		return RuntimeCluster{}, fmt.Errorf("集群拓扑不支持")
-	}
-	return s.repository.CreateCluster(ctx, actor.TenantID, actor.ID, input)
-}
-func (s *Service) GetCluster(ctx context.Context, actor auth.User, id string) (RuntimeCluster, error) {
-	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
-		return RuntimeCluster{}, err
-	}
-	return s.repository.GetCluster(ctx, actor.TenantID, id)
-}
 func (s *Service) ListEnrollments(ctx context.Context, actor auth.User, f PageFilter) ([]Enrollment, int64, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
 		return nil, 0, err
@@ -103,18 +67,12 @@ func (s *Service) CreateEnrollment(ctx context.Context, actor auth.User, input C
 	if err := auth.RequireCapability(actor, auth.CapabilityNodeApprove); err != nil {
 		return Enrollment{}, "", err
 	}
-	input.Role = strings.TrimSpace(input.Role)
-	input.RuntimeClusterID = strings.TrimSpace(input.RuntimeClusterID)
-	if !validNodeRole(input.Role) {
-		return Enrollment{}, "", fmt.Errorf("节点角色不支持")
+	input.Platform, input.DisplayName = strings.ToLower(strings.TrimSpace(input.Platform)), strings.TrimSpace(input.DisplayName)
+	if !validPlatform(input.Platform) {
+		return Enrollment{}, "", fmt.Errorf("节点平台仅支持 linux 或 windows")
 	}
-	if input.RuntimeClusterID != "" && !validUUID(input.RuntimeClusterID) {
-		return Enrollment{}, "", fmt.Errorf("运行集群 ID 格式无效")
-	}
-	if input.RuntimeClusterID != "" {
-		if _, err := s.repository.GetCluster(ctx, actor.TenantID, input.RuntimeClusterID); err != nil {
-			return Enrollment{}, "", err
-		}
+	if err := validateCapabilities(input.Capabilities); err != nil {
+		return Enrollment{}, "", err
 	}
 	if input.TTL <= 0 {
 		input.TTL = 30 * time.Minute
@@ -141,34 +99,66 @@ func (s *Service) ApproveEnrollment(ctx context.Context, actor auth.User, id str
 	}
 	return s.repository.ApproveEnrollment(ctx, actor.TenantID, id, actor.ID, approve)
 }
-func (s *Service) ClaimEnrollment(ctx context.Context, input ClaimEnrollmentInput) (Enrollment, HostNode, string, error) {
-	if strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.Hostname) == "" || strings.TrimSpace(input.OS) == "" || strings.TrimSpace(input.Architecture) == "" {
-		return Enrollment{}, HostNode{}, "", fmt.Errorf("接入码、主机名、操作系统和架构不能为空")
+func (s *Service) ClaimEnrollment(ctx context.Context, input ClaimEnrollmentInput) (Enrollment, Node, string, error) {
+	input.Platform = strings.ToLower(strings.TrimSpace(input.Platform))
+	input.Hostname = strings.TrimSpace(input.Hostname)
+	input.Architecture = strings.TrimSpace(input.Architecture)
+	input.AgentVersion = strings.TrimSpace(input.AgentVersion)
+	input.MachineFingerprint = strings.TrimSpace(input.MachineFingerprint)
+	if strings.TrimSpace(input.Code) == "" || input.Hostname == "" || !validPlatform(input.Platform) || input.Architecture == "" || input.AgentVersion == "" || input.MachineFingerprint == "" {
+		return Enrollment{}, Node{}, "", fmt.Errorf("接入码、主机名、平台、架构、Agent 版本和机器指纹不能为空或无效")
+	}
+	if len(input.Hostname) > 255 || len(input.Architecture) > 64 || len(input.AgentVersion) > 128 || len(input.MachineFingerprint) > 512 {
+		return Enrollment{}, Node{}, "", fmt.Errorf("NodeAgent 主机身份字段长度无效")
+	}
+	if err := validateCapabilities(input.Capabilities); err != nil {
+		return Enrollment{}, Node{}, "", err
 	}
 	token, err := randomToken(32)
 	if err != nil {
-		return Enrollment{}, HostNode{}, "", err
+		return Enrollment{}, Node{}, "", err
 	}
 	e, n, err := s.repository.ClaimEnrollment(ctx, input, hashToken(token))
 	return e, n, token, err
 }
-func (s *Service) ListHostNodes(ctx context.Context, actor auth.User, f PageFilter) ([]HostNode, int64, error) {
+func (s *Service) ListNodes(ctx context.Context, actor auth.User, f PageFilter) ([]Node, int64, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
 		return nil, 0, err
 	}
-	return s.repository.ListHostNodes(ctx, actor.TenantID, normalizePage(f))
+	return s.repository.ListNodes(ctx, actor.TenantID, normalizePage(f))
 }
-func (s *Service) GetHostNode(ctx context.Context, actor auth.User, id string) (HostNode, error) {
+func (s *Service) GetNode(ctx context.Context, actor auth.User, id string) (Node, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
-		return HostNode{}, err
+		return Node{}, err
 	}
-	return s.repository.GetHostNode(ctx, actor.TenantID, id)
+	return s.repository.GetNode(ctx, actor.TenantID, id)
 }
-func (s *Service) Heartbeat(ctx context.Context, nodeID, token string, input HeartbeatInput) (HostNode, []Workload, error) {
+func (s *Service) Heartbeat(ctx context.Context, nodeID, token string, input HeartbeatInput) (Node, []DeploymentService, error) {
 	if strings.TrimSpace(token) == "" {
-		return HostNode{}, nil, ErrAgentUnauthorized
+		return Node{}, nil, ErrAgentUnauthorized
+	}
+	for _, observation := range input.Services {
+		if !validUUID(observation.ServiceID) || (observation.ObservedStatus != "running" && observation.ObservedStatus != "stopped" && observation.ObservedStatus != "failed") || observation.ObservedGeneration < 1 || observation.ReplicasObserved < 0 || observation.ReplicasObserved > 1 || len(observation.Message) > 1024 || len(observation.Endpoint) > 2048 {
+			return Node{}, nil, fmt.Errorf("节点服务观测字段无效")
+		}
+		if err := validateReportedEndpoint(observation.Endpoint); err != nil {
+			return Node{}, nil, err
+		}
 	}
 	return s.repository.Heartbeat(ctx, nodeID, hashToken(token), input)
+}
+
+// validateReportedEndpoint 只校验 Agent 上报地址的安全边界；服务类型归属由仓储层
+// 依据 serviceId 的数据库记录判定，避免 Agent 伪造 collector/runtime 的访问入口。
+func validateReportedEndpoint(endpoint string) error {
+	if endpoint == "" {
+		return nil
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
+		return fmt.Errorf("工程入口地址必须为不含 userinfo 或 fragment 的 http/https URL")
+	}
+	return nil
 }
 func (s *Service) AgentCommands(ctx context.Context, nodeID, token string) ([]AgentCommand, error) {
 	if strings.TrimSpace(token) == "" {
@@ -212,17 +202,17 @@ func (s *Service) ListRunEvents(ctx context.Context, actor auth.User, id string)
 	}
 	return s.repository.ListRunEvents(ctx, actor.TenantID, id)
 }
-func (s *Service) OperateWorkload(ctx context.Context, actor auth.User, deploymentID, role, operation string) (ProjectDeployment, DeploymentRun, error) {
+func (s *Service) OperateService(ctx context.Context, actor auth.User, deploymentID, serviceType, operation string) (ProjectDeployment, DeploymentRun, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentOperate); err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
 	if operation != "start" && operation != "stop" && operation != "restart" {
-		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("工作负载操作不支持")
+		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("工程服务操作不支持")
 	}
-	if !validWorkloadRole(role) {
-		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("工作负载角色不支持")
+	if !validServiceType(serviceType) {
+		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("工程服务类型不支持")
 	}
-	return s.repository.OperateWorkload(ctx, actor.TenantID, deploymentID, role, operation, actor.ID)
+	return s.repository.OperateService(ctx, actor.TenantID, deploymentID, serviceType, operation, actor.ID)
 }
 func (s *Service) ListPackages() []NodePackage {
 	if s.packages == nil {
@@ -236,6 +226,7 @@ func (s *Service) OpenPackage(id string) (NodePackage, string, error) {
 	}
 	return s.packages.Open(id)
 }
+
 func normalizePage(f PageFilter) PageFilter {
 	if f.Page <= 0 {
 		f.Page = 1
@@ -247,63 +238,40 @@ func normalizePage(f PageFilter) PageFilter {
 		f.PageSize = 200
 	}
 	f.Search = strings.TrimSpace(f.Search)
+	f.ProjectID = strings.TrimSpace(f.ProjectID)
 	return f
 }
-func validNodeRole(v string) bool {
-	return v == RoleRuntimeLinux || v == RoleCollectorLinux || v == RoleCollectorWindows
+func validPlatform(v string) bool { return v == PlatformLinux || v == PlatformWindows }
+func validCapability(v string) bool {
+	return v == CapabilityProjectEntry || v == CapabilityDataRuntime || v == CapabilityCollector
 }
-func validClusterCode(v string) bool {
-	if len(v) < 2 || len(v) > 63 || v[0] < 'a' || v[0] > 'z' {
-		return false
-	}
-	for _, ch := range v[1:] {
-		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' {
-			continue
-		}
-		return false
-	}
-	return true
+func validServiceType(v string) bool {
+	return v == ServiceProjectEntry || v == ServiceDataRuntime || v == ServiceCollector
 }
-func validWorkloadRole(v string) bool {
-	return v == WorkloadRoleCompute || v == WorkloadRoleAlert || v == WorkloadRoleCollector
-}
-func validateDeployment(in CreateDeploymentInput) error {
-	if strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.RuntimeClusterID) == "" {
-		return fmt.Errorf("工程和运行集群不能为空")
+func validateCapabilities(values []string) error {
+	if len(values) == 0 {
+		return fmt.Errorf("节点至少需要一项能力")
 	}
-	if !validUUID(in.ProjectID) || !validUUID(in.RuntimeClusterID) {
-		return fmt.Errorf("工程 ID 和运行集群 ID 格式无效")
-	}
-	if in.DeploymentMode != "development" && in.DeploymentMode != "production" {
-		return fmt.Errorf("部署模式必须是 development 或 production")
-	}
-	if len(in.Workloads) == 0 {
-		return fmt.Errorf("至少需要一个工作负载")
-	}
-	seen := map[string]bool{}
-	for _, w := range in.Workloads {
-		if !validWorkloadRole(w.Role) {
-			return fmt.Errorf("工作负载角色不支持")
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !validCapability(value) {
+			return fmt.Errorf("节点能力不支持")
 		}
-		if seen[w.Role] {
-			return fmt.Errorf("工作负载角色不能重复")
+		if _, ok := seen[value]; ok {
+			return fmt.Errorf("节点能力不能重复")
 		}
-		seen[w.Role] = true
-		if w.Role == WorkloadRoleCollector && strings.TrimSpace(w.HostNodeID) == "" {
-			return fmt.Errorf("采集工作负载必须选择宿主节点")
-		}
-		if w.Role == WorkloadRoleCollector && !validUUID(w.HostNodeID) {
-			return fmt.Errorf("采集宿主节点 ID 格式无效")
-		}
-		if w.Role != WorkloadRoleCollector && strings.TrimSpace(w.HostNodeID) != "" {
-			return fmt.Errorf("计算和报警工作负载不能指定宿主节点")
-		}
-		if w.Replicas > 1 {
-			return fmt.Errorf("Demo 工作负载当前仅支持单副本")
-		}
+		seen[value] = struct{}{}
 	}
 	return nil
 }
+func validateDeployment(in CreateDeploymentInput) error {
+	if !validUUID(in.ProjectID) || !validUUID(in.NodeID) || !validUUID(in.ApplicationVersionID) {
+		return fmt.Errorf("工程、节点和正式版本 ID 格式无效")
+	}
+	return nil
+}
+func validUUID(value string) bool { _, err := uuid.Parse(value); return err == nil }
 func randomToken(bytes int) (string, error) {
 	b := make([]byte, bytes)
 	if _, err := rand.Read(b); err != nil {

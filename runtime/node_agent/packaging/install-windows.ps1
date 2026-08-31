@@ -15,6 +15,16 @@ if ($ServerUrl -match "[\r\n]" -or $EnrollmentCode -match "[\r\n]") {
 if (!(Test-Path "$PSScriptRoot\bin\node-agent.exe" -PathType Leaf)) {
   throw 'node-agent.exe is missing from this package'
 }
+if (!(Test-Path "$PSScriptRoot\BUILD_VERSION" -PathType Leaf)) {
+  throw 'package BUILD_VERSION is missing'
+}
+if (!(Test-Path "$PSScriptRoot\capabilities\collector\win-x64\industrial_collector.exe" -PathType Leaf)) {
+  throw 'collector is missing from this package'
+}
+$buildVersion = (Get-Content -LiteralPath "$PSScriptRoot\BUILD_VERSION" -Raw).Trim()
+if (!$buildVersion) {
+  throw 'package BUILD_VERSION is empty'
+}
 
 function Set-ConfigString {
   param([string]$Path, [string]$Key, [string]$Value)
@@ -59,10 +69,12 @@ function Stop-ServiceForUpdate {
   $Service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(45))
 }
 
-New-Item -ItemType Directory -Force -Path "$Prefix\bin", "$Prefix\data", "$Prefix\runtime", "$Prefix\logs", $ConfigDir | Out-Null
+New-Item -ItemType Directory -Force -Path "$Prefix\bin", "$Prefix\capabilities\collector\win-x64", "$Prefix\data", "$Prefix\runtime", "$Prefix\releases", "$Prefix\logs", $ConfigDir | Out-Null
 Copy-Item "$PSScriptRoot\bin\node-agent.exe" "$Prefix\bin\node-agent.exe" -Force
+Copy-Item "$PSScriptRoot\capabilities\collector\win-x64\industrial_collector.exe" "$Prefix\capabilities\collector\win-x64\industrial_collector.exe" -Force
 if (!(Test-Path "$ConfigDir\config.yaml" -PathType Leaf)) {
   Copy-Item "$PSScriptRoot\config.yaml" "$ConfigDir\config.yaml"
+  (Get-Content -LiteralPath "$ConfigDir\config.yaml" -Raw).Replace('__BUILD_VERSION__', $buildVersion) | Set-Content -LiteralPath "$ConfigDir\config.yaml" -Encoding utf8 -NoNewline
 }
 if ($ServerUrl) { Set-ConfigString -Path "$ConfigDir\config.yaml" -Key 'serverUrl' -Value $ServerUrl }
 if ($EnrollmentCode) { Set-ConfigString -Path "$ConfigDir\config.yaml" -Key 'enrollmentCode' -Value $EnrollmentCode }
@@ -99,4 +111,4 @@ if (!$NoService) {
   }
 }
 
-Write-Output "Installed. Configure $ConfigDir\config.yaml or pass -ServerUrl/-EnrollmentCode before starting."
+Write-Output "Installed NodeAgent $buildVersion. Capability templates can claim a node but stay disabled until local release configuration is complete."

@@ -1,4 +1,4 @@
-// Package loader 严格加载 release-pvc 中的 RuntimeEngine 配置和项目 Artifact。
+// Package loader 严格加载 k3s release-pvc 或本机受控 native-release 中的 RuntimeEngine 配置和项目 Artifact。
 package loader
 
 import (
@@ -69,7 +69,11 @@ func Load(options Options) (*Loaded, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validateJSON(schemas.engineConfig, configBytes, "runtime-engine-config"); err != nil {
+	configSchema, err := schemas.engineConfigSchema(configBytes)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateJSON(configSchema, configBytes, "runtime-engine-config"); err != nil {
 		return nil, err
 	}
 	var config model.EngineConfig
@@ -90,6 +94,13 @@ func Load(options Options) (*Loaded, error) {
 	}
 	if err := validateArtifactFile(config.ArtifactMount.ArtifactFile); err != nil {
 		return nil, err
+	}
+	// native-release 的根就是节点 Agent 选定的不可变 release 根；先检查根本身，
+	// 再检查每个文件，防止只读根下叠加可写子挂载绕过校验。
+	if config.SchemaVersion == "runtime-engine.config.v2" {
+		if err := requireArtifactReadOnly(options, mountPath); err != nil {
+			return nil, fmt.Errorf("native-release 根必须为只读挂载: %w", err)
+		}
 	}
 	artifactPath, artifactBytes, err := readMountedArtifact(mountPath, config.ArtifactMount.ArtifactFile, "项目 Artifact")
 	if err != nil {

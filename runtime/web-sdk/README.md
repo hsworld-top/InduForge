@@ -104,3 +104,52 @@ window.__INDUFORGE_RUNTIME__ = {
 ```
 
 也可以使用 `configureRuntime(runtime)` 配置顶层导出，或用 `createRuntimeClient(runtime)` 创建相互隔离的客户端。数据点路径可以通过属性链形成，也可以使用 `points.byPath('完整.路径')`；静态属性来自宿主注入的 `pointContracts`。`sub/pub` 保留为 `subscribe/publish` 的简写，新代码优先使用完整方法名。
+
+## 发布工程：Runtime API HTTP/WebSocket 适配器
+
+发布后的工程可使用 `createHttpRuntime()` 接入同节点 Project Gateway 代理的 Runtime API，不必依赖
+Designer 预览桥接或 `window.__INDUFORGE_RUNTIME__` 注入。默认请求同源
+`/api/v1/runtime`，并连接同源 `/ws/v1/points`；Gateway 负责注入 deployment/project 身份头。
+
+```js
+import { configureRuntime, createHttpRuntime } from '@induforge/runtime-sdk'
+
+const runtime = createHttpRuntime({
+  // 默认同源；只有直连 Runtime API 或测试时才传 baseUrl、identity。
+  timeoutMs: 10_000,
+})
+
+// Bearer token 只用于创建 HttpOnly Runtime 会话，后续 HTTP/WS 均使用同源 Cookie。
+const session = await runtime.session.establish(runtimeAccessToken)
+if (session.code !== 0) throw new Error(session.msg)
+
+configureRuntime(runtime)
+const current = await points.factory.line1.temperature.read()
+const history = await points.factory.line1.temperature.history({
+  from: '2026-08-31T09:00:00Z',
+  to: '2026-08-31T10:00:00Z',
+  limit: 100,
+})
+const activeAlarms = await alarms.current.list({ limit: 100 })
+const compute = await computes.byRef('compute-unit-uuid').describe()
+
+const live = await points.factory.line1.temperature.subscribe(
+  (sample) => console.log(sample.value),
+  {
+    onError: (error) => console.error('实时连接异常', error),
+    onClose: ({ code, reason }) => console.log('实时连接关闭', code, reason),
+  },
+)
+// live.data 是取消订阅函数。调用后连接以正常关闭语义结束。
+live.data?.()
+
+await runtime.session.exit()
+```
+
+`runtime.catalog.get()` 返回 Runtime Artifact 的点位、计算和报警目录，并将点位元数据缓存到
+`runtime.pointContracts`。会话查询使用 `runtime.session.query()`。每次 HTTP 调用都接受
+`{ signal, timeoutMs }`；取消和超时会返回 `code: 50031` 的统一失败包络。WebSocket 在订阅成功后不自动
+重连：异常会交给 `onError`，关闭始终交给 `onClose`，便于工程按自身生命周期决定是否重连。
+
+Runtime API V1 目前只读。因此 `points.*.set()` 和 `computes.*.run()` 会将服务端的
+`501 / code: 50031` 原样返回；其他尚未定义的写入、发布和报警动作同样返回失败，绝不会伪成功。

@@ -104,6 +104,80 @@ export interface RuntimeConfiguration {
   }
 }
 
+/** Runtime API 请求可选项；除历史和报警列表外不参与 URL 查询串。 */
+export interface HttpRequestOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+  headers?: HeadersInit
+  credentials?: RequestCredentials
+}
+
+export interface HttpRuntimeIdentity {
+  deploymentId?: string
+  projectId?: string
+}
+
+export interface PointSubscriptionOptions extends HttpRequestOptions {
+  onError?: (error: Error) => void
+  onClose?: (event: { code: number; reason: string; wasClean: boolean }) => void
+}
+
+export interface RuntimeCatalog {
+  schemaVersion: string
+  artifactDigest: string
+  points: DataPointContract[]
+  computes: RuntimeComputeUnit[]
+  alarms: unknown[]
+}
+
+export interface RuntimeComputeUnit {
+  id: string
+  revision: number
+  name: string
+  description?: string | null
+  enabled: boolean
+  inputs?: unknown
+  outputs?: unknown
+  trigger?: unknown
+}
+
+export interface RuntimeSession {
+  subjectId: string
+  roles: string[]
+  expiresAt?: string
+}
+
+export interface HttpRuntimeSession {
+  establish(accessToken?: string, options?: HttpRequestOptions): Promise<SDKResult<RuntimeSession>>
+  query(options?: HttpRequestOptions): Promise<SDKResult<RuntimeSession>>
+  exit(options?: HttpRequestOptions): Promise<SDKResult<{ revoked: boolean }>>
+}
+
+export interface HttpRuntimeCatalog {
+  get(options?: HttpRequestOptions): Promise<SDKResult<RuntimeCatalog>>
+}
+
+export interface HttpRuntimeOptions {
+  /** 默认同源 /api/v1/runtime，由 Project Gateway 注入工程身份。 */
+  baseUrl?: string
+  /** 默认同源 /ws/v1/points。baseUrl 不规则时请显式指定。 */
+  wsUrl?: string
+  /** 会话建立时使用的 Bearer Token；不会保存到 SDK 外部。 */
+  accessToken?: string
+  /** 仅直连 Runtime API 或测试时传入；经 Gateway 的浏览器请求通常不应设置。 */
+  identity?: HttpRuntimeIdentity
+  timeoutMs?: number
+  credentials?: RequestCredentials
+  fetch?: typeof globalThis.fetch
+  WebSocket?: typeof globalThis.WebSocket
+}
+
+export interface HttpRuntimeConfiguration extends RuntimeConfiguration {
+  pointContracts: Record<string, DataPointContract>
+  session: HttpRuntimeSession
+  catalog: HttpRuntimeCatalog
+}
+
 export interface SceneResolution {
   url: string
   expiresAt: string
@@ -144,16 +218,28 @@ export interface DataPoint<T = unknown> {
 }
 
 export type PointPath<T = unknown> = DataPoint<T> & {
-  readonly [segment: string]: PointPath
+  /** 动态路径段无法在声明期枚举，因此保留链式调用的宽松类型。 */
+  readonly [segment: string]: any
   byPath(path: string): DataPoint
   resolve(path: string): DataPoint
 }
 
 export interface AlarmSDK {
-  items: { list(query?: unknown): Promise<SDKResult<unknown>>; get(id: string): Promise<SDKResult<unknown>> }
-  settings: { get(): Promise<SDKResult<unknown>>; update(patch: unknown): Promise<SDKResult<unknown>> }
-  current: { list(query?: unknown): Promise<SDKResult<unknown>>; get(id: string): Promise<SDKResult<unknown>> }
-  changes: { subscribe(handler: (event: unknown) => void, options?: unknown): Promise<SDKResult<unknown>> }
+  items: {
+    list(query?: unknown): Promise<SDKResult<unknown>>
+    get(id: string): Promise<SDKResult<unknown>>
+  }
+  settings: {
+    get(): Promise<SDKResult<unknown>>
+    update(patch: unknown): Promise<SDKResult<unknown>>
+  }
+  current: {
+    list(query?: unknown): Promise<SDKResult<unknown>>
+    get(id: string): Promise<SDKResult<unknown>>
+  }
+  changes: {
+    subscribe(handler: (event: unknown) => void, options?: unknown): Promise<SDKResult<unknown>>
+  }
   actions: {
     acknowledge(id: string, input?: unknown): Promise<SDKResult<unknown>>
     unacknowledge(id: string, input?: unknown): Promise<SDKResult<unknown>>
@@ -161,11 +247,15 @@ export interface AlarmSDK {
     shelve(id: string, input?: unknown): Promise<SDKResult<unknown>>
     unshelve(id: string, input?: unknown): Promise<SDKResult<unknown>>
   }
-  history: { list(query?: unknown): Promise<SDKResult<unknown>>; get(id: string): Promise<SDKResult<unknown>> }
+  history: {
+    list(query?: unknown): Promise<SDKResult<unknown>>
+    get(id: string): Promise<SDKResult<unknown>>
+  }
 }
 
 export type ComputePath = {
-  readonly [segment: string]: ComputePath
+  /** 动态计算引用无法在声明期枚举，因此保留链式调用的宽松类型。 */
+  readonly [segment: string]: any
   run(input?: unknown): Promise<SDKResult<unknown>>
   describe(): Promise<SDKResult<unknown>>
   byRef(ref: string): ComputePath
@@ -204,3 +294,5 @@ export const scenes: RuntimeScenes
 
 export function configureRuntime(runtime: RuntimeConfiguration): RuntimeClient
 export function createRuntimeClient(runtime?: RuntimeConfiguration): RuntimeClient
+/** 创建发布态 Runtime API 的 HTTP/WebSocket 适配器，再传给 configureRuntime 或 createRuntimeClient。 */
+export function createHttpRuntime(options?: HttpRuntimeOptions): HttpRuntimeConfiguration

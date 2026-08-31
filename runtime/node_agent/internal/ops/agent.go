@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,16 +28,17 @@ type Config struct {
 	Enabled             bool          `yaml:"enabled"`
 	ServerURL           string        `yaml:"serverUrl"`
 	EnrollmentCode      string        `yaml:"enrollmentCode"`
-	Role                string        `yaml:"role"`
+	AgentVersion        string        `yaml:"agentVersion"`
 	HeartbeatEvery      time.Duration `yaml:"heartbeatEvery"`
 	DataDir             string        `yaml:"dataDir"`
-	DemoRuntime         bool          `yaml:"demoRuntime"`
 	ClearEnrollmentCode func() error  `yaml:"-"`
 }
 
+const maxCenterResponseBytes = 1 << 20
+
 // Identity 是领取成功后的设备凭据，文件权限只允许服务账户读取。
 type Identity struct {
-	HostNodeID      string `json:"hostNodeId"`
+	NodeID          string `json:"nodeId"`
 	AgentToken      string `json:"agentToken"`
 	PendingApproval bool   `json:"pendingApproval"`
 }
@@ -47,21 +51,21 @@ type HostInfo struct {
 	MachineFingerprint string `json:"machineFingerprint"`
 }
 
-type DesiredWorkload struct {
-	CommandID     string `json:"commandId"`
-	RunID         string `json:"runId"`
-	DeploymentID  string `json:"deploymentId"`
-	WorkloadID    string `json:"workloadId"`
-	Role          string `json:"role"`
-	Operation     string `json:"operation"`
-	DesiredStatus string `json:"desiredStatus"`
-	Generation    int64  `json:"generation"`
-	Version       string `json:"version,omitempty"`
+type AgentCommand struct {
+	NodeID          string `json:"nodeId"`
+	RunID           string `json:"runId"`
+	DeploymentID    string `json:"deploymentId"`
+	ServiceID       string `json:"serviceId"`
+	ServiceType     string `json:"serviceType"`
+	Operation       string `json:"operation"`
+	DesiredStatus   string `json:"desiredStatus"`
+	Generation      int64  `json:"generation"`
+	Version         string `json:"version"`
+	ReplicasDesired int    `json:"replicasDesired"`
 }
 
-// Agent 将中心 desired 状态与本机 observed 状态分开处理。生产中的 compute/alert
-// 由 RuntimeCluster/site-controller 调和；DemoRuntime 仅供本轮安装包验收，允许
-// runtime_linux 节点真实托管 compute/alert 小型进程。
+// Agent 将中心 desired 状态与本机 observed 状态分开处理。中心只能选择本机
+// 声明的服务组，不能传递命令、路径、参数或环境变量。
 type Agent struct {
 	cfg        Config
 	identity   Identity
@@ -75,23 +79,21 @@ func NewAgent(cfg Config, supervisor *Supervisor) (*Agent, error) {
 	if supervisor == nil {
 		return nil, fmt.Errorf("supervisor 不能为空")
 	}
+	if cfg.Enabled {
+		if err := validateServerURL(cfg.ServerURL); err != nil {
+			return nil, err
+		}
+	}
 	if cfg.HeartbeatEvery <= 0 {
 		cfg.HeartbeatEvery = 10 * time.Second
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = "./data"
 	}
-	if cfg.Role == "" {
-		cfg.Role = "collector_linux"
-	}
-	if !validNodeRole(cfg.Role) {
-		return nil, fmt.Errorf("不支持的节点角色: %s", cfg.Role)
+	if cfg.AgentVersion == "" {
+		cfg.AgentVersion = "unknown"
 	}
 	return &Agent{cfg: cfg, supervisor: supervisor, client: &http.Client{Timeout: 8 * time.Second}, applied: make(map[string]int64)}, nil
-}
-
-func validNodeRole(role string) bool {
-	return role == "runtime_linux" || role == "collector_linux" || role == "collector_windows"
 }
 
 func (a *Agent) identityPath() string { return filepath.Join(a.cfg.DataDir, "ops-agent-identity.json") }
@@ -111,7 +113,7 @@ func (a *Agent) loadIdentity() error {
 	if err := json.Unmarshal(data, &identity); err != nil {
 		return fmt.Errorf("读取节点身份失败: %w", err)
 	}
-	if identity.HostNodeID == "" || identity.AgentToken == "" {
+	if identity.NodeID == "" || identity.AgentToken == "" {
 		return fmt.Errorf("节点身份不完整")
 	}
 	a.mu.Lock()
@@ -121,7 +123,7 @@ func (a *Agent) loadIdentity() error {
 }
 
 func (a *Agent) saveIdentity(identity Identity) error {
-	if identity.HostNodeID == "" || identity.AgentToken == "" {
+	if identity.NodeID == "" || identity.AgentToken == "" {
 		return fmt.Errorf("中心返回的节点身份不完整")
 	}
 	if err := os.MkdirAll(a.cfg.DataDir, 0700); err != nil {
@@ -166,18 +168,18 @@ func (a *Agent) loadApplied() error {
 	return nil
 }
 
-func (a *Agent) appliedGeneration(workloadID string) int64 {
+func (a *Agent) appliedGeneration(serviceID string) int64 {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return a.applied[workloadID]
+	return a.applied[serviceID]
 }
-func (a *Agent) saveApplied(workloadID string, generation int64) error {
+func (a *Agent) saveApplied(serviceID string, generation int64) error {
 	a.mu.Lock()
-	if generation <= a.applied[workloadID] {
+	if generation <= a.applied[serviceID] {
 		a.mu.Unlock()
 		return nil
 	}
-	a.applied[workloadID] = generation
+	a.applied[serviceID] = generation
 	data, err := json.Marshal(a.applied)
 	a.mu.Unlock()
 	if err != nil {
@@ -199,18 +201,27 @@ func (a *Agent) claim(ctx context.Context) error {
 	if strings.TrimSpace(a.cfg.EnrollmentCode) == "" {
 		return fmt.Errorf("未配置 enrollmentCode 且本地没有已领取节点身份")
 	}
-	payload := map[string]any{"code": a.cfg.EnrollmentCode, "host": a.hostInfo(), "agent": map[string]any{"version": "1.0.0", "role": a.cfg.Role, "capabilities": map[string]bool{"demoRuntime": a.cfg.DemoRuntime}}}
+	host := a.hostInfo()
+	payload := map[string]any{
+		"code":               a.cfg.EnrollmentCode,
+		"hostname":           host.Hostname,
+		"platform":           host.OS,
+		"architecture":       host.Architecture,
+		"machineFingerprint": host.MachineFingerprint,
+		"agentVersion":       a.cfg.AgentVersion,
+		"capabilities":       a.supervisor.Capabilities(),
+	}
 	var result struct {
-		HostNode struct {
+		Node struct {
 			ID string `json:"id"`
-		} `json:"hostNode"`
+		} `json:"node"`
 		AgentToken      string `json:"agentToken"`
 		PendingApproval bool   `json:"pendingApproval"`
 	}
 	if err := a.request(ctx, http.MethodPost, "/api/v1/ops/agent/enrollments/claim", "", payload, &result); err != nil {
 		return err
 	}
-	if err := a.saveIdentity(Identity{HostNodeID: result.HostNode.ID, AgentToken: result.AgentToken, PendingApproval: result.PendingApproval}); err != nil {
+	if err := a.saveIdentity(Identity{NodeID: result.Node.ID, AgentToken: result.AgentToken, PendingApproval: result.PendingApproval}); err != nil {
 		return err
 	}
 	if a.cfg.ClearEnrollmentCode != nil {
@@ -233,8 +244,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	if !a.cfg.Enabled {
 		return nil
 	}
-	if strings.TrimSpace(a.cfg.ServerURL) == "" {
-		return fmt.Errorf("ops serverUrl 不能为空")
+	if err := validateServerURL(a.cfg.ServerURL); err != nil {
+		return err
 	}
 	if err := a.loadIdentity(); err != nil {
 		return err
@@ -256,7 +267,7 @@ func (a *Agent) Run(ctx context.Context) error {
 }
 
 func (a *Agent) reconcileOnce(ctx context.Context) {
-	if a.currentIdentity().HostNodeID == "" {
+	if a.currentIdentity().NodeID == "" {
 		// 控制面可能比 Agent 晚就绪；领取失败留待下一周期重试，不影响本机已运行进程。
 		_ = a.claim(ctx)
 		return
@@ -276,97 +287,121 @@ func (a *Agent) reconcileOnce(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	for _, workload := range commands {
-		_ = a.Reconcile(workload)
+	for _, command := range commands {
+		_ = a.Reconcile(command)
 	}
 }
 
-func (a *Agent) Reconcile(workload DesiredWorkload) error {
-	if workload.WorkloadID == "" {
-		return nil
+func (a *Agent) Reconcile(command AgentCommand) error {
+	if command.ServiceID == "" {
+		return fmt.Errorf("serviceId 不能为空")
 	}
-	role := WorkloadRole(workload.Role)
-	if !validRole(role) {
-		return fmt.Errorf("不支持的 workload role: %s", workload.Role)
+	identity := a.currentIdentity()
+	if command.NodeID == "" || command.NodeID != identity.NodeID {
+		return fmt.Errorf("服务未显式分配给本节点")
 	}
-	if !a.canManage(role) {
-		return nil
+	group := ServiceGroup(command.ServiceType)
+	if !validServiceGroup(group) {
+		return fmt.Errorf("不支持的服务类型: %s", command.ServiceType)
 	}
-	applied := a.appliedGeneration(workload.WorkloadID)
-	if workload.Generation < applied {
+	if !a.supervisor.HasService(group) {
+		err := fmt.Errorf("本节点的服务组 %s 仅已安装但尚未完成本地 Release 配置", group)
+		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+		return err
+	}
+	applied := a.appliedGeneration(command.ServiceID)
+	if command.Generation < applied {
 		return nil
 	}
 	// persisted generation 只说明旧 Agent 成功处理过，不能证明重启后的本机进程仍存在。
 	// 相同 generation 仅在 observed status 已满足中心 desired 时才真正幂等。
-	if workload.Generation == applied {
-		if status, err := a.supervisor.Status(workload.WorkloadID); err == nil && matchesDesired(status, workload) {
+	if command.Generation == applied {
+		if status, err := a.supervisor.Status(command.ServiceID); err == nil && matchesDesired(status, command) {
 			return nil
 		}
 	}
 	var err error
-	switch strings.ToLower(strings.TrimSpace(workload.Operation)) {
+	switch strings.ToLower(strings.TrimSpace(command.Operation)) {
 	case "restart":
-		_, err = a.supervisor.Restart(workload.WorkloadID, role, workload.Generation)
+		_, err = a.supervisor.Restart(command.ServiceID, group, command.Generation)
 	case "", "deploy", "start", "stop":
-		// deploy 是首次落地命令；当前 demo 无独立制品安装步骤，故按 desiredStatus
-		// 调和，通常等价于启动一个此前不存在的本机工作负载实例。
-		switch strings.ToLower(strings.TrimSpace(workload.DesiredStatus)) {
+		switch strings.ToLower(strings.TrimSpace(command.DesiredStatus)) {
 		case "running":
-			_, err = a.supervisor.Start(workload.WorkloadID, role, workload.Generation)
+			_, err = a.supervisor.Start(command.ServiceID, group, command.Generation)
 		case "stopped":
-			_, err = a.supervisor.Stop(workload.WorkloadID, workload.Generation)
+			_, err = a.supervisor.Stop(command.ServiceID, command.Generation)
 		default:
-			err = fmt.Errorf("不支持的 desiredStatus: %s", workload.DesiredStatus)
+			err = fmt.Errorf("不支持的 desiredStatus: %s", command.DesiredStatus)
 		}
 	default:
-		err = fmt.Errorf("不支持的 operation: %s", workload.Operation)
+		err = fmt.Errorf("不支持的 operation: %s", command.Operation)
 	}
 	if err != nil {
-		a.supervisor.RecordFailure(workload.WorkloadID, role, workload.Generation, err)
+		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
 		return err
 	}
-	return a.saveApplied(workload.WorkloadID, workload.Generation)
+	return a.saveApplied(command.ServiceID, command.Generation)
 }
 
-func matchesDesired(status ProcessStatus, workload DesiredWorkload) bool {
-	if strings.EqualFold(workload.Operation, "restart") {
-		return status.State == "running" && status.Generation >= workload.Generation
+func matchesDesired(status ProcessStatus, command AgentCommand) bool {
+	if strings.EqualFold(command.Operation, "restart") {
+		return status.State == "running" && status.Generation >= command.Generation
 	}
-	switch strings.ToLower(strings.TrimSpace(workload.DesiredStatus)) {
+	switch strings.ToLower(strings.TrimSpace(command.DesiredStatus)) {
 	case "running":
-		return status.State == "running" && status.Generation >= workload.Generation
+		return status.State == "running" && status.Generation >= command.Generation
 	case "stopped":
-		return status.State == "stopped" && status.Generation >= workload.Generation
+		return status.State == "stopped" && status.Generation >= command.Generation
 	default:
 		return false
 	}
 }
 
-func (a *Agent) canManage(role WorkloadRole) bool {
-	if role == WorkloadCollector {
-		return a.cfg.Role == "collector_linux" || a.cfg.Role == "collector_windows"
-	}
-	return a.cfg.DemoRuntime && a.cfg.Role == "runtime_linux" && (role == WorkloadCompute || role == WorkloadAlert)
-}
-
 func (a *Agent) Heartbeat(ctx context.Context) error {
 	identity := a.currentIdentity()
-	if identity.HostNodeID == "" {
+	if identity.NodeID == "" {
 		return fmt.Errorf("节点尚未领取身份")
 	}
-	payload := map[string]any{"agentVersion": "1.0.0", "resourceSummary": resourceSummary(), "observedState": map[string]any{"status": "online", "observedAt": time.Now().UTC().Format(time.RFC3339), "workloads": a.supervisor.List()}}
-	return a.request(ctx, http.MethodPost, "/api/v1/ops/agent/host-nodes/"+identity.HostNodeID+"/heartbeat", identity.AgentToken, payload, nil)
+	services := make([]map[string]any, 0)
+	for _, status := range a.supervisor.List() {
+		if status.WorkloadID == "" {
+			continue
+		}
+		services = append(services, map[string]any{
+			"serviceId":          status.WorkloadID,
+			"observedStatus":     heartbeatStatus(status.State),
+			"observedGeneration": status.Generation,
+			"replicasObserved":   status.ReplicasObserved,
+			"message":            status.LastError,
+			"endpoint":           a.supervisor.PublicURL(status.Role),
+		})
+	}
+	payload := map[string]any{"agentVersion": a.cfg.AgentVersion, "resourceSummary": resourceSummary(), "services": services}
+	return a.request(ctx, http.MethodPost, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/heartbeat", identity.AgentToken, payload, nil)
 }
 
-func (a *Agent) Commands(ctx context.Context) ([]DesiredWorkload, error) {
+// heartbeatStatus 把本机过渡态收敛到中心的三种观测状态，避免把 Supervisor
+// 内部 starting/stopping 状态泄漏到控制面契约。
+func heartbeatStatus(status string) string {
+	switch status {
+	case "running", "starting":
+		return "running"
+	case "failed":
+		return "failed"
+	default:
+		return "stopped"
+	}
+}
+
+func (a *Agent) Commands(ctx context.Context) ([]AgentCommand, error) {
 	identity := a.currentIdentity()
-	if identity.HostNodeID == "" {
+	if identity.NodeID == "" {
 		return nil, fmt.Errorf("节点尚未领取身份")
 	}
 	var response struct {
-		Commands []DesiredWorkload `json:"commands"`
+		Commands []AgentCommand `json:"commands"`
 	}
-	if err := a.request(ctx, http.MethodGet, "/api/v1/ops/agent/host-nodes/"+identity.HostNodeID+"/commands", identity.AgentToken, nil, &response); err != nil {
+	if err := a.request(ctx, http.MethodGet, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/commands", identity.AgentToken, nil, &response); err != nil {
 		return nil, err
 	}
 	return response.Commands, nil
@@ -404,8 +439,22 @@ func (a *Agent) request(ctx context.Context, method, path, token string, payload
 		Msg  string          `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
-	if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
+	raw, err := io.ReadAll(io.LimitReader(response.Body, maxCenterResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("读取中心响应失败: %w", err)
+	}
+	if len(raw) > maxCenterResponseBytes {
+		return fmt.Errorf("中心响应超过 %d 字节上限", maxCenterResponseBytes)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := decoder.Decode(&envelope); err != nil {
 		return fmt.Errorf("解析中心响应失败: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("中心响应包含尾随 JSON")
+		}
+		return fmt.Errorf("中心响应包含尾随 JSON: %w", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 || envelope.Code != 0 {
 		return fmt.Errorf("中心请求失败: status=%d code=%d msg=%s", response.StatusCode, envelope.Code, envelope.Msg)
@@ -416,6 +465,44 @@ func (a *Agent) request(ctx context.Context, method, path, token string, payload
 		}
 	}
 	return nil
+}
+
+// validateServerURL 避免 enrollment code 和 Agent token 经远端明文 HTTP 外泄。
+// 本机开发/同机部署允许 loopback HTTP；所有其他 Center 必须使用 HTTPS。
+func validateServerURL(raw string) error {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fmt.Errorf("ops serverUrl 不能为空")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || !parsed.IsAbs() || parsed.Host == "" || parsed.Opaque != "" {
+		return fmt.Errorf("ops serverUrl 必须是绝对 URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("ops serverUrl 不允许 userinfo、query 或 fragment")
+	}
+	if path := parsed.EscapedPath(); path != "" && path != "/" {
+		return fmt.Errorf("ops serverUrl 只能使用根路径")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackCenterHost(parsed.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("ops serverUrl 仅本机 loopback 可使用 http，其余 Center 必须使用 https")
+	default:
+		return fmt.Errorf("ops serverUrl 只允许 https，或本机 loopback 的 http")
+	}
+}
+
+func isLoopbackCenterHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func resourceSummary() map[string]any {

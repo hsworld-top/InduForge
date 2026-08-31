@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -113,6 +114,8 @@ type status struct {
 	SchemaVersion     string    `json:"schemaVersion"`
 	ComponentRole     string    `json:"componentRole"`
 	SiteID            string    `json:"siteId"`
+	NodeID            string    `json:"nodeId,omitempty"`
+	ProcessID         int       `json:"processId,omitempty"`
 	ProjectID         string    `json:"projectId,omitempty"`
 	DeploymentID      string    `json:"deploymentId"`
 	AccountID         string    `json:"accountId"`
@@ -171,6 +174,10 @@ func (s *EngineState) snapshot() status {
 		v.DeploymentID = s.loaded.Config.DeploymentID
 		v.AccountID = s.loaded.Config.AccountID
 		v.ExecutionForm = s.loaded.Config.ExecutionForm
+		if s.loaded.Config.ExecutionForm == "native-linux" {
+			v.NodeID = s.loaded.Config.NodeID
+			v.ProcessID = os.Getpid()
+		}
 	}
 	if s.lastBusiness != nil {
 		x := timestamp(*s.lastBusiness)

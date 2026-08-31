@@ -1,0 +1,33 @@
+agent:
+  listen: { host: 127.0.0.1, port: 17601 }
+  executor:
+    { type: process, process: { workDir: ./runtime, logDir: ./logs, binary: runtime_engine } }
+  ops:
+    enabled: true
+    serverUrl: ''
+    enrollmentCode: ''
+    agentVersion: '__BUILD_VERSION__'
+    heartbeatEvery: 10s
+    dataDir: ./data
+    # installed 表示本机已安装的能力，可用于领取节点身份；enabled 只有在
+    # releaseRoot/releaseDigest/executable/healthUrl 全部由本机运维配置后才可设为 true。
+    # 中心不能下发命令、路径、环境变量或 release 物料。
+    services:
+      - group: project_entry
+        component: project-gateway
+        installed: true
+        enabled: false
+        publicUrl: ''
+      - group: project_entry
+        component: runtime-api
+        installed: true
+        enabled: false
+      - group: data_runtime
+        component: runtime-engine
+        installed: true
+        enabled: false
+      - group: collector
+        component: collector
+        installed: false # install.sh --enable-collector 将其改为 true
+        enabled: false
+logging: { file: ./logs/agent.log, level: info }

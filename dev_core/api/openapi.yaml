@@ -1391,6 +1391,7 @@ paths:
     put:
       operationId: approveNode
       tags: [node]
+      x-client: legacy
       summary: approveNode
       parameters:
         - name: nodeId
@@ -1421,6 +1422,7 @@ paths:
     put:
       operationId: rejectNode
       tags: [node]
+      x-client: legacy
       summary: rejectNode
       parameters:
         - name: nodeId
@@ -1451,6 +1453,7 @@ paths:
     delete:
       operationId: deleteNode
       tags: [node]
+      x-client: legacy
       summary: deleteNode
       parameters:
         - name: nodeId
@@ -1637,6 +1640,7 @@ paths:
     delete:
       operationId: deleteNodeDeployment
       tags: [deployment]
+      x-client: legacy
       summary: deleteNodeDeployment
       parameters:
         - name: nodeDeploymentId
@@ -1661,6 +1665,7 @@ paths:
     post:
       operationId: restartNodeDeployment
       tags: [deployment]
+      x-client: legacy
       summary: restartNodeDeployment
       parameters:
         - name: nodeDeploymentId
@@ -1685,6 +1690,7 @@ paths:
     post:
       operationId: startNodeDeployment
       tags: [deployment]
+      x-client: legacy
       summary: startNodeDeployment
       parameters:
         - name: nodeDeploymentId
@@ -1709,6 +1715,7 @@ paths:
     post:
       operationId: stopNodeDeployment
       tags: [deployment]
+      x-client: legacy
       summary: stopNodeDeployment
       parameters:
         - name: nodeDeploymentId
@@ -1733,6 +1740,7 @@ paths:
     post:
       operationId: rollbackDeployment
       tags: [deployment]
+      x-client: legacy
       summary: rollbackDeployment
       parameters:
         - name: deploymentId
@@ -2467,29 +2475,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
-  /ops/runtime-clusters:
-    get:
-      operationId: listRuntimeClusters
-      tags: [ops]
-      x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-    post:
-      operationId: createRuntimeCluster
-      tags: [ops]
-      x-client: dev_ide
-      security: [{bearerAuth: []}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RuntimeClusterCreateRequest'}}}}
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-  /ops/runtime-clusters/{id}:
-    get:
-      operationId: getRuntimeCluster
-      tags: [ops]
-      x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
   /ops/node-enrollments:
     get:
       operationId: listNodeEnrollments
@@ -2529,17 +2514,17 @@ paths:
       security: [{bearerAuth: []}]
       parameters: [{name: id, in: path, required: true, schema: {type: string}}]
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-  /ops/host-nodes:
+  /ops/nodes:
     get:
-      operationId: listHostNodes
+      operationId: listOpsNodes
       tags: [ops]
       x-client: dev_ide
       security: [{bearerAuth: []}]
       parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-  /ops/host-nodes/{id}:
+  /ops/nodes/{id}:
     get:
-      operationId: getHostNode
+      operationId: getOpsNode
       tags: [ops]
       x-client: dev_ide
       security: [{bearerAuth: []}]
@@ -2566,7 +2551,7 @@ paths:
       tags: [ops]
       x-client: dev_ide
       security: [{bearerAuth: []}]
-      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
+      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}, {$ref: '#/components/parameters/OpsProjectId'}]
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
     post:
       operationId: createProjectDeployment
@@ -2583,7 +2568,7 @@ paths:
       security: [{bearerAuth: []}]
       parameters: [{name: id, in: path, required: true, schema: {type: string}}]
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-  /ops/project-deployments/{id}/workloads/{role}/{action}:
+  /ops/project-deployments/{id}/services/{service}/{action}:
     post:
       operationId: operateProjectDeploymentWorkload
       tags: [ops]
@@ -2591,7 +2576,7 @@ paths:
       security: [{bearerAuth: []}]
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
-        - {name: role, in: path, required: true, schema: {type: string}}
+        - {name: service, in: path, required: true, schema: {type: string, enum: [project_entry, data_runtime, collector]}}
         - {name: action, in: path, required: true, schema: {type: string}}
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
   /ops/deployment-runs/{id}:
@@ -2617,18 +2602,18 @@ paths:
       x-client: node_agent
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentClaimRequest'}}}}
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-  /ops/agent/host-nodes/{id}/heartbeat:
+  /ops/agent/nodes/{id}/heartbeat:
     post:
-      operationId: heartbeatHostNode
+      operationId: heartbeatOpsNode
       tags: [opsAgent]
       x-client: node_agent
       security: [{agentTokenAuth: []}]
       parameters: [{name: id, in: path, required: true, schema: {type: string}}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentHeartbeatRequest'}}}}
       responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
-  /ops/agent/host-nodes/{id}/commands:
+  /ops/agent/nodes/{id}/commands:
     get:
-      operationId: listHostNodeCommands
+      operationId: listOpsNodeCommands
       tags: [opsAgent]
       x-client: node_agent
       security: [{agentTokenAuth: []}]
@@ -2649,6 +2634,7 @@ components:
     OpsPageSize: {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
     OpsSearch: {name: search, in: query, schema: {type: string, maxLength: 200}}
     OpsKeyword: {name: keyword, in: query, schema: {type: string, maxLength: 200}, description: search 的兼容别名；search 优先}
+    OpsProjectId: {name: projectId, in: query, schema: {type: string, format: uuid}, description: 精确筛选工程部署}
   securitySchemes:
     bearerAuth:
       type: http
@@ -2876,85 +2862,53 @@ components:
       required: [nodeId]
       properties:
         nodeId: {type: string, format: uuid}
-    RuntimeClusterCreateRequest:
-      type: object
-      required: [name, code]
-      properties:
-        name: {type: string, minLength: 1, maxLength: 120}
-        code: {type: string, pattern: '^[a-z][a-z0-9-]{1,62}$'}
-        description: {type: string}
-        topology: {type: string, enum: [single_node, high_availability]}
-        metadata: {type: object, additionalProperties: true}
     NodeEnrollmentCreateRequest:
       type: object
-      required: [role]
+      required: [platform, capabilities]
       properties:
-        runtimeClusterId:
-          type: string
-          format: uuid
-          description: Linux 运行节点的目标运行资源池；租户尚无运行资源池时可省略，中心将在同一事务内创建默认单节点资源池并绑定
-        role: {type: string, enum: [runtime_linux, collector_linux, collector_windows]}
+        platform: {type: string, enum: [linux, windows]}
+        capabilities: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [project_entry, data_runtime, collector]}}
         displayName: {type: string, maxLength: 120}
         ttlMinutes: {type: integer, minimum: 1, maximum: 1440}
     ProjectDeploymentCreateRequest:
       type: object
-      required: [projectId, runtimeClusterId, deploymentMode, workloads]
+      required: [projectId, nodeId, applicationVersionId]
       properties:
         projectId: {type: string, format: uuid}
-        runtimeClusterId: {type: string, format: uuid}
-        version: {type: string}
-        deploymentMode: {type: string, enum: [development, production]}
-        workloads:
-          type: array
-          minItems: 1
-          items:
-            type: object
-            required: [role]
-            properties:
-              role: {type: string, enum: [compute, alert, collector]}
-              hostNodeId: {type: string, format: uuid}
-              replicas: {type: integer, minimum: 1}
+        nodeId: {type: string, format: uuid}
+        applicationVersionId: {type: string, format: uuid}
+        enableCollector: {type: boolean, default: false}
     AgentEnrollmentClaimRequest:
       type: object
-      required: [code, host, agent]
+      required: [code, hostname, platform, architecture, capabilities]
       properties:
         code: {type: string, minLength: 1}
-        host:
-          type: object
-          required: [hostname, os, architecture]
-          properties:
-            displayName: {type: string}
-            hostname: {type: string}
-            os: {type: string}
-            architecture: {type: string}
-            machineFingerprint: {type: string}
-            ipAddress: {type: string}
-        agent:
-          type: object
-          required: [version]
-          properties:
-            version: {type: string}
-            capabilities: {type: object, additionalProperties: true}
+        displayName: {type: string}
+        hostname: {type: string}
+        platform: {type: string, enum: [linux, windows]}
+        architecture: {type: string}
+        agentVersion: {type: string}
+        machineFingerprint: {type: string}
+        ipAddress: {type: string}
+        capabilities: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [project_entry, data_runtime, collector]}}
     AgentHeartbeatRequest:
       type: object
-      required: [resourceSummary, observedState]
+      required: [resourceSummary]
       properties:
         resourceSummary: {type: object, additionalProperties: true}
         agentVersion: {type: string}
-        observedState:
-          type: object
-          properties:
-            workloads:
-              type: array
-              items:
-                type: object
-                required: [workloadId, observedStatus, observedGeneration]
-                properties:
-                  workloadId: {type: string, format: uuid}
-                  observedStatus: {type: string, enum: [running, stopped, failed]}
-                  observedGeneration: {type: integer, format: int64, minimum: 1}
-                  replicasObserved: {type: integer, minimum: 0}
-                  message: {type: string}
+        services:
+          type: array
+          items:
+            type: object
+            required: [serviceId, observedStatus, observedGeneration]
+            properties:
+              serviceId: {type: string, format: uuid}
+              observedStatus: {type: string, enum: [running, stopped, failed]}
+              observedGeneration: {type: integer, format: int64, minimum: 1}
+              replicasObserved: {type: integer, minimum: 0}
+              message: {type: string}
+              endpoint: {type: string, format: uri, description: 仅 project_entry 可上报的本机配置 publicUrl；其他服务必须为空}
     ApiResponse:
       type: object
       required: [code, msg, data, reqId]
