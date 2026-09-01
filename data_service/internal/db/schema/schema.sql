@@ -32,6 +32,19 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: data_project_tenant_bindings; Type: TABLE; Schema: public; Owner: -
+--
+-- 项目租户归属由 control 面首次写入后不可改绑；数据域的快照/运行工件查询
+-- 必须以该表为租户边界，不能信任客户端请求中的 tenantId。
+CREATE TABLE data_project_tenant_bindings (
+    project_id uuid NOT NULL,
+    tenant_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_project_tenant_bindings_pkey PRIMARY KEY (project_id)
+);
+
+--
 -- Name: collector_dev_agents; Type: TABLE; Schema: public; Owner: -
 --
 
