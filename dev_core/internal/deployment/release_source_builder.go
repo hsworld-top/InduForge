@@ -193,7 +193,7 @@ func (b *ProjectReleaseSourceBuilder) packFrontend(dist string) ([]byte, error) 
 		return nil, fmt.Errorf("读取前端构建目录失败: %w", err)
 	}
 	if _, ok := files["index.html"]; !ok {
-		return nil, fmt.Errorf("前端构建目录缺少 index.html")
+		return nil, fmt.Errorf("前端构建目录缺少 index.html: %s", buildOutputSummary(dist))
 	}
 	return packReleaseSourceArchive(files)
 }
