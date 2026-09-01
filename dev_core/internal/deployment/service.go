@@ -141,6 +141,7 @@ type ServiceConfig struct{ ArtifactBucket, MinNodeAgentVersion, MinRuntimeVersio
 // ReleaseSource 是正式构建器唯一接受的已构建输入；服务层不执行任意工程命令。
 type ReleaseSource struct {
 	Client, Runtime, Collector                               []byte
+	CollectorSourceSnapshot                                  []byte
 	SBOM, ResourceRecommendation, HealthContract, SchemaPlan []byte
 	ProjectDocument                                          map[string]any
 	SourceRevision, BuilderID                                string

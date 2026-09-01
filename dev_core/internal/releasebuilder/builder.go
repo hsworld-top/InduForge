@@ -54,6 +54,7 @@ var defaultBuildLimits = buildLimits{
 type Input struct {
 	ProjectID, ProjectCode, ReleaseID, Version string
 	Client, Runtime, Collector                 []byte
+	CollectorSourceSnapshot                    []byte
 	SBOM, ResourceRecommendation               []byte
 	HealthContract, SchemaPlan                 []byte
 	Capabilities                               []string
@@ -79,8 +80,10 @@ type Result struct {
 }
 
 type artifact struct {
-	File     string `json:"file"`
-	Checksum string `json:"checksum"`
+	File                 string          `json:"file"`
+	Checksum             string          `json:"checksum"`
+	SourceSnapshot       json.RawMessage `json:"sourceSnapshot,omitempty"`
+	SourceSnapshotSHA256 string          `json:"sourceSnapshotSha256,omitempty"`
 }
 
 type manifest struct {
@@ -286,8 +289,13 @@ func buildManifest(input Input, files []bundleFile) ([]byte, error) {
 	m.Artifacts.Client = artifact{File: clientArtifactFile, Checksum: "sha256:" + fileDigests[clientArtifactFile]}
 	m.Artifacts.Runtime = artifact{File: runtimeArtifactFile, Checksum: "sha256:" + fileDigests[runtimeArtifactFile]}
 	if input.Collector != nil {
-		collector := artifact{File: collectorArtifact, Checksum: "sha256:" + fileDigests[collectorArtifact]}
+		if !validCollectorSourceSnapshot(input.CollectorSourceSnapshot) {
+			return nil, fmt.Errorf("collector sourceSnapshot 无效")
+		}
+		collector := artifact{File: collectorArtifact, Checksum: "sha256:" + fileDigests[collectorArtifact], SourceSnapshot: append(json.RawMessage(nil), input.CollectorSourceSnapshot...), SourceSnapshotSHA256: "sha256:" + digest(input.CollectorSourceSnapshot)}
 		m.Artifacts.Collector = &collector
+	} else if len(input.CollectorSourceSnapshot) != 0 {
+		return nil, fmt.Errorf("无 collector 工件时禁止 sourceSnapshot")
 	}
 	m.Compatibility.MinNodeAgentVersion = input.MinNodeAgentVersion
 	m.Compatibility.MinRuntimeVersion = input.MinRuntimeVersion
@@ -296,6 +304,22 @@ func buildManifest(input Input, files []bundleFile) ([]byte, error) {
 	m.SupplyChain.BuilderID, m.SupplyChain.SigningKeyID, m.SupplyChain.Promotable = input.BuilderID, input.SigningKeyID, input.Promotable
 	m.Preflight.ResourceRecommendationRef, m.Preflight.HealthContractRef, m.Preflight.SchemaPlanRef = resourcePlanFile, healthContractFile, schemaPlanFile
 	return json.Marshal(m)
+}
+
+func validCollectorSourceSnapshot(raw []byte) bool {
+	if len(raw) == 0 || int64(len(raw)) > 16<<20 || !json.Valid(raw) {
+		return false
+	}
+	var source struct {
+		SchemaVersion string          `json:"schemaVersion"`
+		SHA256        string          `json:"sha256"`
+		Size          int             `json:"size"`
+		Artifact      json.RawMessage `json:"artifact"`
+	}
+	if json.Unmarshal(raw, &source) != nil || source.SchemaVersion != "collector-runtime-artifact.v1" || source.Size != len(source.Artifact) || source.SHA256 != "sha256:"+digest(source.Artifact) {
+		return false
+	}
+	return len(source.Artifact) > 0 && json.Valid(source.Artifact)
 }
 
 func buildChecksums(files []bundleFile) ([]byte, error) {

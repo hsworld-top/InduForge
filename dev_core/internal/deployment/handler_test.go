@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -267,13 +269,24 @@ func (b fakeReleaseSourceBuilder) BuildReleaseSource(context.Context, deployment
 }
 
 func validReleaseSource() deployment.ReleaseSource {
+	snapshot := deploymentCollectorSnapshot()
 	return deployment.ReleaseSource{
-		Client: []byte("client"), Runtime: []byte("runtime"), Collector: []byte("collector"),
+		Client: []byte("client"), Runtime: []byte("runtime"), Collector: []byte("collector"), CollectorSourceSnapshot: snapshot,
 		SBOM: []byte(`{"bomFormat":"CycloneDX"}`), ResourceRecommendation: []byte(`{"cpu":"1"}`),
 		HealthContract: []byte(`{"health":"ok"}`), SchemaPlan: []byte(`{"changes":[]}`),
 		ProjectDocument: map[string]any{"computeUnits": []any{map[string]any{"id": "sum"}}, "alarmItems": []any{map[string]any{"id": "high"}}, "dataPoints": []any{map[string]any{"sourceType": "collector.modbus"}}},
 		SourceRevision:  "git:" + strings.Repeat("a", 40), BuilderID: "test-release-builder",
 	}
+}
+
+func deploymentCollectorSnapshot() []byte {
+	artifact := []byte(`{"schemaVersion":"collector-runtime-artifact.v1","artifactId":"collector-a","artifactRevision":1,"projectId":"` + testProjectID + `"}`)
+	sum := sha256.Sum256(artifact)
+	raw, err := json.Marshal(map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "projectId": testProjectID, "artifactRevision": 1, "sha256": "sha256:" + hex.EncodeToString(sum[:]), "size": len(artifact), "artifact": json.RawMessage(artifact)})
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
 
 func TestPublishMarksBuildFailedOnPipelineErrors(t *testing.T) {

@@ -110,6 +110,7 @@ func TestBuildFailsClosedForTamperingAndSecretLeakage(t *testing.T) {
 func TestBuildOptionalCollectorAndInputValidation(t *testing.T) {
 	input := validInput(t)
 	input.Collector = []byte("collector-artifact")
+	input.CollectorSourceSnapshot = validCollectorSnapshotForTest(t, input.ProjectID)
 	input.RequiredNodeCapabilities = []string{"collector", "data_runtime", "project_entry"}
 	result, err := Build(input)
 	if err != nil {
@@ -143,6 +144,17 @@ func TestBuildOptionalCollectorAndInputValidation(t *testing.T) {
 	if _, err := Build(input); err == nil || !strings.Contains(err.Error(), healthContractFile) {
 		t.Fatalf("malformed fixed JSON input must be rejected: %v", err)
 	}
+}
+
+func validCollectorSnapshotForTest(t *testing.T, projectID string) []byte {
+	t.Helper()
+	artifact := []byte(`{"schemaVersion":"collector-runtime-artifact.v1","artifactId":"collector-a","artifactRevision":1,"projectId":"` + projectID + `"}`)
+	sum := sha256.Sum256(artifact)
+	raw, err := json.Marshal(map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "projectId": projectID, "artifactRevision": 1, "sha256": "sha256:" + hex.EncodeToString(sum[:]), "size": len(artifact), "artifact": json.RawMessage(artifact)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func TestBuildFailsClosedForNodeAgentSizeLimits(t *testing.T) {

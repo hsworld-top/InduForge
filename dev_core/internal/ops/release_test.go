@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -135,6 +137,8 @@ func TestValidateDeployableReleaseRejectsSourceSnapshotAndMalformedMaterial(t *t
 }
 
 func validReleaseManifest(projectID string) string {
+	source := collectorSourceSnapshotForManifest(projectID)
+	sourceDigest := sha256.Sum256(source)
 	return `{
   "schemaVersion":"2.0",
   "projectId":"` + projectID + `",
@@ -144,7 +148,7 @@ func validReleaseManifest(projectID string) string {
   "artifacts":{
     "client":{"file":"client-assets.tar.zst","checksum":"sha256:` + strings.Repeat("b", 64) + `"},
     "runtime":{"file":"runtime-artifact.tar.zst","checksum":"sha256:` + strings.Repeat("c", 64) + `"},
-    "collector":{"file":"collector-artifact.tar.zst","checksum":"sha256:` + strings.Repeat("d", 64) + `"}
+    "collector":{"file":"collector-artifact.tar.zst","checksum":"sha256:` + strings.Repeat("d", 64) + `","sourceSnapshot":` + string(source) + `,"sourceSnapshotSha256":"sha256:` + hex.EncodeToString(sourceDigest[:]) + `"}
   },
   "capabilities":["runtime.auth","runtime.datapoint"],
   "compatibility":{"minNodeAgentVersion":"1.0.0","minRuntimeVersion":"1.0.0","requiredNodeCapabilities":["project_entry","data_runtime"]},
@@ -152,4 +156,11 @@ func validReleaseManifest(projectID string) string {
   "preflight":{"resourceRecommendationRef":"resource-recommendation.json","healthContractRef":"health-contract.json","schemaPlanRef":"schema-plan.json"},
   "buildTime":"2026-08-31T00:00:00Z"
 }`
+}
+
+func collectorSourceSnapshotForManifest(projectID string) []byte {
+	artifact := []byte(`{"schemaVersion":"collector-runtime-artifact.v1","artifactId":"collector-a","artifactRevision":1,"projectId":"` + projectID + `"}`)
+	sum := sha256.Sum256(artifact)
+	raw, _ := json.Marshal(map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "projectId": projectID, "artifactRevision": 1, "sha256": "sha256:" + hex.EncodeToString(sum[:]), "size": len(artifact), "artifact": json.RawMessage(artifact)})
+	return raw
 }

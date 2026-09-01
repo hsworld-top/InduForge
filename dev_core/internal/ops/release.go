@@ -2,6 +2,7 @@ package ops
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,8 +20,10 @@ const (
 )
 
 type releaseArtifactDescriptor struct {
-	File     string `json:"file"`
-	Checksum string `json:"checksum"`
+	File                 string          `json:"file"`
+	Checksum             string          `json:"checksum"`
+	SourceSnapshot       json.RawMessage `json:"sourceSnapshot,omitempty"`
+	SourceSnapshotSHA256 string          `json:"sourceSnapshotSha256,omitempty"`
 }
 
 type deployableReleaseManifest struct {
@@ -93,11 +96,21 @@ func validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, a
 	if err := validateReleaseArtifact(manifest.Artifacts.Runtime, runtimeArtifactFile); err != nil {
 		return err
 	}
+	collectorRequired := requireCollector
+	for _, capability := range manifest.Capabilities {
+		if capability == ServiceCollector {
+			collectorRequired = true
+			break
+		}
+	}
 	if manifest.Artifacts.Collector != nil {
 		if err := validateReleaseArtifact(*manifest.Artifacts.Collector, collectorArtifactFile); err != nil {
 			return err
 		}
-	} else if requireCollector {
+		if collectorRequired && !validCollectorSourceSnapshot(manifest.Artifacts.Collector.SourceSnapshot, manifest.Artifacts.Collector.SourceSnapshotSHA256, projectID) {
+			return fmt.Errorf("%w: Release collector sourceSnapshot 无效", ErrReleaseNotDeployable)
+		}
+	} else if collectorRequired {
 		return fmt.Errorf("%w: 部署已启用采集服务，但 Release 未声明 %s", ErrReleaseNotDeployable, collectorArtifactFile)
 	}
 	if strings.TrimSpace(manifest.Compatibility.MinNodeAgentVersion) == "" || strings.TrimSpace(manifest.Compatibility.MinRuntimeVersion) == "" {
@@ -118,6 +131,27 @@ func validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, a
 	}
 	return nil
 }
+
+func validCollectorSourceSnapshot(raw []byte, digest, projectID string) bool {
+	if len(raw) == 0 || len(raw) > 16<<20 || !validSHA256Checksum(digest) {
+		return false
+	}
+	sum := sha256.Sum256(raw)
+	if digest != "sha256:"+hex.EncodeToString(sum[:]) {
+		return false
+	}
+	var source struct {
+		SchemaVersion    string          `json:"schemaVersion"`
+		ProjectID        string          `json:"projectId"`
+		ArtifactRevision int64           `json:"artifactRevision"`
+		SHA256           string          `json:"sha256"`
+		Size             int             `json:"size"`
+		Artifact         json.RawMessage `json:"artifact"`
+	}
+	return json.Unmarshal(raw, &source) == nil && source.SchemaVersion == "collector-runtime-artifact.v1" && source.ProjectID == projectID && source.ArtifactRevision > 0 && source.Size == len(source.Artifact) && source.SHA256 == "sha256:"+sha256Hex(source.Artifact) && len(source.Artifact) > 0 && json.Valid(source.Artifact)
+}
+
+func sha256Hex(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToString(sum[:]) }
 
 func validStableID(value string) bool {
 	if len(value) == 0 || len(value) > 128 {

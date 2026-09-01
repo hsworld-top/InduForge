@@ -12,6 +12,9 @@ type ProjectRuntimeContext struct {
 	Release                                                releaseMetadata
 	BindingRevision                                        int
 	Support                                                RuntimeSupportResources
+	// CollectorSourceSnapshot 是 Release 冻结的 collector artifact 完整性快照；
+	// 它由发布编排注入，调和器不得以当前开发态配置替代。
+	CollectorSourceSnapshot json.RawMessage
 }
 
 // LoadProjectRuntimeContext 保持 pending service 查询轻量：制品与环境支撑在这里
@@ -51,6 +54,11 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 	} else {
 		return ProjectRuntimeContext{}, fmt.Errorf("部署模式非法")
 	}
+	if source, required, e := collectorSourceSnapshotFromManifest(out.Release.Manifest, out.ProjectID); e != nil {
+		return ProjectRuntimeContext{}, e
+	} else if required {
+		out.CollectorSourceSnapshot = source
+	}
 	// resource_refs 在基础服务异常时保留，便于诊断和恢复；只有 observed running
 	// 的服务才能成为新工程部署的 resolver 支撑，避免把已知异常资源继续下发。
 	rows, e := r.pool.Query(ctx, `SELECT service_type,resource_refs FROM runtime_environment_services WHERE environment_id=$1 AND desired_status='running' AND observed_status='running'`, out.EnvironmentID)
@@ -79,4 +87,25 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 		return ProjectRuntimeContext{}, e
 	}
 	return out, nil
+}
+
+func collectorSourceSnapshotFromManifest(raw []byte, projectID string) (json.RawMessage, bool, error) {
+	var manifest deployableReleaseManifest
+	if json.Unmarshal(raw, &manifest) != nil {
+		return nil, false, fmt.Errorf("Release Manifest 无效")
+	}
+	required := false
+	for _, capability := range manifest.Capabilities {
+		if capability == ServiceCollector {
+			required = true
+			break
+		}
+	}
+	if !required {
+		return nil, false, nil
+	}
+	if manifest.Artifacts.Collector == nil || !validCollectorSourceSnapshot(manifest.Artifacts.Collector.SourceSnapshot, manifest.Artifacts.Collector.SourceSnapshotSHA256, projectID) {
+		return nil, true, fmt.Errorf("collector Release sourceSnapshot 缺失或无效")
+	}
+	return append(json.RawMessage(nil), manifest.Artifacts.Collector.SourceSnapshot...), true, nil
 }
