@@ -813,7 +813,7 @@ func (r *PostgreSQLRepository) AgentCommands(ctx context.Context, id, hash strin
 		var run, ver string
 		var metadata releaseMetadata
 		var binding bindingMetadata
-		err := r.pool.QueryRow(ctx, `SELECT COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending' ORDER BY started_at DESC LIMIT 1),''),v.version,v.id::text,COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),v.manifest,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM project_deployments d JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding FROM deployment_bindings WHERE tenant_id=d.tenant_id AND project_deployment_id=d.id AND node_id=d.node_id AND application_version_id=v.id ORDER BY revision DESC LIMIT 1) b ON true WHERE d.id=$1 AND d.node_id=$2`, s.ProjectDeploymentID, n.ID).Scan(&run, &ver, &metadata.ID, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
+		err := r.pool.QueryRow(ctx, `SELECT COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending' ORDER BY started_at DESC LIMIT 1),''),v.version,v.id::text,COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),v.manifest,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM project_deployments d JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding FROM deployment_bindings WHERE deployment_service_id=$2 AND node_id=$3 AND application_version_id=v.id ORDER BY revision DESC LIMIT 1) b ON true WHERE d.id=$1`, s.ProjectDeploymentID, s.ID, n.ID).Scan(&run, &ver, &metadata.ID, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
 		if err != nil {
 			return nil, fmt.Errorf("读取节点正式 Release 命令失败: %w", err)
 		}
@@ -828,15 +828,15 @@ func (r *PostgreSQLRepository) GetNodeByToken(ctx context.Context, id, hash stri
 	x, e := scanNode(r.pool.QueryRow(ctx, `SELECT id,tenant_id,enrollment_id,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at FROM host_nodes WHERE id=$1 AND agent_token_hash=$2`, id, hash))
 	return x, e
 }
-func (r *PostgreSQLRepository) GetAgentDeploymentBinding(ctx context.Context, nodeID, tokenHash, deploymentID string) (DeploymentBinding, error) {
-	access, binding, err := r.agentDeploymentAccess(ctx, nodeID, tokenHash, deploymentID)
+func (r *PostgreSQLRepository) GetAgentDeploymentBinding(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string) (DeploymentBinding, error) {
+	access, binding, err := r.agentDeploymentAccess(ctx, nodeID, tokenHash, deploymentID, serviceID)
 	if err != nil {
 		return DeploymentBinding{}, err
 	}
 	return DeploymentBinding{ID: binding.ID, TenantID: binding.TenantID, ProjectDeploymentID: deploymentID, ProjectID: binding.ProjectID, NodeID: nodeID, ApplicationVersionID: access.ID, Revision: binding.Revision, Content: binding.Content}, nil
 }
-func (r *PostgreSQLRepository) GetAgentRelease(ctx context.Context, nodeID, tokenHash, deploymentID string) (AgentRelease, error) {
-	metadata, _, err := r.agentDeploymentAccess(ctx, nodeID, tokenHash, deploymentID)
+func (r *PostgreSQLRepository) GetAgentRelease(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string) (AgentRelease, error) {
+	metadata, _, err := r.agentDeploymentAccess(ctx, nodeID, tokenHash, deploymentID, serviceID)
 	if err != nil {
 		return AgentRelease{}, err
 	}
@@ -851,10 +851,10 @@ type bindingMetadata struct {
 
 // agentDeploymentAccess 将节点令牌、节点状态、Deployment、Release 和 Binding 放进同一查询。
 // 任何关联缺失都按未授权处理，不能让节点探测其他节点或工程的 Release。
-func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID, tokenHash, deploymentID string) (releaseMetadata, bindingMetadata, error) {
+func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string) (releaseMetadata, bindingMetadata, error) {
 	var metadata releaseMetadata
 	var binding bindingMetadata
-	err := r.pool.QueryRow(ctx, `SELECT v.id::text,COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),v.manifest,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM host_nodes n JOIN project_deployments d ON d.node_id=n.id AND d.tenant_id=n.tenant_id JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding FROM deployment_bindings WHERE tenant_id=d.tenant_id AND project_deployment_id=d.id AND node_id=n.id AND application_version_id=v.id ORDER BY revision DESC LIMIT 1) b ON true WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' AND n.approved_at IS NOT NULL AND d.id=$3 AND d.desired_status='running' AND v.status='ready' AND v.deleted_at IS NULL`, nodeID, tokenHash, deploymentID).Scan(&metadata.ID, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
+	err := r.pool.QueryRow(ctx, `SELECT v.id::text,COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),v.manifest,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM host_nodes n JOIN deployment_services s ON s.node_id=n.id JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=n.tenant_id JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding FROM deployment_bindings WHERE deployment_service_id=s.id AND node_id=n.id AND application_version_id=v.id ORDER BY revision DESC LIMIT 1) b ON true WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' AND n.approved_at IS NOT NULL AND d.id=$3 AND s.id=$4 AND d.desired_status='running' AND v.status='ready' AND v.deleted_at IS NULL`, nodeID, tokenHash, deploymentID, serviceID).Scan(&metadata.ID, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return releaseMetadata{}, bindingMetadata{}, ErrAgentUnauthorized
 	}
@@ -928,19 +928,39 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	if e != nil {
 		return d, DeploymentRun{}, mapDeploymentCreateError(e)
 	}
-	_, e = tx.Exec(ctx, `DELETE FROM deployment_services WHERE project_deployment_id=$1`, d.ID)
-	if e != nil { return d, DeploymentRun{}, e }
+	// 同类型同节点更新保留 service_id，K3s 资源名稳定，从而由同一 Deployment
+	// 模板变更触发滚动更新。跨节点迁移需要先由旧节点完成 stop，不能覆盖节点列。
+	rows, queryErr := tx.Query(ctx, `SELECT id::text,service_type,node_id::text FROM deployment_services WHERE project_deployment_id=$1 FOR UPDATE`, d.ID)
+	if queryErr != nil { return d, DeploymentRun{}, queryErr }
+	existing := map[string]struct{ id, node string }{}
+	for rows.Next() { var id, kind, node string; if queryErr = rows.Scan(&id, &kind, &node); queryErr != nil { rows.Close(); return d, DeploymentRun{}, queryErr }; existing[kind] = struct{ id, node string }{id, node} }
+	rows.Close(); if queryErr = rows.Err(); queryErr != nil { return d, DeploymentRun{}, queryErr }
 	for _, kind := range required {
 		var publicPort any
 		if kind == ServiceBase { publicPort = in.AccessPort }
 		var serviceID string
-		e = tx.QueryRow(ctx, `INSERT INTO deployment_services(tenant_id,project_deployment_id,node_id,service_type,public_port) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, tenant, d.ID, in.Placements[kind], kind, publicPort).Scan(&serviceID)
+		if old, exists := existing[kind]; exists {
+			if old.node != in.Placements[kind] { return d, DeploymentRun{}, fmt.Errorf("%s 引擎节点迁移必须先停止旧工作负载", kind) }
+			serviceID = old.id
+			e = tx.QueryRow(ctx, `UPDATE deployment_services SET public_port=$1,desired_status='running',observed_status='pending',desired_generation=desired_generation+1,last_operation='deploy',updated_at=now() WHERE id=$2 RETURNING id::text`, publicPort, serviceID).Scan(&serviceID)
+		} else {
+			e = tx.QueryRow(ctx, `INSERT INTO deployment_services(tenant_id,project_deployment_id,node_id,service_type,public_port) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, tenant, d.ID, in.Placements[kind], kind, publicPort).Scan(&serviceID)
+		}
 		if e != nil {
 			return d, DeploymentRun{}, e
 		}
-		bindingID, bindingJSON, bindErr := newEngineDeploymentBinding(d, metadata, serviceID, in.Placements[kind], kind, 1, publicPort)
+		var revision int
+		_ = tx.QueryRow(ctx, `SELECT COALESCE(max(revision),0)+1 FROM deployment_bindings WHERE deployment_service_id=$1`, serviceID).Scan(&revision)
+		bindingID, bindingJSON, bindErr := newEngineDeploymentBinding(d, metadata, serviceID, in.Placements[kind], kind, revision, publicPort)
 		if bindErr != nil { return d, DeploymentRun{}, bindErr }
-		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,$7,1,$8)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, bindingJSON); e != nil { return d, DeploymentRun{}, e }
+		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, revision, bindingJSON); e != nil { return d, DeploymentRun{}, e }
+	}
+	requiredSet := map[string]bool{}
+	for _, kind := range required { requiredSet[kind] = true }
+	for kind := range existing {
+		if !requiredSet[kind] {
+			if _, e = tx.Exec(ctx, `UPDATE deployment_services SET desired_status='stopped',observed_status='pending',desired_generation=desired_generation+1,last_operation='stop',updated_at=now() WHERE project_deployment_id=$1 AND service_type=$2`, d.ID, kind); e != nil { return d, DeploymentRun{}, e }
+		}
 	}
 	var run DeploymentRun
 	e = tx.QueryRow(ctx, `INSERT INTO deployment_runs(tenant_id,project_deployment_id,operation,desired_status,created_by) VALUES($1,$2,'deploy','running',$3) RETURNING id,tenant_id,project_deployment_id,operation,desired_status,observed_status,progress,COALESCE(message,''),started_at,completed_at`, tenant, d.ID, user).Scan(runScanArgs(&run)...)

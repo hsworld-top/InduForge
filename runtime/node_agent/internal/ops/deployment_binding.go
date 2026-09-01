@@ -92,7 +92,7 @@ func (a *Agent) fetchDeploymentBinding(ctx context.Context, command AgentCommand
 		return deploymentBinding{}, fmt.Errorf("节点尚未领取身份")
 	}
 	var raw json.RawMessage
-	path := "/api/v1/ops/agent/nodes/" + identity.NodeID + "/deployments/" + command.DeploymentID + "/binding"
+	path := "/api/v1/ops/agent/nodes/" + identity.NodeID + "/deployments/" + command.DeploymentID + "/binding?serviceId=" + command.ServiceID
 	if err := a.request(ctx, http.MethodGet, path, identity.AgentToken, nil, &raw); err != nil {
 		return deploymentBinding{}, err
 	}
@@ -108,12 +108,12 @@ func (a *Agent) fetchDeploymentBinding(ctx context.Context, command AgentCommand
 
 // downloadDeploymentRelease 只接收 Center 同源端点返回的二进制流；不解释 JSON、
 // objectKey 或外部下载 URL，也不跟随任何 redirect。
-func (a *Agent) downloadDeploymentRelease(ctx context.Context, deploymentID string) (io.ReadCloser, error) {
+func (a *Agent) downloadDeploymentRelease(ctx context.Context, deploymentID, serviceID string) (io.ReadCloser, error) {
 	identity := a.currentIdentity()
 	if identity.NodeID == "" || identity.AgentToken == "" {
 		return nil, fmt.Errorf("节点尚未领取身份")
 	}
-	path := "/api/v1/ops/agent/nodes/" + identity.NodeID + "/deployments/" + deploymentID + "/release"
+	path := "/api/v1/ops/agent/nodes/" + identity.NodeID + "/deployments/" + deploymentID + "/release?serviceId=" + serviceID
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(a.cfg.ServerURL, "/")+path, nil)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (a *Agent) installBoundRelease(ctx context.Context, command AgentCommand, g
 	if !exists {
 		return fmt.Errorf("本地 trust store 不信任 signingKeyId: %s", binding.Release.SigningKeyID)
 	}
-	bundle, err := a.downloadDeploymentRelease(ctx, command.DeploymentID)
+	bundle, err := a.downloadDeploymentRelease(ctx, command.DeploymentID, command.ServiceID)
 	if err != nil {
 		return err
 	}

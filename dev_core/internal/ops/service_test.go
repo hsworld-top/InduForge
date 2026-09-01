@@ -280,10 +280,10 @@ type agentReleaseRepository struct {
 	release    AgentRelease
 }
 
-func (r *agentReleaseRepository) GetAgentDeploymentBinding(context.Context, string, string, string) (DeploymentBinding, error) {
+func (r *agentReleaseRepository) GetAgentDeploymentBinding(context.Context, string, string, string, string) (DeploymentBinding, error) {
 	return DeploymentBinding{}, r.bindingErr
 }
-func (r *agentReleaseRepository) GetAgentRelease(context.Context, string, string, string) (AgentRelease, error) {
+func (r *agentReleaseRepository) GetAgentRelease(context.Context, string, string, string, string) (AgentRelease, error) {
 	return r.release, r.releaseErr
 }
 
@@ -297,7 +297,7 @@ func TestAgentReleaseRejectsCrossNodeAndRevokedNode(t *testing.T) {
 	for _, name := range []string{"cross node", "revoked node"} {
 		t.Run(name, func(t *testing.T) {
 			service := NewService(&agentReleaseRepository{releaseErr: ErrAgentUnauthorized}, nil, memoryReleaseStore{})
-			if _, _, err := service.AgentRelease(context.Background(), testNodeID, "agent-token", "deployment-id"); !errors.Is(err, ErrAgentUnauthorized) {
+			if _, _, err := service.AgentRelease(context.Background(), testNodeID, "agent-token", "deployment-id", "service-id"); !errors.Is(err, ErrAgentUnauthorized) {
 				t.Fatalf("%s must be denied, got %v", name, err)
 			}
 		})

@@ -372,7 +372,7 @@ func (h *Handler) commands(w http.ResponseWriter, r *http.Request) {
 	platformapi.WriteSuccess(w, r, map[string]any{"commands": x, "clusterPlan": plan, "clusterUninstall": uninstall, "foundationPlan": foundationPlan, "foundationDelete": foundationDelete, "timeSyncPlan": timeSyncPlan})
 }
 func (h *Handler) agentBinding(w http.ResponseWriter, r *http.Request) {
-	binding, err := h.service.AgentDeploymentBinding(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"))
+	binding, err := h.service.AgentDeploymentBinding(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"), r.URL.Query().Get("serviceId"))
 	if err != nil {
 		h.err(w, r, err)
 		return
@@ -385,7 +385,7 @@ func (h *Handler) agentBinding(w http.ResponseWriter, r *http.Request) {
 	platformapi.WriteSuccess(w, r, payload)
 }
 func (h *Handler) agentRelease(w http.ResponseWriter, r *http.Request) {
-	_, content, err := h.service.AgentRelease(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"))
+	_, content, err := h.service.AgentRelease(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"), r.URL.Query().Get("serviceId"))
 	if err != nil {
 		h.err(w, r, err)
 		return

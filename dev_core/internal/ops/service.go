@@ -82,8 +82,8 @@ type Repository interface {
 	ListRunEvents(context.Context, string, string) ([]DeploymentRunEvent, error)
 	OperateService(context.Context, string, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
 	OperateDeployment(context.Context, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
-	GetAgentDeploymentBinding(context.Context, string, string, string) (DeploymentBinding, error)
-	GetAgentRelease(context.Context, string, string, string) (AgentRelease, error)
+	GetAgentDeploymentBinding(context.Context, string, string, string, string) (DeploymentBinding, error)
+	GetAgentRelease(context.Context, string, string, string, string) (AgentRelease, error)
 }
 
 var foundationServiceTypes = []string{"if_realtime", "if_history", "if_timeseries", "if_message", "if_object", "nats_jetstream", "nginx", "traefik"}
@@ -477,20 +477,20 @@ func (s *Service) AgentFoundationDelete(ctx context.Context, nodeID, token strin
 	}
 	return s.repository.AgentFoundationDelete(ctx, nodeID, hashToken(token))
 }
-func (s *Service) AgentDeploymentBinding(ctx context.Context, nodeID, token, deploymentID string) (DeploymentBinding, error) {
+func (s *Service) AgentDeploymentBinding(ctx context.Context, nodeID, token, deploymentID, serviceID string) (DeploymentBinding, error) {
 	if strings.TrimSpace(token) == "" {
 		return DeploymentBinding{}, ErrAgentUnauthorized
 	}
-	return s.repository.GetAgentDeploymentBinding(ctx, nodeID, hashToken(token), deploymentID)
+	return s.repository.GetAgentDeploymentBinding(ctx, nodeID, hashToken(token), deploymentID, serviceID)
 }
-func (s *Service) AgentRelease(ctx context.Context, nodeID, token, deploymentID string) (AgentRelease, objectstore.ObjectReader, error) {
+func (s *Service) AgentRelease(ctx context.Context, nodeID, token, deploymentID, serviceID string) (AgentRelease, objectstore.ObjectReader, error) {
 	if strings.TrimSpace(token) == "" {
 		return AgentRelease{}, objectstore.ObjectReader{}, ErrAgentUnauthorized
 	}
 	if s.releases == nil {
 		return AgentRelease{}, objectstore.ObjectReader{}, fmt.Errorf("%w: Release 下载存储未配置", ErrReleaseNotDeployable)
 	}
-	release, err := s.repository.GetAgentRelease(ctx, nodeID, hashToken(token), deploymentID)
+	release, err := s.repository.GetAgentRelease(ctx, nodeID, hashToken(token), deploymentID, serviceID)
 	if err != nil {
 		return AgentRelease{}, objectstore.ObjectReader{}, err
 	}
