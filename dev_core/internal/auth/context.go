@@ -13,15 +13,19 @@ const (
 	refreshCookieName = "if_refresh"
 )
 
-// AccessTokenFromRequest 优先从同源 HttpOnly Cookie 读取浏览器会话。
-// Authorization 仅保留给服务间调用和自动化测试，浏览器前端不再持有 JWT。
+// AccessTokenFromRequest 优先接受显式 Bearer，再回退到同源 HttpOnly Cookie。
+// 浏览器前端不持有 JWT；Cookie 回退只提取访问令牌，绝不使用刷新令牌。
 func AccessTokenFromRequest(r *http.Request) string {
-	if r != nil {
-		if cookie, err := r.Cookie(accessCookieName); err == nil && strings.TrimSpace(cookie.Value) != "" {
-			return strings.TrimSpace(cookie.Value)
-		}
+	if r == nil {
+		return ""
 	}
-	return bearerToken(r.Header.Get("Authorization"))
+	if token := bearerToken(r.Header.Get("Authorization")); token != "" {
+		return token
+	}
+	if cookie, err := r.Cookie(accessCookieName); err == nil && strings.TrimSpace(cookie.Value) != "" {
+		return strings.TrimSpace(cookie.Value)
+	}
+	return ""
 }
 
 // ForwardAuthorization 为 dev_core 到数据域的内部调用生成认证头，避免把 JWT 暴露给浏览器。
