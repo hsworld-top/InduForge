@@ -113,6 +113,7 @@ type Repository interface {
 	GetVersion(context.Context, string, string) (Version, error)
 	GetDeployment(context.Context, string, string) (Deployment, error)
 	CreateVersion(context.Context, CreateVersionInput) (Version, error)
+	BeginProductionBuild(context.Context, Project, string, string, string) (Version, error)
 	MarkVersionReady(context.Context, string, string, CreateVersionInput) (Version, error)
 	MarkVersionFailed(context.Context, string, string, string) (Version, error)
 	DeleteVersion(context.Context, string, string) error

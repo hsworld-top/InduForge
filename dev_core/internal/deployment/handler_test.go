@@ -207,6 +207,9 @@ func (r *fakeRepository) CreateVersion(_ context.Context, input deployment.Creat
 	r.versions[item.ID] = item
 	return item, nil
 }
+func (r *fakeRepository) BeginProductionBuild(_ context.Context, project deployment.Project, userID, name, description string) (deployment.Version, error) {
+	return deployment.Version{ID: "building", TenantID: project.TenantID, ProjectID: project.ID, Version: "1.0.0", Status: "building", Name: name, Description: description}, nil
+}
 func (r *fakeRepository) MarkVersionReady(_ context.Context, tenantID, id string, input deployment.CreateVersionInput) (deployment.Version, error) {
 	return r.CreateVersion(context.Background(), input)
 }

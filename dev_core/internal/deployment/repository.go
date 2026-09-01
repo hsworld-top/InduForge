@@ -101,6 +101,36 @@ func (r *PostgreSQLRepository) CreateVersion(ctx context.Context, input CreateVe
 	return versionFromModel(row), nil
 }
 
+func (r *PostgreSQLRepository) BeginProductionBuild(ctx context.Context, project Project, userID, name, description string) (Version, error) {
+	tenant, projectID, user, err := parseTriple(project.TenantID, project.ID, userID)
+	if err != nil {
+		return Version{}, ErrNotFound
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Version{}, err
+	}
+	defer tx.Rollback(ctx)
+	var locked string
+	if err = tx.QueryRow(ctx, `SELECT id::text FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, tenant, projectID).Scan(&locked); err != nil {
+		return Version{}, mapNotFound(err)
+	}
+	var patch int
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(max((regexp_match(version, '^1\\.0\\.([0-9]+)$'))[1]::integer),-1) FROM application_versions WHERE project_id=$1 AND deleted_at IS NULL AND version <> '__DEV__'`, projectID).Scan(&patch); err != nil {
+		return Version{}, err
+	}
+	version := fmt.Sprintf("1.0.%d", patch+1)
+	var result dbsqlc.ApplicationVersion
+	err = tx.QueryRow(ctx, `INSERT INTO application_versions(tenant_id,project_id,version,name,description,status,created_by) VALUES($1,$2,$3,$4,$5,'building',$6) RETURNING id,tenant_id,project_id,version,name,description,status,source_hash,artifact_bucket,artifact_key,artifact_hash,artifact_size,manifest,build_log,error_message,completed_at,deleted_at,created_at,updated_at`, tenant, projectID, version, nullableText(name), nullableText(description), user).Scan(&result.ID, &result.TenantID, &result.ProjectID, &result.Version, &result.Name, &result.Description, &result.Status, &result.SourceHash, &result.ArtifactBucket, &result.ArtifactKey, &result.ArtifactHash, &result.ArtifactSize, &result.Manifest, &result.BuildLog, &result.ErrorMessage, &result.CompletedAt, &result.DeletedAt, &result.CreatedAt, &result.UpdatedAt)
+	if err != nil {
+		return Version{}, mapConstraint(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Version{}, err
+	}
+	return versionFromModel(result), nil
+}
+
 func (r *PostgreSQLRepository) MarkVersionReady(ctx context.Context, tenantID, versionID string, input CreateVersionInput) (Version, error) {
 	tenant, version, err := parsePair(tenantID, versionID)
 	if err != nil {
