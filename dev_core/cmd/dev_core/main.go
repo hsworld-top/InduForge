@@ -114,6 +114,7 @@ func main() {
 	}
 	codeWorkspaceService, err := codeworkspace.NewService(projectRepository, dockerClient, codeworkspace.Config{
 		Image: cfg.CodeServerImage, BindHost: cfg.CodeServerBindHost, VolumeName: cfg.CodeWorkspaceVolume,
+		DefaultTemplateProjectID: platformdb.BuiltinDemoProjectID, DefaultTemplateID: "vite-vue-js",
 	})
 	if err != nil {
 		logger.Error("初始化代码工作区服务失败", "error", err)

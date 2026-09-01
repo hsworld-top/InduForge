@@ -138,6 +138,28 @@ func TestStartReusesExistingProjectContainer(t *testing.T) {
 	}
 }
 
+func TestBuiltinDemoWorkspaceReceivesOfficialDefaultTemplateOnly(t *testing.T) {
+	root := t.TempDir()
+	demoID := "00000000-0000-4000-8000-000000000001"
+	item := project.Project{ID: demoID, TenantID: "tenant", CreatedBy: "owner", Visibility: "internal", WorkspacePath: filepath.Join(root, demoID, "workspace")}
+	engine := &fakeEngine{inspectErr: ErrContainerNotFound}
+	service, err := NewService(fakeProjects{item: item}, engine, Config{
+		Image: "image", VolumeName: "workspaces", DefaultTemplateProjectID: demoID, DefaultTemplateID: "vite-vue-js",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, demoID); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(engine.created[0].Environment, "INDUFORGE_DEFAULT_WORKSPACE_TEMPLATE=vite-vue-js") {
+		t.Fatalf("内置教程工程未接收官方默认模板: %#v", engine.created[0].Environment)
+	}
+	if _, err := NewService(fakeProjects{}, &fakeEngine{}, Config{Image: "image", VolumeName: "workspaces", DefaultTemplateProjectID: demoID}); err == nil {
+		t.Fatal("不完整默认模板配置必须拒绝")
+	}
+}
+
 func TestCodeWorkspaceRequiresProjectWriteAccess(t *testing.T) {
 	root := t.TempDir()
 	item := project.Project{ID: testProjectID, TenantID: "tenant", CreatedBy: "owner", Visibility: "internal", WorkspacePath: filepath.Join(root, testProjectID, "workspace")}

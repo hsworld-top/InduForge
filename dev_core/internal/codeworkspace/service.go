@@ -26,9 +26,11 @@ type ProjectRepository interface {
 }
 
 type Config struct {
-	Image      string
-	BindHost   string
-	VolumeName string
+	Image                    string
+	BindHost                 string
+	VolumeName               string
+	DefaultTemplateProjectID string
+	DefaultTemplateID        string
 }
 
 type Status struct {
@@ -64,6 +66,8 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	config.Image = strings.TrimSpace(config.Image)
 	config.BindHost = strings.TrimSpace(config.BindHost)
 	config.VolumeName = strings.TrimSpace(config.VolumeName)
+	config.DefaultTemplateProjectID = strings.TrimSpace(config.DefaultTemplateProjectID)
+	config.DefaultTemplateID = strings.TrimSpace(config.DefaultTemplateID)
 	if config.Image == "" {
 		return nil, fmt.Errorf("code-server 镜像不能为空")
 	}
@@ -72,6 +76,9 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	}
 	if config.VolumeName == "" {
 		return nil, fmt.Errorf("代码工作区共享卷名称不能为空")
+	}
+	if (config.DefaultTemplateProjectID == "") != (config.DefaultTemplateID == "") {
+		return nil, fmt.Errorf("默认工程模板配置不完整")
 	}
 	return &Service{projects: projects, engine: engine, config: config, now: time.Now}, nil
 }
@@ -241,12 +248,18 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 			return ContainerSpec{}, fmt.Errorf("准备代码工作区目录失败: %w", err)
 		}
 	}
+	environment := []string{"PNPM_HOME=/cache/pnpm", "npm_config_store_dir=/cache/pnpm-store", "XDG_CACHE_HOME=/cache"}
+	// 内置教程工程的源码同样必须经由代码工作区的官方模板初始化，不能由发布链路
+	// 复制或拼装。该环境变量只在工作区为空时生效，初始化器会原子写入共享卷。
+	if item.ID == s.config.DefaultTemplateProjectID {
+		environment = append(environment, "INDUFORGE_DEFAULT_WORKSPACE_TEMPLATE="+s.config.DefaultTemplateID)
+	}
 	return ContainerSpec{
 		Name: containerName(item.ID), Image: s.config.Image,
 		Command:       []string{"--bind-addr", "0.0.0.0:3000", "--auth", "none", "--disable-telemetry", "--idle-timeout-seconds", "1800", workspacePath},
 		User:          "1000:1000",
 		WorkingDir:    workspacePath,
-		Environment:   []string{"PNPM_HOME=/cache/pnpm", "npm_config_store_dir=/cache/pnpm-store", "XDG_CACHE_HOME=/cache"},
+		Environment:   environment,
 		ContainerPort: containerPort, BindHost: s.config.BindHost,
 		Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.project-id": item.ID, "com.induforge.role": "code-workspace"},
 		Mounts: []Mount{

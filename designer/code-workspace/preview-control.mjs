@@ -13,6 +13,7 @@ const previewPort = Number.parseInt(process.env.VITE_PORT || '5173', 10)
 const workspaceRoot = process.env.WORKSPACE_ROOT || '/workspace'
 const templatesRoot = process.env.WORKSPACE_TEMPLATES_ROOT || '/opt/induforge/templates'
 const storeDir = process.env.PNPM_CONFIG_STORE_DIR || '/cache/pnpm-store'
+const defaultWorkspaceTemplate = (process.env.INDUFORGE_DEFAULT_WORKSPACE_TEMPLATE || '').trim()
 const allowedOrigins = new Set(
   (process.env.PREVIEW_CONTROL_ALLOWED_ORIGINS || '')
     .split(',')
@@ -24,6 +25,15 @@ const workspaceInitializer = createWorkspaceInitializer({ workspaceRoot, templat
 let managedProcess = null
 let operation = Promise.resolve()
 let state = createState('stopped', null, null)
+
+// 仅内置教程工程携带默认模板标识。初始化仍完全复用通用的官方模板、离线依赖和
+// 原子落盘流程；普通工程不会收到该标识，仍由用户在工作台中选择模板。
+async function initializeDefaultWorkspace() {
+  if (!defaultWorkspaceTemplate) return
+  const workspace = await workspaceInitializer.status()
+  if (workspace.status !== 'uninitialized') return
+  await workspaceInitializer.initialize(defaultWorkspaceTemplate)
+}
 
 function createState(status, ownership, message) {
   return {
@@ -305,6 +315,7 @@ const server = createServer(async (request, response) => {
 server.listen(controlPort, '0.0.0.0', async () => {
   console.log(`Preview Control listening on 0.0.0.0:${controlPort}`)
   try {
+    await initializeDefaultWorkspace()
     if ((await workspaceInitializer.status()).status === 'initialized') {
       await serializeOperation(startManagedProcess)
     }
