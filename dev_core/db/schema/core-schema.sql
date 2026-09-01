@@ -765,32 +765,6 @@ CREATE TABLE project_deployments (
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
 
--- DeploymentBinding 是制品之外唯一允许携带节点绑定信息的版本化快照。
--- 每个引擎服务都有自己的节点绑定，DEV 也必须引用内部 __DEV__ 制品，不能绕过
--- 下载、摘要和签名校验链路。
-CREATE TABLE deployment_bindings (
-  id uuid PRIMARY KEY,
-  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
-  project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
-  deployment_service_id uuid NOT NULL,
-  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
-  node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
-  -- RELEASE 绑定不可变 application_version；DEV 绑定只保存内部、已签名制品描述。
-  application_version_id uuid REFERENCES application_versions (id) ON DELETE RESTRICT,
-  artifact_mode text NOT NULL CHECK (artifact_mode IN ('release', 'development')),
-  artifact_descriptor jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(artifact_descriptor) = 'object'),
-  revision integer NOT NULL CHECK (revision > 0),
-  binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object'),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (deployment_service_id, revision),
-  CONSTRAINT deployment_bindings_artifact_source_check CHECK (
-    (artifact_mode = 'release' AND application_version_id IS NOT NULL AND artifact_descriptor = '{}'::jsonb) OR
-    (artifact_mode = 'development' AND application_version_id IS NULL AND artifact_descriptor ? 'releaseId')
-  )
-);
-CREATE INDEX deployment_bindings_agent_lookup_idx ON deployment_bindings (node_id, deployment_service_id, revision DESC);
-
 CREATE TABLE deployment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
@@ -852,6 +826,15 @@ CREATE INDEX deployment_services_node_idx ON deployment_services (node_id, desir
 CREATE UNIQUE INDEX deployment_services_base_access_port_key
   ON deployment_services (node_id, public_port)
   WHERE service_type = 'base' AND public_port IS NOT NULL;
-ALTER TABLE deployment_bindings
-  ADD CONSTRAINT deployment_bindings_service_id_fkey
-  FOREIGN KEY (deployment_service_id) REFERENCES deployment_services (id) ON DELETE CASCADE;
+CREATE TABLE deployment_bindings (
+  id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
+  deployment_service_id uuid NOT NULL REFERENCES deployment_services (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE, node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  application_version_id uuid REFERENCES application_versions (id) ON DELETE RESTRICT,
+  artifact_mode text NOT NULL CHECK (artifact_mode IN ('release', 'development')),
+  artifact_descriptor jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(artifact_descriptor) = 'object'), revision integer NOT NULL CHECK (revision > 0), binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object'),
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE (deployment_service_id, revision),
+  CONSTRAINT deployment_bindings_artifact_source_check CHECK ((artifact_mode = 'release' AND application_version_id IS NOT NULL AND artifact_descriptor = '{}'::jsonb) OR (artifact_mode = 'development' AND application_version_id IS NULL AND artifact_descriptor ? 'releaseId'))
+);
+CREATE INDEX deployment_bindings_agent_lookup_idx ON deployment_bindings (node_id, deployment_service_id, revision DESC);
