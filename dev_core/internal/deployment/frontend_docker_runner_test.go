@@ -62,6 +62,9 @@ func TestDockerFrontendBuildRunnerUsesReleaseScopedVolumeSpec(t *testing.T) {
 	if len(e.spec.Command) != 1 || strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/.") || !strings.Contains(e.spec.Command[0], "chmod u+rw /tmp/pnpm-store/v11/index.db") || !strings.Contains(e.spec.Command[0], "find files -type f -exec sh -c") || !strings.Contains(e.spec.Command[0], "--config.trust-lockfile=true") || !strings.Contains(e.spec.Command[0], "--package-import-method=copy") {
 		t.Fatal("构建器必须只覆盖小索引并复用镜像只读 files")
 	}
+	if strings.Contains(e.spec.Command[0], "/build/") || !strings.Contains(e.spec.Command[0], "/output/src") || !strings.Contains(e.spec.Command[0], "/output/dist") || !e.spec.WorkspaceReadOnly {
+		t.Fatal("源码必须只读，构建副本和产物必须写入独立 output 挂载")
+	}
 	if out.Cleanup() == nil {
 		if _, err := os.Stat(filepath.Dir(out.DistDir)); !os.IsNotExist(err) {
 			t.Fatal("cleanup 未删除本次 release 输出")
@@ -120,6 +123,9 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	ms := h["Mounts"].([]any)
 	if len(ms) != 3 || ms[0].(map[string]any)["Type"] != "volume" || ms[0].(map[string]any)["ReadOnly"] != true || ms[0].(map[string]any)["Target"] != "/source" {
 		t.Fatalf("volume 挂载错误: %#v", ms)
+	}
+	if ms[2].(map[string]any)["Target"] != "/output" {
+		t.Fatalf("构建产物必须使用独立 output 挂载: %#v", ms)
 	}
 	if got := create["Entrypoint"].([]any); len(got) != 2 || got[0] != "/bin/sh" || got[1] != "-ec" {
 		t.Fatalf("必须覆盖 IDE 镜像 entrypoint: %#v", got)
