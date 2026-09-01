@@ -304,11 +304,18 @@ func TestDeploymentPayloadOnlyUsesProjectEntryEndpoint(t *testing.T) {
 	deployment := ProjectDeployment{Services: []DeploymentService{
 		{ServiceType: ServiceCollector, Endpoint: "https://collector.example.invalid"},
 		{ServiceType: ServiceCompute, Endpoint: "https://runtime.example.invalid"},
-		{ServiceType: ServiceBase, Endpoint: "https://gateway.example.com/engineering"},
+		{ServiceType: ServiceBase, Endpoint: "https://gateway.example.com/engineering", DesiredStatus: "running", ObservedStatus: "running"},
 	}}
 	payload := deploymentPayload(deployment)
 	if payload["accessUrl"] != "https://gateway.example.com/engineering" {
 		t.Fatalf("accessUrl=%v", payload["accessUrl"])
+	}
+	if payload["accessAvailable"] != true {
+		t.Fatalf("running entry must be available: %v", payload["accessAvailable"])
+	}
+	deployment.Services[2].ObservedStatus = "pending"
+	if payload := deploymentPayload(deployment); payload["accessUrl"] == "" || payload["accessAvailable"] != false {
+		t.Fatalf("planned URL must stay unavailable: %#v", payload)
 	}
 	deployment.Services = deployment.Services[:2]
 	if payload := deploymentPayload(deployment); payload["accessUrl"] != "" {
