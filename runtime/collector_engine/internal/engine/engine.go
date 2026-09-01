@@ -10,6 +10,7 @@ import (
 	"github.com/indu-forge/collector-engine/internal/health"
 	"github.com/indu-forge/collector-engine/internal/loader"
 	"github.com/indu-forge/collector-engine/internal/publisher"
+	"math/rand/v2"
 	"sync"
 	"time"
 )
@@ -21,13 +22,56 @@ type Engine struct {
 	health    *health.State
 	mu        sync.Mutex
 	sequence  int64
+	retries   map[string]retryState
+	now       func() time.Time
+	jitter    func(time.Duration) time.Duration
+}
+type retryState struct {
+	failures int
+	until    time.Time
 }
 
 func New(loaded *loader.Loaded, drivers *driver.Registry, p publisher.Publisher, h *health.State) (*Engine, error) {
 	if loaded == nil || drivers == nil || p == nil || h == nil {
 		return nil, errors.New("collector 依赖非法")
 	}
-	return &Engine{loaded: loaded, drivers: drivers, publisher: p, health: h}, nil
+	return &Engine{loaded: loaded, drivers: drivers, publisher: p, health: h, retries: map[string]retryState{}, now: time.Now, jitter: defaultJitter}, nil
+}
+func defaultJitter(base time.Duration) time.Duration {
+	return base + time.Duration(rand.Int64N(int64(base/5+1)))
+}
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func (e *Engine) retrying(id string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.retries[id].until.After(e.now())
+}
+func (e *Engine) failed(id string) {
+	e.mu.Lock()
+	s := e.retries[id]
+	s.failures++
+	base := time.Second * time.Duration(1<<min(s.failures-1, 5))
+	if base > 30*time.Second {
+		base = 30 * time.Second
+	}
+	s.until = e.now().Add(e.jitter(base))
+	e.retries[id] = s
+	e.mu.Unlock()
+	e.health.SetReady(false)
+}
+func (e *Engine) succeeded(id string) {
+	e.mu.Lock()
+	delete(e.retries, id)
+	empty := len(e.retries) == 0
+	e.mu.Unlock()
+	if empty {
+		e.health.SetReady(true)
+	}
 }
 func (e *Engine) CheckReady(ctx context.Context) error {
 	if err := e.publisher.Ready(ctx); err != nil {
@@ -103,6 +147,10 @@ func (e *Engine) readBatch(ctx context.Context, mappings []loader.Mapping) {
 		byConnection[m.ConnectionID] = append(byConnection[m.ConnectionID], m)
 	}
 	for connectionID, group := range byConnection {
+		if e.retrying(connectionID) {
+			e.health.SetReady(false)
+			continue
+		}
 		d, err := e.drivers.Get(conns[connectionID].DriverID)
 		if err != nil {
 			e.health.SetReady(false)
@@ -111,18 +159,26 @@ func (e *Engine) readBatch(ctx context.Context, mappings []loader.Mapping) {
 		if batch, ok := d.(driver.BatchReader); ok {
 			results, readErr := batch.ReadBatch(ctx, conns[connectionID], bindings[connectionID], group)
 			if readErr != nil {
-				e.health.SetReady(false)
+				e.failed(connectionID)
 				continue
 			}
+			published := true
 			for _, m := range group {
-				e.publishResult(ctx, m, results[m.DatapointID])
+				if !e.publishResult(ctx, m, results[m.DatapointID]) {
+					published = false
+				}
+			}
+			if published {
+				e.succeeded(connectionID)
+			} else {
+				e.failed(connectionID)
 			}
 			continue
 		}
 		for _, m := range group {
 			d, err := e.drivers.Get(conns[m.ConnectionID].DriverID)
 			if err != nil {
-				e.health.SetReady(false)
+				e.failed(connectionID)
 				return
 			}
 			var r driver.Result
@@ -141,11 +197,15 @@ func (e *Engine) readBatch(ctx context.Context, mappings []loader.Mapping) {
 			if r.Quality == "" {
 				r.Quality = "unknown"
 			}
-			e.publishResult(ctx, m, r)
+			if e.publishResult(ctx, m, r) {
+				e.succeeded(connectionID)
+			} else {
+				e.failed(connectionID)
+			}
 		}
 	}
 }
-func (e *Engine) publishResult(ctx context.Context, m loader.Mapping, r driver.Result) {
+func (e *Engine) publishResult(ctx context.Context, m loader.Mapping, r driver.Result) bool {
 	e.mu.Lock()
 	seq := e.sequence
 	e.sequence++
@@ -153,16 +213,18 @@ func (e *Engine) publishResult(ctx context.Context, m loader.Mapping, r driver.R
 	body, err := event.New(e.loaded.Binding, m, seq, r.Value, r.Quality, r.SourceTimestamp, time.Now())
 	if err != nil {
 		e.health.SetReady(false)
-		return
+		return false
 	}
 	raw, err := jsonMarshal(body)
 	if err != nil {
 		e.health.SetReady(false)
-		return
+		return false
 	}
-	if err = e.publisher.Publish(ctx, body.Subject, raw); err != nil && errors.Is(err, publisher.ErrBackpressure) {
+	if err = e.publisher.Publish(ctx, body.Subject, raw); err != nil {
 		e.health.SetReady(false)
+		return false
 	}
+	return true
 }
 
 var jsonMarshal = func(v any) ([]byte, error) { return json.Marshal(v) }

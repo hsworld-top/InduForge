@@ -56,3 +56,30 @@ func TestUnsupportedDriverIsNotReady(t *testing.T) {
 		t.Fatal("unsupported driver cannot be ready")
 	}
 }
+func TestConnectionBackoffGrowsCapsAndResets(t *testing.T) {
+	h := &health.State{}
+	e, _ := New(fixture(), driver.NewRegistry(fakeDriver{}), &fakePublisher{}, h)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e.now = func() time.Time { return now }
+	e.jitter = func(v time.Duration) time.Duration { return v }
+	e.failed("c")
+	if e.retries["c"].until.Sub(now) != time.Second || !e.retrying("c") {
+		t.Fatal("first retry must be 1s")
+	}
+	now = now.Add(time.Second)
+	e.failed("c")
+	if e.retries["c"].until.Sub(now) != 2*time.Second {
+		t.Fatal("second retry must double")
+	}
+	for i := 0; i < 8; i++ {
+		now = e.retries["c"].until
+		e.failed("c")
+	}
+	if got := e.retries["c"].until.Sub(now); got != 30*time.Second {
+		t.Fatalf("cap=%s", got)
+	}
+	e.succeeded("c")
+	if len(e.retries) != 0 || !h.Ready() {
+		t.Fatal("success must reset retry and ready")
+	}
+}
