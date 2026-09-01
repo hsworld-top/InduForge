@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	projectGatewayImage = "induforge/project-gateway:1.0.0"
-	runtimeEngineImage  = "induforge/runtime-engine:1.0.0"
-	computeSandboxImage = "induforge/compute-sandbox:1.0.0"
+	projectGatewayImage  = "induforge/project-gateway:1.0.0"
+	runtimeEngineImage   = "induforge/runtime-engine:1.0.0"
+	collectorEngineImage = "induforge/collector-engine:1.0.0"
+	computeSandboxImage  = "induforge/compute-sandbox:1.0.0"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
@@ -67,6 +68,8 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	container := "runtime-engine"
 	if workload.Engine == ServiceBase {
 		image, role, container = projectGatewayImage, "base", "project-gateway"
+	} else if workload.Engine == ServiceCollector {
+		image, container = collectorEngineImage, "collector-engine"
 	}
 	hostPort := ""
 	sandbox := ""

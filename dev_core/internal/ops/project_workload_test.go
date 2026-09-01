@@ -52,6 +52,10 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(alarm, "sandbox.json") || strings.Contains(alarm, "sandbox-token") || strings.Contains(alarm, "sandbox-secret") {
 		t.Fatalf("alarm must not receive sandbox Secret: %s", alarm)
 	}
+	collector, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", NodeID: testNodeID, Engine: ServiceCollector, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
+	if err != nil || !strings.Contains(collector, "image: induforge/collector-engine:1.0.0") || strings.Contains(collector, "runtime-binding-prepare") || strings.Contains(collector, `command: ["runtime-engine"]`) {
+		t.Fatalf("collector workload must not reuse runtime-engine init/config: %v\n%s", err, collector)
+	}
 	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
 	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.0", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
