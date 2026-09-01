@@ -4176,12 +4176,23 @@ onBeforeUnmount(() => {
 .ops-engine-placement :deep(.el-select__wrapper) {
   width: 100%;
   min-width: 0;
-  min-height: 30px;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
   box-sizing: border-box;
   border: 1px solid var(--ck-border);
   border-radius: 8px;
   background: var(--ck-bg-card);
   box-shadow: none;
+}
+.ops-deployment-field :deep(.el-select__wrapper.is-focused),
+.ops-deployment-field :deep(.el-select__wrapper.is-hovering),
+.ops-deployment-port :deep(.el-input__wrapper.is-focus),
+.ops-engine-placement :deep(.el-select__wrapper.is-focused),
+.ops-engine-placement :deep(.el-select__wrapper.is-hovering) {
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
 }
 .ops-deployment-field :deep(.el-select__wrapper:hover),
 .ops-deployment-port :deep(.el-input__wrapper:hover),
