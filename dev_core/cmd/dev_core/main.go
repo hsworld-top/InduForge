@@ -219,7 +219,7 @@ func configureReleasePublishing(service *deployment.Service, cfg config.Config) 
 	if err != nil {
 		return err
 	}
-	runner, err := deployment.NewDockerFrontendBuildRunner(deployment.DockerFrontendBuildRunnerConfig{DockerHost: cfg.CodeServerDockerHost, Image: cfg.ReleaseBuilderImage, WorkspaceVolume: cfg.CodeWorkspaceVolume, WorkspaceRoot: cfg.WorkspaceRoot})
+	runner, err := deployment.NewDockerFrontendBuildRunner(deployment.DockerFrontendBuildRunnerConfig{DockerHost: cfg.CodeServerDockerHost, Image: cfg.ReleaseBuilderImage, WorkspaceVolume: cfg.CodeWorkspaceVolume, WorkspaceRoot: cfg.WorkspaceRoot, BootstrapProjectID: platformdb.BuiltinDemoProjectID, BootstrapTemplateID: "vite-vue-js"})
 	if err != nil {
 		return err
 	}

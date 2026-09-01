@@ -10,6 +10,13 @@ RUN corepack enable \
     && chown -R 1000:1000 /opt/induforge /cache
 
 COPY --from=workspace-assets --chown=1000:1000 /opt/induforge/pnpm-store/ /opt/induforge/pnpm-store/
+COPY --from=workspace-assets --chown=1000:1000 /opt/induforge/templates/vite-vue-js/ /opt/induforge/templates/vite-vue-js/
+
+RUN rm -rf /opt/induforge/templates/vite-vue-js/node_modules \
+      /opt/induforge/templates/vite-vue-js/dist \
+      /opt/induforge/templates/vite-vue-js/.pnpm-store \
+    && find /opt/induforge/templates -type d -exec chmod 755 {} + \
+    && find /opt/induforge/templates -type f -exec chmod 644 {} +
 
 USER 1000:1000
 WORKDIR /build

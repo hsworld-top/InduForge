@@ -22,6 +22,13 @@ func (e *fakeDockerFrontendEngine) Run(_ context.Context, s dockerFrontendSpec) 
 	if e.err != nil {
 		return e.err
 	}
+	if s.BootstrapTemplateID != "" {
+		root := filepath.Join(frontendTestRoot, s.WorkspaceSubpath)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"scripts":{"build":"vite build"}}`), 0o644)
+	}
 	p := filepath.Join(testWorkspaceRoot(s), "dist")
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		return err
@@ -102,7 +109,7 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "image", Volume: "volume", WorkspaceSubpath: "p/workspace", CacheSubpath: "p/cache", OutputSubpath: "p/release-builds/r", MemoryBytes: 123, NanoCPUs: 456, Command: []string{"corepack pnpm install --frozen-lockfile --offline"}})
+	err = c.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "image", Volume: "volume", WorkspaceSubpath: "p/workspace", CacheSubpath: "p/cache", OutputSubpath: "p/release-builds/r", WorkspaceReadOnly: true, MemoryBytes: 123, NanoCPUs: 456, Command: []string{"corepack pnpm install --frozen-lockfile --offline"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +138,31 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	}
 	if !removed {
 		t.Fatal("一次性容器未清理")
+	}
+}
+
+func TestDockerFrontendBuildRunnerBootstrapsOnlyEmptyBuiltinWorkspace(t *testing.T) {
+	frontendTestRoot = t.TempDir()
+	e := &fakeDockerFrontendEngine{}
+	r, err := newDockerFrontendBuildRunner(e, DockerFrontendBuildRunnerConfig{
+		Image: "builder", WorkspaceVolume: "volume", WorkspaceRoot: frontendTestRoot,
+		BootstrapProjectID: releaseSourceProjectID, BootstrapTemplateID: "vite-vue-js",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := Version{ID: "22222222-2222-4222-8222-222222222222"}
+	if _, err := r.BuildProjectFrontend(context.Background(), Project{ID: releaseSourceProjectID}, version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(frontendTestRoot, releaseSourceProjectID, "workspace", "package.json")); err != nil {
+		t.Fatalf("内置工程源码未初始化: %v", err)
+	}
+	if !e.spec.WorkspaceReadOnly {
+		t.Fatal("正式构建阶段必须仍以只读工作区挂载")
+	}
+	if got := bootstrapCommand("vite-vue-js"); !strings.Contains(got, "/opt/induforge/templates/vite-vue-js/") || !strings.Contains(got, "rm -rf \"$staging/node_modules\"") {
+		t.Fatalf("初始化命令未使用受控模板或未清理构建污染: %s", got)
 	}
 }
 
