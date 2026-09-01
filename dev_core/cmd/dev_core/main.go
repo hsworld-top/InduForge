@@ -183,6 +183,11 @@ func main() {
 	go worker.New(worker.NewPostgreSQLRepository(pool), ifpObjects, logger, 10*time.Second).Run(signalCtx)
 	go runSceneObjectCleanup(signalCtx, sceneAssetService, logger)
 	go runOpsLivenessReconciler(signalCtx, opsRepository, logger)
+	if reconciler, reconcileErr := ops.NewInClusterProjectReconciler(); reconcileErr != nil {
+		logger.Info("项目 K3s 调和器未启用", "reason", reconcileErr)
+	} else {
+		go runProjectWorkloadReconciler(signalCtx, opsRepository, reconciler, logger)
+	}
 
 	go func() {
 		logger.Info("dev_core 已启动", "addr", cfg.Addr)
@@ -210,6 +215,21 @@ func runOpsLivenessReconciler(ctx context.Context, repository *ops.PostgreSQLRep
 		case <-ticker.C:
 			if _, err := repository.ReconcileNodeLiveness(ctx); err != nil {
 				logger.Warn("更新运维节点在线状态失败", "error", err)
+			}
+		}
+	}
+}
+
+func runProjectWorkloadReconciler(ctx context.Context, repository *ops.PostgreSQLRepository, reconciler *ops.KubernetesProjectReconciler, logger *slog.Logger) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := repository.ReconcilePendingProjectWorkloads(ctx, reconciler); err != nil {
+				logger.Warn("调和项目 K3s 工作负载失败", "error", err)
 			}
 		}
 	}
