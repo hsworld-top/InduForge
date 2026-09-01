@@ -155,7 +155,7 @@ func (r *PostgreSQLRepository) DeleteRuntimeEnvironment(ctx context.Context, ten
 		return "deleting", nil
 	}
 	var deploymentCount, serviceCount int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN runtime_environment_nodes en ON en.node_id=d.node_id WHERE en.environment_id=$1`, id).Scan(&deploymentCount); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(DISTINCT d.id) FROM project_deployments d JOIN deployment_services s ON s.project_deployment_id=d.id JOIN runtime_environment_nodes en ON en.node_id=s.node_id WHERE en.environment_id=$1`, id).Scan(&deploymentCount); err != nil {
 		return "", err
 	}
 	if deploymentCount > 0 {
@@ -200,7 +200,7 @@ func (r *PostgreSQLRepository) ListRuntimeEnvironmentNodes(ctx context.Context, 
 	if err := r.requireRuntimeEnvironment(ctx, tenant, environmentID); err != nil {
 		return nil, 0, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),e.id::text,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.tenant_id=$1 JOIN host_nodes n ON n.id=en.node_id AND n.tenant_id=e.tenant_id LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM project_deployments d WHERE d.tenant_id=n.tenant_id AND d.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id WHERE en.environment_id=$2 AND ($3='' OR n.display_name ILIKE '%'||$3||'%' OR n.hostname ILIKE '%'||$3||'%') ORDER BY en.created_at DESC,n.id DESC LIMIT $4 OFFSET $5`, tenant, environmentID, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
+	rows, err := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),e.id::text,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.tenant_id=$1 JOIN host_nodes n ON n.id=en.node_id AND n.tenant_id=e.tenant_id LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id WHERE en.environment_id=$2 AND ($3='' OR n.display_name ILIKE '%'||$3||'%' OR n.hostname ILIKE '%'||$3||'%') ORDER BY en.created_at DESC,n.id DESC LIMIT $4 OFFSET $5`, tenant, environmentID, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -298,7 +298,7 @@ func (r *PostgreSQLRepository) RemoveRuntimeEnvironmentNode(ctx context.Context,
 	var serviceInUse, deploymentInUse bool
 	err = tx.QueryRow(ctx, `SELECT n.display_name,e.desired_status,
 		EXISTS(SELECT 1 FROM runtime_environment_services s WHERE s.environment_id=en.environment_id AND s.node_id=en.node_id),
-		EXISTS(SELECT 1 FROM project_deployments d WHERE d.node_id=en.node_id)
+		EXISTS(SELECT 1 FROM deployment_services s WHERE s.node_id=en.node_id)
 		FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id JOIN host_nodes n ON n.id=en.node_id
 		WHERE e.tenant_id=$1 AND e.id=$2 AND n.id=$3 AND e.deleted_at IS NULL FOR UPDATE OF en,e,n`, tenant, environmentID, nodeID).Scan(&nodeName, &environmentStatus, &serviceInUse, &deploymentInUse)
 	if errors.Is(err, pgx.ErrNoRows) {
