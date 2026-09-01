@@ -12,6 +12,7 @@ import (
 	"github.com/indu-forge/collector-engine/internal/resolver"
 	"math"
 	"net"
+	"sort"
 	"sync"
 	"time"
 )
@@ -87,16 +88,108 @@ func (d *ModbusTCP) ReadWithBinding(ctx context.Context, c loader.Connection, b 
 // carry a batch policy; each area is bounded by the Modbus protocol limit and
 // future schema versions may widen this to contiguous range coalescing.
 func (d *ModbusTCP) ReadBatch(ctx context.Context, c loader.Connection, b loader.BindingConnection, mappings []loader.Mapping) (map[string]Result, error) {
-	results := make(map[string]Result, len(mappings))
+	h, err := d.handler(ctx, c, b)
+	if err != nil {
+		return nil, err
+	}
+	type item struct {
+		mapping loader.Mapping
+		station byte
+		area    string
+		address uint16
+		bit     *uint8
+		width   uint16
+	}
+	groups := map[string][]item{}
 	for _, mapping := range mappings {
-		result, err := d.ReadWithBinding(ctx, c, b, mapping)
-		if err != nil {
-			d.invalidate(c.ConnectionID)
-			return nil, err
+		var a struct {
+			Station  byte   `json:"station"`
+			Area     string `json:"area"`
+			Address  uint16 `json:"address"`
+			BitIndex *uint8 `json:"bitIndex"`
 		}
-		results[mapping.DatapointID] = result
+		if !strictJSON(mapping.Address, &a) {
+			return nil, errors.New("Modbus 地址非法")
+		}
+		width := registerWidth(mapping)
+		if a.Area == "coil" || a.Area == "discreteInput" {
+			width = 1
+		}
+		if width == 0 {
+			return nil, errors.New("Modbus 数据类型非法")
+		}
+		key := fmt.Sprintf("%d/%s", a.Station, a.Area)
+		groups[key] = append(groups[key], item{mapping, a.Station, a.Area, a.Address, a.BitIndex, width})
+	}
+	results := map[string]Result{}
+	for _, items := range groups {
+		sort.Slice(items, func(i, j int) bool { return items[i].address < items[j].address })
+		for start := 0; start < len(items); {
+			end := start + 1
+			windowEnd := uint32(items[start].address) + uint32(items[start].width)
+			limit := uint32(125)
+			if items[start].area == "coil" || items[start].area == "discreteInput" {
+				limit = 2000
+			}
+			for end < len(items) {
+				nextEnd := uint32(items[end].address) + uint32(items[end].width)
+				if items[end].address > uint16(windowEnd+2) || nextEnd-uint32(items[start].address) > limit {
+					break
+				}
+				if nextEnd > windowEnd {
+					windowEnd = nextEnd
+				}
+				end++
+			}
+			raw, readErr := readWindow(h, items[start].station, items[start].area, items[start].address, uint16(windowEnd-uint32(items[start].address)))
+			if readErr != nil {
+				d.invalidate(c.ConnectionID)
+				return nil, errors.New("Modbus 批量读取失败")
+			}
+			for _, it := range items[start:end] {
+				offset := int(it.address - items[start].address)
+				var chunk []byte
+				if it.area == "coil" || it.area == "discreteInput" {
+					chunk = []byte{raw[offset/8]}
+					if offset%8 > 0 {
+						chunk[0] >>= uint(offset % 8)
+					}
+				} else {
+					from := offset * 2
+					chunk = raw[from : from+int(it.width)*2]
+				}
+				v, e := decodeModbus(chunk, it.mapping.DataType, it.bit)
+				if e != nil {
+					return nil, e
+				}
+				results[it.mapping.DatapointID] = Result{Value: v, Quality: "good", SourceTimestamp: time.Now().UTC()}
+			}
+			start = end
+		}
 	}
 	return results, nil
+}
+func registerWidth(m loader.Mapping) uint16 {
+	bytes := map[string]uint16{"int8": 2, "uint8": 2, "int16": 2, "uint16": 2, "int32": 4, "uint32": 4, "float32": 4, "int64": 8, "uint64": 8, "float64": 8}[m.DataType]
+	if bytes == 0 {
+		return 0
+	}
+	return (bytes / 2) * uint16(m.ElementCount)
+}
+func readWindow(h *modbus.TCPClientHandler, station byte, area string, address, quantity uint16) ([]byte, error) {
+	h.SlaveId = station
+	c := modbus.NewClient(h)
+	switch area {
+	case "coil":
+		return c.ReadCoils(address, quantity)
+	case "discreteInput":
+		return c.ReadDiscreteInputs(address, quantity)
+	case "inputRegister":
+		return c.ReadInputRegisters(address, quantity)
+	case "holdingRegister":
+		return c.ReadHoldingRegisters(address, quantity)
+	}
+	return nil, errors.New("Modbus 区域非法")
 }
 func (d *ModbusTCP) invalidate(id string) {
 	d.mu.Lock()
