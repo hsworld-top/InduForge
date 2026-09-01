@@ -7,16 +7,17 @@ import (
 
 func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	port := 17800
-	base, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, Generation: 2, HostPort: &port})
+	digest := "sha256:" + strings.Repeat("a", 64)
+	base, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2, HostPort: &port})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/node-id", "maxUnavailable: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release"`} {
+	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/node-id", "maxUnavailable: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
 		if !strings.Contains(base, expected) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
 	}
-	compute, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 2})
+	compute, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
 	if err != nil || !strings.Contains(compute, "IF_ENGINE_ROLE") || !strings.Contains(compute, `"compute"`) || strings.Contains(compute, "hostPort:") {
 		t.Fatalf("compute role/port isolation failed: %v\n%s", err, compute)
 	}
@@ -41,7 +42,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(nats, "postgres-bootstrap.json") || strings.Contains(nats, "runtime-secrets") || strings.Contains(state, "nats.json") || strings.Contains(state, "runtime-secrets") {
 		t.Fatalf("bootstrap Secret 未最小投影:\nnats=%s\nstate=%s", nats, state)
 	}
-	alarm, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, Generation: 2})
+	alarm, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
 	if err != nil || !strings.Contains(alarm, `"alarm"`) || strings.Contains(alarm, `"compute"`) {
 		t.Fatalf("alarm role isolation failed: %v\n%s", err, alarm)
 	}
@@ -51,7 +52,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(alarm, "sandbox.json") || strings.Contains(alarm, "sandbox-token") || strings.Contains(alarm, "sandbox-secret") {
 		t.Fatalf("alarm must not receive sandbox Secret: %s", alarm)
 	}
-	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 2})
+	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
 	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.0", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
@@ -60,7 +61,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 }
 
 func TestRenderProjectWorkloadManifestBindingChecksumChangesTemplate(t *testing.T) {
-	base := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 2, BindingRevision: 5, RuntimeBindingChecksum: "sha256:one"}
+	base := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: "sha256:" + strings.Repeat("a", 64), Generation: 2, BindingRevision: 5, RuntimeBindingChecksum: "sha256:one"}
 	first, err := RenderProjectWorkloadManifest(base)
 	if err != nil {
 		t.Fatal(err)
@@ -69,5 +70,22 @@ func TestRenderProjectWorkloadManifestBindingChecksumChangesTemplate(t *testing.
 	second, err := RenderProjectWorkloadManifest(base)
 	if err != nil || first == second || !strings.Contains(second, `runtime-binding-sha256: "sha256:two"`) || !strings.Contains(second, `binding-revision: "5"`) {
 		t.Fatalf("binding checksum did not alter Pod template: %v\n%s", err, second)
+	}
+}
+
+func TestRenderProjectWorkloadUsesImmutableReleaseDigest(t *testing.T) {
+	base := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: "sha256:" + strings.Repeat("a", 64), Generation: 1, HostPort: func() *int { p := 17800; return &p }()}
+	first, err := RenderProjectWorkloadManifest(base)
+	if err != nil || strings.Contains(first, "/release/current") {
+		t.Fatalf("immutable release mount failed: %v", err)
+	}
+	base.ReleaseDigest = "sha256:" + strings.Repeat("b", 64)
+	second, err := RenderProjectWorkloadManifest(base)
+	if err != nil || first == second || !strings.Contains(second, "sha256-"+strings.Repeat("b", 64)) {
+		t.Fatalf("digest did not select distinct release: %v", err)
+	}
+	base.ReleaseDigest = "sha256:bad"
+	if _, err := RenderProjectWorkloadManifest(base); err == nil {
+		t.Fatal("invalid digest accepted")
 	}
 }

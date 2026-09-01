@@ -51,20 +51,20 @@ type ProjectWorkloadInspector interface {
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
 	defer rows.Close()
 	count := 0
 	for rows.Next() {
-		var serviceID, deploymentID, environmentID, nodeID, engine, releaseID string
+		var serviceID, deploymentID, environmentID, nodeID, engine, releaseID, releaseDigest string
 		var generation int64
 		var port *int
-		if err = rows.Scan(&serviceID, &deploymentID, &environmentID, &nodeID, &engine, &releaseID, &generation, &port); err != nil {
+		if err = rows.Scan(&serviceID, &deploymentID, &environmentID, &nodeID, &engine, &releaseID, &releaseDigest, &generation, &port); err != nil {
 			return count, err
 		}
-		workload := ProjectWorkload{EnvironmentID: environmentID, DeploymentID: deploymentID, ServiceID: serviceID, NodeID: nodeID, Engine: engine, ReleaseID: releaseID, Generation: generation, HostPort: port}
+		workload := ProjectWorkload{EnvironmentID: environmentID, DeploymentID: deploymentID, ServiceID: serviceID, NodeID: nodeID, Engine: engine, ReleaseID: releaseID, ReleaseDigest: releaseDigest, Generation: generation, HostPort: port}
 		if applyErr := applier.Reconcile(ctx, workload); applyErr != nil {
 			message := applyErr.Error()
 			if len(message) > 1024 {
@@ -324,6 +324,6 @@ func yamlToJSON(document string) []byte {
 	return []byte(fmt.Sprintf(`{"kind":%q,"metadata":{"name":%q}}`, kind, name))
 }
 
-func projectArtifactHostPath(deploymentID string) string {
-	return filepath.Join("/var/lib/induforge/node-agent/deployments", deploymentID, "release")
+func projectArtifactHostPath(deploymentID, digest string) string {
+	return filepath.Join("/var/lib/induforge/node-agent/deployments", deploymentID, "release", "releases", "sha256-"+strings.TrimPrefix(digest, "sha256:"))
 }

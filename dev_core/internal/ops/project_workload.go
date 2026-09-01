@@ -14,11 +14,11 @@ const (
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
 // 任意 YAML、命令或镜像：节点只负责制品准备和状态，中心以环境级 RBAC 写集群。
 type ProjectWorkload struct {
-	EnvironmentID, DeploymentID, ServiceID, NodeID, Engine, ReleaseID string
-	Generation                                                        int64
-	HostPort                                                          *int
-	RuntimeBindingChecksum                                            string
-	BindingRevision                                                   int
+	EnvironmentID, DeploymentID, ServiceID, NodeID, Engine, ReleaseID, ReleaseDigest string
+	Generation                                                                       int64
+	HostPort                                                                         *int
+	RuntimeBindingChecksum                                                           string
+	BindingRevision                                                                  int
 }
 
 func projectNamespace(environmentID string) (string, error) {
@@ -59,10 +59,10 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if workload.Generation < 1 || strings.TrimSpace(workload.NodeID) == "" || strings.TrimSpace(workload.ReleaseID) == "" {
+	if workload.Generation < 1 || strings.TrimSpace(workload.NodeID) == "" || strings.TrimSpace(workload.ReleaseID) == "" || !validSHA256Checksum(workload.ReleaseDigest) {
 		return "", fmt.Errorf("工作负载调和字段不完整")
 	}
-	artifactRoot := projectArtifactHostPath(workload.DeploymentID)
+	artifactRoot := projectArtifactHostPath(workload.DeploymentID, workload.ReleaseDigest)
 	image, role := runtimeEngineImage, workload.Engine
 	container := "runtime-engine"
 	if workload.Engine == ServiceBase {
@@ -161,7 +161,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: COMPUTE_SANDBOX_EXECUTION_FORM, value: "native-linux"}
             - {name: COMPUTE_SANDBOX_DEPLOYMENT_ID, value: %q}
             - {name: COMPUTE_SANDBOX_PROJECT_ID, value: %q}
-            - {name: COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/opt/induforge/release/current"}
+            - {name: COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/opt/induforge/release"}
             - {name: COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-artifact.tar.zst"}
           ports: [{name: sandbox, containerPort: 18103}]
           readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
@@ -216,7 +216,7 @@ spec:
           env:
             - {name: IF_ENGINE_ROLE, valueFrom: {configMapKeyRef: {name: %s-config, key: engine-role}}}
             - {name: IF_RELEASE_ID, valueFrom: {configMapKeyRef: {name: %s-config, key: release-id}}}
-            - {name: IF_RELEASE_ROOT, value: "/opt/induforge/release/current"}
+            - {name: IF_RELEASE_ROOT, value: "/opt/induforge/release"}
             - {name: IF_WORK_ROOT, value: "/work"}
             - {name: IF_DEPLOYMENT_ID, value: %q}
             - {name: IF_PROJECT_ID, value: %q}
