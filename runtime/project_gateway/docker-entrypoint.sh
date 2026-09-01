@@ -9,15 +9,10 @@ set -eu
 : "${IF_NODE_ID:?IF_NODE_ID is required}"
 : "${IF_RELEASE_ID:?IF_RELEASE_ID is required}"
 
-client_root="$IF_WORK_ROOT/client"
-mkdir -p "$client_root"
-test -r "$IF_RELEASE_ROOT/client-assets.tar.zst"
-zstd -dc -- "$IF_RELEASE_ROOT/client-assets.tar.zst" | tar -x -C "$client_root"
-test -f "$client_root/index.html"
-
 exec /usr/local/bin/project-gateway \
   --listen 0.0.0.0:18080 \
-  --client-root "$client_root" \
+  --release-root "$IF_RELEASE_ROOT" \
+  --client-root "$IF_WORK_ROOT/client" \
   --runtime-api http://127.0.0.1:18081 \
   --deployment-id "$IF_DEPLOYMENT_ID" \
   --account-id "$IF_PROJECT_ID" \

@@ -164,7 +164,14 @@ func (s *Server) handleHealth(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 	upstream := s.runtimeAPIAvailable(request)
-	writeJSON(writer, http.StatusOK, envelope{Code: 0, Msg: "ok", Data: map[string]any{
+	status := http.StatusOK
+	code, message := 0, "ok"
+	if !upstream {
+		// readinessProbe 使用此端点；静态入口已加载但 Runtime API 未连接时不能
+		// 接收流量，避免把失败的动态请求伪装为可用工程。
+		status, code, message = http.StatusServiceUnavailable, 50031, "runtime-api unavailable"
+	}
+	writeJSON(writer, status, envelope{Code: code, Msg: message, Data: map[string]any{
 		"status":         "UP",
 		"upstreamStatus": map[bool]string{true: "CONNECTED", false: "DISCONNECTED"}[upstream],
 		"observedAt":     time.Now().UTC().Format(time.RFC3339Nano),

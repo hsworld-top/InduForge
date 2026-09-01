@@ -17,6 +17,7 @@ import (
 type Config struct {
 	Listen        string
 	ClientRoot    string
+	ReleaseRoot   string
 	RuntimeAPIURL string
 	DeploymentID  string
 	AccountID     string

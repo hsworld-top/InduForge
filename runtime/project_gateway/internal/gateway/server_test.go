@@ -1,13 +1,19 @@
 package gateway
 
 import (
+	"archive/tar"
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestGatewayServesReleaseAssetsAndSPAFallback(t *testing.T) {
@@ -89,6 +95,98 @@ func TestGatewayStatusReportsRuntimeAPIDegradation(t *testing.T) {
 		t.Fatalf("unexpected status: %#v", body)
 	}
 }
+
+func TestGatewayHealthRequiresRuntimeAPI(t *testing.T) {
+	server, upstream := newTestServer(t)
+	upstream.Close()
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), `"code":50031`) {
+		t.Fatalf("health must reject unavailable upstream: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPrepareClientAssetsVerifiesReleaseAndRejectsTraversal(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		files     map[string][]byte
+		corrupt   bool
+		wantError bool
+	}{
+		{name: "valid", files: map[string][]byte{"index.html": []byte("release-index"), "assets/app.js": []byte("ok")}},
+		{name: "tampered", files: map[string][]byte{"index.html": []byte("release-index")}, corrupt: true, wantError: true},
+		{name: "traversal", files: map[string][]byte{"../outside": []byte("bad")}, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			releaseRoot := t.TempDir()
+			archive := clientArchive(t, tc.files)
+			sum := sha256.Sum256(archive)
+			if tc.corrupt {
+				archive = append(archive, 0)
+			}
+			if err := os.WriteFile(filepath.Join(releaseRoot, clientArchiveName), archive, 0o444); err != nil {
+				t.Fatal(err)
+			}
+			manifest := map[string]any{"artifacts": map[string]any{"client": map[string]string{"file": clientArchiveName, "checksum": "sha256:" + fmtHex(sum[:])}}}
+			checksums := map[string]any{"schemaVersion": "release-checksums.v1", "files": []map[string]any{{"path": clientArchiveName, "sha256": "sha256:" + fmtHex(sum[:]), "size": int64(len(archive))}}}
+			writeReleaseJSON(t, filepath.Join(releaseRoot, "release-manifest.json"), manifest)
+			writeReleaseJSON(t, filepath.Join(releaseRoot, "checksums.json"), checksums)
+			clientRoot := filepath.Join(t.TempDir(), "client")
+			err := PrepareClientAssets(releaseRoot, clientRoot)
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("expected rejected release client artifact")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := os.ReadFile(filepath.Join(clientRoot, "index.html"))
+			if err != nil || string(body) != "release-index" {
+				t.Fatalf("client was not unpacked safely: %q %v", body, err)
+			}
+		})
+	}
+}
+
+func clientArchive(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	encoder, err := zstd.NewWriter(&compressed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := tar.NewWriter(encoder)
+	for name, data := range files {
+		if err := writer.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writer.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := encoder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return compressed.Bytes()
+}
+
+func writeReleaseJSON(t *testing.T, path string, value any) {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o444); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func fmtHex(value []byte) string { return fmt.Sprintf("%x", value) }
 
 func TestConfigRejectsRemoteRuntimeAPIAndSymlinkedAssets(t *testing.T) {
 	root := t.TempDir()
