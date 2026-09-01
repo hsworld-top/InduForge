@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -121,9 +122,40 @@ func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, pr
 	info, err := os.Lstat(dist)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		_ = os.RemoveAll(outputRoot)
-		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建未生成 dist 目录")
+		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建未生成 dist 目录: %s", buildOutputSummary(outputRoot))
 	}
 	return FrontendBuildOutput{DistDir: dist, Cleanup: func() error { return os.RemoveAll(outputRoot) }}, nil
+}
+
+// buildOutputSummary 仅返回受控输出目录两层内的名称与大小，便于诊断挂载路径，绝不读取源码内容。
+func buildOutputSummary(root string) string {
+	const limit = 32
+	items := make([]string, 0, limit)
+	_ = filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || name == root || len(items) >= limit {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, name)
+		if relErr != nil || strings.Count(rel, string(filepath.Separator)) > 1 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			items = append(items, rel+"/")
+			return nil
+		}
+		info, infoErr := entry.Info()
+		if infoErr == nil {
+			items = append(items, fmt.Sprintf("%s:%d", rel, info.Size()))
+		}
+		return nil
+	})
+	if len(items) == 0 {
+		return "空"
+	}
+	return strings.Join(items, ",")
 }
 
 // bootstrapBuiltinWorkspace 仅为内置教程工程在共享卷为空时落入审核过的官方模板。
