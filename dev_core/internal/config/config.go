@@ -7,12 +7,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
 const defaultAddr = ":18101"
+
+var strictSemVerPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 type Config struct {
 	Addr                    string
@@ -50,6 +53,13 @@ type Config struct {
 	NodePackageDirectory    string
 	OpsCenterNodeID         string
 	OpsK3sAPIPort           int
+	ReleaseBuilderEnabled   bool
+	ReleaseBuilderImage     string
+	ReleaseBuilderID        string
+	ReleaseSigningKeyFile   string
+	ReleaseSigningKeyID     string
+	MinNodeAgentVersion     string
+	MinRuntimeVersion       string
 }
 
 func Load() (Config, error) {
@@ -87,6 +97,16 @@ func Load() (Config, error) {
 	if err != nil || k3sAPIPort < 1 || k3sAPIPort > 65535 {
 		return Config{}, fmt.Errorf("IF_OPS_K3S_API_PORT 无效")
 	}
+	releaseEnabled, err := strconv.ParseBool(firstEnvWithDefault("RELEASE_BUILDER_ENABLED", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("RELEASE_BUILDER_ENABLED 无效: %w", err)
+	}
+	releaseImage, releaseBuilderID := strings.TrimSpace(firstEnv("RELEASE_BUILDER_IMAGE")), strings.TrimSpace(firstEnv("RELEASE_BUILDER_ID"))
+	releaseKeyFile, releaseKeyID := strings.TrimSpace(firstEnv("RELEASE_SIGNING_KEY_FILE")), strings.TrimSpace(firstEnv("RELEASE_SIGNING_KEY_ID"))
+	minAgent, minRuntime := strings.TrimSpace(firstEnv("RELEASE_MIN_NODE_AGENT_VERSION")), strings.TrimSpace(firstEnv("RELEASE_MIN_RUNTIME_VERSION"))
+	if releaseEnabled && (releaseImage == "" || releaseBuilderID == "" || releaseKeyFile == "" || releaseKeyID == "" || !strictSemVer(minAgent) || !strictSemVer(minRuntime)) {
+		return Config{}, fmt.Errorf("启用正式 Release 构建时必须配置镜像、构建器、签名密钥及严格最小版本")
+	}
 
 	workspaceRoot := firstEnvWithDefault("CODE_WORKSPACE_ROOT", filepath.Join(".data", "workspaces"))
 	return Config{
@@ -121,7 +141,33 @@ func Load() (Config, error) {
 		NodePackageDirectory:    firstEnvWithDefault("NODE_PACKAGE_DIRECTORY", defaultNodePackageDirectory()),
 		OpsCenterNodeID:         strings.TrimSpace(firstEnv("IF_OPS_CENTER_NODE_ID")),
 		OpsK3sAPIPort:           k3sAPIPort,
+		ReleaseBuilderEnabled:   releaseEnabled, ReleaseBuilderImage: releaseImage, ReleaseBuilderID: releaseBuilderID,
+		ReleaseSigningKeyFile: releaseKeyFile, ReleaseSigningKeyID: releaseKeyID, MinNodeAgentVersion: minAgent, MinRuntimeVersion: minRuntime,
 	}, nil
+}
+
+func strictSemVer(value string) bool {
+	if !strictSemVerPattern.MatchString(value) {
+		return false
+	}
+	core := strings.SplitN(value, "+", 2)[0]
+	separator := strings.IndexByte(core, '-')
+	if separator < 0 {
+		return true
+	}
+	for _, item := range strings.Split(core[separator+1:], ".") {
+		numeric := item != ""
+		for _, char := range item {
+			if char < '0' || char > '9' {
+				numeric = false
+				break
+			}
+		}
+		if numeric && len(item) > 1 && item[0] == '0' {
+			return false
+		}
+	}
+	return true
 }
 
 // 开发命令会在 dev_core 目录启动进程，安装包仍统一存放在仓库根 .data 下。

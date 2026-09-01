@@ -150,8 +150,12 @@ func main() {
 	controlPlane.SetNodeHandler(nodeHandler)
 	deploymentService := deployment.NewService(
 		deployment.NewPostgreSQLRepository(pool), workspace, ifpObjects,
-		deployment.ServiceConfig{ArtifactBucket: cfg.ObjectStoreIFPBucket},
+		deployment.ServiceConfig{ArtifactBucket: cfg.ObjectStoreIFPBucket, MinNodeAgentVersion: cfg.MinNodeAgentVersion, MinRuntimeVersion: cfg.MinRuntimeVersion},
 	)
+	if err := configureReleasePublishing(deploymentService, cfg); err != nil {
+		logger.Error("初始化正式 Release 发布失败", "error", err)
+		os.Exit(1)
+	}
 	deploymentService.SetReleaseValidator(sceneAssetService)
 	deploymentService.SetEvents(realtimeServer)
 	controlPlane.SetDeploymentHandler(deployment.NewHandler(deploymentService, authService))
@@ -203,6 +207,28 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP 服务关闭失败", "error", err)
 	}
+}
+
+// configureReleasePublishing 默认不注入构建器，使未启用环境的 Publish 保持失败关闭。
+func configureReleasePublishing(service *deployment.Service, cfg config.Config) error {
+	if !cfg.ReleaseBuilderEnabled {
+		return nil
+	}
+	key, err := deployment.LoadEd25519SigningKey(cfg.ReleaseSigningKeyFile, cfg.ReleaseSigningKeyID)
+	if err != nil {
+		return err
+	}
+	runner, err := deployment.NewDockerFrontendBuildRunner(deployment.DockerFrontendBuildRunnerConfig{DockerHost: cfg.CodeServerDockerHost, Image: cfg.ReleaseBuilderImage, WorkspaceVolume: cfg.CodeWorkspaceVolume, WorkspaceRoot: cfg.WorkspaceRoot})
+	if err != nil {
+		return err
+	}
+	builder, err := deployment.NewProjectReleaseSourceBuilder(deployment.ProjectReleaseSourceBuilderConfig{DataServiceURL: cfg.DataServiceURL, BuilderID: cfg.ReleaseBuilderID}, runner)
+	if err != nil {
+		return err
+	}
+	service.SetReleaseSourceBuilder(builder)
+	service.SetSigningConfig(key)
+	return nil
 }
 
 func runOpsLivenessReconciler(ctx context.Context, repository *ops.PostgreSQLRepository, logger *slog.Logger) {
