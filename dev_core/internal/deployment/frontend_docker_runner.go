@@ -169,7 +169,9 @@ func (r *DockerFrontendBuildRunner) bootstrapBuiltinWorkspace(ctx context.Contex
 }
 
 func bootstrapCommand(templateID string) string {
-	return "test -z \"$(find /workspace -mindepth 1 -maxdepth 1 -print -quit)\"; staging=/workspace/.induforge-initialize; mkdir \"$staging\"; cp -a /opt/induforge/templates/" + templateID + "/. \"$staging\"/; rm -rf \"$staging/node_modules\" \"$staging/dist\" \"$staging/.pnpm-store\"; mkdir -p \"$staging/.induforge\"; printf '%s\\n' '{\"version\":1,\"templateId\":\"" + templateID + "\"}' > \"$staging/.induforge/project.json\"; find \"$staging\" -mindepth 1 -maxdepth 1 -exec mv {} /workspace/ \\;; rmdir \"$staging\""
+	// dockerFrontendClient 将工作区子路径固定挂载为 /source；不要使用镜像中不存在的路径，
+	// 以保证初始化与正式构建读取同一受控 volume subpath。
+	return "test -z \"$(find /source -mindepth 1 -maxdepth 1 -print -quit)\"; staging=/source/.induforge-initialize; mkdir \"$staging\"; cp -a /opt/induforge/templates/" + templateID + "/. \"$staging\"/; rm -rf \"$staging/node_modules\" \"$staging/dist\" \"$staging/.pnpm-store\"; mkdir -p \"$staging/.induforge\"; printf '%s\\n' '{\"version\":1,\"templateId\":\"" + templateID + "\"}' > \"$staging/.induforge/project.json\"; find \"$staging\" -mindepth 1 -maxdepth 1 -exec mv {} /source/ \\;; rmdir \"$staging\""
 }
 
 type dockerFrontendClient struct {

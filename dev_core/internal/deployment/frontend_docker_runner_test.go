@@ -164,7 +164,7 @@ func TestDockerFrontendBuildRunnerBootstrapsOnlyEmptyBuiltinWorkspace(t *testing
 	if !e.spec.WorkspaceReadOnly {
 		t.Fatal("正式构建阶段必须仍以只读工作区挂载")
 	}
-	if got := bootstrapCommand("vite-vue-js"); !strings.Contains(got, "/opt/induforge/templates/vite-vue-js/") || !strings.Contains(got, "rm -rf \"$staging/node_modules\"") {
+	if got := bootstrapCommand("vite-vue-js"); !strings.Contains(got, "/opt/induforge/templates/vite-vue-js/") || !strings.Contains(got, "rm -rf \"$staging/node_modules\"") || !strings.Contains(got, "find /source") || strings.Contains(got, "/workspace") {
 		t.Fatalf("初始化命令未使用受控模板或未清理构建污染: %s", got)
 	}
 }
