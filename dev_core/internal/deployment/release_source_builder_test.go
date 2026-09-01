@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -129,8 +131,33 @@ func TestProjectReleaseSourceBuilderRejectsCollectorWithoutTrustedArtifact(t *te
 	server := artifactServer(t, runtimeArtifact(releaseSourceProjectID, "collector.point", false))
 	defer server.Close()
 	_, err := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist}).BuildReleaseSource(context.Background(), Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}, Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}, "")
-	if err == nil || !strings.Contains(err.Error(), "Collector") {
+	if err == nil || !strings.Contains(err.Error(), "采集") {
 		t.Fatalf("采集引擎没有受信制品必须失败关闭: %v", err)
+	}
+}
+
+func TestProjectReleaseSourceBuilderIncludesTrustedCollectorArtifact(t *testing.T) {
+	workspace, dist := releaseSourceDirectories(t)
+	runtime := runtimeArtifact(releaseSourceProjectID, "collector.point", false)
+	collector, _ := json.Marshal(map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "artifactId": "collector-a", "artifactRevision": 1, "projectId": releaseSourceProjectID, "collectorVersion": "1.0.0", "connections": []any{}, "pointMappings": []any{}, "wal": map[string]any{}})
+	sum := sha256.Sum256(collector)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "projectId": releaseSourceProjectID, "artifactRevision": 1, "sha256": "sha256:" + hex.EncodeToString(sum[:]), "size": len(collector), "artifact": json.RawMessage(collector)}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": runtime})
+	}))
+	defer server.Close()
+	source, err := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist}).BuildReleaseSource(context.Background(), Project{ID: releaseSourceProjectID, TenantID: "tenant-a", Code: "demo", WorkspacePath: workspace}, Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}, "")
+	if err != nil || len(source.Collector) == 0 {
+		t.Fatalf("collector source: %v", err)
+	}
+	if _, ok := unpackReleaseSource(t, source.Collector)["collector-runtime-artifact.json"]; !ok {
+		t.Fatal("collector artifact not packed")
+	}
+	if !containsEngine(releasebuilder.DeriveEngineRequirements(source.ProjectDocument), "collector") {
+		t.Fatal("collector capability lost")
 	}
 }
 

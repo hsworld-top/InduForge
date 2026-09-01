@@ -92,8 +92,12 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 	if err != nil {
 		return ReleaseSource{}, err
 	}
+	var collector []byte
 	if containsEngine(releasebuilder.DeriveEngineRequirements(artifact), "collector") {
-		return ReleaseSource{}, fmt.Errorf("工程启用了采集引擎，但当前未提供受信 Collector Release 工件")
+		collector, err = b.fetchCollectorArtifact(ctx, project, version, artifact, authorization)
+		if err != nil {
+			return ReleaseSource{}, err
+		}
 	}
 	frontend, err := b.frontend.BuildProjectFrontend(ctx, project, version)
 	if err != nil {
@@ -110,7 +114,7 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 	if err != nil {
 		return ReleaseSource{}, err
 	}
-	sourceRevision := sourceRevision(client, runtime)
+	sourceRevision := sourceRevision(client, runtime, collector)
 	sbom, err := json.Marshal(map[string]any{
 		"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
 		"metadata": map[string]any{"component": map[string]any{"type": "application", "name": project.Code, "version": sourceRevision}},
@@ -119,12 +123,73 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 		return ReleaseSource{}, fmt.Errorf("生成 Release SBOM 失败: %w", err)
 	}
 	return ReleaseSource{
-		Client: client, Runtime: runtime, SBOM: sbom,
+		Client: client, Runtime: runtime, Collector: collector, SBOM: sbom,
 		ResourceRecommendation: []byte(`{"cpu":"250m","memory":"256Mi"}`),
 		HealthContract:         []byte(`{"schemaVersion":"release-health.v1","readiness":"http"}`),
 		SchemaPlan:             []byte(`{"schemaVersion":"release-schema-plan.v1","changes":[]}`),
 		ProjectDocument:        artifact, SourceRevision: sourceRevision, BuilderID: b.builderID,
 	}, nil
+}
+
+// fetchCollectorArtifact 只接受 data service 生成且携带自身完整性元数据的 bytes；
+// 不支持 URL、路径或调用方提供的工件，避免 ReleaseBuilder 变成下载器。
+func (b *ProjectReleaseSourceBuilder) fetchCollectorArtifact(ctx context.Context, project Project, version Version, snapshot map[string]any, authorization string) ([]byte, error) {
+	body, err := json.Marshal(map[string]any{"tenantId": project.TenantID, "projectId": project.ID, "releaseId": version.ID, "revision": version.Version, "sourceSnapshot": snapshot})
+	if err != nil {
+		return nil, fmt.Errorf("构造采集工件请求失败")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, b.dataServiceURL+"/api/v1/data/projects/"+project.ID+"/collector-artifact", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("创建采集工件请求失败")
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if authorization != "" {
+		request.Header.Set("Authorization", authorization)
+	}
+	response, err := b.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("生成采集工件失败")
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, b.responseLimit+1))
+	if err != nil || int64(len(raw)) > b.responseLimit {
+		return nil, fmt.Errorf("读取采集工件响应失败")
+	}
+	var envelope struct {
+		Code int             `json:"code"`
+		Data json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil || response.StatusCode/100 != 2 || envelope.Code != 0 {
+		return nil, fmt.Errorf("采集工件响应无效")
+	}
+	var result struct {
+		SchemaVersion    string          `json:"schemaVersion"`
+		ProjectID        string          `json:"projectId"`
+		ArtifactRevision int64           `json:"artifactRevision"`
+		SHA256           string          `json:"sha256"`
+		Size             int64           `json:"size"`
+		Artifact         json.RawMessage `json:"artifact"`
+	}
+	if json.Unmarshal(envelope.Data, &result) != nil || result.SchemaVersion != "collector-runtime-artifact.v1" || result.ProjectID != project.ID || result.ArtifactRevision < 1 || result.Size != int64(len(result.Artifact)) || len(result.Artifact) == 0 || int64(len(result.Artifact)) > b.archiveLimit {
+		return nil, fmt.Errorf("采集工件元数据无效")
+	}
+	sum := sha256.Sum256(result.Artifact)
+	if result.SHA256 != "sha256:"+hex.EncodeToString(sum[:]) {
+		return nil, fmt.Errorf("采集工件摘要不匹配")
+	}
+	var artifact struct {
+		SchemaVersion    string `json:"schemaVersion"`
+		ProjectID        string `json:"projectId"`
+		ArtifactRevision int64  `json:"artifactRevision"`
+	}
+	if json.Unmarshal(result.Artifact, &artifact) != nil || artifact.SchemaVersion != result.SchemaVersion || artifact.ProjectID != project.ID || artifact.ArtifactRevision != result.ArtifactRevision {
+		return nil, fmt.Errorf("采集工件内容无效")
+	}
+	packed, err := packReleaseSourceArchive(map[string][]byte{"collector-runtime-artifact.json": result.Artifact})
+	if err != nil || int64(len(packed)) > b.archiveLimit {
+		return nil, fmt.Errorf("归档采集工件失败")
+	}
+	return packed, nil
 }
 
 func (b *ProjectReleaseSourceBuilder) fetchRuntimeArtifact(ctx context.Context, projectID, authorization string) (map[string]any, []byte, error) {
@@ -311,12 +376,14 @@ func packReleaseSourceArchive(files map[string][]byte) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func sourceRevision(client, runtime []byte) string {
+func sourceRevision(client, runtime, collector []byte) string {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte("client\x00"))
 	_, _ = hash.Write(client)
 	_, _ = hash.Write([]byte("runtime\x00"))
 	_, _ = hash.Write(runtime)
+	_, _ = hash.Write([]byte("collector\x00"))
+	_, _ = hash.Write(collector)
 	return "git:" + hex.EncodeToString(hash.Sum(nil))
 }
 
