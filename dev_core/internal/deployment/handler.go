@@ -53,6 +53,7 @@ func (h *Handler) PublishProjectVersion(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	input.Authorization = auth.ForwardAuthorization(r)
+	input.RequestID = platformapi.RequestIDFromContext(r.Context())
 	item, err := h.service.Publish(r.Context(), actor, projectID, input)
 	if err != nil {
 		h.writeError(w, r, err)

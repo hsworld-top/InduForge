@@ -124,6 +124,9 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	if got := create["Entrypoint"].([]any); len(got) != 2 || got[0] != "/bin/sh" || got[1] != "-ec" {
 		t.Fatalf("必须覆盖 IDE 镜像 entrypoint: %#v", got)
 	}
+	if create["WorkingDir"] != "/tmp" {
+		t.Fatalf("受限容器必须从可写 tmpfs 工作目录启动: %#v", create["WorkingDir"])
+	}
 	if command := create["Cmd"].([]any); len(command) != 1 || !strings.Contains(command[0].(string), "pnpm install --frozen-lockfile --offline") {
 		t.Fatalf("构建命令不安全或不完整: %#v", command)
 	}

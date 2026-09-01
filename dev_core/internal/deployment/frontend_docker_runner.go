@@ -233,7 +233,8 @@ func (c *dockerFrontendClient) Run(ctx context.Context, s dockerFrontendSpec) er
 		User, WorkingDir string
 		Labels           map[string]string
 		HostConfig       host
-	}{Image: s.Image, Entrypoint: []string{"/bin/sh", "-ec"}, Cmd: s.Command, Env: []string{"PNPM_CONFIG_STORE_DIR=/cache/pnpm-store", "XDG_CACHE_HOME=/cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"}, User: "1000:1000", WorkingDir: "/build/src", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}}}
+		// 初始化容器不挂载 /build；统一从必定存在的 tmpfs 启动，命令自行切换到输出卷。
+	}{Image: s.Image, Entrypoint: []string{"/bin/sh", "-ec"}, Cmd: s.Command, Env: []string{"PNPM_CONFIG_STORE_DIR=/cache/pnpm-store", "XDG_CACHE_HOME=/cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"}, User: "1000:1000", WorkingDir: "/tmp", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}}}
 	body.HostConfig.Mounts = append(body.HostConfig.Mounts, mount{Type: "volume", Source: s.Volume, Target: "/source", ReadOnly: s.WorkspaceReadOnly, VolumeOptions: volOpt{Subpath: s.WorkspaceSubpath}})
 	if s.CacheSubpath != "" {
 		body.HostConfig.Mounts = append(body.HostConfig.Mounts, mount{Type: "volume", Source: s.Volume, Target: "/cache", VolumeOptions: volOpt{Subpath: s.CacheSubpath}})

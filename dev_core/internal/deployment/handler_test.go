@@ -184,9 +184,12 @@ func (s *fakeStore) PresignGet(_ context.Context, key string, ttl time.Duration)
 }
 
 type fakeRepository struct {
-	versions     map[string]deployment.Version
-	deployments  map[string]deployment.Deployment
-	markReadyErr error
+	versions             map[string]deployment.Version
+	deployments          map[string]deployment.Deployment
+	markReadyErr         error
+	markFailedTenant     string
+	markFailedVersion    string
+	markFailedBackground bool
 }
 
 func (r *fakeRepository) GetProject(_ context.Context, tenantID, projectID string) (deployment.Project, error) {
@@ -300,6 +303,9 @@ func TestPublishMarksBuildFailedOnPipelineErrors(t *testing.T) {
 			if got := repository.versions[testBuildingID]; got.Status != "failed" || got.ErrorMessage == "" {
 				t.Fatalf("失败必须回写构建记录: %#v", got)
 			}
+			if repository.markFailedTenant != testsupport.TenantID || repository.markFailedVersion != testBuildingID || !repository.markFailedBackground {
+				t.Fatalf("失败回写必须使用后台上下文和当前租户版本: tenant=%s version=%s background=%v", repository.markFailedTenant, repository.markFailedVersion, repository.markFailedBackground)
+			}
 		})
 	}
 }
@@ -338,7 +344,9 @@ func TestPublishBuildsSignedImmutableRelease(t *testing.T) {
 		}
 	}
 }
-func (r *fakeRepository) MarkVersionFailed(_ context.Context, tenantID, id, message string) (deployment.Version, error) {
+func (r *fakeRepository) MarkVersionFailed(ctx context.Context, tenantID, id, message string) (deployment.Version, error) {
+	r.markFailedTenant, r.markFailedVersion = tenantID, id
+	r.markFailedBackground = ctx.Err() == nil
 	item, ok := r.versions[id]
 	if !ok || item.TenantID != tenantID {
 		return deployment.Version{}, deployment.ErrNotFound

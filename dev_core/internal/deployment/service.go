@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path"
 	"strings"
 	"time"
@@ -83,6 +84,8 @@ type PublishInput struct {
 	Description string
 	// Authorization 仅用于向数据域转发当前请求身份，绝不写入日志或发布制品。
 	Authorization string `json:"-"`
+	// RequestID 仅用于发布链路的运维诊断，不进入制品、数据库错误信息或下游请求。
+	RequestID string `json:"-"`
 }
 
 type CreateVersionInput struct {
@@ -212,35 +215,58 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if err != nil {
 		return Version{}, err
 	}
-	fail := func(cause error) (Version, error) {
+	fail := func(stage string, cause error) (Version, error) {
 		// HTTP 客户端取消或上游超时不能让版本永久停在 building。使用短后台上下文
 		// 尝试完成终态回写；若数据库暂不可用，下次发布的超时调和仍会兜底。
 		markCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, _ = s.repository.MarkVersionFailed(markCtx, actor.TenantID, version.ID, cause.Error())
+		if _, markErr := s.repository.MarkVersionFailed(markCtx, actor.TenantID, version.ID, cause.Error()); markErr != nil {
+			slog.Default().Error("正式 Release 失败状态回写失败", "requestId", input.RequestID, "versionId", version.ID, "stage", stage, "error", releaseDiagnosticError(markErr))
+		} else {
+			slog.Default().Error("正式 Release 构建失败", "requestId", input.RequestID, "versionId", version.ID, "stage", stage, "error", releaseDiagnosticError(cause))
+		}
 		return Version{}, cause
 	}
 	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
-		return fail(fmt.Errorf("正式 Release 构建器或签名配置未配置"))
+		return fail("configuration", fmt.Errorf("正式 Release 构建器或签名配置未配置"))
 	}
 	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project, version, input.Authorization)
 	if err != nil {
-		return fail(fmt.Errorf("读取正式 Release 构建输入失败: %w", err))
+		return fail("source", fmt.Errorf("读取正式 Release 构建输入失败: %w", err))
 	}
 	result, err := assembleFormalRelease(project, version, source, s.signing, s.config, time.Now().UTC())
 	if err != nil {
-		return fail(fmt.Errorf("组装正式 Release 失败: %w", err))
+		return fail("assemble", fmt.Errorf("组装正式 Release 失败: %w", err))
 	}
 	ready, err := uploadFormalRelease(ctx, s.store, project, version, result)
 	if err != nil {
-		return fail(fmt.Errorf("上传正式 Release 失败: %w", err))
+		return fail("upload", fmt.Errorf("上传正式 Release 失败: %w", err))
 	}
 	ready.SigningKeyID = s.signing.KeyID
 	completed, err := s.repository.MarkVersionReady(ctx, actor.TenantID, version.ID, ready)
 	if err != nil {
-		return fail(fmt.Errorf("确认正式 Release 失败: %w", err))
+		return fail("mark-ready", fmt.Errorf("确认正式 Release 失败: %w", err))
 	}
 	return completed, nil
+}
+
+// releaseDiagnosticError 截断可能来自外部依赖的错误，避免意外把认证信息写入日志。
+func releaseDiagnosticError(err error) string {
+	message := strings.TrimSpace(err.Error())
+	for _, prefix := range []string{"Bearer ", "bearer ", "Basic ", "basic "} {
+		if index := strings.Index(message, prefix); index >= 0 {
+			end := strings.IndexAny(message[index:], " \t\r\n\"'")
+			if end <= len(prefix) {
+				end = len(message) - index
+			}
+			message = message[:index] + prefix + "[REDACTED]" + message[index+end:]
+		}
+	}
+	const maxLength = 1024
+	if len(message) > maxLength {
+		return message[:maxLength] + "…(已截断)"
+	}
+	return message
 }
 
 func (s *Service) DeleteVersion(ctx context.Context, actor auth.User, versionID string) error {
