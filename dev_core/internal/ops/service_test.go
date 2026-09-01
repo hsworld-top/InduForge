@@ -132,7 +132,7 @@ func (r *deploymentRepository) OperateDeployment(_ context.Context, _, deploymen
 
 func TestCreateDeploymentUsesEnvironmentModeAndPlacements(t *testing.T) {
 	r := &deploymentRepository{}
-	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: testVersionID, Mode: "release", AccessPort: 17800, Placements: map[string]string{ServiceBase: testNodeID}}
+	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: testVersionID, Mode: "production", AccessPort: 17800, Placements: map[string]string{ServiceBase: testNodeID}}
 	_, _, e := NewService(r, nil).CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, input)
 	if e != nil || !r.validated || r.input.EnvironmentID != testEnvironmentID || r.input.Mode != "release" || r.input.Placements[ServiceBase] != testNodeID {
 		t.Fatalf("environment deployment not validated: %#v %v", r.input, e)
@@ -141,7 +141,11 @@ func TestCreateDeploymentUsesEnvironmentModeAndPlacements(t *testing.T) {
 func TestCreateDevelopmentDeploymentDoesNotAcceptUserVersion(t *testing.T) {
 	base := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, Mode: "development", AccessPort: 17800, Placements: map[string]string{ServiceBase: testNodeID}}
 	r := &deploymentRepository{}
-	if _, _, err := NewService(r, nil).CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, base); err != nil || !r.validated {
+	service := NewService(r, nil)
+	service.SetDevelopmentArtifactBuilder(func(context.Context, auth.User, string, string) (DevelopmentArtifact, error) {
+		return DevelopmentArtifact{ReleaseID: testVersionID, Version: "__DEV__", ArtifactKey: "development/test", ArtifactSize: 1}, nil
+	})
+	if _, _, err := service.CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, base); err != nil || !r.validated || r.input.DevelopmentArtifact == nil {
 		t.Fatalf("development slot request was rejected: %v", err)
 	}
 	base.ApplicationVersionID = testVersionID
@@ -150,8 +154,20 @@ func TestCreateDevelopmentDeploymentDoesNotAcceptUserVersion(t *testing.T) {
 		t.Fatalf("development request accepted a user selected version: %v", err)
 	}
 }
+
+func TestDevelopmentBuildFailureDoesNotReachDeploymentReplacement(t *testing.T) {
+	r := &deploymentRepository{}
+	service := NewService(r, nil)
+	service.SetDevelopmentArtifactBuilder(func(context.Context, auth.User, string, string) (DevelopmentArtifact, error) {
+		return DevelopmentArtifact{}, errors.New("build failed")
+	})
+	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, Mode: "development", AccessPort: 17800, Placements: map[string]string{ServiceBase: testNodeID}}
+	if _, _, err := service.CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, input); err == nil || r.validated {
+		t.Fatalf("构建失败不得替换已有部署: err=%v validated=%v", err, r.validated)
+	}
+}
 func TestCreateDeploymentRejectsMalformedNodeOrVersion(t *testing.T) {
-	for _, in := range []CreateDeploymentInput{{ProjectID: testProjectID, EnvironmentID: "bad", Mode: "development"}, {ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: "bad", Mode: "release"}} {
+	for _, in := range []CreateDeploymentInput{{ProjectID: testProjectID, EnvironmentID: "bad", Mode: "development"}, {ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: "bad", Mode: "production"}} {
 		r := &deploymentRepository{}
 		_, _, e := NewService(r, nil).CreateDeployment(context.Background(), auth.User{Role: "OPS_ADMIN"}, in)
 		if e == nil || !strings.Contains(e.Error(), "格式无效") || r.validated {
@@ -161,7 +177,7 @@ func TestCreateDeploymentRejectsMalformedNodeOrVersion(t *testing.T) {
 }
 
 func TestCreateDeploymentRejectsInvalidCustomerPort(t *testing.T) {
-	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: testVersionID, Mode: "release", AccessPort: 65533}
+	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: testVersionID, Mode: "production", AccessPort: 65533}
 	r := &deploymentRepository{}
 	if _, _, err := NewService(r, nil).CreateDeployment(context.Background(), auth.User{Role: "OPS_ADMIN"}, input); err == nil || !strings.Contains(err.Error(), "工程访问端口") || r.validated {
 		t.Fatalf("invalid customer port reached repository: %v", err)

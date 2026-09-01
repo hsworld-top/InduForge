@@ -327,6 +327,7 @@ type CreateDeploymentInput struct {
 	Mode                 string            `json:"mode"`
 	AccessPort           int               `json:"accessPort"`
 	Placements           map[string]string `json:"placements"`
+	Authorization        string            `json:"-"`
 	// DevelopmentArtifact 仅由服务端注入，绝不能从公开请求体接收。
 	DevelopmentArtifact *DevelopmentArtifact `json:"-"`
 }

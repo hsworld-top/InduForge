@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -159,6 +160,17 @@ func main() {
 	}
 	deploymentService.SetReleaseValidator(sceneAssetService)
 	deploymentService.SetEvents(realtimeServer)
+	opsService.SetDevelopmentArtifactBuilder(func(buildCtx context.Context, actor auth.User, projectID, authorization string) (ops.DevelopmentArtifact, error) {
+		artifact, err := deploymentService.BuildDevelopmentArtifact(buildCtx, actor, projectID, authorization)
+		if err != nil {
+			return ops.DevelopmentArtifact{}, err
+		}
+		manifest, err := json.Marshal(artifact.Manifest)
+		if err != nil {
+			return ops.DevelopmentArtifact{}, err
+		}
+		return ops.DevelopmentArtifact{ReleaseID: artifact.ReleaseID, Version: artifact.Version, Bucket: artifact.Bucket, ArtifactKey: artifact.ArtifactKey, ArtifactHash: artifact.ArtifactHash, ArtifactSize: artifact.ArtifactSize, Manifest: manifest, ManifestHash: artifact.ManifestHash, ChecksumsHash: artifact.ChecksumsHash, SigningKeyID: artifact.SigningKeyID}, nil
+	})
 	controlPlane.SetDeploymentHandler(deployment.NewHandler(deploymentService, authService))
 	auditLogRepository := auditlog.NewPostgreSQLRepository(pool)
 	controlPlane.SetAuditLogHandler(auditlog.NewHandler(auditlog.NewService(auditLogRepository), authService))

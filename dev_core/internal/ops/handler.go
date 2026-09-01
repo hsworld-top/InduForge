@@ -195,6 +195,7 @@ func (h *Handler) createDeployment(w http.ResponseWriter, r *http.Request) {
 			h.invalid(w, r)
 			return
 		}
+		x.Authorization = auth.ForwardAuthorization(r)
 		d, run, e := h.service.CreateDeployment(r.Context(), u, x)
 		if e != nil {
 			h.err(w, r, e)

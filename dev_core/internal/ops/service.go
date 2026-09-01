@@ -86,6 +86,10 @@ type Repository interface {
 	GetAgentRelease(context.Context, string, string, string, string) (AgentRelease, error)
 }
 
+// DevelopmentArtifactBuilder 是受控源码构建的窄依赖。ops 只接收已签名描述，
+// 不反向依赖发布模块的具体实现或其存储细节。
+type DevelopmentArtifactBuilder func(context.Context, auth.User, string, string) (DevelopmentArtifact, error)
+
 var foundationServiceTypes = []string{"if_realtime", "if_history", "if_timeseries", "if_message", "if_object", "nats_jetstream", "nginx", "traefik"}
 
 func validFoundationServiceType(value string) bool {
@@ -152,16 +156,21 @@ type ReleaseStore interface {
 	Open(context.Context, string) (objectstore.ObjectReader, error)
 }
 type Service struct {
-	repository      Repository
-	packages        PackageStore
-	releases        ReleaseStore
-	clusterTokenKey []byte
+	repository         Repository
+	packages           PackageStore
+	releases           ReleaseStore
+	clusterTokenKey    []byte
+	developmentBuilder DevelopmentArtifactBuilder
 }
 
 // SetClusterTokenKey 配置集群令牌派生根密钥。调用方使用已有控制面密钥，避免
 // 新增配置导致开发热启动失败；派生结果按环境隔离且不落库。
 func (s *Service) SetClusterTokenKey(key []byte) {
 	s.clusterTokenKey = append([]byte(nil), key...)
+}
+
+func (s *Service) SetDevelopmentArtifactBuilder(builder DevelopmentArtifactBuilder) {
+	s.developmentBuilder = builder
 }
 
 func NewService(repository Repository, packages PackageStore, releases ...ReleaseStore) *Service {
@@ -517,6 +526,21 @@ func (s *Service) CreateDeployment(ctx context.Context, actor auth.User, input C
 	if err := validateDeployment(input); err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
+	// API 以 production 表达用户意图，持久层沿用既有 release 枚举，避免把
+	// 编排内部术语暴露给调用方或引入并行模式。
+	if input.Mode == "production" {
+		input.Mode = "release"
+	}
+	if input.Mode == "development" {
+		if s.developmentBuilder == nil {
+			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("开发制品构建服务未配置")
+		}
+		artifact, err := s.developmentBuilder(ctx, actor, input.ProjectID, input.Authorization)
+		if err != nil {
+			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("构建开发制品失败: %w", err)
+		}
+		input.DevelopmentArtifact = &artifact
+	}
 	if err := s.repository.ValidateDeploymentTargets(ctx, actor.TenantID, input); err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
@@ -616,14 +640,17 @@ func validateDeployment(in CreateDeploymentInput) error {
 	if !validUUID(in.ProjectID) || !validUUID(in.EnvironmentID) {
 		return fmt.Errorf("工程或运行环境 ID 格式无效")
 	}
-	if in.Mode != "development" && in.Mode != "release" {
+	if in.Mode != "development" && in.Mode != "production" {
 		return fmt.Errorf("部署模式无效")
 	}
-	if in.Mode == "release" && !validUUID(in.ApplicationVersionID) {
+	if in.Mode == "production" && !validUUID(in.ApplicationVersionID) {
 		return fmt.Errorf("正式版本 ID 格式无效")
 	}
 	if in.Mode == "development" && in.ApplicationVersionID != "" {
 		return fmt.Errorf("开发部署不能绑定正式版本")
+	}
+	if in.DevelopmentArtifact != nil {
+		return fmt.Errorf("开发制品只能由服务端生成")
 	}
 	if in.AccessPort < 1024 || in.AccessPort > 65532 {
 		return fmt.Errorf("工程访问端口必须在 1024 到 65532 之间")
