@@ -117,7 +117,7 @@ func (r *PostgreSQLRepository) BeginProductionBuild(ctx context.Context, project
 	}
 	var patch int
 	// 软删除版本仍受 (project_id, version) 唯一约束保护，正式版本号必须保持单调且不可复用。
-	if err = tx.QueryRow(ctx, `SELECT COALESCE(max((regexp_match(version, '^1\\.0\\.([0-9]+)$'))[1]::integer),-1) FROM application_versions WHERE project_id=$1 AND version <> '__DEV__'`, projectID).Scan(&patch); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(max((regexp_match(version, '^1\.0\.([0-9]+)$'))[1]::integer),-1) FROM application_versions WHERE project_id=$1 AND version <> '__DEV__'`, projectID).Scan(&patch); err != nil {
 		return Version{}, err
 	}
 	version := fmt.Sprintf("1.0.%d", patch+1)
