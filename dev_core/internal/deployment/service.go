@@ -3,6 +3,7 @@ package deployment
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"path"
@@ -120,13 +121,30 @@ type Repository interface {
 
 type ServiceConfig struct{ ArtifactBucket string }
 
+// ReleaseSource 是正式构建器唯一接受的已构建输入；服务层不执行任意工程命令。
+type ReleaseSource struct {
+	Client, Runtime, Collector                               []byte
+	SBOM, ResourceRecommendation, HealthContract, SchemaPlan []byte
+	ProjectDocument                                          map[string]any
+	SourceRevision, BuilderID                                string
+}
+type ReleaseSourceBuilder interface {
+	BuildReleaseSource(context.Context, Project) (ReleaseSource, error)
+}
+type SigningConfig struct {
+	Key   ed25519.PrivateKey
+	KeyID string
+}
+
 type Service struct {
-	repository Repository
-	workspace  Workspace
-	store      ArtifactStore
-	config     ServiceConfig
-	events     Events
-	releases   ReleaseValidator
+	repository    Repository
+	workspace     Workspace
+	store         ArtifactStore
+	config        ServiceConfig
+	events        Events
+	releases      ReleaseValidator
+	sourceBuilder ReleaseSourceBuilder
+	signing       SigningConfig
 }
 
 type Events interface {
@@ -143,7 +161,9 @@ func NewService(repository Repository, workspace Workspace, store ArtifactStore,
 
 func (s *Service) SetEvents(events Events) { s.events = events }
 
-func (s *Service) SetReleaseValidator(validator ReleaseValidator) { s.releases = validator }
+func (s *Service) SetReleaseValidator(validator ReleaseValidator)       { s.releases = validator }
+func (s *Service) SetReleaseSourceBuilder(builder ReleaseSourceBuilder) { s.sourceBuilder = builder }
+func (s *Service) SetSigningConfig(config SigningConfig)                { s.signing = config }
 
 func (s *Service) ListVersions(ctx context.Context, actor auth.User, projectID string, page, limit int) ([]Version, int64, error) {
 	project, err := s.repository.GetProject(ctx, actor.TenantID, projectID)
