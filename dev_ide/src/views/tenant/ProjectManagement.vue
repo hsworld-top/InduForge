@@ -319,46 +319,7 @@
     </el-dialog>
 
     <ProjectPublishDialog v-model:visible="showDeployDialog" :project="deployForm.project"
-      @manage-versions="openVersionManageDialog" @confirm="handlePublishConfirm" />
-
-    <el-dialog v-model="showVersionManageDialog" :title="t('projectManagement.versionManageDialog')" width="760px"
-      append-to-body>
-      <el-table v-loading="versionManageLoading" :data="versionManageList" size="small" style="width: 100%">
-        <el-table-column prop="version" :label="t('projectManagement.version')" width="120">
-          <template #default="scope"> v{{ scope.row.version }} </template>
-        </el-table-column>
-        <el-table-column :label="t('projectManagement.versionStatus')" width="130">
-          <template #default="scope">
-            <el-tag size="small" :type="getVersionStatusTagType(scope.row.status)">
-              {{ getVersionStatusLabel(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('projectManagement.versionRefCount')" width="130">
-          <template #default="scope">
-            {{ scope.row.nodeDeploymentRefCount || 0 }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('projectManagement.createdAt')" min-width="180">
-          <template #default="scope">
-            {{ formatDateTime(scope.row.createdAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('projectManagement.actions')" width="150" align="center">
-          <template #default="scope">
-            <el-button type="danger" text :disabled="!canDeleteVersion(scope.row)" @click="deleteVersion(scope.row)">
-              {{ t('projectManagement.deleteVersion') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <template #footer>
-        <el-button @click="showVersionManageDialog = false">{{
-          t('projectManagement.close')
-          }}</el-button>
-      </template>
-    </el-dialog>
+      @confirm="handlePublishConfirm" />
 
     <!-- 设计中心和数据中心通过工程卡片/表格行的直接入口打开。 -->
     <template v-if="false">
@@ -588,7 +549,6 @@ export default {
     const showCreateDialog = ref(false)
     const showEditDialog = ref(false)
     const showDeployDialog = ref(false)
-    const showVersionManageDialog = ref(false)
     const showGroupManageDialog = ref(false)
     const showGroupEditDialog = ref(false)
     const groupProjectPickerVisible = ref(false)
@@ -630,8 +590,6 @@ export default {
 
     // 部署相关状态
     const deployLoading = ref(false)
-    const versionManageLoading = ref(false)
-    const versionManageList = ref([])
     const deployForm = reactive({
       project: null,
       currentMode: null,
@@ -2052,103 +2010,6 @@ export default {
      */
     const normalizeVersion = (version) => (typeof version === 'string' ? version.trim() : '')
 
-    /**
-     * 打开版本管理弹窗并拉取当前工程版本。
-     * @returns {Promise<void>}
-     */
-    const openVersionManageDialog = async () => {
-      if (!deployForm.project?.id) return
-      showVersionManageDialog.value = true
-      await fetchVersionManageList()
-    }
-
-    /**
-     * 获取版本管理列表。
-     * @returns {Promise<void>}
-     */
-    const fetchVersionManageList = async () => {
-      if (!deployForm.project?.id) return
-      versionManageLoading.value = true
-      try {
-        const res = await request.get(`/publish/${deployForm.project.id}/versions`, {
-          params: { page: 1, pageSize: 200 },
-        })
-        const payload = res?.data ?? res
-        const data = payload?.data || payload || {}
-        const rawItems = data.items || []
-        versionManageList.value = rawItems.filter(
-          (item) => item?.mode !== 'DEV' && item?.version !== '__DEV__',
-        )
-      } catch (error) {
-        ElMessage.error(getApiErrorMessage(error, t('projectManagement.versionManageLoadFailed')))
-      } finally {
-        versionManageLoading.value = false
-      }
-    }
-
-    /**
-     * 判断版本是否允许删除。
-     * @param {object} versionItem - 版本条目
-     * @returns {boolean}
-     */
-    const canDeleteVersion = (versionItem) => {
-      if (!versionItem) return false
-      if ((versionItem.nodeDeploymentRefCount || 0) > 0) return false
-      return ['success', 'failed'].includes(versionItem.status)
-    }
-
-    /**
-     * 获取版本状态标签类型。
-     * @param {string} status - 状态
-     * @returns {string}
-     */
-    const getVersionStatusTagType = (status) => {
-      if (status === 'success') return 'success'
-      if (status === 'failed') return 'danger'
-      if (status === 'building') return 'warning'
-      return 'info'
-    }
-
-    /**
-     * 获取版本状态显示文本。
-     * @param {string} status - 状态
-     * @returns {string}
-     */
-    const getVersionStatusLabel = (status) => {
-      return t(`projectManagement.versionStatus_${status || 'pending'}`)
-    }
-
-    /**
-     * 删除发布版本。
-     * @param {object} versionItem - 版本条目
-     * @returns {Promise<void>}
-     */
-    const deleteVersion = async (versionItem) => {
-      if (!canDeleteVersion(versionItem)) {
-        return ElMessage.warning(t('projectManagement.deleteVersionBlocked'))
-      }
-      try {
-        await ElMessageBox.confirm(
-          t('projectManagement.deleteVersionConfirm', {
-            version: versionItem.version,
-          }),
-          t('projectManagement.deleteConfirmTitle'),
-          { type: 'warning' },
-        )
-      } catch {
-        return
-      }
-
-      try {
-        await request.delete(`/publish/deployment/${versionItem.id}`)
-        ElMessage.success(t('projectManagement.deleteVersionSuccess'))
-        await fetchVersionManageList()
-        await openDeployDialog(deployForm.project)
-      } catch (error) {
-        ElMessage.error(getApiErrorMessage(error, t('projectManagement.deleteVersionFailed')))
-      }
-    }
-
     // 创建者展示统一使用用户名，避免显示角色/姓名造成歧义。
     const getProjectCreatorDisplay = (project) => {
       const creator = project?.creator || {}
@@ -2368,7 +2229,6 @@ export default {
       showCreateDialog,
       showEditDialog,
       showDeployDialog,
-      showVersionManageDialog,
       showGroupManageDialog,
       showGroupEditDialog,
       groupProjectPickerVisible,
@@ -2410,8 +2270,6 @@ export default {
 
       // 部署相关
       deployLoading,
-      versionManageLoading,
-      versionManageList,
       deployForm,
       projectVersions,
       releaseVersionOptions,
@@ -2484,11 +2342,6 @@ export default {
       openDataCenter,
       openDeployDialog,
       handlePublishConfirm,
-      openVersionManageDialog,
-      canDeleteVersion,
-      getVersionStatusTagType,
-      getVersionStatusLabel,
-      deleteVersion,
       exportProject,
       batchExportProjects,
       batchDeleteProjects,

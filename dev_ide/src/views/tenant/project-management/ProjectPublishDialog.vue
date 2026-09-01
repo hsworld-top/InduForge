@@ -1,14 +1,60 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="t('projectManagement.deployDialog', { name: project?.name || '' })"
+    :title="dialogTitle"
     width="min(680px, 92vw)"
     append-to-body
     destroy-on-close
     class="project-publish-dialog"
     @update:model-value="emit('update:visible', $event)"
   >
-    <div v-loading="loading" class="publish-dialog-body">
+    <div v-if="activeView === 'versions'" v-loading="versionLoading" class="version-manager">
+      <button type="button" class="version-manager-back" @click="activeView = 'publish'">
+        <el-icon><ArrowLeft /></el-icon>
+        <span>{{ t('projectManagement.backToPublish') }}</span>
+      </button>
+
+      <div class="version-list-header">
+        <span>{{ t('projectManagement.version') }}</span>
+        <span>{{ t('projectManagement.versionStatus') }}</span>
+        <span>{{ t('projectManagement.versionRefCount') }}</span>
+        <span>{{ t('projectManagement.createdAt') }}</span>
+        <span />
+      </div>
+
+      <div v-if="sortedVersions.length" class="version-list">
+        <div v-for="version in sortedVersions" :key="version.id" class="version-list-row">
+          <strong>v{{ version.version }}</strong>
+          <el-tag size="small" effect="light" :type="versionStatusType(version.status)">
+            {{ versionStatusLabel(version.status) }}
+          </el-tag>
+          <span>{{ version.nodeDeploymentRefCount || 0 }}</span>
+          <time>{{ formatVersionTime(version.createdAt) }}</time>
+          <el-tooltip
+            :content="
+              canDeleteManagedVersion(version)
+                ? t('projectManagement.deleteVersion')
+                : t('projectManagement.deleteVersionBlocked')
+            "
+            placement="top"
+          >
+            <button
+              type="button"
+              class="version-delete-button"
+              :disabled="!canDeleteManagedVersion(version)"
+              @click="deleteManagedVersion(version)"
+            >
+              <el-icon><Delete /></el-icon>
+            </button>
+          </el-tooltip>
+        </div>
+      </div>
+      <div v-else class="version-list-empty">
+        {{ t('projectManagement.noReleaseVersion') }}
+      </div>
+    </div>
+
+    <div v-else v-loading="loading" class="publish-dialog-body">
       <div class="publish-mode-tabs" role="tablist">
         <button
           type="button"
@@ -107,8 +153,8 @@
     </div>
 
     <template #footer>
-      <div class="publish-dialog-footer">
-        <el-button v-if="mode === 'RELEASE'" text @click="emit('manage-versions')">
+      <div v-if="activeView === 'publish'" class="publish-dialog-footer">
+        <el-button v-if="mode === 'RELEASE'" text @click="activeView = 'versions'">
           {{ t('projectManagement.versionManage') }}
         </el-button>
         <span class="publish-dialog-footer__spacer" />
@@ -129,12 +175,20 @@
           }}
         </el-button>
       </div>
+      <div v-else class="publish-dialog-footer">
+        <span class="publish-dialog-footer__spacer" />
+        <el-button @click="emit('update:visible', false)">
+          {{ t('projectManagement.close') }}
+        </el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { ArrowLeft, Delete } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
   opsAPI,
@@ -142,7 +196,8 @@ import {
   type OpsNode,
   type RuntimeEnvironment,
 } from '@/api/ops.api'
-import { getApiErrorMessage } from '@/utils/request'
+import request, { getApiErrorMessage } from '@/utils/request'
+import { formatDateTime } from '@/utils'
 
 type PublishMode = 'DEV' | 'RELEASE'
 type EngineKey = 'runtime' | 'compute' | 'alarm' | 'collection'
@@ -160,6 +215,11 @@ interface PublishPayload {
   placements: Record<EngineKey, string | null>
 }
 
+interface ManagedApplicationVersion extends ApplicationVersion {
+  nodeDeploymentRefCount?: number
+  mode?: string
+}
+
 const props = defineProps<{
   visible: boolean
   project: ProjectSummary | null
@@ -167,19 +227,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:visible': [visible: boolean]
-  'manage-versions': []
   confirm: [payload: PublishPayload]
 }>()
 
 const { t } = useI18n()
 const mode = ref<PublishMode>('DEV')
+const activeView = ref<'publish' | 'versions'>('publish')
 const loading = ref(false)
+const versionLoading = ref(false)
 const environmentLoading = ref(false)
 const nodeLoading = ref(false)
 const loadError = ref('')
 const environments = ref<RuntimeEnvironment[]>([])
 const nodes = ref<OpsNode[]>([])
-const versions = ref<ApplicationVersion[]>([])
+const versions = ref<ManagedApplicationVersion[]>([])
 const environmentId = ref('')
 const collectorEnabled = ref(false)
 const placements = reactive<Record<EngineKey, string>>({
@@ -211,6 +272,12 @@ const engineRows = computed(() => [
     optional: true,
   },
 ])
+
+const dialogTitle = computed(() =>
+  activeView.value === 'versions'
+    ? `${t('projectManagement.versionManageDialog')} · ${props.project?.name || ''}`
+    : t('projectManagement.deployDialog', { name: props.project?.name || '' }),
+)
 
 const versionParts = (version: string | undefined) => {
   const normalized = String(version || '')
@@ -252,6 +319,64 @@ const nextVersion = computed(() => {
   }
   return parts.join('.')
 })
+
+const versionStatusType = (status: string | undefined) => {
+  if (status === 'success') return 'success'
+  if (status === 'failed') return 'danger'
+  if (status === 'building') return 'warning'
+  return 'info'
+}
+
+const versionStatusLabel = (status: string | undefined) =>
+  t(`projectManagement.versionStatus_${status || 'pending'}`)
+
+const formatVersionTime = (value: string | undefined) => (value ? formatDateTime(value) : '--')
+
+const canDeleteManagedVersion = (version: ManagedApplicationVersion) =>
+  (version.nodeDeploymentRefCount || 0) === 0 &&
+  ['success', 'failed'].includes(String(version.status || ''))
+
+const loadVersions = async () => {
+  if (!props.project?.id) return
+  versionLoading.value = true
+  try {
+    const result = await opsAPI.listProjectVersions(props.project.id, {
+      page: 1,
+      pageSize: 200,
+    })
+    versions.value = (result.items as ManagedApplicationVersion[]).filter(
+      (item) => item.mode !== 'DEV' && item.version !== '__DEV__',
+    )
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, t('projectManagement.versionManageLoadFailed')))
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+const deleteManagedVersion = async (version: ManagedApplicationVersion) => {
+  if (!canDeleteManagedVersion(version)) return
+  try {
+    await ElMessageBox.confirm(
+      t('projectManagement.deleteVersionConfirm', { version: version.version }),
+      t('projectManagement.deleteConfirmTitle'),
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
+  versionLoading.value = true
+  try {
+    await request.delete(`/publish/deployment/${version.id}`)
+    ElMessage.success(t('projectManagement.deleteVersionSuccess'))
+    await loadVersions()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, t('projectManagement.deleteVersionFailed')))
+  } finally {
+    versionLoading.value = false
+  }
+}
 
 const isNodeReady = (node: OpsNode) =>
   node.platform === 'linux' &&
@@ -317,7 +442,9 @@ const loadPublishContext = async () => {
       opsAPI.listProjectVersions(props.project.id, { page: 1, pageSize: 200 }),
     ])
     environments.value = environmentResult.items.filter((item) => item.desiredStatus !== 'deleting')
-    versions.value = versionResult.items
+    versions.value = (versionResult.items as ManagedApplicationVersion[]).filter(
+      (item) => item.mode !== 'DEV' && item.version !== '__DEV__',
+    )
     const defaultEnvironment =
       environments.value.find((item) => item.isDefault && item.status !== 'uninitialized') ||
       environments.value.find((item) => item.status !== 'uninitialized') ||
@@ -334,6 +461,7 @@ const loadPublishContext = async () => {
 
 const reset = () => {
   mode.value = 'DEV'
+  activeView.value = 'publish'
   collectorEnabled.value = false
   environmentId.value = ''
   environments.value = []
@@ -408,6 +536,114 @@ watch(
 
 .publish-dialog-body {
   min-height: 322px;
+}
+
+.version-manager {
+  min-height: 250px;
+}
+
+.version-manager-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 9px;
+  color: var(--ck-text-secondary);
+  background: var(--ck-bg-tertiary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.version-manager-back:hover {
+  color: var(--ck-primary);
+  background: var(--ck-primary-light);
+}
+
+.version-list-header,
+.version-list-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) 92px 64px minmax(150px, 1.2fr) 32px;
+  align-items: center;
+  column-gap: 12px;
+}
+
+.version-list-header {
+  min-height: 34px;
+  border: 1px solid var(--ck-border-light);
+  border-radius: var(--ck-radius-md) var(--ck-radius-md) 0 0;
+  padding: 0 12px;
+  color: var(--ck-text-muted);
+  background: var(--ck-bg-tertiary);
+  font-size: 11px;
+}
+
+.version-list {
+  overflow: hidden;
+  border: 1px solid var(--ck-border-light);
+  border-top: 0;
+  border-radius: 0 0 var(--ck-radius-md) var(--ck-radius-md);
+}
+
+.version-list-row {
+  min-height: 48px;
+  padding: 0 12px;
+  color: var(--ck-text-secondary);
+  background: var(--ck-bg-secondary);
+  font-size: 12px;
+}
+
+.version-list-row + .version-list-row {
+  border-top: 1px solid var(--ck-border-light);
+}
+
+.version-list-row strong {
+  color: var(--ck-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.version-list-row time {
+  color: var(--ck-text-muted);
+  font-size: 11px;
+}
+
+.version-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ck-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.version-delete-button:hover:not(:disabled) {
+  color: var(--ck-danger);
+  background: rgb(239 68 68 / 10%);
+}
+
+.version-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.version-list-empty {
+  display: flex;
+  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ck-border-light);
+  border-top: 0;
+  border-radius: 0 0 var(--ck-radius-md) var(--ck-radius-md);
+  color: var(--ck-text-muted);
+  background: var(--ck-bg-secondary);
+  font-size: 12px;
 }
 
 .publish-mode-tabs {
@@ -608,6 +844,16 @@ html.dark .publish-mode-tab.is-active,
 }
 
 @media (max-width: 640px) {
+  .version-list-header,
+  .version-list-row {
+    grid-template-columns: minmax(82px, 1fr) 82px 42px 30px;
+  }
+
+  .version-list-header > :nth-child(4),
+  .version-list-row > :nth-child(4) {
+    display: none;
+  }
+
   .engine-placement-header {
     display: none;
   }

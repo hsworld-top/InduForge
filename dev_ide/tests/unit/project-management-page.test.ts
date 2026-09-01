@@ -318,7 +318,7 @@ vi.mock('@/views/tenant/project-management/ProjectPublishDialog.vue', () => ({
         default: null,
       },
     },
-    emits: ['update:visible', 'manage-versions', 'confirm'],
+    emits: ['update:visible', 'confirm'],
     setup(props) {
       return () =>
         props.visible
