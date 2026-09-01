@@ -90,6 +90,23 @@ func TestValidateDeployableReleaseRequiresCollectorWhenDeploymentEnablesIt(t *te
 	}
 }
 
+func TestDeploymentRequirementsRequireCollectorArtifactFromManifest(t *testing.T) {
+	var manifest map[string]any
+	if err := json.Unmarshal([]byte(validReleaseManifest(testProjectID)), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["capabilities"] = []any{ServiceBase, ServiceCollector}
+	delete(manifest["artifacts"].(map[string]any), "collector")
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = deploymentRequirementsForRelease(releaseMetadata{ID: testVersionID, ArtifactKey: "releases/tenant/project/release.tar.zst", ArtifactHash: strings.Repeat("a", 64), ArtifactSize: 1, ManifestHash: strings.Repeat("e", 64), ChecksumsHash: strings.Repeat("f", 64), SigningKeyID: "induforge-release-2026-01", Manifest: raw}, testProjectID)
+	if !errors.Is(err, ErrReleaseNotDeployable) {
+		t.Fatalf("采集引擎必须要求受信 collector 工件: %v", err)
+	}
+}
+
 func TestValidateDeployableReleaseRejectsSourceSnapshotAndMalformedMaterial(t *testing.T) {
 	valid := validReleaseManifest(testProjectID)
 	tests := []struct {

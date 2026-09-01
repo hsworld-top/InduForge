@@ -38,12 +38,15 @@ func deploymentEngineRequirements(manifest []byte) ([]string, error) {
 
 func validateEnginePlacements(required []string, placements map[string]string) error {
 	if len(placements) == 0 {
-		return fmt.Errorf("基础引擎必须选择部署节点")
+		return fmt.Errorf("%s必须选择部署节点", ServiceBaseName)
 	}
 	requiredSet := make(map[string]struct{}, len(required))
 	for _, engine := range required {
 		requiredSet[engine] = struct{}{}
 		if strings.TrimSpace(placements[engine]) == "" {
+			if engine == ServiceBase {
+				return fmt.Errorf("%s必须选择部署节点", ServiceBaseName)
+			}
 			return fmt.Errorf("%s 引擎必须选择部署节点", engine)
 		}
 	}

@@ -891,18 +891,37 @@ func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant strin
 }
 func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, tenant string, in CreateDeploymentInput) error {
 	metadata, err := loadReleaseMetadata(ctx, r.pool, tenant, in.ProjectID, in.ApplicationVersionID)
-	if err != nil { return err }
-	required, err := deploymentEngineRequirements(metadata.Manifest)
-	if err != nil { return err }
-	if err = validateEnginePlacements(required, in.Placements); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	required, err := deploymentRequirementsForRelease(metadata, in.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err = validateEnginePlacements(required, in.Placements); err != nil {
+		return err
+	}
 	for _, engine := range required {
 		var ready bool
 		err = r.pool.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
-		if errors.Is(err, pgx.ErrNoRows) { return ErrNotFound }; if err != nil { return err }; if !ready { return fmt.Errorf("%s 引擎节点当前不能调度", engine) }
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return fmt.Errorf("%s 引擎节点当前不能调度", engine)
+		}
 	}
 	var conflict string
 	err = r.pool.QueryRow(ctx, `SELECT s.project_deployment_id::text FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE d.tenant_id=$1 AND s.service_type='base' AND s.node_id=$2 AND s.public_port=$3 AND NOT (d.project_id=$4 AND d.environment_id=$5) LIMIT 1`, tenant, in.Placements[ServiceBase], in.AccessPort, in.ProjectID, in.EnvironmentID).Scan(&conflict)
-	if err == nil { return ErrNodePortConflict }; if !errors.Is(err, pgx.ErrNoRows) { return err }
+	if err == nil {
+		return ErrNodePortConflict
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	return nil
 }
 func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, user string, in CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error) {
@@ -911,17 +930,32 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		return ProjectDeployment{}, DeploymentRun{}, e
 	}
 	defer tx.Rollback(ctx)
-	if e = tx.QueryRow(ctx, lockDeploymentProjectSQL, tenant, in.ProjectID).Scan(new(string)); e != nil { return ProjectDeployment{}, DeploymentRun{}, mapNotFound(e) }
+	if e = tx.QueryRow(ctx, lockDeploymentProjectSQL, tenant, in.ProjectID).Scan(new(string)); e != nil {
+		return ProjectDeployment{}, DeploymentRun{}, mapNotFound(e)
+	}
 	metadata, err := loadReleaseMetadata(ctx, tx, tenant, in.ProjectID, in.ApplicationVersionID)
 	if err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
-	required, err := deploymentEngineRequirements(metadata.Manifest); if err != nil { return ProjectDeployment{}, DeploymentRun{}, err }
-	if err = validateEnginePlacements(required, in.Placements); err != nil { return ProjectDeployment{}, DeploymentRun{}, err }
+	required, err := deploymentRequirementsForRelease(metadata, in.ProjectID)
+	if err != nil {
+		return ProjectDeployment{}, DeploymentRun{}, err
+	}
+	if err = validateEnginePlacements(required, in.Placements); err != nil {
+		return ProjectDeployment{}, DeploymentRun{}, err
+	}
 	for _, engine := range required {
 		var ready bool
 		err = tx.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3 FOR UPDATE OF n`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
-		if errors.Is(err, pgx.ErrNoRows) { return ProjectDeployment{}, DeploymentRun{}, ErrNotFound }; if err != nil { return ProjectDeployment{}, DeploymentRun{}, err }; if !ready { return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("%s 引擎节点当前不能调度", engine) }
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProjectDeployment{}, DeploymentRun{}, ErrNotFound
+		}
+		if err != nil {
+			return ProjectDeployment{}, DeploymentRun{}, err
+		}
+		if !ready {
+			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("%s 引擎节点当前不能调度", engine)
+		}
 	}
 	var d ProjectDeployment
 	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,access_port,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',$4,'','',$5,$6,desired_status,observed_status,0,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, in.AccessPort, user))
@@ -931,16 +965,32 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	// 同类型同节点更新保留 service_id，K3s 资源名稳定，从而由同一 Deployment
 	// 模板变更触发滚动更新。跨节点迁移需要先由旧节点完成 stop，不能覆盖节点列。
 	rows, queryErr := tx.Query(ctx, `SELECT id::text,service_type,node_id::text FROM deployment_services WHERE project_deployment_id=$1 FOR UPDATE`, d.ID)
-	if queryErr != nil { return d, DeploymentRun{}, queryErr }
+	if queryErr != nil {
+		return d, DeploymentRun{}, queryErr
+	}
 	existing := map[string]struct{ id, node string }{}
-	for rows.Next() { var id, kind, node string; if queryErr = rows.Scan(&id, &kind, &node); queryErr != nil { rows.Close(); return d, DeploymentRun{}, queryErr }; existing[kind] = struct{ id, node string }{id, node} }
-	rows.Close(); if queryErr = rows.Err(); queryErr != nil { return d, DeploymentRun{}, queryErr }
+	for rows.Next() {
+		var id, kind, node string
+		if queryErr = rows.Scan(&id, &kind, &node); queryErr != nil {
+			rows.Close()
+			return d, DeploymentRun{}, queryErr
+		}
+		existing[kind] = struct{ id, node string }{id, node}
+	}
+	rows.Close()
+	if queryErr = rows.Err(); queryErr != nil {
+		return d, DeploymentRun{}, queryErr
+	}
 	for _, kind := range required {
 		var publicPort any
-		if kind == ServiceBase { publicPort = in.AccessPort }
+		if kind == ServiceBase {
+			publicPort = in.AccessPort
+		}
 		var serviceID string
 		if old, exists := existing[kind]; exists {
-			if old.node != in.Placements[kind] { return d, DeploymentRun{}, fmt.Errorf("%s 引擎节点迁移必须先停止旧工作负载", kind) }
+			if old.node != in.Placements[kind] {
+				return d, DeploymentRun{}, fmt.Errorf("%s 引擎节点迁移必须先停止旧工作负载", kind)
+			}
 			serviceID = old.id
 			e = tx.QueryRow(ctx, `UPDATE deployment_services SET public_port=$1,desired_status='running',observed_status='pending',desired_generation=desired_generation+1,last_operation='deploy',updated_at=now() WHERE id=$2 RETURNING id::text`, publicPort, serviceID).Scan(&serviceID)
 		} else {
@@ -952,14 +1002,22 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		var revision int
 		_ = tx.QueryRow(ctx, `SELECT COALESCE(max(revision),0)+1 FROM deployment_bindings WHERE deployment_service_id=$1`, serviceID).Scan(&revision)
 		bindingID, bindingJSON, bindErr := newEngineDeploymentBinding(d, metadata, serviceID, in.Placements[kind], kind, revision, publicPort)
-		if bindErr != nil { return d, DeploymentRun{}, bindErr }
-		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, revision, bindingJSON); e != nil { return d, DeploymentRun{}, e }
+		if bindErr != nil {
+			return d, DeploymentRun{}, bindErr
+		}
+		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, revision, bindingJSON); e != nil {
+			return d, DeploymentRun{}, e
+		}
 	}
 	requiredSet := map[string]bool{}
-	for _, kind := range required { requiredSet[kind] = true }
+	for _, kind := range required {
+		requiredSet[kind] = true
+	}
 	for kind := range existing {
 		if !requiredSet[kind] {
-			if _, e = tx.Exec(ctx, `UPDATE deployment_services SET desired_status='stopped',observed_status='pending',desired_generation=desired_generation+1,last_operation='stop',updated_at=now() WHERE project_deployment_id=$1 AND service_type=$2`, d.ID, kind); e != nil { return d, DeploymentRun{}, e }
+			if _, e = tx.Exec(ctx, `UPDATE deployment_services SET desired_status='stopped',observed_status='pending',desired_generation=desired_generation+1,last_operation='stop',updated_at=now() WHERE project_deployment_id=$1 AND service_type=$2`, d.ID, kind); e != nil {
+				return d, DeploymentRun{}, e
+			}
 		}
 	}
 	var run DeploymentRun
@@ -1252,6 +1310,26 @@ func validateReleaseMetadata(metadata releaseMetadata, projectID string, require
 	return validateDeployableReleaseForDeployment(projectID, metadata.ID, metadata.ArtifactKey, metadata.ArtifactHash, metadata.ManifestHash, metadata.ChecksumsHash, metadata.SigningKeyID, requireCollector, metadata.Manifest)
 }
 
+// deploymentRequirementsForRelease 只信任不可变、已签名 Release manifest 推导引擎。
+// 采集引擎被工程内容要求时，必须同时存在受信采集工件；请求 placements 不能改变此结论。
+func deploymentRequirementsForRelease(metadata releaseMetadata, projectID string) ([]string, error) {
+	required, err := deploymentEngineRequirements(metadata.Manifest)
+	if err != nil {
+		return nil, err
+	}
+	requireCollector := false
+	for _, engine := range required {
+		if engine == ServiceCollector {
+			requireCollector = true
+			break
+		}
+	}
+	if err = validateReleaseMetadata(metadata, projectID, requireCollector); err != nil {
+		return nil, err
+	}
+	return required, nil
+}
+
 func newInitialDeploymentBinding(deployment ProjectDeployment, release releaseMetadata, nodeID string, services []string) (string, []byte, error) {
 	bindingID := uuid.NewString()
 	ports := map[string]int{"gatewayPublic": deployment.AccessPort, "runtimeApiLoopback": deployment.AccessPort + 1, "engineLoopback": deployment.AccessPort + 2}
@@ -1297,7 +1375,7 @@ func newEngineDeploymentBinding(deployment ProjectDeployment, release releaseMet
 		"projectId": deployment.ProjectID, "environmentId": deployment.EnvironmentID,
 		"mode": deployment.Mode, "engine": serviceType,
 		"release": map[string]any{"id": release.ID, "archiveSha256": sha256Value(release.ArtifactHash), "manifestSha256": sha256Value(release.ManifestHash), "checksumsSha256": sha256Value(release.ChecksumsHash), "signingKeyId": release.SigningKeyID},
-		"ports": map[string]any{"hostPort": publicPort}, "secrets": []any{}, "issuedAt": time.Now().UTC().Format(time.RFC3339),
+		"ports":   map[string]any{"hostPort": publicPort}, "secrets": []any{}, "issuedAt": time.Now().UTC().Format(time.RFC3339),
 	}
 	content, err := json.Marshal(binding)
 	return bindingID, content, err

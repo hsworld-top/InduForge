@@ -11,8 +11,10 @@ const (
 	CapabilityDataRuntime  = "data_runtime"
 	CapabilityCollector    = "collector"
 
-	// ServiceBase 始终包含工程 Gateway 与 Runtime API。计算、报警、采集
-	// 均由工程内容推导，不能由前端任意勾选伪造工作负载。
+	// ServiceBase 是内部稳定契约值；在 API、页面和运维文案中统一称为“基础引擎”。
+	// 它始终包含工程 Gateway 与 Runtime API。计算、报警、采集均由工程内容推导，
+	// 不能由前端任意勾选伪造工作负载。
+	ServiceBaseName  = "基础引擎"
 	ServiceBase      = "base"
 	ServiceCompute   = "compute"
 	ServiceAlarm     = "alarm"
@@ -111,12 +113,12 @@ type RuntimeEnvironmentService struct {
 
 type ProjectDeployment struct {
 	ID, TenantID, ProjectID, ProjectName, EnvironmentID, EnvironmentName string
-	ApplicationVersionID, Version, LatestRunID  string
-	Mode, DesiredStatus, ObservedStatus, Health string
-	Progress                                    int
-	AccessPort                                  int
-	Services                                    []DeploymentService
-	CreatedAt, UpdatedAt                        time.Time
+	ApplicationVersionID, Version, LatestRunID                           string
+	Mode, DesiredStatus, ObservedStatus, Health                          string
+	Progress                                                             int
+	AccessPort                                                           int
+	Services                                                             []DeploymentService
+	CreatedAt, UpdatedAt                                                 time.Time
 }
 
 type DeploymentRun struct {

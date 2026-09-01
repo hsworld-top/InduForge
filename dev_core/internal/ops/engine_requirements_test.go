@@ -17,3 +17,10 @@ func TestValidateEnginePlacementsRejectsManualOptionalEngine(t *testing.T) {
 		t.Fatal("unused engine was accepted")
 	}
 }
+
+func TestValidateEnginePlacementsUsesBaseEngineDisplayName(t *testing.T) {
+	err := validateEnginePlacements([]string{ServiceBase}, nil)
+	if err == nil || err.Error() != ServiceBaseName+"必须选择部署节点" {
+		t.Fatalf("基础引擎文案不统一: %v", err)
+	}
+}
