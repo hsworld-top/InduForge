@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
 	projectaccess "github.com/indu-forge/dev_core/internal/project"
 )
@@ -146,6 +148,14 @@ type ReleaseSource struct {
 type ReleaseSourceBuilder interface {
 	BuildReleaseSource(context.Context, Project, Version, string) (ReleaseSource, error)
 }
+
+// DevelopmentArtifact 是内部部署槽使用的临时制品描述；它不写 application_versions，
+// 固定展示版本为 __DEV__，每次构建以唯一 releaseId 和摘要区分。
+type DevelopmentArtifact struct {
+	ReleaseID, Version, Bucket, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
+	ArtifactSize                                                                                     int64
+	Manifest                                                                                         map[string]any
+}
 type SigningConfig struct {
 	Key   ed25519.PrivateKey
 	KeyID string
@@ -179,6 +189,45 @@ func (s *Service) SetEvents(events Events) { s.events = events }
 func (s *Service) SetReleaseValidator(validator ReleaseValidator)       { s.releases = validator }
 func (s *Service) SetReleaseSourceBuilder(builder ReleaseSourceBuilder) { s.sourceBuilder = builder }
 func (s *Service) SetSigningConfig(config SigningConfig)                { s.signing = config }
+
+// BuildDevelopmentArtifact 复用正式受控源码构建、签名和对象存储链路，但不创建用户可见版本记录。
+func (s *Service) BuildDevelopmentArtifact(ctx context.Context, actor auth.User, projectID, authorization string) (DevelopmentArtifact, error) {
+	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentExecute); err != nil {
+		return DevelopmentArtifact{}, err
+	}
+	project, err := s.repository.GetProject(ctx, actor.TenantID, projectID)
+	if err != nil {
+		return DevelopmentArtifact{}, err
+	}
+	if err = requireProject(actor, project, auth.CapabilityDeploymentExecute); err != nil {
+		return DevelopmentArtifact{}, err
+	}
+	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
+		return DevelopmentArtifact{}, fmt.Errorf("开发制品构建器或签名配置未配置")
+	}
+	version := Version{ID: uuid.NewString(), ProjectID: project.ID, TenantID: project.TenantID, Version: "__DEV__"}
+	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project, version, authorization)
+	if err != nil {
+		return DevelopmentArtifact{}, fmt.Errorf("构建开发制品输入失败: %w", err)
+	}
+	result, err := assembleFormalRelease(project, version, source, s.signing, s.config, time.Now().UTC())
+	if err != nil {
+		return DevelopmentArtifact{}, fmt.Errorf("组装开发制品失败: %w", err)
+	}
+	key := path.Join("development", project.TenantID, project.ID, version.ID, result.OuterSHA256+".tar.zst")
+	ref, err := s.store.Put(ctx, key, bytes.NewReader(result.Bundle), result.Size, "application/zstd")
+	if err != nil || ref.Key != key || ref.Size != result.Size {
+		if err == nil {
+			err = fmt.Errorf("开发制品对象存储确认不匹配")
+		}
+		return DevelopmentArtifact{}, err
+	}
+	manifest := map[string]any{}
+	if err = json.Unmarshal(result.Manifest, &manifest); err != nil {
+		return DevelopmentArtifact{}, err
+	}
+	return DevelopmentArtifact{ReleaseID: version.ID, Version: version.Version, Bucket: ref.Bucket, ArtifactKey: key, ArtifactHash: result.OuterSHA256, ArtifactSize: result.Size, Manifest: manifest, ManifestHash: result.ManifestSHA256, ChecksumsHash: result.ChecksumsSHA256, SigningKeyID: s.signing.KeyID}, nil
+}
 
 func (s *Service) ListVersions(ctx context.Context, actor auth.User, projectID string, page, limit int) ([]Version, int64, error) {
 	project, err := s.repository.GetProject(ctx, actor.TenantID, projectID)
