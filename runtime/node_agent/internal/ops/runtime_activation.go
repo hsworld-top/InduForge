@@ -49,7 +49,9 @@ func DeriveRuntimeActivation(input RuntimeActivationDerivationInput) (DerivedRun
 	if err := strictDecodeJSON(input.BindingJSON, &binding); err != nil {
 		return DerivedRuntimeActivation{}, fmt.Errorf("DeploymentBinding 原始 JSON 无效: %w", err)
 	}
-	if err := validateActivationBinding(binding); err != nil {
+	now := input.Now.UTC()
+	if now.IsZero() { now = time.Now().UTC() }
+	if err := validateActivationBinding(binding, now); err != nil {
 		return DerivedRuntimeActivation{}, err
 	}
 	manifest, checksums, err := verifyInstalledActivationRelease(input.InstalledRelease, binding)
@@ -58,10 +60,6 @@ func DeriveRuntimeActivation(input RuntimeActivationDerivationInput) (DerivedRun
 	}
 	if !validRuntimeUUID(input.SiteID) || !validRuntimeUUID(input.AccountID) {
 		return DerivedRuntimeActivation{}, errors.New("本地 siteId 或 accountId 无效")
-	}
-	now := input.Now.UTC()
-	if now.IsZero() {
-		now = time.Now().UTC()
 	}
 	if _, err := parseRuntimeActivationTime(input.ExpiresAt, true, now); err != nil {
 		return DerivedRuntimeActivation{}, fmt.Errorf("本地 activation expiresAt 无效: %w", err)
@@ -108,7 +106,7 @@ func DeriveRuntimeActivation(input RuntimeActivationDerivationInput) (DerivedRun
 	return DerivedRuntimeActivation{Activation: activation, BindingDigestMode: bindingDigestRawCenterJSON, ReleaseVersion: manifest.Version}, nil
 }
 
-func validateActivationBinding(binding deploymentBinding) error {
+func validateActivationBinding(binding deploymentBinding, now time.Time) error {
 	if binding.SchemaVersion != deploymentBindingSchema || !validRuntimeUUID(binding.BindingID) || binding.Revision < 1 ||
 		!validRuntimeUUID(binding.NodeID) || !validRuntimeUUID(binding.DeploymentID) || !validRuntimeUUID(binding.ProjectID) || !validRuntimeUUID(binding.Release.ID) ||
 		!validSHA256(binding.Release.ArchiveSHA256) || !validSHA256(binding.Release.ManifestSHA256) || !validSHA256(binding.Release.ChecksumsSHA256) || !validStableID(binding.Release.SigningKeyID) {
@@ -122,7 +120,7 @@ func validateActivationBinding(binding deploymentBinding) error {
 	}
 	if binding.ExpiresAt != "" {
 		expiresAt, err := parseBindingTime(binding.ExpiresAt)
-		if err != nil || !expiresAt.After(time.Now().UTC()) {
+		if err != nil || !expiresAt.After(now) {
 			return errors.New("DeploymentBinding expiresAt 无效或已过期")
 		}
 	}

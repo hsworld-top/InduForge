@@ -30,9 +30,10 @@ func TestDeploymentPortAvailabilityDetectsHostProcess(t *testing.T) {
 func TestDeriveRuntimeActivationUsesExactCenterBindingBytesAndFixedPlan(t *testing.T) {
 	installed, bindingRaw, foundation := installedActivationFixture(t, false)
 	now := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
 	derived, err := DeriveRuntimeActivation(RuntimeActivationDerivationInput{
 		BindingJSON: bindingRaw, InstalledRelease: installed, SiteID: "77777777-7777-4777-8777-777777777777", AccountID: "88888888-8888-4888-8888-888888888888",
-		Foundation: foundation.Foundation, Secrets: foundation.Secrets, ExpiresAt: "2026-09-01T10:00:00Z", Now: now,
+		Foundation: foundation.Foundation, Secrets: foundation.Secrets, ExpiresAt: expiresAt, Now: now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +45,7 @@ func TestDeriveRuntimeActivationUsesExactCenterBindingBytesAndFixedPlan(t *testi
 	withWhitespace := append([]byte(" \n"), bindingRaw...)
 	derivedWhitespace, err := DeriveRuntimeActivation(RuntimeActivationDerivationInput{
 		BindingJSON: withWhitespace, InstalledRelease: installed, SiteID: derived.Activation.SiteID, AccountID: derived.Activation.AccountID,
-		Foundation: foundation.Foundation, Secrets: foundation.Secrets, ExpiresAt: "2026-09-01T10:00:00Z", Now: now,
+		Foundation: foundation.Foundation, Secrets: foundation.Secrets, ExpiresAt: expiresAt, Now: now,
 	})
 	if err != nil || derivedWhitespace.Activation.Binding.BindingSHA256 == derived.Activation.Binding.BindingSHA256 {
 		t.Fatalf("raw byte digest boundary was not enforced: result=%+v err=%v", derivedWhitespace, err)
@@ -154,10 +155,11 @@ func TestFixedLaunchGateRejectsDeclaredFoundationAndValidatesSecrets(t *testing.
 
 func TestDeriveRuntimeActivationIncludesCollectorOnlyWhenBound(t *testing.T) {
 	installed, bindingRaw, foundation := installedActivationFixture(t, true)
-	foundation.Secrets = append(foundation.Secrets, RuntimeSecretReference{Name: "collector-nats", Ref: "secret-collector-nats", SchemaVersion: "runtime-nats-credentials.v1", SHA256: "sha256:" + strings.Repeat("9", 64), Revision: 1, ExpiresAt: "2026-09-01T10:00:00Z"})
+	expiresAt := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	foundation.Secrets = append(foundation.Secrets, RuntimeSecretReference{Name: "collector-nats", Ref: "secret-collector-nats", SchemaVersion: "runtime-nats-credentials.v1", SHA256: "sha256:" + strings.Repeat("9", 64), Revision: 1, ExpiresAt: expiresAt})
 	derived, err := DeriveRuntimeActivation(RuntimeActivationDerivationInput{
 		BindingJSON: bindingRaw, InstalledRelease: installed, SiteID: "77777777-7777-4777-8777-777777777777", AccountID: "88888888-8888-4888-8888-888888888888",
-		Foundation: foundation.Foundation, Secrets: foundation.Secrets, ExpiresAt: "2026-09-01T10:00:00Z", Now: time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC),
+		Foundation: foundation.Foundation, Secrets: foundation.Secrets, ExpiresAt: expiresAt, Now: time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC),
 	})
 	if err != nil || derived.Activation.Artifacts.Collector == nil || activationComponentByName(derived.Activation.Components, "collector") == nil {
 		t.Fatalf("bound collector should be derived with its artifact: activation=%+v err=%v", derived.Activation, err)
@@ -215,7 +217,11 @@ func installedActivationFixture(t *testing.T, collector bool) (InstalledRelease,
 	if err != nil {
 		t.Fatal(err)
 	}
-	return installed, raw, runtimeFoundationFixture(t)
+	foundation := runtimeFoundationFixture(t)
+	// 该夹具同时会交给 Planner 做真实“当前时刻”校验，不能依赖已经过期的示例日期。
+	future := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	for index := range foundation.Secrets { foundation.Secrets[index].ExpiresAt = future }
+	return installed, raw, foundation
 }
 
 type testSecretResolver struct{ root string }
