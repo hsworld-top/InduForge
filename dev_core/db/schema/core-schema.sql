@@ -706,6 +706,8 @@ CREATE TABLE runtime_environment_services (
   operation text NOT NULL DEFAULT 'apply' CHECK (operation IN ('apply', 'migrate')),
   storage_claim text NOT NULL DEFAULT '',
   previous_storage_claim text,
+  -- 仅登记受控 Kubernetes 资源/Secret 引用，绝不保存连接串、令牌或密码。
+  resource_refs jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(resource_refs) = 'object'),
   last_message text,
   observed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
