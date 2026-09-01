@@ -4163,7 +4163,10 @@ onBeforeUnmount(() => {
 .ops-deployment-field :deep(.el-select__wrapper),
 .ops-deployment-port :deep(.el-input__wrapper),
 .ops-engine-placement :deep(.el-select__wrapper) {
+  width: 100%;
+  min-width: 0;
   min-height: 30px;
+  box-sizing: border-box;
   border: 1px solid var(--ck-border);
   border-radius: 8px;
   background: var(--ck-bg-card);

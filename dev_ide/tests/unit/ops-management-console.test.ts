@@ -127,6 +127,9 @@ describe('ops management console', () => {
     expect(source).toMatch(
       /\.ops-engine-placement :deep\(\.el-select\) \{[\s\S]*width: 100%;[\s\S]*min-width: 0;/,
     )
+    expect(source).toMatch(
+      /\.ops-engine-placement :deep\(\.el-select__wrapper\) \{[\s\S]*width: 100%;[\s\S]*min-width: 0;[\s\S]*box-sizing: border-box;/,
+    )
     expect(source).toContain('grid-template-columns: minmax(100px, 0.78fr) minmax(0, 1.22fr)')
     for (const engine of ['runtimeEngine', 'computeEngine', 'alarmEngine', 'collectionEngine']) {
       expect(source).toContain(`t('opsConsole.deployments.${engine}')`)
