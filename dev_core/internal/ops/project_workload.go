@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+const (
+	projectGatewayImage = "induforge/project-gateway:1.0.0"
+	runtimeEngineImage  = "induforge/runtime-engine:1.0.0"
+)
+
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
 // 任意 YAML、命令或镜像：节点只负责制品准备和状态，中心以环境级 RBAC 写集群。
 type ProjectWorkload struct {
@@ -47,10 +52,10 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		return "", fmt.Errorf("工作负载调和字段不完整")
 	}
 	artifactRoot := projectArtifactHostPath(workload.DeploymentID)
-	image, role := "induforge/runtime-engine:latest", workload.Engine
+	image, role := runtimeEngineImage, workload.Engine
 	container := "runtime-engine"
 	if workload.Engine == ServiceBase {
-		image, role, container = "induforge/project-gateway:latest", "base", "project-gateway"
+		image, role, container = projectGatewayImage, "base", "project-gateway"
 	}
 	hostPort := ""
 	if workload.Engine == ServiceBase {
@@ -94,6 +99,11 @@ spec:
             - {name: IF_ENGINE_ROLE, valueFrom: {configMapKeyRef: {name: %s-config, key: engine-role}}}
             - {name: IF_RELEASE_ID, valueFrom: {configMapKeyRef: {name: %s-config, key: release-id}}}
             - {name: IF_RELEASE_ROOT, value: "/opt/induforge/release/current"}
+            - {name: IF_WORK_ROOT, value: "/work"}
+            - {name: IF_DEPLOYMENT_ID, value: %q}
+            - {name: IF_PROJECT_ID, value: %q}
+            - {name: IF_ENVIRONMENT_ID, value: %q}
+            - {name: IF_NODE_ID, value: %q}
           ports:
             - name: http
               containerPort: 18080%s
@@ -102,8 +112,21 @@ spec:
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: work, mountPath: /work}
       volumes:
         - name: release
           hostPath: {path: %q, type: Directory}
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, hostPort, artifactRoot), nil
+        - name: work
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: %s
+  namespace: %s
+  labels: {induforge.io/project-workload: "true", induforge.io/service-id: %q}
+spec:
+  selector: {app.kubernetes.io/name: %q}
+  ports: [{name: http, port: 80, targetPort: http}]
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, artifactRoot, name, namespace, workload.ServiceID, name), nil
 }

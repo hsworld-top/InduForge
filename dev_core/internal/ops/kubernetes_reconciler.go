@@ -179,6 +179,9 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if meta.Kind == "Deployment" {
 			resource = "deployments"
 		}
+		if meta.Kind == "Service" {
+			resource = "services"
+		}
 		path := "/apis/apps/v1/namespaces/" + namespace + "/" + resource + "/" + meta.Metadata.Name
 		if meta.Kind == "ConfigMap" {
 			path = "/api/v1/namespaces/" + namespace + "/" + resource + "/" + meta.Metadata.Name
