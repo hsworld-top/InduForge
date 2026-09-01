@@ -25,9 +25,13 @@ func NewDeploymentSecretManager(c KubeSecretClient) *DeploymentSecretManager {
 
 // Ensure 将环境级 source Secret 的最小凭据在内存中封装为 resolver 的严格 JSON，
 // 写入 deployment 专属 Secret。不会返回、记录或持久化任何源 Secret 值。
-func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, role string, support RuntimeSupportResources) (string, error) {
+func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, projectID, environmentID, role string, support RuntimeSupportResources) (string, error) {
 	if role != ServiceCompute && role != ServiceAlarm {
 		return "", fmt.Errorf("运行角色非法")
+	}
+	database := runtimeStateDatabaseName(projectID, environmentID)
+	if projectID == "" || environmentID == "" || database == "" {
+		return "", fmt.Errorf("运行状态库槽位非法")
 	}
 	nats, err := m.sourceValue(ctx, support.NATSCredentialSource, "credential")
 	if err != nil {
@@ -67,7 +71,7 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	if err != nil {
 		return "", fmt.Errorf("构造 bootstrap 状态库连接失败")
 	}
-	runtimeDSN, err := runtimePostgresDSN(support, data["runtime-db-username"], data["runtime-db-password"])
+	runtimeDSN, err := runtimePostgresDSNForDatabase(support, data["runtime-db-username"], data["runtime-db-password"], database)
 	if err != nil {
 		return "", fmt.Errorf("构造运行状态库连接失败")
 	}
@@ -75,7 +79,7 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	if err != nil {
 		return "", fmt.Errorf("构造 resolver 凭据失败")
 	}
-	bootstrap, err := postgresBootstrapSecretFile(bootstrapDSN, support.StateStoreDatabase, support.StateStoreSchema, data["runtime-db-username"], data["runtime-db-password"])
+	bootstrap, err := postgresBootstrapSecretFile(bootstrapDSN, database, runtimeStateSchema, data["runtime-db-username"], data["runtime-db-password"])
 	if err != nil {
 		return "", fmt.Errorf("构造 bootstrap 凭据失败")
 	}

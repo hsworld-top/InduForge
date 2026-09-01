@@ -46,3 +46,32 @@ func TestBuildRuntimeBindingInputRejectsMissingArtifactOrSupport(t *testing.T) {
 		t.Fatal("missing support reference accepted")
 	}
 }
+
+func TestRuntimeStateSlotUsesFixedSchemaAndStableDatabaseName(t *testing.T) {
+	context := validRuntimeContext()
+	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 1}
+	raw, err := BuildRuntimeBindingInput(workload, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value map[string]any
+	if err = json.Unmarshal(raw, &value); err != nil {
+		t.Fatal(err)
+	}
+	state := value["binding"].(map[string]any)["stateStore"].(map[string]any)
+	if state["schema"] != runtimeStateSchema {
+		t.Fatalf("schema = %v", state["schema"])
+	}
+	first := runtimeStateDatabaseName(context.ProjectID, context.EnvironmentID)
+	if !strings.HasPrefix(first, "ifrt_") || len(first) > 63 || first != runtimeStateDatabaseName(context.ProjectID, context.EnvironmentID) {
+		t.Fatalf("database name invalid: %s", first)
+	}
+	dev := context
+	dev.Mode = "development"
+	if first != runtimeStateDatabaseName(dev.ProjectID, dev.EnvironmentID) {
+		t.Fatal("mode changed runtime state slot")
+	}
+	if first == runtimeStateDatabaseName("another-project", context.EnvironmentID) {
+		t.Fatal("projects share runtime state slot")
+	}
+}

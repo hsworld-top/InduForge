@@ -34,11 +34,13 @@ func ResolveRuntimeSupportResources(refs map[string]map[string]string) (RuntimeS
 	lookup := func(service, key string) string { return strings.TrimSpace(refs[service][key]) }
 	resources := RuntimeSupportResources{
 		NATSEndpoint: lookup("nats_jetstream", "service"), NATSResourceRef: lookup("nats_jetstream", "resourceRef"), NATSCredentialSecretRef: lookup("nats_jetstream", "credentialSecretRef"),
-		StateStoreResourceRef: lookup("if_history", "resourceRef"), StateStoreDSNSecretRef: lookup("if_history", "dsnSecretRef"), StateStoreSchema: lookup("if_history", "schemaPrefix"), StateStoreEndpoint: lookup("if_history", "service"), StateStoreDatabase: lookup("if_history", "database"), StateStoreAdminUser: lookup("if_history", "adminUser"),
+		// database/schema 是 runtime 的隔离契约，不由环境 resource_refs 控制；
+		// refs 仅提供 endpoint 与 maintenance admin 身份。
+		StateStoreResourceRef: lookup("if_history", "resourceRef"), StateStoreDSNSecretRef: lookup("if_history", "dsnSecretRef"), StateStoreSchema: runtimeStateSchema, StateStoreEndpoint: lookup("if_history", "service"), StateStoreAdminUser: lookup("if_history", "adminUser"),
 	}
 	resources.NATSCredentialSource = KubernetesSecretSource{Namespace: lookup("nats_jetstream", "secretNamespace"), Name: lookup("nats_jetstream", "secretName"), Keys: map[string]string{"credential": lookup("nats_jetstream", "secretKey")}}
 	resources.StateStoreCredentialSource = KubernetesSecretSource{Namespace: lookup("if_history", "secretNamespace"), Name: lookup("if_history", "secretName"), Keys: map[string]string{"password": lookup("if_history", "secretKey")}}
-	for label, value := range map[string]string{"NATS Service": resources.NATSEndpoint, "NATS resourceRef": resources.NATSResourceRef, "NATS credentialSecretRef": resources.NATSCredentialSecretRef, "state-store resourceRef": resources.StateStoreResourceRef, "state-store dsnSecretRef": resources.StateStoreDSNSecretRef, "state-store schema": resources.StateStoreSchema, "state-store endpoint": resources.StateStoreEndpoint, "state-store database": resources.StateStoreDatabase, "state-store admin user": resources.StateStoreAdminUser} {
+	for label, value := range map[string]string{"NATS Service": resources.NATSEndpoint, "NATS resourceRef": resources.NATSResourceRef, "NATS credentialSecretRef": resources.NATSCredentialSecretRef, "state-store resourceRef": resources.StateStoreResourceRef, "state-store dsnSecretRef": resources.StateStoreDSNSecretRef, "state-store schema": resources.StateStoreSchema, "state-store endpoint": resources.StateStoreEndpoint, "state-store admin user": resources.StateStoreAdminUser} {
 		if value == "" {
 			return RuntimeSupportResources{}, fmt.Errorf("运行环境缺少 %s", label)
 		}

@@ -9,6 +9,7 @@ import (
 )
 
 const runtimeBindingInputVersion = "runtime-binding.input.v1"
+const runtimeStateSchema = "runtime_engine"
 
 // BuildRuntimeBindingInput 从受信 deployment context 生成 prepare 的唯一输入。它不
 // 接收外部 producer/ownership/Artifact digest，运行制品身份只能来自 Release Manifest。
@@ -40,7 +41,7 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			"projectId":  context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
 			"role": role, "artifactMountPath": "/work/artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, key, context.Support),
-			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": "runtime_" + key},
+			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
 		},
 	}
 	if role == ServiceCompute {
@@ -62,4 +63,10 @@ func runtimeJetStreamInput(role, key string, support RuntimeSupportResources) ma
 func stableRuntimeKey(values ...string) string {
 	h := sha256.Sum256([]byte(strings.Join(values, "\x00")))
 	return hex.EncodeToString(h[:])[:16]
+}
+
+// runtimeStateDatabaseName 只以 project/environment 槽位生成数据库名；模式切换
+// 与 deployment 重建均不会改变隔离边界，且从不采信 resource refs 的任意名称。
+func runtimeStateDatabaseName(projectID, environmentID string) string {
+	return "ifrt_" + stableRuntimeKey(projectID, environmentID)
 }

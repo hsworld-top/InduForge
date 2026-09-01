@@ -3,6 +3,7 @@ package provisioner
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 )
 
 var safePGIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
+var runtimeDatabaseIdentifier = regexp.MustCompile(`^ifrt_[0-9a-f]{16}$`)
 
 // PostgresBootstrapCredentials 仅供 initContainer 读取。maintenanceDsn 允许创建
 // 尚不存在的目标库，运行容器不会挂载此文件。
@@ -30,7 +32,7 @@ type PostgresBootstrapCredentials struct {
 // DBAdmin 将 PostgreSQL 管理操作收敛为可替换边界，禁止任何实现回传 DSN 或密码。
 type DBAdmin interface {
 	DatabaseExists(context.Context, string) (bool, error)
-	CreateDatabase(context.Context, string) error
+	CreateDatabase(context.Context, string, string) error
 	EnsureRole(context.Context, string, string) error
 	InitializeSchema(context.Context, string, string, string) error
 	Close()
@@ -70,8 +72,8 @@ func (a *pgxAdmin) DatabaseExists(ctx context.Context, name string) (bool, error
 	err := a.maintenance.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname=$1)`, name).Scan(&exists)
 	return exists, err
 }
-func (a *pgxAdmin) CreateDatabase(ctx context.Context, name string) error {
-	_, err := a.maintenance.Exec(ctx, "CREATE DATABASE "+quotePGIdentifier(name))
+func (a *pgxAdmin) CreateDatabase(ctx context.Context, name, owner string) error {
+	_, err := a.maintenance.Exec(ctx, "CREATE DATABASE "+quotePGIdentifier(name)+" OWNER "+quotePGIdentifier(owner))
 	return err
 }
 func (a *pgxAdmin) EnsureRole(ctx context.Context, role, password string) error {
@@ -167,18 +169,18 @@ func ProvisionState(ctx context.Context, input Input, raw []byte) error {
 }
 
 func ProvisionStateWithAdmin(ctx context.Context, input Input, credentials PostgresBootstrapCredentials, admin DBAdmin) error {
-	if admin == nil || !validPGIdentifier(credentials.Database) || !validPGIdentifier(credentials.Schema) || !validPGIdentifier(credentials.Username) || credentials.Password == "" || input.Binding.StateStore.Schema != credentials.Schema {
+	if admin == nil || !runtimeDatabaseIdentifier.MatchString(credentials.Database) || credentials.Database != expectedRuntimeDatabase(input.Binding.ProjectID, input.Binding.SiteID) || credentials.Schema != "runtime_engine" || !validPGIdentifier(credentials.Username) || credentials.Password == "" || input.Binding.StateStore.Schema != credentials.Schema {
 		return errors.New("PostgreSQL provision 输入非法")
+	}
+	if err := admin.EnsureRole(ctx, credentials.Username, credentials.Password); err != nil {
+		return stateError("配置 role", credentials.Username)
 	}
 	exists, err := admin.DatabaseExists(ctx, credentials.Database)
 	if err != nil {
 		return stateError("检查 database", credentials.Database)
 	}
-	if !exists && admin.CreateDatabase(ctx, credentials.Database) != nil {
+	if !exists && admin.CreateDatabase(ctx, credentials.Database, credentials.Username) != nil {
 		return stateError("创建 database", credentials.Database)
-	}
-	if err := admin.EnsureRole(ctx, credentials.Username, credentials.Password); err != nil {
-		return stateError("配置 role", credentials.Username)
 	}
 	if err := admin.InitializeSchema(ctx, credentials.Database, credentials.Schema, credentials.Username); err != nil {
 		return stateError("初始化 schema", credentials.Schema)
@@ -186,3 +188,8 @@ func ProvisionStateWithAdmin(ctx context.Context, input Input, credentials Postg
 	return nil
 }
 func stateError(stage, name string) error { return fmt.Errorf("PostgreSQL %s失败: %s", stage, name) }
+
+func expectedRuntimeDatabase(projectID, environmentID string) string {
+	sum := sha256.Sum256([]byte(projectID + "\x00" + environmentID))
+	return fmt.Sprintf("ifrt_%x", sum[:8])
+}

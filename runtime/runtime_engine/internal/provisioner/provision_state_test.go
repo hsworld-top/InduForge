@@ -21,7 +21,7 @@ func (f *fakeDBAdmin) DatabaseExists(context.Context, string) (bool, error) {
 	}
 	return f.exists, nil
 }
-func (f *fakeDBAdmin) CreateDatabase(context.Context, string) error {
+func (f *fakeDBAdmin) CreateDatabase(context.Context, string, string) error {
 	if f.fail == "create" {
 		return errors.New("db unavailable")
 	}
@@ -65,7 +65,7 @@ func TestProvisionStateConflictAndRollback(t *testing.T) {
 	in, credentials := stateInput()
 	fake := &fakeDBAdmin{fail: "schema"}
 	err := ProvisionStateWithAdmin(context.Background(), in, credentials, fake)
-	if err == nil || !strings.Contains(err.Error(), "runtime_project") || strings.Contains(err.Error(), credentials.Password) {
+	if err == nil || !strings.Contains(err.Error(), "runtime_engine") || strings.Contains(err.Error(), credentials.Password) {
 		t.Fatalf("err = %v", err)
 	}
 	if fake.created != 1 || fake.role != 1 {
@@ -94,6 +94,21 @@ func TestStateErrorsDoNotLeakSecret(t *testing.T) {
 		t.Fatalf("unsafe err: %v", err)
 	}
 }
+
+func TestProvisionStateRejectsNonContractDatabaseOrSchema(t *testing.T) {
+	in, credentials := stateInput()
+	fake := &fakeDBAdmin{}
+	credentials.Database = "ifrt_0000000000000000"
+	if err := ProvisionStateWithAdmin(context.Background(), in, credentials, fake); err == nil {
+		t.Fatal("forged database accepted")
+	}
+	in.Binding.StateStore.Schema = "project_schema"
+	credentials.Database = expectedRuntimeDatabase(in.Binding.ProjectID, in.Binding.SiteID)
+	if err := ProvisionStateWithAdmin(context.Background(), in, credentials, fake); err == nil {
+		t.Fatal("dynamic schema accepted")
+	}
+}
 func stateInput() (Input, PostgresBootstrapCredentials) {
-	return Input{Binding: binding.Input{StateStore: binding.StateStoreInput{Schema: "runtime_project"}}}, PostgresBootstrapCredentials{SchemaVersion: "postgres-bootstrap.v1", MaintenanceDSN: "postgres://admin:secret@db/postgres", Database: "induforge_runtime", Schema: "runtime_project", Username: "runtime_project", Password: "runtime-secret"}
+	project, environment := "project-a", "environment-a"
+	return Input{Binding: binding.Input{ProjectID: project, SiteID: environment, StateStore: binding.StateStoreInput{Schema: "runtime_engine"}}}, PostgresBootstrapCredentials{SchemaVersion: "postgres-bootstrap.v1", MaintenanceDSN: "postgres://admin:secret@db/postgres", Database: expectedRuntimeDatabase(project, environment), Schema: "runtime_engine", Username: "runtime_project", Password: "runtime-secret"}
 }
