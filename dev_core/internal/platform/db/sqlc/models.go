@@ -22,6 +22,9 @@ type ApplicationVersion struct {
 	ArtifactHash   pgtype.Text        `json:"artifact_hash"`
 	ArtifactSize   pgtype.Int8        `json:"artifact_size"`
 	Manifest       []byte             `json:"manifest"`
+	ManifestHash   pgtype.Text        `json:"manifest_hash"`
+	ChecksumsHash  pgtype.Text        `json:"checksums_hash"`
+	SigningKeyID   pgtype.Text        `json:"signing_key_id"`
 	BuildLog       pgtype.Text        `json:"build_log"`
 	ErrorMessage   pgtype.Text        `json:"error_message"`
 	CreatedBy      pgtype.UUID        `json:"created_by"`
@@ -48,6 +51,86 @@ type AuditLog struct {
 	UserAgent  pgtype.Text        `json:"user_agent"`
 	Metadata   []byte             `json:"metadata"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type DeploymentBinding struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	ProjectDeploymentID  pgtype.UUID        `json:"project_deployment_id"`
+	DeploymentServiceID  pgtype.UUID        `json:"deployment_service_id"`
+	ProjectID            pgtype.UUID        `json:"project_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ApplicationVersionID pgtype.UUID        `json:"application_version_id"`
+	Revision             int32              `json:"revision"`
+	Binding              []byte             `json:"binding"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DeploymentRun struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	ProjectDeploymentID pgtype.UUID        `json:"project_deployment_id"`
+	Operation           string             `json:"operation"`
+	DesiredStatus       string             `json:"desired_status"`
+	ObservedStatus      string             `json:"observed_status"`
+	Progress            int32              `json:"progress"`
+	Message             pgtype.Text        `json:"message"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CreatedBy           pgtype.UUID        `json:"created_by"`
+}
+
+type DeploymentRunEvent struct {
+	ID              pgtype.UUID        `json:"id"`
+	DeploymentRunID pgtype.UUID        `json:"deployment_run_id"`
+	Stage           string             `json:"stage"`
+	Message         string             `json:"message"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type DeploymentService struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	ProjectDeploymentID pgtype.UUID        `json:"project_deployment_id"`
+	NodeID              pgtype.UUID        `json:"node_id"`
+	ServiceType         string             `json:"service_type"`
+	PublicPort          pgtype.Int4        `json:"public_port"`
+	DesiredStatus       string             `json:"desired_status"`
+	ObservedStatus      string             `json:"observed_status"`
+	ReplicasDesired     int32              `json:"replicas_desired"`
+	ReplicasObserved    int32              `json:"replicas_observed"`
+	DesiredGeneration   int64              `json:"desired_generation"`
+	ObservedGeneration  int64              `json:"observed_generation"`
+	LastOperation       string             `json:"last_operation"`
+	LastMessage         pgtype.Text        `json:"last_message"`
+	Endpoint            string             `json:"endpoint"`
+	ObservedAt          pgtype.Timestamptz `json:"observed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HostNode struct {
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	EnrollmentID       pgtype.UUID        `json:"enrollment_id"`
+	DisplayName        string             `json:"display_name"`
+	Hostname           string             `json:"hostname"`
+	Platform           string             `json:"platform"`
+	Architecture       string             `json:"architecture"`
+	AgentVersion       pgtype.Text        `json:"agent_version"`
+	AgentTokenHash     string             `json:"agent_token_hash"`
+	MachineFingerprint pgtype.Text        `json:"machine_fingerprint"`
+	IpAddress          pgtype.Text        `json:"ip_address"`
+	DesiredStatus      string             `json:"desired_status"`
+	ObservedStatus     string             `json:"observed_status"`
+	ResourceSummary    []byte             `json:"resource_summary"`
+	Capabilities       []byte             `json:"capabilities"`
+	LastHeartbeatAt    pgtype.Timestamptz `json:"last_heartbeat_at"`
+	ApprovedAt         pgtype.Timestamptz `json:"approved_at"`
+	ApprovedBy         pgtype.UUID        `json:"approved_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Node struct {
@@ -119,6 +202,26 @@ type NodeDeployment struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type NodeEnrollment struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Platform        string             `json:"platform"`
+	Capabilities    []byte             `json:"capabilities"`
+	DisplayName     pgtype.Text        `json:"display_name"`
+	CodeHash        string             `json:"code_hash"`
+	Status          string             `json:"status"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	ClaimedAt       pgtype.Timestamptz `json:"claimed_at"`
+	ClaimedByNodeID pgtype.UUID        `json:"claimed_by_node_id"`
+	ApprovedAt      pgtype.Timestamptz `json:"approved_at"`
+	ApprovedBy      pgtype.UUID        `json:"approved_by"`
+	RejectedAt      pgtype.Timestamptz `json:"rejected_at"`
+	RejectedBy      pgtype.UUID        `json:"rejected_by"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Project struct {
 	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
@@ -134,6 +237,21 @@ type Project struct {
 	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProjectDeployment struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	ProjectID            pgtype.UUID        `json:"project_id"`
+	EnvironmentID        pgtype.UUID        `json:"environment_id"`
+	ApplicationVersionID pgtype.UUID        `json:"application_version_id"`
+	Mode                 string             `json:"mode"`
+	AccessPort           int32              `json:"access_port"`
+	DesiredStatus        string             `json:"desired_status"`
+	ObservedStatus       string             `json:"observed_status"`
+	CreatedBy            pgtype.UUID        `json:"created_by"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProjectGroup struct {
@@ -228,6 +346,295 @@ type RefreshToken struct {
 	ReplacedByTokenID pgtype.UUID        `json:"replaced_by_token_id"`
 	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type RuntimeCluster struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	Name          string             `json:"name"`
+	K3sVersion    string             `json:"k3s_version"`
+	ApiPort       int32              `json:"api_port"`
+	DesiredStatus string             `json:"desired_status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RuntimeClusterEvent struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	ClusterID pgtype.UUID        `json:"cluster_id"`
+	NodeID    pgtype.UUID        `json:"node_id"`
+	EventType string             `json:"event_type"`
+	Name      string             `json:"name"`
+	Target    string             `json:"target"`
+	Result    string             `json:"result"`
+	Message   pgtype.Text        `json:"message"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type RuntimeClusterNode struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ClusterID          pgtype.UUID        `json:"cluster_id"`
+	NodeID             pgtype.UUID        `json:"node_id"`
+	NodeKind           string             `json:"node_kind"`
+	DesiredAction      string             `json:"desired_action"`
+	DesiredGeneration  int64              `json:"desired_generation"`
+	ObservedGeneration int64              `json:"observed_generation"`
+	ClusterStatus      string             `json:"cluster_status"`
+	ClusterMessage     pgtype.Text        `json:"cluster_message"`
+	ClusterObservedAt  pgtype.Timestamptz `json:"cluster_observed_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type RuntimeEnvironment struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	Name          string             `json:"name"`
+	Code          string             `json:"code"`
+	IsDefault     bool               `json:"is_default"`
+	DesiredStatus string             `json:"desired_status"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type RuntimeEnvironmentEvent struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	EnvironmentID pgtype.UUID        `json:"environment_id"`
+	EventType     string             `json:"event_type"`
+	Name          string             `json:"name"`
+	Target        string             `json:"target"`
+	Result        string             `json:"result"`
+	Message       pgtype.Text        `json:"message"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type RuntimeEnvironmentNode struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	EnvironmentID pgtype.UUID        `json:"environment_id"`
+	NodeID        pgtype.UUID        `json:"node_id"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type RuntimeEnvironmentService struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	EnvironmentID        pgtype.UUID        `json:"environment_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	PreviousNodeID       pgtype.UUID        `json:"previous_node_id"`
+	ServiceType          string             `json:"service_type"`
+	DeploymentMode       string             `json:"deployment_mode"`
+	DesiredStatus        string             `json:"desired_status"`
+	ObservedStatus       string             `json:"observed_status"`
+	DesiredGeneration    int64              `json:"desired_generation"`
+	ObservedGeneration   int64              `json:"observed_generation"`
+	Operation            string             `json:"operation"`
+	StorageClaim         string             `json:"storage_claim"`
+	PreviousStorageClaim pgtype.Text        `json:"previous_storage_claim"`
+	LastMessage          pgtype.Text        `json:"last_message"`
+	ObservedAt           pgtype.Timestamptz `json:"observed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneAsset struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	ProjectID             pgtype.UUID        `json:"project_id"`
+	Provider              string             `json:"provider"`
+	AssetType             string             `json:"asset_type"`
+	CompatibleKind        string             `json:"compatible_kind"`
+	Name                  string             `json:"name"`
+	EntryPath             string             `json:"entry_path"`
+	CurrentGeneration     int64              `json:"current_generation"`
+	DraftVersion          int64              `json:"draft_version"`
+	CommittedDraftVersion int64              `json:"committed_draft_version"`
+	ArchivedAt            pgtype.Timestamptz `json:"archived_at"`
+	CreatedBy             pgtype.UUID        `json:"created_by"`
+	UpdatedBy             pgtype.UUID        `json:"updated_by"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneAssetBinding struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	SceneDocumentID pgtype.UUID        `json:"scene_document_id"`
+	AssetID         pgtype.UUID        `json:"asset_id"`
+	GenerationID    pgtype.UUID        `json:"generation_id"`
+	MountPath       string             `json:"mount_path"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneAssetDraftFile struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	AssetID         pgtype.UUID        `json:"asset_id"`
+	LogicalPath     string             `json:"logical_path"`
+	ContentObjectID pgtype.UUID        `json:"content_object_id"`
+	ContentHash     string             `json:"content_hash"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneAssetGeneration struct {
+	ID                       pgtype.UUID        `json:"id"`
+	TenantID                 pgtype.UUID        `json:"tenant_id"`
+	ProjectID                pgtype.UUID        `json:"project_id"`
+	AssetID                  pgtype.UUID        `json:"asset_id"`
+	Generation               int64              `json:"generation"`
+	EntryPath                string             `json:"entry_path"`
+	RootHash                 string             `json:"root_hash"`
+	Manifest                 []byte             `json:"manifest"`
+	ThumbnailContentObjectID pgtype.UUID        `json:"thumbnail_content_object_id"`
+	CreatedBy                pgtype.UUID        `json:"created_by"`
+	UpdatedBy                pgtype.UUID        `json:"updated_by"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneAssetGenerationFile struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	AssetID         pgtype.UUID        `json:"asset_id"`
+	GenerationID    pgtype.UUID        `json:"generation_id"`
+	LogicalPath     string             `json:"logical_path"`
+	FileRole        string             `json:"file_role"`
+	ContentObjectID pgtype.UUID        `json:"content_object_id"`
+	ContentHash     string             `json:"content_hash"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneContentObject struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Provider    string             `json:"provider"`
+	ContentHash string             `json:"content_hash"`
+	ContentSize int64              `json:"content_size"`
+	ContentType string             `json:"content_type"`
+	JsonContent []byte             `json:"json_content"`
+	ObjectKey   pgtype.Text        `json:"object_key"`
+	OrphanedAt  pgtype.Timestamptz `json:"orphaned_at"`
+	CreatedBy   pgtype.UUID        `json:"created_by"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneDocument struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	ProjectID             pgtype.UUID        `json:"project_id"`
+	SceneID               string             `json:"scene_id"`
+	Kind                  string             `json:"kind"`
+	Name                  string             `json:"name"`
+	Provider              string             `json:"provider"`
+	EntryPath             string             `json:"entry_path"`
+	PublicContract        []byte             `json:"public_contract"`
+	ProviderContract      []byte             `json:"provider_contract"`
+	DatapointRefs         []byte             `json:"datapoint_refs"`
+	CurrentRevision       int64              `json:"current_revision"`
+	DraftVersion          int64              `json:"draft_version"`
+	CommittedDraftVersion int64              `json:"committed_draft_version"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy             pgtype.UUID        `json:"created_by"`
+	UpdatedBy             pgtype.UUID        `json:"updated_by"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneFileNode struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	SceneDocumentID pgtype.UUID        `json:"scene_document_id"`
+	Provider        string             `json:"provider"`
+	LogicalPath     string             `json:"logical_path"`
+	ParentPath      string             `json:"parent_path"`
+	NodeType        string             `json:"node_type"`
+	ContentObjectID pgtype.UUID        `json:"content_object_id"`
+	ContentHash     pgtype.Text        `json:"content_hash"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneProviderState struct {
+	ID              int16              `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Provider        string             `json:"provider"`
+	ProviderVersion string             `json:"provider_version"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneRevision struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	SceneDocumentID pgtype.UUID        `json:"scene_document_id"`
+	Revision        int64              `json:"revision"`
+	DraftVersion    int64              `json:"draft_version"`
+	Provider        string             `json:"provider"`
+	ProviderVersion string             `json:"provider_version"`
+	EntryPath       string             `json:"entry_path"`
+	PublicContract  []byte             `json:"public_contract"`
+	DatapointRefs   []byte             `json:"datapoint_refs"`
+	RootHash        string             `json:"root_hash"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneRevisionAsset struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	SceneDocumentID pgtype.UUID        `json:"scene_document_id"`
+	RevisionID      pgtype.UUID        `json:"revision_id"`
+	AssetID         pgtype.UUID        `json:"asset_id"`
+	GenerationID    pgtype.UUID        `json:"generation_id"`
+	MountPath       string             `json:"mount_path"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SceneRevisionFile struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ProjectID       pgtype.UUID        `json:"project_id"`
+	SceneDocumentID pgtype.UUID        `json:"scene_document_id"`
+	RevisionID      pgtype.UUID        `json:"revision_id"`
+	LogicalPath     string             `json:"logical_path"`
+	ContentObjectID pgtype.UUID        `json:"content_object_id"`
+	ContentHash     string             `json:"content_hash"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	UpdatedBy       pgtype.UUID        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {
