@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/common.schema.json",
+  "title": "InduForge Runtime V1 公共定义",
+  "$comment": "所有数字均为 JSON number；JSON 文本中不存在 NaN、Infinity 或 -Infinity，生产者必须在序列化前拒绝非有限数。",
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "eventId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "utcRfc3339": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$"
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["good", "bad", "unknown"]
+    },
+    "dataPointType": {
+      "type": "string",
+      "enum": ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal", "string", "bytes", "datetime", "object", "array"]
+    },
+    "jsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactRevision", "artifactDigest"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/stableId" },
+        "artifactRevision": { "type": "integer", "minimum": 1 },
+        "artifactDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownerId", "epoch"],
+      "properties": {
+        "ownerId": { "$ref": "#/$defs/stableId" },
+        "epoch": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
