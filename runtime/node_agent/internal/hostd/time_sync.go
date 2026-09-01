@@ -146,9 +146,15 @@ func (m *Manager) TimeSyncStatus(ctx context.Context) (TimeSyncState, error) {
 }
 
 func (plan TimeSyncPlan) RenderChronyConfig() string {
+	driftFile := "/var/lib/chrony/induforge-client.drift"
+	if plan.Role == "center" {
+		// 中心由工作节点切换而来时不能继承客户端曾经估算的频率；否则 -x 模式会继续发布
+		// Chrony 的旧内部时间，而不是管理员当前设置的中心系统时间。
+		driftFile = "/var/lib/chrony/induforge-center.drift"
+	}
 	lines := []string{
 		"# Managed by InduForge. User maintains the center system clock.",
-		"driftfile /var/lib/chrony/chrony.drift",
+		"driftfile " + driftFile,
 		"logdir /var/log/chrony",
 	}
 	if plan.Role == "center" {

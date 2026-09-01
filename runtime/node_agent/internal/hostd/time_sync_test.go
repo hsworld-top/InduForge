@@ -51,6 +51,9 @@ func TestTimeSyncPlanRendersOfflineCenterAndClientConfig(t *testing.T) {
 	if !strings.Contains(centerConfig, "local stratum 10") || !strings.Contains(centerConfig, "allow 172.16.125.130") || strings.Contains(centerConfig, "pool ") || strings.Contains(centerConfig, "server ") {
 		t.Fatalf("center config must serve only its local system clock:\n%s", centerConfig)
 	}
+	if !strings.Contains(centerConfig, "driftfile /var/lib/chrony/induforge-center.drift") {
+		t.Fatal("center must not reuse a worker clock-frequency estimate")
+	}
 	if !strings.Contains(center.RenderChronyServiceDropIn(), "chronyd-starter.sh -F 1 -x") {
 		t.Fatal("center chrony service must be forbidden from adjusting system time")
 	}
@@ -62,6 +65,9 @@ func TestTimeSyncPlanRendersOfflineCenterAndClientConfig(t *testing.T) {
 	}
 	if strings.Contains(client.RenderChronyServiceDropIn(), " -x") {
 		t.Fatal("client chrony service must be allowed to adjust system time")
+	}
+	if !strings.Contains(clientConfig, "driftfile /var/lib/chrony/induforge-client.drift") {
+		t.Fatal("worker must keep an independent clock-frequency estimate")
 	}
 }
 
