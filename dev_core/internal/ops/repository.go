@@ -24,14 +24,17 @@ type PostgreSQLRepository struct {
 const defaultK3sVersion = "v1.36.4+k3s1"
 const defaultRuntimeEnvironmentCode = "default-runtime"
 
+// deploymentSelect 不从 project_deployments 推断节点；节点归属是 deployment_services 的属性。
+const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,d.application_version_id,COALESCE(v.version,''),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id`
+
 type releaseMetadata struct {
 	ID, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
 	ArtifactSize                                                             int64
 	Manifest                                                                 []byte
 }
 
-// pendingServicesSQL 只以物理 node_id 选取期望状态。不得添加按角色或资源池扩散的条件。
-const pendingServicesSQL = `SELECT s.id,s.tenant_id,s.project_deployment_id,s.node_id,s.service_type,s.desired_status,s.observed_status,COALESCE(s.last_message,''),COALESCE(s.endpoint,''),s.replicas_desired,s.replicas_observed,s.desired_generation,s.observed_generation,s.last_operation,s.observed_at,s.created_at,s.updated_at FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE d.node_id=$1 AND s.node_id=$1 AND (s.desired_generation<>s.observed_generation OR s.desired_status<>s.observed_status) ORDER BY s.updated_at`
+// pendingServicesSQL 只由服务自身的 node_id 调度。一个工程部署可将不同引擎放在不同节点。
+const pendingServicesSQL = `SELECT s.id,s.tenant_id,s.project_deployment_id,s.node_id,s.service_type,s.public_port,s.desired_status,s.observed_status,COALESCE(s.last_message,''),COALESCE(s.endpoint,''),s.replicas_desired,s.replicas_observed,s.desired_generation,s.observed_generation,s.last_operation,s.observed_at,s.created_at,s.updated_at FROM deployment_services s WHERE s.node_id=$1 AND (s.desired_generation<>s.observed_generation OR s.desired_status<>s.observed_status) ORDER BY s.updated_at`
 
 const (
 	lockDeploymentProjectSQL = `SELECT id FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE`
@@ -868,7 +871,7 @@ func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID
 }
 
 func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant string, f PageFilter) ([]ProjectDeployment, int64, error) {
-	rows, e := r.pool.Query(ctx, `SELECT d.id,d.tenant_id,d.project_id,p.name,d.node_id,n.display_name,d.application_version_id,v.version,COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN host_nodes n ON n.id=d.node_id AND n.tenant_id=d.tenant_id JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id WHERE d.tenant_id=$1 AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5) ORDER BY d.updated_at DESC,d.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID)
+	rows, e := r.pool.Query(ctx, deploymentSelect+` WHERE d.tenant_id=$1 AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5) ORDER BY d.updated_at DESC,d.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -883,51 +886,23 @@ func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant strin
 		out = append(out, d)
 	}
 	var total int64
-	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN host_nodes n ON n.id=d.node_id AND n.tenant_id=d.tenant_id JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id WHERE d.tenant_id=$1 AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($3='' OR d.project_id::text=$3)`, tenant, f.Search, f.ProjectID).Scan(&total)
+	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id WHERE d.tenant_id=$1 AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($3='' OR d.project_id::text=$3)`, tenant, f.Search, f.ProjectID).Scan(&total)
 	return out, total, e
 }
 func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, tenant string, in CreateDeploymentInput) error {
-	var count int
-	if e := r.pool.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id=$1 AND tenant_id=$2`, in.ProjectID, tenant).Scan(&count); e != nil || count != 1 {
-		return ErrNotFound
+	metadata, err := loadReleaseMetadata(ctx, r.pool, tenant, in.ProjectID, in.ApplicationVersionID)
+	if err != nil { return err }
+	required, err := deploymentEngineRequirements(metadata.Manifest)
+	if err != nil { return err }
+	if err = validateEnginePlacements(required, in.Placements); err != nil { return err }
+	for _, engine := range required {
+		var ready bool
+		err = r.pool.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
+		if errors.Is(err, pgx.ErrNoRows) { return ErrNotFound }; if err != nil { return err }; if !ready { return fmt.Errorf("%s 引擎节点当前不能调度", engine) }
 	}
-	var status string
-	metadata := releaseMetadata{ID: in.ApplicationVersionID}
-	if e := r.pool.QueryRow(ctx, `SELECT status,COALESCE(artifact_key,''),COALESCE(artifact_hash,''),COALESCE(manifest_hash,''),COALESCE(checksums_hash,''),COALESCE(signing_key_id,''),COALESCE(artifact_size,0),manifest FROM application_versions WHERE id=$1 AND project_id=$2 AND tenant_id=$3 AND deleted_at IS NULL`, in.ApplicationVersionID, in.ProjectID, tenant).Scan(&status, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest); errors.Is(e, pgx.ErrNoRows) {
-		return ErrNotFound
-	} else if e != nil {
-		return e
-	}
-	if status != "ready" {
-		return fmt.Errorf("%w: 版本尚未构建成功", ErrReleaseNotDeployable)
-	}
-	if e := validateReleaseMetadata(metadata, in.ProjectID, in.EnableCollector); e != nil {
-		return e
-	}
-	required := []string{CapabilityProjectEntry, CapabilityDataRuntime}
-	if in.EnableCollector {
-		required = append(required, CapabilityCollector)
-	}
-	caps, _ := json.Marshal(required)
-	var ok bool
-	e := r.pool.QueryRow(ctx, `SELECT approved_at IS NOT NULL AND desired_status='active' AND observed_status='online' AND last_heartbeat_at>now()-interval '45 seconds' AND capabilities @> $3::jsonb FROM host_nodes WHERE id=$1 AND tenant_id=$2`, in.NodeID, tenant, caps).Scan(&ok)
-	if e != nil {
-		return ErrNotFound
-	}
-	if !ok {
-		return fmt.Errorf("节点当前不能调度：需已审批、在线且具备工程服务能力")
-	}
-	var deployedProjectID string
-	e = r.pool.QueryRow(ctx, `SELECT project_id::text FROM project_deployments WHERE tenant_id=$1 AND node_id=$2 AND access_port <= $3+3 AND access_port+3 >= $3 LIMIT 1`, tenant, in.NodeID, in.AccessPort).Scan(&deployedProjectID)
-	if e == nil {
-		if deployedProjectID == in.ProjectID {
-			return ErrDeploymentExists
-		}
-		return ErrNodePortConflict
-	}
-	if !errors.Is(e, pgx.ErrNoRows) {
-		return e
-	}
+	var conflict string
+	err = r.pool.QueryRow(ctx, `SELECT s.project_deployment_id::text FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE d.tenant_id=$1 AND s.service_type='base' AND s.node_id=$2 AND s.public_port=$3 AND NOT (d.project_id=$4 AND d.environment_id=$5) LIMIT 1`, tenant, in.Placements[ServiceBase], in.AccessPort, in.ProjectID, in.EnvironmentID).Scan(&conflict)
+	if err == nil { return ErrNodePortConflict }; if !errors.Is(err, pgx.ErrNoRows) { return err }
 	return nil
 }
 func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, user string, in CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error) {
@@ -936,65 +911,36 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		return ProjectDeployment{}, DeploymentRun{}, e
 	}
 	defer tx.Rollback(ctx)
-	var lockedID string
-	if e = tx.QueryRow(ctx, lockDeploymentProjectSQL, tenant, in.ProjectID).Scan(&lockedID); errors.Is(e, pgx.ErrNoRows) {
-		return ProjectDeployment{}, DeploymentRun{}, ErrNotFound
-	} else if e != nil {
-		return ProjectDeployment{}, DeploymentRun{}, e
-	}
-	required := []string{CapabilityProjectEntry, CapabilityDataRuntime}
-	if in.EnableCollector {
-		required = append(required, CapabilityCollector)
-	}
-	caps, _ := json.Marshal(required)
-	var nodeReady bool
-	if e = tx.QueryRow(ctx, lockDeploymentNodeSQL, tenant, in.NodeID, caps).Scan(&nodeReady); errors.Is(e, pgx.ErrNoRows) {
-		return ProjectDeployment{}, DeploymentRun{}, ErrNotFound
-	} else if e != nil {
-		return ProjectDeployment{}, DeploymentRun{}, e
-	}
-	if !nodeReady {
-		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("节点当前不能调度：需已审批、在线且具备工程服务能力")
-	}
+	if e = tx.QueryRow(ctx, lockDeploymentProjectSQL, tenant, in.ProjectID).Scan(new(string)); e != nil { return ProjectDeployment{}, DeploymentRun{}, mapNotFound(e) }
 	metadata, err := loadReleaseMetadata(ctx, tx, tenant, in.ProjectID, in.ApplicationVersionID)
 	if err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
-	if err := validateReleaseMetadata(metadata, in.ProjectID, in.EnableCollector); err != nil {
-		return ProjectDeployment{}, DeploymentRun{}, err
-	}
-	var deployedProjectID string
-	e = tx.QueryRow(ctx, `SELECT project_id::text FROM project_deployments WHERE tenant_id=$1 AND (project_id=$2 OR (node_id=$3 AND access_port <= $4+3 AND access_port+3 >= $4)) ORDER BY CASE WHEN project_id=$2 THEN 0 ELSE 1 END,id LIMIT 1`, tenant, in.ProjectID, in.NodeID, in.AccessPort).Scan(&deployedProjectID)
-	if e == nil {
-		if deployedProjectID == in.ProjectID {
-			return ProjectDeployment{}, DeploymentRun{}, ErrDeploymentExists
-		}
-		return ProjectDeployment{}, DeploymentRun{}, ErrNodePortConflict
-	}
-	if !errors.Is(e, pgx.ErrNoRows) {
-		return ProjectDeployment{}, DeploymentRun{}, e
+	required, err := deploymentEngineRequirements(metadata.Manifest); if err != nil { return ProjectDeployment{}, DeploymentRun{}, err }
+	if err = validateEnginePlacements(required, in.Placements); err != nil { return ProjectDeployment{}, DeploymentRun{}, err }
+	for _, engine := range required {
+		var ready bool
+		err = tx.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3 FOR UPDATE OF n`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
+		if errors.Is(err, pgx.ErrNoRows) { return ProjectDeployment{}, DeploymentRun{}, ErrNotFound }; if err != nil { return ProjectDeployment{}, DeploymentRun{}, err }; if !ready { return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("%s 引擎节点当前不能调度", engine) }
 	}
 	var d ProjectDeployment
-	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,node_id,application_version_id,access_port,created_by) SELECT $1,$2,$3,$4,$5,$6 RETURNING id,tenant_id,project_id,'',$3,'',$4,'','',$5,desired_status,observed_status,0,created_at,updated_at`, tenant, in.ProjectID, in.NodeID, in.ApplicationVersionID, in.AccessPort, user))
+	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,access_port,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',$4,'','',$5,$6,desired_status,observed_status,0,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, in.AccessPort, user))
 	if e != nil {
 		return d, DeploymentRun{}, mapDeploymentCreateError(e)
 	}
-	types := []string{ServiceBase, ServiceCompute}
-	if in.EnableCollector {
-		types = append(types, ServiceCollector)
-	}
-	bindingID, bindingJSON, err := newInitialDeploymentBinding(d, metadata, types)
-	if err != nil {
-		return d, DeploymentRun{}, err
-	}
-	if _, err = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,1,$7)`, bindingID, tenant, d.ID, in.ProjectID, in.NodeID, in.ApplicationVersionID, bindingJSON); err != nil {
-		return d, DeploymentRun{}, err
-	}
-	for _, kind := range types {
-		_, e = tx.Exec(ctx, `INSERT INTO deployment_services(tenant_id,project_deployment_id,node_id,service_type) VALUES($1,$2,$3,$4)`, tenant, d.ID, in.NodeID, kind)
+	_, e = tx.Exec(ctx, `DELETE FROM deployment_services WHERE project_deployment_id=$1`, d.ID)
+	if e != nil { return d, DeploymentRun{}, e }
+	for _, kind := range required {
+		var publicPort any
+		if kind == ServiceBase { publicPort = in.AccessPort }
+		var serviceID string
+		e = tx.QueryRow(ctx, `INSERT INTO deployment_services(tenant_id,project_deployment_id,node_id,service_type,public_port) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, tenant, d.ID, in.Placements[kind], kind, publicPort).Scan(&serviceID)
 		if e != nil {
 			return d, DeploymentRun{}, e
 		}
+		bindingID, bindingJSON, bindErr := newEngineDeploymentBinding(d, metadata, serviceID, in.Placements[kind], kind, 1, publicPort)
+		if bindErr != nil { return d, DeploymentRun{}, bindErr }
+		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,$7,1,$8)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, bindingJSON); e != nil { return d, DeploymentRun{}, e }
 	}
 	var run DeploymentRun
 	e = tx.QueryRow(ctx, `INSERT INTO deployment_runs(tenant_id,project_deployment_id,operation,desired_status,created_by) VALUES($1,$2,'deploy','running',$3) RETURNING id,tenant_id,project_deployment_id,operation,desired_status,observed_status,progress,COALESCE(message,''),started_at,completed_at`, tenant, d.ID, user).Scan(runScanArgs(&run)...)
@@ -1012,7 +958,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	return d, run, e
 }
 func (r *PostgreSQLRepository) GetDeployment(ctx context.Context, tenant, id string) (ProjectDeployment, error) {
-	d, e := scanDeployment(r.pool.QueryRow(ctx, `SELECT d.id,d.tenant_id,d.project_id,p.name,d.node_id,n.display_name,d.application_version_id,v.version,COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN host_nodes n ON n.id=d.node_id AND n.tenant_id=d.tenant_id JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id WHERE d.tenant_id=$1 AND d.id=$2`, tenant, id))
+	d, e := scanDeployment(r.pool.QueryRow(ctx, deploymentSelect+` WHERE d.tenant_id=$1 AND d.id=$2`, tenant, id))
 	if e != nil {
 		return d, mapNotFound(e)
 	}
@@ -1153,7 +1099,7 @@ func (r *PostgreSQLRepository) pendingServices(ctx context.Context, nodeID strin
 	return out, rows.Err()
 }
 func (r *PostgreSQLRepository) listServices(ctx context.Context, did string) ([]DeploymentService, error) {
-	rows, e := r.pool.Query(ctx, `SELECT id,tenant_id,project_deployment_id,node_id,service_type,desired_status,observed_status,COALESCE(last_message,''),COALESCE(endpoint,''),replicas_desired,replicas_observed,desired_generation,observed_generation,last_operation,observed_at,created_at,updated_at FROM deployment_services WHERE project_deployment_id=$1 ORDER BY service_type`, did)
+	rows, e := r.pool.Query(ctx, `SELECT id,tenant_id,project_deployment_id,node_id,service_type,public_port,desired_status,observed_status,COALESCE(last_message,''),COALESCE(endpoint,''),replicas_desired,replicas_observed,desired_generation,observed_generation,last_operation,observed_at,created_at,updated_at FROM deployment_services WHERE project_deployment_id=$1 ORDER BY service_type`, did)
 	if e != nil {
 		return nil, e
 	}
@@ -1232,12 +1178,12 @@ func hydrateNode(x *Node, caps, summary []byte) {
 }
 func scanDeployment(s scanner) (ProjectDeployment, error) {
 	var x ProjectDeployment
-	e := s.Scan(&x.ID, &x.TenantID, &x.ProjectID, &x.ProjectName, &x.NodeID, &x.NodeName, &x.ApplicationVersionID, &x.Version, &x.LatestRunID, &x.AccessPort, &x.DesiredStatus, &x.ObservedStatus, &x.Progress, &x.CreatedAt, &x.UpdatedAt)
+	e := s.Scan(&x.ID, &x.TenantID, &x.ProjectID, &x.ProjectName, &x.EnvironmentID, &x.EnvironmentName, &x.ApplicationVersionID, &x.Version, &x.LatestRunID, &x.Mode, &x.AccessPort, &x.DesiredStatus, &x.ObservedStatus, &x.Progress, &x.CreatedAt, &x.UpdatedAt)
 	x.Health = normalizeHealth(x.ObservedStatus)
 	return x, e
 }
 func serviceScanArgs(x *DeploymentService) []any {
-	return []any{&x.ID, &x.TenantID, &x.ProjectDeploymentID, &x.NodeID, &x.ServiceType, &x.DesiredStatus, &x.ObservedStatus, &x.LastMessage, &x.Endpoint, &x.ReplicasDesired, &x.ReplicasObserved, &x.DesiredGeneration, &x.ObservedGeneration, &x.LastOperation, &x.ObservedAt, &x.CreatedAt, &x.UpdatedAt}
+	return []any{&x.ID, &x.TenantID, &x.ProjectDeploymentID, &x.NodeID, &x.ServiceType, &x.PublicPort, &x.DesiredStatus, &x.ObservedStatus, &x.LastMessage, &x.Endpoint, &x.ReplicasDesired, &x.ReplicasObserved, &x.DesiredGeneration, &x.ObservedGeneration, &x.LastOperation, &x.ObservedAt, &x.CreatedAt, &x.UpdatedAt}
 }
 func runScanArgs(x *DeploymentRun) []any {
 	return []any{&x.ID, &x.TenantID, &x.ProjectDeploymentID, &x.Operation, &x.DesiredStatus, &x.ObservedStatus, &x.Progress, &x.Message, &x.StartedAt, &x.CompletedAt}
@@ -1286,7 +1232,7 @@ func validateReleaseMetadata(metadata releaseMetadata, projectID string, require
 	return validateDeployableReleaseForDeployment(projectID, metadata.ID, metadata.ArtifactKey, metadata.ArtifactHash, metadata.ManifestHash, metadata.ChecksumsHash, metadata.SigningKeyID, requireCollector, metadata.Manifest)
 }
 
-func newInitialDeploymentBinding(deployment ProjectDeployment, release releaseMetadata, services []string) (string, []byte, error) {
+func newInitialDeploymentBinding(deployment ProjectDeployment, release releaseMetadata, nodeID string, services []string) (string, []byte, error) {
 	bindingID := uuid.NewString()
 	ports := map[string]int{"gatewayPublic": deployment.AccessPort, "runtimeApiLoopback": deployment.AccessPort + 1, "engineLoopback": deployment.AccessPort + 2}
 	for _, service := range services {
@@ -1299,7 +1245,7 @@ func newInitialDeploymentBinding(deployment ProjectDeployment, release releaseMe
 		"schemaVersion": "deployment-binding.v1",
 		"bindingId":     bindingID,
 		"revision":      1,
-		"nodeId":        deployment.NodeID,
+		"nodeId":        nodeID,
 		"deploymentId":  deployment.ID,
 		"projectId":     deployment.ProjectID,
 		"release": map[string]any{
@@ -1319,6 +1265,22 @@ func newInitialDeploymentBinding(deployment ProjectDeployment, release releaseMe
 		return "", nil, err
 	}
 	return bindingID, content, nil
+}
+
+// newEngineDeploymentBinding 为每个工作负载生成节点专用快照。基础引擎才携带 hostPort，
+// 其他引擎只使用集群内部端口，避免把旧的连续四端口模型泄漏到调度层。
+func newEngineDeploymentBinding(deployment ProjectDeployment, release releaseMetadata, serviceID, nodeID, serviceType string, revision int, publicPort any) (string, []byte, error) {
+	bindingID := uuid.NewString()
+	binding := map[string]any{
+		"schemaVersion": "deployment-binding.v2", "bindingId": bindingID, "revision": revision,
+		"nodeId": nodeID, "deploymentId": deployment.ID, "serviceId": serviceID,
+		"projectId": deployment.ProjectID, "environmentId": deployment.EnvironmentID,
+		"mode": deployment.Mode, "engine": serviceType,
+		"release": map[string]any{"id": release.ID, "archiveSha256": sha256Value(release.ArtifactHash), "manifestSha256": sha256Value(release.ManifestHash), "checksumsSha256": sha256Value(release.ChecksumsHash), "signingKeyId": release.SigningKeyID},
+		"ports": map[string]any{"hostPort": publicPort}, "secrets": []any{}, "issuedAt": time.Now().UTC().Format(time.RFC3339),
+	}
+	content, err := json.Marshal(binding)
+	return bindingID, content, err
 }
 
 type deploymentBindingDocument struct {
@@ -1401,16 +1363,16 @@ func mapDeploymentCreateError(e error) error {
 	var databaseError *pgconn.PgError
 	if errors.As(e, &databaseError) {
 		switch databaseError.ConstraintName {
-		case "project_deployments_tenant_project_key":
+		case "project_deployments_tenant_project_environment_key":
 			return ErrDeploymentExists
-		case "project_deployments_tenant_node_access_port_key":
+		case "deployment_services_base_access_port_key":
 			return ErrNodePortConflict
 		}
 	}
-	if strings.Contains(fmt.Sprint(e), "project_deployments_tenant_project_key") {
+	if strings.Contains(fmt.Sprint(e), "project_deployments_tenant_project_environment_key") {
 		return ErrDeploymentExists
 	}
-	if strings.Contains(fmt.Sprint(e), "project_deployments_tenant_node_access_port_key") {
+	if strings.Contains(fmt.Sprint(e), "deployment_services_base_access_port_key") {
 		return ErrNodePortConflict
 	}
 	return e

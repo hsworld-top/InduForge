@@ -117,7 +117,7 @@ func (r *deploymentRepository) ValidateDeploymentTargets(_ context.Context, _ st
 	return nil
 }
 func (r *deploymentRepository) CreateDeployment(_ context.Context, _, _ string, in CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error) {
-	return ProjectDeployment{ProjectID: in.ProjectID, NodeID: in.NodeID, ApplicationVersionID: in.ApplicationVersionID}, DeploymentRun{}, nil
+	return ProjectDeployment{ProjectID: in.ProjectID, EnvironmentID: in.EnvironmentID, ApplicationVersionID: in.ApplicationVersionID}, DeploymentRun{}, nil
 }
 func (r *deploymentRepository) OperateService(context.Context, string, string, string, string, string) (ProjectDeployment, DeploymentRun, error) {
 	return ProjectDeployment{}, DeploymentRun{}, nil
@@ -315,7 +315,7 @@ func TestInitialDeploymentBindingUsesCustomerPortAndEmptySecrets(t *testing.T) {
 	manifest := strings.Replace(validReleaseManifest(testProjectID), `"requiredNodeCapabilities":["project_entry","data_runtime"]`, `"requiredNodeCapabilities":["project_entry","data_runtime","collector"]`, 1)
 	release := releaseMetadata{ID: testVersionID, ArtifactKey: "releases/project/release.tar.zst", ArtifactHash: strings.Repeat("a", 64), ManifestHash: strings.Repeat("b", 64), ChecksumsHash: strings.Repeat("c", 64), SigningKeyID: "induforge-release-2026-01", ArtifactSize: 1, Manifest: []byte(manifest)}
 	deploymentID := "55555555-5555-4555-8555-555555555555"
-	bindingID, raw, err := newInitialDeploymentBinding(ProjectDeployment{ID: deploymentID, NodeID: testNodeID, ProjectID: testProjectID, AccessPort: 17800}, release, []string{ServiceBase, ServiceCompute, ServiceCollector})
+	bindingID, raw, err := newInitialDeploymentBinding(ProjectDeployment{ID: deploymentID, ProjectID: testProjectID, AccessPort: 17800}, release, testNodeID, []string{ServiceBase, ServiceCompute, ServiceCollector})
 	if err != nil {
 		t.Fatal(err)
 	}

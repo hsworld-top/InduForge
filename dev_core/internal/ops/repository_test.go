@@ -64,19 +64,19 @@ func TestContainsAllPreventsCapabilityEscalation(t *testing.T) {
 }
 func TestAgentDesiredStateIsPinnedToPhysicalNode(t *testing.T) {
 	query := pendingServicesSQL
-	if !(contains(query, "d.node_id=$1") && contains(query, "s.node_id=$1")) {
+	if !(contains(query, "s.node_id=$1") && !contains(query, "d.node_id")) {
 		t.Fatal("desired-state query must never fan out by cluster or role")
 	}
 }
 
 func TestMapDeploymentCreateErrorPreservesProjectAndPortIsolation(t *testing.T) {
-	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_project_key")); !errors.Is(err, ErrDeploymentExists) {
+	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_project_environment_key")); !errors.Is(err, ErrDeploymentExists) {
 		t.Fatalf("same project conflict=%v", err)
 	}
-	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_node_access_port_key")); !errors.Is(err, ErrNodePortConflict) {
+	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint deployment_services_base_access_port_key")); !errors.Is(err, ErrNodePortConflict) {
 		t.Fatalf("same node port conflict=%v", err)
 	}
-	if err := mapDeploymentCreateError(&pgconn.PgError{ConstraintName: "project_deployments_tenant_node_access_port_key"}); !errors.Is(err, ErrNodePortConflict) {
+	if err := mapDeploymentCreateError(&pgconn.PgError{ConstraintName: "deployment_services_base_access_port_key"}); !errors.Is(err, ErrNodePortConflict) {
 		t.Fatalf("postgres port conflict=%v", err)
 	}
 }

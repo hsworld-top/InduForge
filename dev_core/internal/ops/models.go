@@ -111,8 +111,6 @@ type RuntimeEnvironmentService struct {
 
 type ProjectDeployment struct {
 	ID, TenantID, ProjectID, ProjectName, EnvironmentID, EnvironmentName string
-	// NodeID/NodeName 不再表示整项部署的放置，仅为旧读取路径保留；真实放置只读取 Services。
-	NodeID, NodeName                            string
 	ApplicationVersionID, Version, LatestRunID  string
 	Mode, DesiredStatus, ObservedStatus, Health string
 	Progress                                    int
@@ -315,11 +313,8 @@ type AgentRelease struct {
 type CreateDeploymentInput struct {
 	ProjectID            string            `json:"projectId"`
 	EnvironmentID        string            `json:"environmentId"`
-	NodeID               string            `json:"nodeId,omitempty"`
 	ApplicationVersionID string            `json:"applicationVersionId"`
 	Mode                 string            `json:"mode"`
 	AccessPort           int               `json:"accessPort"`
 	Placements           map[string]string `json:"placements"`
-	// EnableCollector 仅兼容旧请求；新服务需求由工程内容推导，不能信任此字段。
-	EnableCollector bool `json:"enableCollector,omitempty"`
 }
