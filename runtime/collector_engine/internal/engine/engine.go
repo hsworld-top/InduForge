@@ -98,48 +98,70 @@ func (e *Engine) readBatch(ctx context.Context, mappings []loader.Mapping) {
 	for _, binding := range e.loaded.Binding.Connections {
 		bindings[binding.ConnectionID] = binding
 	}
+	byConnection := map[string][]loader.Mapping{}
 	for _, m := range mappings {
-		d, err := e.drivers.Get(conns[m.ConnectionID].DriverID)
-		if err != nil {
-			e.health.SetReady(false)
-			return
-		}
-		var r driver.Result
-		if bound, ok := d.(interface {
-			ReadWithBinding(context.Context, loader.Connection, loader.BindingConnection, loader.Mapping) (driver.Result, error)
-		}); ok {
-			r, err = bound.ReadWithBinding(ctx, conns[m.ConnectionID], bindings[m.ConnectionID], m)
-		} else {
-			r, err = d.Read(ctx, conns[m.ConnectionID], m)
-		}
-		if err != nil {
-			// 断线、超时或协议异常没有可验证的样本，不能伪造 null 或旧值发布。
-			e.health.SetReady(false)
-			continue
-		}
-		if r.Quality == "" {
-			r.Quality = "unknown"
-		}
-		e.mu.Lock()
-		seq := e.sequence
-		e.sequence++
-		e.mu.Unlock()
-		body, err := event.New(e.loaded.Binding, m, seq, r.Value, r.Quality, r.SourceTimestamp, time.Now())
+		byConnection[m.ConnectionID] = append(byConnection[m.ConnectionID], m)
+	}
+	for connectionID, group := range byConnection {
+		d, err := e.drivers.Get(conns[connectionID].DriverID)
 		if err != nil {
 			e.health.SetReady(false)
 			continue
 		}
-		raw, err := jsonMarshal(body)
-		if err != nil {
-			e.health.SetReady(false)
-			continue
-		}
-		if err = e.publisher.Publish(ctx, body.Subject, raw); err != nil {
-			if errors.Is(err, publisher.ErrBackpressure) {
+		if batch, ok := d.(driver.BatchReader); ok {
+			results, readErr := batch.ReadBatch(ctx, conns[connectionID], bindings[connectionID], group)
+			if readErr != nil {
 				e.health.SetReady(false)
+				continue
+			}
+			for _, m := range group {
+				e.publishResult(ctx, m, results[m.DatapointID])
 			}
 			continue
 		}
+		for _, m := range group {
+			d, err := e.drivers.Get(conns[m.ConnectionID].DriverID)
+			if err != nil {
+				e.health.SetReady(false)
+				return
+			}
+			var r driver.Result
+			if bound, ok := d.(interface {
+				ReadWithBinding(context.Context, loader.Connection, loader.BindingConnection, loader.Mapping) (driver.Result, error)
+			}); ok {
+				r, err = bound.ReadWithBinding(ctx, conns[m.ConnectionID], bindings[m.ConnectionID], m)
+			} else {
+				r, err = d.Read(ctx, conns[m.ConnectionID], m)
+			}
+			if err != nil {
+				// 断线、超时或协议异常没有可验证的样本，不能伪造 null 或旧值发布。
+				e.health.SetReady(false)
+				continue
+			}
+			if r.Quality == "" {
+				r.Quality = "unknown"
+			}
+			e.publishResult(ctx, m, r)
+		}
+	}
+}
+func (e *Engine) publishResult(ctx context.Context, m loader.Mapping, r driver.Result) {
+	e.mu.Lock()
+	seq := e.sequence
+	e.sequence++
+	e.mu.Unlock()
+	body, err := event.New(e.loaded.Binding, m, seq, r.Value, r.Quality, r.SourceTimestamp, time.Now())
+	if err != nil {
+		e.health.SetReady(false)
+		return
+	}
+	raw, err := jsonMarshal(body)
+	if err != nil {
+		e.health.SetReady(false)
+		return
+	}
+	if err = e.publisher.Publish(ctx, body.Subject, raw); err != nil && errors.Is(err, publisher.ErrBackpressure) {
+		e.health.SetReady(false)
 	}
 }
 

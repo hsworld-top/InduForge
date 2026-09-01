@@ -82,6 +82,30 @@ func (d *ModbusTCP) ReadWithBinding(ctx context.Context, c loader.Connection, b 
 	}
 	return Result{Value: value, Quality: "good", SourceTimestamp: time.Now().UTC()}, nil
 }
+
+// ReadBatch keeps all reads on one verified TCP connection. V1 mappings do not
+// carry a batch policy; each area is bounded by the Modbus protocol limit and
+// future schema versions may widen this to contiguous range coalescing.
+func (d *ModbusTCP) ReadBatch(ctx context.Context, c loader.Connection, b loader.BindingConnection, mappings []loader.Mapping) (map[string]Result, error) {
+	results := make(map[string]Result, len(mappings))
+	for _, mapping := range mappings {
+		result, err := d.ReadWithBinding(ctx, c, b, mapping)
+		if err != nil {
+			d.invalidate(c.ConnectionID)
+			return nil, err
+		}
+		results[mapping.DatapointID] = result
+	}
+	return results, nil
+}
+func (d *ModbusTCP) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if h := d.clients[id]; h != nil {
+		_ = h.Close()
+		delete(d.clients, id)
+	}
+}
 func (d *ModbusTCP) handler(ctx context.Context, c loader.Connection, b loader.BindingConnection) (*modbus.TCPClientHandler, error) {
 	if d == nil || d.resolver == nil {
 		return nil, errors.New("Modbus resolver 不可用")

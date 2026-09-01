@@ -20,6 +20,13 @@ type Driver interface {
 	Ready(context.Context, loader.Connection, loader.BindingConnection) error
 	Read(context.Context, loader.Connection, loader.Mapping) (Result, error)
 }
+
+// BatchReader 是可选的同连接批读扩展；调度器仅把同采样周期的 mapping 交给它。
+// V1 Modbus schema 的 readOptions 为严格空对象，因此默认按协议网络字节序解码，
+// 不支持字节/字交换、scale 或 offset，避免私自接受 schema 外现场配置。
+type BatchReader interface {
+	ReadBatch(context.Context, loader.Connection, loader.BindingConnection, []loader.Mapping) (map[string]Result, error)
+}
 type Registry struct{ drivers map[string]Driver }
 
 func NewRegistry(items ...Driver) *Registry {
