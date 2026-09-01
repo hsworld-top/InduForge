@@ -15,12 +15,11 @@ import (
 )
 
 var (
-	ErrNotFound               = errors.New("发布或部署记录不存在")
-	ErrAlreadyExists          = errors.New("版本已存在")
-	ErrVersionInUse           = errors.New("版本正在使用，不能删除")
-	ErrScenesNotReady         = errors.New("场景草稿未提交或运行工件校验失败")
-	ErrLegacyReleaseDisabled  = errors.New("正式版本构建与交付尚未开放，当前不能创建正式部署；已保存源码仍可用于开发预览")
-	ErrReleaseAssemblyPending = errors.New("正式 Release 制品组装尚未完成")
+	ErrNotFound              = errors.New("发布或部署记录不存在")
+	ErrAlreadyExists         = errors.New("版本已存在")
+	ErrVersionInUse          = errors.New("版本正在使用，不能删除")
+	ErrScenesNotReady        = errors.New("场景草稿未提交或运行工件校验失败")
+	ErrLegacyReleaseDisabled = errors.New("正式版本构建与交付尚未开放，当前不能创建正式部署；已保存源码仍可用于开发预览")
 )
 
 type Project struct {
@@ -215,10 +214,24 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
 		return fail(fmt.Errorf("正式 Release 构建器或签名配置未配置"))
 	}
-	if _, err = s.sourceBuilder.BuildReleaseSource(ctx, project); err != nil {
+	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project)
+	if err != nil {
 		return fail(fmt.Errorf("读取正式 Release 构建输入失败: %w", err))
 	}
-	return fail(ErrReleaseAssemblyPending)
+	result, err := assembleFormalRelease(project, version, source, s.signing, s.config, time.Now().UTC())
+	if err != nil {
+		return fail(fmt.Errorf("组装正式 Release 失败: %w", err))
+	}
+	ready, err := uploadFormalRelease(ctx, s.store, project, version, result)
+	if err != nil {
+		return fail(fmt.Errorf("上传正式 Release 失败: %w", err))
+	}
+	ready.SigningKeyID = s.signing.KeyID
+	completed, err := s.repository.MarkVersionReady(ctx, actor.TenantID, version.ID, ready)
+	if err != nil {
+		return fail(fmt.Errorf("确认正式 Release 失败: %w", err))
+	}
+	return completed, nil
 }
 
 func (s *Service) DeleteVersion(ctx context.Context, actor auth.User, versionID string) error {
