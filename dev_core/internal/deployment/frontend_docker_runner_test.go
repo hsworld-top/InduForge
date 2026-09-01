@@ -53,14 +53,14 @@ func TestDockerFrontendBuildRunnerUsesReleaseScopedVolumeSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(e.spec.Name, releaseSourceProjectID) || !strings.Contains(e.spec.Name, "-") || e.spec.WorkspaceSubpath != releaseSourceProjectID+"/workspace" || e.spec.CacheSubpath != releaseSourceProjectID+"/cache" || e.spec.OutputSubpath != releaseSourceProjectID+"/release-builds/"+v.ID {
+	if !strings.Contains(e.spec.Name, releaseSourceProjectID) || !strings.Contains(e.spec.Name, "-") || e.spec.WorkspaceSubpath != releaseSourceProjectID+"/workspace" || e.spec.CacheSubpath != "" || e.spec.OutputSubpath != releaseSourceProjectID+"/release-builds/"+v.ID {
 		t.Fatalf("volume subpath 或一次性名称错误: %#v", e.spec)
 	}
 	if out.DistDir != filepath.Join(frontendTestRoot, e.spec.OutputSubpath, "dist") {
 		t.Fatal("返回的 control 可见 dist 路径错误")
 	}
-	if len(e.spec.Command) != 1 || !strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/. /cache/pnpm-store/") || !strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/corepack/. /tmp/corepack/") || !strings.Contains(e.spec.Command[0], "chmod -R u+rwX /tmp/corepack /cache/pnpm-store") {
-		t.Fatal("构建器没有把审核的只读离线 store 复制到可写 cache")
+	if len(e.spec.Command) != 1 || strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/.") || !strings.Contains(e.spec.Command[0], "chmod u+rw /tmp/pnpm-store/v11/index.db") || !strings.Contains(e.spec.Command[0], "ln -s /opt/induforge/pnpm-store/v11/files") || !strings.Contains(e.spec.Command[0], "--config.trust-lockfile=true") || !strings.Contains(e.spec.Command[0], "--package-import-method=copy") {
+		t.Fatal("构建器必须只覆盖小索引并复用镜像只读 files")
 	}
 	if out.Cleanup() == nil {
 		if _, err := os.Stat(filepath.Dir(out.DistDir)); !os.IsNotExist(err) {
@@ -131,7 +131,7 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 		t.Fatalf("构建命令不安全或不完整: %#v", command)
 	}
 	env := strings.Join(anyStrings(create["Env"].([]any)), " ")
-	for _, expected := range []string{"PNPM_CONFIG_STORE_DIR=/cache/pnpm-store", "XDG_CACHE_HOME=/cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"} {
+	for _, expected := range []string{"PNPM_CONFIG_STORE_DIR=/tmp/pnpm-store", "XDG_CACHE_HOME=/tmp/pnpm-cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"} {
 		if !strings.Contains(env, expected) {
 			t.Fatalf("缺少固定构建环境 %s: %s", expected, env)
 		}

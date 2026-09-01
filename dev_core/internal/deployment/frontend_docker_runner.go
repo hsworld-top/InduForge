@@ -110,9 +110,9 @@ func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, pr
 	buildCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	buildID := uuid.NewString()
-	// builder 镜像只读保存审核过的离线 store；运行时复制到卷中的可写 cache，
-	// 从而既不联网也不修改镜像层。
-	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), CacheSubpath: path.Join(project.ID, "cache"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), WorkspaceReadOnly: true, MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"mkdir -p /tmp/home /tmp/corepack /build/src /build/dist /cache/pnpm-store; cp -a /opt/induforge/corepack/. /tmp/corepack/; cp -a /opt/induforge/pnpm-store/. /cache/pnpm-store/; chmod -R u+rwX /tmp/corepack /cache/pnpm-store; cp -a /source/. /build/src/; cd /build/src; corepack pnpm install --frozen-lockfile --offline; corepack pnpm run build -- --outDir /build/dist"}}
+	// 大型内容寻址 files 始终留在镜像只读层；每次构建只在 tmpfs 复制 27MB 级索引和
+	// 离线策略元数据，依赖安装结果与本次输出一起清理，绝不占用工程共享卷。
+	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), WorkspaceReadOnly: true, MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"mkdir -p /tmp/home /tmp/corepack /tmp/pnpm-cache /tmp/pnpm-store/v11 /build/src /build/dist; cp -a /opt/induforge/corepack/. /tmp/corepack/; cp /opt/induforge/pnpm-store/v11/index.db /tmp/pnpm-store/v11/; chmod u+rw /tmp/pnpm-store/v11/index.db; cp -a /opt/induforge/pnpm-store/v11/projects /tmp/pnpm-store/v11/projects; chmod -R u+rwX /tmp/pnpm-store/v11/projects; ln -s /opt/induforge/pnpm-store/v11/files /tmp/pnpm-store/v11/files; ln -s /opt/induforge/pnpm-store/v11/file+ /tmp/pnpm-store/v11/file+; cp -a /source/. /build/src/; cd /build/src; corepack pnpm install --config.trust-lockfile=true --frozen-lockfile --offline --package-import-method=copy; corepack pnpm run build -- --outDir /build/dist"}}
 	if err := r.engine.Run(buildCtx, spec); err != nil {
 		_ = os.RemoveAll(outputRoot)
 		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建失败: %w", err)
@@ -236,7 +236,7 @@ func (c *dockerFrontendClient) Run(ctx context.Context, s dockerFrontendSpec) er
 		Labels           map[string]string
 		HostConfig       host
 		// 初始化容器不挂载 /build；统一从必定存在的 tmpfs 启动，命令自行切换到输出卷。
-	}{Image: s.Image, Entrypoint: []string{"/bin/sh", "-ec"}, Cmd: s.Command, Env: []string{"PNPM_CONFIG_STORE_DIR=/cache/pnpm-store", "XDG_CACHE_HOME=/cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"}, User: "1000:1000", WorkingDir: "/tmp", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}}}
+	}{Image: s.Image, Entrypoint: []string{"/bin/sh", "-ec"}, Cmd: s.Command, Env: []string{"PNPM_CONFIG_STORE_DIR=/tmp/pnpm-store", "XDG_CACHE_HOME=/tmp/pnpm-cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"}, User: "1000:1000", WorkingDir: "/tmp", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=128m"}}}
 	body.HostConfig.Mounts = append(body.HostConfig.Mounts, mount{Type: "volume", Source: s.Volume, Target: "/source", ReadOnly: s.WorkspaceReadOnly, VolumeOptions: volOpt{Subpath: s.WorkspaceSubpath}})
 	if s.CacheSubpath != "" {
 		body.HostConfig.Mounts = append(body.HostConfig.Mounts, mount{Type: "volume", Source: s.Volume, Target: "/cache", VolumeOptions: volOpt{Subpath: s.CacheSubpath}})
