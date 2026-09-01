@@ -259,6 +259,13 @@ spec:
             type: Directory
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: center-control
+  namespace: induforge-system
+automountServiceAccountToken: true
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: center-control
@@ -292,6 +299,7 @@ spec:
         app.kubernetes.io/name: center-control
         app.kubernetes.io/part-of: induforge-center
     spec:
+      serviceAccountName: center-control
       nodeSelector:
         induforge.io/center-node: "true"
       securityContext:

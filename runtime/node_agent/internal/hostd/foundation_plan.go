@@ -88,6 +88,10 @@ func (plan FoundationPlan) RenderManifest(secret string) string {
 	objectConfig := fmt.Sprintf(`{"identities":[{"name":"induforge-runtime","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","List","Tagging","Write"]}]}`, objectAccessKey, secret)
 	parts := []string{
 		"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: " + namespace,
+		// Center 控制面仅被授予本环境命名空间的项目工作负载权限；不能取得
+		// ClusterRole 或 K3s 管理员凭据，因此无法越过已登记的运行环境。
+		"apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: induforge-project-reconciler\n  namespace: " + namespace + "\nrules:\n  - apiGroups: [\"apps\"]\n    resources: [\"deployments\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"services\", \"configmaps\", \"secrets\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"pods\", \"events\"]\n    verbs: [\"get\", \"list\", \"watch\"]",
+		"apiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: induforge-project-reconciler\n  namespace: " + namespace + "\nsubjects:\n  - kind: ServiceAccount\n    name: center-control\n    namespace: induforge-system\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: Role\n  name: induforge-project-reconciler",
 		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: foundation-credentials\n  namespace: " + namespace + "\ntype: Opaque\nstringData:\n  postgres-password: " + quoteYAML(secret) + "\n  redis.conf: " + quoteYAML("requirepass "+secret+"\nappendonly yes\n") + "\n  nats.conf: " + quoteYAML("authorization { token: "+secret+" }\njetstream { store_dir: /data }\n") + "\n  object-access-key: " + quoteYAML(objectAccessKey) + "\n  object-secret-key: " + quoteYAML(secret) + "\n  s3.json: " + quoteYAML(objectConfig) + "\n  shared-password: " + quoteYAML(secret),
 		renderStatefulSet(namespace, "postgres", "timescale/timescaledb:2.26.4-pg16", plan.Assignments["postgres"], plan.Claims["postgres"], []string{"containerPort: 5432"}, []string{"name: POSTGRES_PASSWORD\n              valueFrom:\n                secretKeyRef:\n                  name: foundation-credentials\n                  key: postgres-password", "name: POSTGRES_DB\n              value: induforge"}, "/var/lib/postgresql/data"),
 		renderStatefulSet(namespace, "redis", "redis:7.2-alpine", plan.Assignments["redis"], plan.Claims["redis"], []string{"containerPort: 6379"}, nil, "/data"),
@@ -104,7 +108,7 @@ func (plan FoundationPlan) RenderManifest(secret string) string {
 		renderDeployment(namespace, "nginx", "nginx:1.28-alpine", plan.Assignments["nginx"], "80"),
 		renderEMQXCredentialJob(namespace, plan.Assignments["emqx"]),
 	}
-	sort.Strings(parts[2:])
+	sort.Strings(parts[4:])
 	return strings.Join(parts, "\n---\n") + "\n"
 }
 

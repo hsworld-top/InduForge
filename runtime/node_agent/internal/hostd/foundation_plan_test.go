@@ -26,6 +26,11 @@ func TestFoundationPlanRendersFixedValidManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := plan.RenderManifest("private-secret-value-0123456789")
+	for _, expected := range []string{"kind: Role\nmetadata:\n  name: induforge-project-reconciler", "kind: RoleBinding", "name: center-control\n    namespace: induforge-system", "resources: [\"deployments\"]"} {
+		if !strings.Contains(manifest, expected) {
+			t.Fatalf("环境级 project reconciler RBAC 缺失 %q", expected)
+		}
+	}
 	for _, image := range []string{"timescale/timescaledb:2.26.4-pg16", "redis:7.2-alpine", "emqx/emqx:5.6.1", "nats:2.12.8-alpine", "chrislusf/seaweedfs:3.85", "nginx:1.28-alpine"} {
 		if !strings.Contains(manifest, "image: "+image) || !strings.Contains(manifest, "imagePullPolicy: Never") {
 			t.Fatalf("fixed offline image missing: %s", image)
