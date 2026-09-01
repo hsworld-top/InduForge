@@ -20,14 +20,35 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if err != nil || !strings.Contains(compute, "IF_ENGINE_ROLE") || !strings.Contains(compute, `"compute"`) || strings.Contains(compute, "hostPort:") {
 		t.Fatalf("compute role/port isolation failed: %v\n%s", err, compute)
 	}
+	for _, expected := range []string{"initContainers:", "name: runtime-binding-prepare", `command: ["if-runtime-provisioner", "prepare", "--input", "/etc/induforge/runtime-binding/input.json"]`, "args:", "name: deployment-secrets", "mountPath: /work/bundle/secrets", "name: runtime-binding", "induforge.io/runtime-binding-sha256"} {
+		if !strings.Contains(compute, expected) {
+			t.Fatalf("compute binding manifest missing %q:\n%s", expected, compute)
+		}
+	}
 	alarm, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, Generation: 2})
 	if err != nil || !strings.Contains(alarm, `"alarm"`) || strings.Contains(alarm, `"compute"`) {
 		t.Fatalf("alarm role isolation failed: %v\n%s", err, alarm)
+	}
+	if !strings.Contains(alarm, "runtime-binding-prepare") || strings.Contains(base, "runtime-binding-prepare") || strings.Contains(base, "deployment-secrets") {
+		t.Fatalf("runtime binding/base isolation failed:\nbase=%s\nalarm=%s", base, alarm)
 	}
 	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 2})
 	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.0", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
 		}
+	}
+}
+
+func TestRenderProjectWorkloadManifestBindingChecksumChangesTemplate(t *testing.T) {
+	base := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 2, BindingRevision: 5, RuntimeBindingChecksum: "sha256:one"}
+	first, err := RenderProjectWorkloadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base.RuntimeBindingChecksum = "sha256:two"
+	second, err := RenderProjectWorkloadManifest(base)
+	if err != nil || first == second || !strings.Contains(second, `runtime-binding-sha256: "sha256:two"`) || !strings.Contains(second, `binding-revision: "5"`) {
+		t.Fatalf("binding checksum did not alter Pod template: %v\n%s", err, second)
 	}
 }

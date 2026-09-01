@@ -17,6 +17,8 @@ type ProjectWorkload struct {
 	EnvironmentID, DeploymentID, ServiceID, NodeID, Engine, ReleaseID string
 	Generation                                                        int64
 	HostPort                                                          *int
+	RuntimeBindingChecksum                                            string
+	BindingRevision                                                   int
 }
 
 func projectNamespace(environmentID string) (string, error) {
@@ -68,6 +70,36 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	}
 	hostPort := ""
 	sandbox := ""
+	runtimeInit, runtimeArgs, runtimeMounts, runtimeVolumes := "", "", "", ""
+	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
+		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
+		if nameErr != nil {
+			return "", nameErr
+		}
+		bindingName := name + "-runtime-binding"
+		runtimeInit = fmt.Sprintf(`
+      initContainers:
+        - name: runtime-binding-prepare
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner", "prepare", "--input", "/etc/induforge/runtime-binding/input.json"]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: work, mountPath: /work}`, runtimeEngineImage)
+		runtimeArgs = `
+          command: ["runtime-engine"]
+          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/artifact", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
+		runtimeMounts = `
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: deployment-secrets, mountPath: /work/bundle/secrets, readOnly: true}`
+		runtimeVolumes = fmt.Sprintf(`
+        - name: runtime-binding
+          configMap: {name: %s}
+        - name: deployment-secrets
+          secret: {secretName: %s}`, bindingName, secretName)
+	}
 	if workload.Engine == ServiceCompute {
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
 		if nameErr != nil {
@@ -92,7 +124,8 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
-            - {name: release, mountPath: /opt/induforge/release, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.DeploymentID)
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: deployment-secrets, mountPath: /var/run/induforge/secrets, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.DeploymentID)
 	}
 	if workload.Engine == ServiceBase {
 		if workload.HostPort == nil || *workload.HostPort < 1024 || *workload.HostPort > 65535 {
@@ -123,14 +156,18 @@ spec:
   strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
   selector: {matchLabels: {app.kubernetes.io/name: %q}}
   template:
-    metadata: {labels: {app.kubernetes.io/name: %q, induforge.io/release-id: %q}}
+    metadata:
+      labels: {app.kubernetes.io/name: %q, induforge.io/release-id: %q}
+      annotations: {induforge.io/runtime-binding-sha256: %q, induforge.io/release-id: %q, induforge.io/generation: %q, induforge.io/binding-revision: %q}
     spec:
       nodeSelector: {induforge.io/node-id: %q}
       securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+%s
       containers:
         - name: %s
           image: %s
           imagePullPolicy: IfNotPresent
+%s
           env:
             - {name: IF_ENGINE_ROLE, valueFrom: {configMapKeyRef: {name: %s-config, key: engine-role}}}
             - {name: IF_RELEASE_ID, valueFrom: {configMapKeyRef: {name: %s-config, key: release-id}}}
@@ -150,11 +187,13 @@ spec:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: work, mountPath: /work}
 %s
+%s
       volumes:
         - name: release
           hostPath: {path: %q, type: Directory}
         - name: work
           emptyDir: {}
+%s
 ---
 apiVersion: v1
 kind: Service
@@ -165,5 +204,5 @@ metadata:
 spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, sandbox, artifactRoot, name, namespace, workload.ServiceID, name), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
 }
