@@ -460,6 +460,15 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 			if _, err := r.pool.Exec(ctx, `UPDATE runtime_environment_services SET observed_generation=$1,observed_status=$2,last_message=$3,observed_at=now(),previous_node_id=CASE WHEN $2='running' THEN NULL ELSE previous_node_id END,previous_storage_claim=CASE WHEN $2='running' THEN NULL ELSE previous_storage_claim END,operation=CASE WHEN $2='running' THEN 'apply' ELSE operation END,updated_at=now() WHERE environment_id=$4 AND service_type=$5 AND desired_generation=$1`, state.Generation, desired.Status, desired.Message, environmentID, serviceType); err != nil {
 				return n, nil, err
 			}
+			if desired.Status == "running" {
+				refs, refErr := foundationResourceRefs(environmentID, serviceType)
+				if refErr != nil { return n, nil, refErr }
+				if refs != nil {
+					raw, marshalErr := json.Marshal(refs)
+					if marshalErr != nil { return n, nil, marshalErr }
+					if _, refErr = r.pool.Exec(ctx, `UPDATE runtime_environment_services SET resource_refs=$1::jsonb,updated_at=now() WHERE environment_id=$2 AND service_type=$3`, raw, environmentID, serviceType); refErr != nil { return n, nil, refErr }
+				}
+			}
 			changed = changed || serviceChanged
 		}
 		if changed {

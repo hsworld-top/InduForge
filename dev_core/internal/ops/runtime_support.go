@@ -11,6 +11,7 @@ import (
 type RuntimeSupportResources struct {
 	NATSEndpoint, NATSResourceRef, NATSCredentialSecretRef          string
 	StateStoreResourceRef, StateStoreDSNSecretRef, StateStoreSchema string
+	StateStoreEndpoint, StateStoreDatabase, StateStoreAdminUser     string
 	// NATS 使用环境级 credential；项目隔离依赖 project subject，而非伪造独立 account。
 	NATSCredentialSource, StateStoreCredentialSource KubernetesSecretSource
 }
@@ -33,17 +34,17 @@ func ResolveRuntimeSupportResources(refs map[string]map[string]string) (RuntimeS
 	lookup := func(service, key string) string { return strings.TrimSpace(refs[service][key]) }
 	resources := RuntimeSupportResources{
 		NATSEndpoint: lookup("nats_jetstream", "service"), NATSResourceRef: lookup("nats_jetstream", "resourceRef"), NATSCredentialSecretRef: lookup("nats_jetstream", "credentialSecretRef"),
-		StateStoreResourceRef: lookup("if_history", "resourceRef"), StateStoreDSNSecretRef: lookup("if_history", "dsnSecretRef"), StateStoreSchema: lookup("if_history", "schema"),
+		StateStoreResourceRef: lookup("if_history", "resourceRef"), StateStoreDSNSecretRef: lookup("if_history", "dsnSecretRef"), StateStoreSchema: lookup("if_history", "schemaPrefix"), StateStoreEndpoint: lookup("if_history", "service"), StateStoreDatabase: lookup("if_history", "database"), StateStoreAdminUser: lookup("if_history", "adminUser"),
 	}
 	resources.NATSCredentialSource = KubernetesSecretSource{Namespace: lookup("nats_jetstream", "secretNamespace"), Name: lookup("nats_jetstream", "secretName"), Keys: map[string]string{"credential": lookup("nats_jetstream", "secretKey")}}
-	resources.StateStoreCredentialSource = KubernetesSecretSource{Namespace: lookup("if_history", "secretNamespace"), Name: lookup("if_history", "secretName"), Keys: map[string]string{"dsn": lookup("if_history", "secretKey")}}
-	for label, value := range map[string]string{"NATS Service": resources.NATSEndpoint, "NATS resourceRef": resources.NATSResourceRef, "NATS credentialSecretRef": resources.NATSCredentialSecretRef, "state-store resourceRef": resources.StateStoreResourceRef, "state-store dsnSecretRef": resources.StateStoreDSNSecretRef, "state-store schema": resources.StateStoreSchema} {
+	resources.StateStoreCredentialSource = KubernetesSecretSource{Namespace: lookup("if_history", "secretNamespace"), Name: lookup("if_history", "secretName"), Keys: map[string]string{"password": lookup("if_history", "secretKey")}}
+	for label, value := range map[string]string{"NATS Service": resources.NATSEndpoint, "NATS resourceRef": resources.NATSResourceRef, "NATS credentialSecretRef": resources.NATSCredentialSecretRef, "state-store resourceRef": resources.StateStoreResourceRef, "state-store dsnSecretRef": resources.StateStoreDSNSecretRef, "state-store schema": resources.StateStoreSchema, "state-store endpoint": resources.StateStoreEndpoint, "state-store database": resources.StateStoreDatabase, "state-store admin user": resources.StateStoreAdminUser} {
 		if value == "" {
 			return RuntimeSupportResources{}, fmt.Errorf("运行环境缺少 %s", label)
 		}
 	}
 	for label, source := range map[string]KubernetesSecretSource{"NATS credential source": resources.NATSCredentialSource, "state-store credential source": resources.StateStoreCredentialSource} {
-		if strings.TrimSpace(source.Namespace) == "" || strings.TrimSpace(source.Name) == "" || strings.TrimSpace(source.Keys["credential"]+source.Keys["dsn"]) == "" {
+		if strings.TrimSpace(source.Namespace) == "" || strings.TrimSpace(source.Name) == "" || strings.TrimSpace(source.Keys["credential"]+source.Keys["password"]) == "" {
 			return RuntimeSupportResources{}, fmt.Errorf("运行环境缺少 %s", label)
 		}
 	}

@@ -51,7 +51,9 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 	} else {
 		return ProjectRuntimeContext{}, fmt.Errorf("部署模式非法")
 	}
-	rows, e := r.pool.Query(ctx, `SELECT service_type,resource_refs FROM runtime_environment_services WHERE environment_id=$1 AND desired_status='running'`, out.EnvironmentID)
+	// resource_refs 在基础服务异常时保留，便于诊断和恢复；只有 observed running
+	// 的服务才能成为新工程部署的 resolver 支撑，避免把已知异常资源继续下发。
+	rows, e := r.pool.Query(ctx, `SELECT service_type,resource_refs FROM runtime_environment_services WHERE environment_id=$1 AND desired_status='running' AND observed_status='running'`, out.EnvironmentID)
 	if e != nil {
 		return ProjectRuntimeContext{}, e
 	}

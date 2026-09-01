@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 )
 
 const (
@@ -30,9 +32,13 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	if err != nil {
 		return "", fmt.Errorf("读取 NATS 凭据失败")
 	}
-	postgres, err := m.sourceValue(ctx, support.StateStoreCredentialSource, "dsn")
+	postgresPassword, err := m.sourceValue(ctx, support.StateStoreCredentialSource, "password")
 	if err != nil {
 		return "", fmt.Errorf("读取状态库凭据失败")
+	}
+	postgres, err := runtimePostgresDSN(support, postgresPassword)
+	if err != nil {
+		return "", fmt.Errorf("构造状态库连接失败")
 	}
 	files, err := BuildResolverSecretFiles(nats, postgres)
 	if err != nil {
@@ -92,6 +98,17 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 		}
 	}
 	return name, nil
+}
+
+func runtimePostgresDSN(support RuntimeSupportResources, password string) (string, error) {
+	if support.StateStoreEndpoint == "" || support.StateStoreDatabase == "" || support.StateStoreAdminUser == "" || password == "" {
+		return "", fmt.Errorf("状态库连接元数据缺失")
+	}
+	endpoint := strings.TrimPrefix(support.StateStoreEndpoint, "postgres://")
+	if strings.Contains(endpoint, "/") || strings.ContainsAny(endpoint, "?@") {
+		return "", fmt.Errorf("状态库 endpoint 非法")
+	}
+	return "postgres://" + url.QueryEscape(support.StateStoreAdminUser) + ":" + url.QueryEscape(password) + "@" + endpoint + "/" + url.PathEscape(support.StateStoreDatabase) + "?sslmode=disable", nil
 }
 
 func (m *DeploymentSecretManager) sourceValue(ctx context.Context, source KubernetesSecretSource, key string) (string, error) {

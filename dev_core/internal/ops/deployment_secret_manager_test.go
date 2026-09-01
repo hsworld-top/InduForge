@@ -34,9 +34,9 @@ func (m *memorySecretClient) DeleteSecret(_ context.Context, ns, name string) er
 }
 
 func TestDeploymentSecretManagerBuildsResolverFilesAndRefreshesSources(t *testing.T) {
-	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {"token": "source-token"}, "runtime/postgres": {"dsn": "postgres://source"}}}
+	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {"token": "source-token"}, "runtime/postgres": {"password": "source-password"}}}
 	manager := NewDeploymentSecretManager(client)
-	support := RuntimeSupportResources{NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"dsn": "dsn"}}}
+	support := RuntimeSupportResources{StateStoreEndpoint: "postgres.runtime.svc:5432", StateStoreDatabase: "induforge_runtime", StateStoreAdminUser: "postgres", NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"password": "password"}}}
 	name, err := manager.Ensure(context.Background(), "project", "99999999-9999-4999-8999-999999999999", ServiceCompute, support)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestDeploymentSecretManagerBuildsResolverFilesAndRefreshesSources(t *testin
 			t.Fatalf("missing target key %q", key)
 		}
 	}
-	if !strings.Contains(data[resolverNATSFile], "source-token") || !strings.Contains(data[resolverPostgresFile], "postgres://source") {
+	if !strings.Contains(data[resolverNATSFile], "source-token") || !strings.Contains(data[resolverPostgresFile], "postgres.runtime.svc") || !strings.Contains(data[resolverPostgresFile], "source-password") {
 		t.Fatal("resolver files missing source values")
 	}
 	password, applies := data["runtime-db-password"], client.applies
@@ -64,10 +64,10 @@ func TestDeploymentSecretManagerBuildsResolverFilesAndRefreshesSources(t *testin
 }
 
 func TestDeploymentSecretManagerRejectsMissingSourceKeyWithoutLeakingValue(t *testing.T) {
-	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {}, "runtime/postgres": {"dsn": "secret-dsn"}}}
+	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {}, "runtime/postgres": {"password": "secret-password"}}}
 	manager := NewDeploymentSecretManager(client)
-	_, err := manager.Ensure(context.Background(), "project", "99999999-9999-4999-8999-999999999999", ServiceAlarm, RuntimeSupportResources{NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"dsn": "dsn"}}})
-	if err == nil || strings.Contains(err.Error(), "secret-dsn") || client.applies != 0 {
+	_, err := manager.Ensure(context.Background(), "project", "99999999-9999-4999-8999-999999999999", ServiceAlarm, RuntimeSupportResources{StateStoreEndpoint: "postgres:5432", StateStoreDatabase: "runtime", StateStoreAdminUser: "postgres", NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"password": "password"}}})
+	if err == nil || strings.Contains(err.Error(), "secret-password") || client.applies != 0 {
 		t.Fatalf("missing source was not safely rejected: %v", err)
 	}
 }

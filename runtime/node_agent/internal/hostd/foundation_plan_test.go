@@ -42,6 +42,9 @@ func TestFoundationPlanRendersFixedValidManifest(t *testing.T) {
 	if !strings.Contains(manifest, "EMQX_AUTHENTICATION__1__BACKEND") || !strings.Contains(manifest, "kind: Job") || !strings.Contains(manifest, "emqx-runtime-credential") {
 		t.Fatal("message broker must require the generated runtime credential")
 	}
+	if !strings.Contains(manifest, "nats-token:") || !strings.Contains(manifest, "nats.conf:") {
+		t.Fatal("foundation credentials must expose the raw NATS token without changing NATS config")
+	}
 	for _, document := range strings.Split(manifest, "\n---\n") {
 		var value any
 		if err := yaml.Unmarshal([]byte(document), &value); err != nil {
