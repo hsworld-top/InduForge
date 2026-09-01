@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	ErrNotFound              = errors.New("发布或部署记录不存在")
-	ErrAlreadyExists         = errors.New("版本已存在")
-	ErrVersionInUse          = errors.New("版本正在使用，不能删除")
-	ErrScenesNotReady        = errors.New("场景草稿未提交或运行工件校验失败")
-	ErrLegacyReleaseDisabled = errors.New("正式版本构建与交付尚未开放，当前不能创建正式部署；已保存源码仍可用于开发预览")
+	ErrNotFound               = errors.New("发布或部署记录不存在")
+	ErrAlreadyExists          = errors.New("版本已存在")
+	ErrVersionInUse           = errors.New("版本正在使用，不能删除")
+	ErrScenesNotReady         = errors.New("场景草稿未提交或运行工件校验失败")
+	ErrLegacyReleaseDisabled  = errors.New("正式版本构建与交付尚未开放，当前不能创建正式部署；已保存源码仍可用于开发预览")
+	ErrReleaseAssemblyPending = errors.New("正式 Release 制品组装尚未完成")
 )
 
 type Project struct {
@@ -76,7 +77,6 @@ type Deployment struct {
 }
 
 type PublishInput struct {
-	Version     string
 	Name        string
 	Description string
 }
@@ -192,10 +192,6 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if err := auth.RequireCapability(actor, auth.CapabilityReleasePublish); err != nil {
 		return Version{}, err
 	}
-	input.Version = strings.TrimPrefix(strings.TrimSpace(input.Version), "v")
-	if input.Version == "" {
-		return Version{}, fmt.Errorf("版本号不能为空")
-	}
 	project, err := s.repository.GetProject(ctx, actor.TenantID, projectID)
 	if err != nil {
 		return Version{}, err
@@ -203,9 +199,21 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if err := requireProject(actor, project, auth.CapabilityReleasePublish); err != nil {
 		return Version{}, err
 	}
-	// 旧实现会把 workspace 源码 ZIP 直接标记为 ready，与正式 Release 的构建、
-	// 摘要清单和签名契约完全不同。保留读取接口用于识别历史记录，但禁止再制造新旁路。
-	return Version{}, ErrLegacyReleaseDisabled
+	version, err := s.repository.BeginProductionBuild(ctx, project, actor.ID, input.Name, input.Description)
+	if err != nil {
+		return Version{}, err
+	}
+	fail := func(cause error) (Version, error) {
+		_, _ = s.repository.MarkVersionFailed(ctx, actor.TenantID, version.ID, cause.Error())
+		return Version{}, cause
+	}
+	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
+		return fail(fmt.Errorf("正式 Release 构建器或签名配置未配置"))
+	}
+	if _, err = s.sourceBuilder.BuildReleaseSource(ctx, project); err != nil {
+		return fail(fmt.Errorf("读取正式 Release 构建输入失败: %w", err))
+	}
+	return fail(ErrReleaseAssemblyPending)
 }
 
 func (s *Service) DeleteVersion(ctx context.Context, actor auth.User, versionID string) error {

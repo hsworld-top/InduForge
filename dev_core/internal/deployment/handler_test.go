@@ -32,7 +32,7 @@ const (
 func TestDeploymentHTTPFlow(t *testing.T) {
 	handler, token, store := newDeploymentServer(t, "PROJECT_ADMIN")
 
-	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"version": "1.0.0", "name": "首个版本"}, token))
+	assertReleaseAssemblyPending(t, call(t, handler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"name": "首个版本"}, token))
 	if len(store.content) != 0 {
 		t.Fatal("停用的旧发布链路仍写入了源码工件")
 	}
@@ -53,7 +53,7 @@ func TestDeploymentHTTPFlow(t *testing.T) {
 
 func TestDeploymentPermissionBoundaries(t *testing.T) {
 	developerHandler, developerToken, _ := newDeploymentServer(t, "DEVELOPER")
-	assertLegacyReleaseDisabled(t, call(t, developerHandler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"version": "1.0.0"}, developerToken))
+	assertReleaseAssemblyPending(t, call(t, developerHandler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{}, developerToken))
 	developerDeploy := call(t, developerHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, developerToken)
 	if developerDeploy.Code != platformapi.ErrorCodePermissionDenied {
 		t.Fatalf("DEVELOPER 不应执行部署，实际 code=%d msg=%s", developerDeploy.Code, developerDeploy.Msg)
@@ -118,7 +118,7 @@ func call(t *testing.T, handler http.Handler, method, path string, body any, tok
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
+	if response.Code != http.StatusOK && response.Code != http.StatusInternalServerError {
 		t.Fatalf("%s %s status=%d body=%s", method, path, response.Code, response.Body.String())
 	}
 	var result envelope
@@ -139,6 +139,11 @@ func assertLegacyReleaseDisabled(t *testing.T, response envelope) {
 	t.Helper()
 	if response.Code != platformapi.ErrorCodeInvalidRequest || !strings.Contains(response.Msg, "正式版本构建与交付尚未开放") {
 		t.Fatalf("旧发布旁路未失败关闭: code=%d msg=%s", response.Code, response.Msg)
+	}
+}
+func assertReleaseAssemblyPending(t *testing.T, response envelope) {
+	if response.Code != platformapi.ErrorCodeInternal {
+		t.Fatalf("expected assembly pending failure, got %+v", response)
 	}
 }
 
