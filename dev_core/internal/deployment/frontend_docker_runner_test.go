@@ -59,7 +59,7 @@ func TestDockerFrontendBuildRunnerUsesReleaseScopedVolumeSpec(t *testing.T) {
 	if out.DistDir != filepath.Join(frontendTestRoot, e.spec.OutputSubpath, "dist") {
 		t.Fatal("返回的 control 可见 dist 路径错误")
 	}
-	if len(e.spec.Command) != 1 || strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/.") || !strings.Contains(e.spec.Command[0], "chmod u+rw /tmp/pnpm-store/v11/index.db") || !strings.Contains(e.spec.Command[0], "ln -s /opt/induforge/pnpm-store/v11/files") || !strings.Contains(e.spec.Command[0], "--config.trust-lockfile=true") || !strings.Contains(e.spec.Command[0], "--package-import-method=copy") {
+	if len(e.spec.Command) != 1 || strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/.") || !strings.Contains(e.spec.Command[0], "chmod u+rw /tmp/pnpm-store/v11/index.db") || !strings.Contains(e.spec.Command[0], "find files -type f -exec sh -c") || !strings.Contains(e.spec.Command[0], "--config.trust-lockfile=true") || !strings.Contains(e.spec.Command[0], "--package-import-method=copy") {
 		t.Fatal("构建器必须只覆盖小索引并复用镜像只读 files")
 	}
 	if out.Cleanup() == nil {
