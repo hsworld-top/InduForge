@@ -33,6 +33,7 @@ describe('ops presentation', () => {
   it('使用工程服务而不是运行角色文案', () => {
     expect(capabilityLabel.project_entry).toBe('工程入口')
     expect(serviceLabel.data_runtime).toBe('数据运行')
+    expect(serviceLabel.collector).toBe('数据采集')
     expect(
       deploymentStatePresentation({ observedStatus: 'running', entryStatus: 'running' }),
     ).toMatchObject({ label: '运行中' })

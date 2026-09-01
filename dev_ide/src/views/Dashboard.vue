@@ -95,7 +95,7 @@ const ProjectManagement = markRaw(
   defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue')),
 )
 const OpsManagement = markRaw(
-  defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue')),
+  defineAsyncComponent(() => import('@/views/tenant/OpsManagementConsole.vue')),
 )
 const SystemLogs = markRaw(defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue')))
 const SystemSettings = markRaw(

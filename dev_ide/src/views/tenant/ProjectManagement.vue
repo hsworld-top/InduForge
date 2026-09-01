@@ -100,7 +100,7 @@
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
+              <el-tooltip v-if="canPerformOps" :content="t('projectManagement.openFormalDeployment')" placement="top">
                 <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button"
                   @click.stop="openDeployDialog(project)">
                   <el-icon>
@@ -185,7 +185,7 @@
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
+              <el-tooltip v-if="canPerformOps" :content="t('projectManagement.openFormalDeployment')" placement="top">
                 <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button"
                   @click.stop="openDeployDialog(project)">
                   <el-icon>
@@ -2295,126 +2295,20 @@ export default {
 
     // 打开部署对话框
     const openDeployDialog = async (project) => {
-      deployForm.project = project
-      deployForm.currentMode = null
-      deployForm.currentVersion = ''
-      deployForm.mode = 'RELEASE'
-      deployForm.version = ''
-      deployForm.targetNodes = []
-      nodeKeyword.value = ''
-      generatedReleaseVersions.value = []
-      // 切换工程时清空节点模式缓存，避免沿用上一次工程的模式。
-      Object.keys(nodeModes).forEach((nodeId) => {
-        delete nodeModes[nodeId]
+      // 工程列表不再承载旧的源码 ZIP/DEV 双轨部署。统一打开正式物理节点部署页，
+      // 并用一次性 requestId 让异步标签挂载后安全回填当前工程。
+      const requestId = `${project?.id || 'unknown'}:${Date.now()}`
+      ElMessage.info(t('projectManagement.formalDeploymentOnly'))
+      emit('open-tab', 'ops-management')
+      ;[80, 220, 420].forEach((delay) => {
+        window.setTimeout(() => {
+          window.dispatchEvent(
+            new window.CustomEvent('ops:open-deploy', {
+              detail: { projectId: project?.id || '', requestId },
+            }),
+          )
+        }, delay)
       })
-
-      try {
-        const [nodesRes, projectNodeDeployRes, versionsRes] = await Promise.all([
-          // 获取可用节点列表
-          request.get('/nodes', {
-            params: { approvalStatus: 'approved', status: 'online' },
-          }),
-          // 获取工程在节点上的部署关系（用于回填模式与已部署节点）
-          request.get(`/deployments/project/${project.id}/nodes`),
-          // 获取版本列表
-          request.get(`/publish/${project.id}/versions`),
-        ])
-
-        // 兼容不同的响应结构
-        const nodesPayload = nodesRes?.data ?? nodesRes
-        const nodesData = nodesPayload?.data || nodesPayload || {}
-        availableNodes.value = nodesData.items || nodesData || []
-
-        const projectNodeDeployPayload = projectNodeDeployRes?.data ?? projectNodeDeployRes
-        const projectNodeDeployData =
-          projectNodeDeployPayload?.data || projectNodeDeployPayload || []
-        const projectNodeDeployments = Array.isArray(projectNodeDeployData)
-          ? projectNodeDeployData
-          : projectNodeDeployData.items || []
-
-        // 以工程当前部署关系作为模式来源，保证“已部署但未运行”也能正确回填。
-        const deployedModeByNodeId = {}
-        const deployedNodeIds = []
-        projectNodeDeployments.forEach((item) => {
-          const nodeId = item?.nodeId || item?.node?.id
-          if (!nodeId) return
-          const mode = item?.mode || item?.deployment?.mode || null
-          if (mode) {
-            deployedModeByNodeId[nodeId] = mode
-          }
-          deployedNodeIds.push(nodeId)
-        })
-
-        // 回填在线节点的模式展示。
-        availableNodes.value.forEach((node) => {
-          nodeModes[node.id] = deployedModeByNodeId[node.id] || null
-        })
-
-        // 仅默认勾选“当前在线且已部署”的节点。
-        const defaultSelectedNodes = availableNodes.value
-          .map((node) => node.id)
-          .filter((nodeId) => deployedNodeIds.includes(nodeId))
-        deployForm.targetNodes = defaultSelectedNodes.length > 0 ? [defaultSelectedNodes[0]] : []
-
-        // 当前模式：优先使用已部署节点的模式。
-        const selectedModeSet = new Set(
-          deployForm.targetNodes.map((nodeId) => nodeModes[nodeId]).filter(Boolean),
-        )
-        if (selectedModeSet.size === 1) {
-          const [singleMode] = Array.from(selectedModeSet)
-          deployForm.currentMode = singleMode
-          deployForm.mode = singleMode
-        } else if (selectedModeSet.size > 1) {
-          deployForm.currentMode = Array.from(selectedModeSet)[0]
-          // 混合模式时默认保持 RELEASE，用户可手动切换并选择节点。
-          deployForm.mode = 'RELEASE'
-        }
-
-        // 获取版本列表
-        // 兼容不同的响应结构
-        const versionsPayload = versionsRes?.data ?? versionsRes
-        const versionsData = versionsPayload?.data || versionsPayload || {}
-        const allVersions = versionsData.items || versionsData || []
-        // 发布版本全量集合（仅生产模式，含非成功状态），用于“是否已存在版本号”判定。
-        allReleaseVersions.value = allVersions
-          .filter((item) => item?.mode !== 'DEV' && item?.type !== 'SOURCE')
-          .sort((a, b) => {
-            const aTime = new Date(a?.createdAt || 0).getTime()
-            const bTime = new Date(b?.createdAt || 0).getTime()
-            return bTime - aTime
-          })
-
-        // 可部署版本：仅保留构建成功版本。
-        projectVersions.value = allReleaseVersions.value
-          .filter((item) => item?.status === 'success')
-          .sort((a, b) => {
-            const aTime = new Date(a?.createdAt || 0).getTime()
-            const bTime = new Date(b?.createdAt || 0).getTime()
-            return bTime - aTime
-          })
-
-        // 当前版本号：优先展示当前已部署的生产模式版本；否则展示最新生产版本。
-        const currentReleaseDeploy = projectNodeDeployments.find(
-          (item) =>
-            (item?.mode || item?.deployment?.mode) === 'RELEASE' &&
-            (item?.version || item?.deployment?.version),
-        )
-        deployForm.currentVersion =
-          currentReleaseDeploy?.version || currentReleaseDeploy?.deployment?.version || ''
-
-        // 生产模式默认选中当前版本；没有则保持空，等待用户新增版本。
-        if (deployForm.mode === 'RELEASE') {
-          deployForm.version = deployForm.currentVersion || ''
-        }
-
-        showDeployDialog.value = true
-      } catch (error) {
-        ElMessage.error(
-          t('projectManagement.loadDataFailed', {
-            message: getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
-          }),
-        )
-      }
     }
 
     // 确认部署

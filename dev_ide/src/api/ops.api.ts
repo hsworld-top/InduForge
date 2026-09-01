@@ -4,7 +4,7 @@ export type OpsId = string
 export type OpsPlatform = 'linux' | 'windows'
 export type OpsCapability = 'project_entry' | 'data_runtime' | 'collector'
 export type OpsServiceType = OpsCapability
-export type OpsServiceAction = 'start' | 'stop' | 'restart'
+export type OpsDeploymentAction = 'start' | 'stop' | 'restart'
 export type OpsHealth = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
 export type OpsLifecycle = 'running' | 'stopped' | 'failed' | 'pending' | 'online' | 'offline'
 
@@ -19,6 +19,7 @@ export interface OpsNode {
   name: string
   displayName?: string
   hostname?: string
+  ipAddress?: string
   platform: OpsPlatform
   architecture?: string
   capabilities: OpsCapability[]
@@ -31,6 +32,73 @@ export interface OpsNode {
   assignedDeploymentId?: OpsId
   assignedProjectId?: OpsId
   assignedProjectName?: string
+  environmentId?: OpsId
+  environmentName?: string
+  environmentNames?: string[]
+  environmentCount?: number
+  nodeKind?: 'center' | 'worker'
+  clusterId?: OpsId
+  clusterRole?: 'server' | 'agent'
+  clusterStatus?: 'pending' | 'starting' | 'ready' | 'failed' | 'not-installed' | 'removing'
+  clusterDesiredAction?: 'active' | 'removing'
+  clusterMessage?: string
+  clusterDesiredGeneration?: number
+  clusterObservedGeneration?: number
+  clusterObservedAt?: string
+}
+export type RuntimeEnvironmentStatus = 'available' | 'attention' | 'uninitialized' | 'deleting'
+export interface RuntimeEnvironment {
+  id: OpsId
+  name: string
+  code: string
+  isDefault: boolean
+  status: RuntimeEnvironmentStatus
+  desiredStatus: 'active' | 'maintenance' | 'deleting'
+  nodeCount: number
+  onlineNodeCount: number
+  foundationTotal: number
+  foundationHealthy: number
+  projectCount: number
+  recentChange: string
+  recentAt?: string | null
+  recentBy: string
+  createdAt?: string
+  updatedAt?: string
+}
+export interface RuntimeEnvironmentEvent {
+  id: OpsId
+  environmentId: OpsId
+  eventType: string
+  name: string
+  target: string
+  result: 'success' | 'failed'
+  message?: string
+  operator: string
+  createdAt: string
+}
+export type FoundationServiceType =
+  | 'if_realtime'
+  | 'if_history'
+  | 'if_timeseries'
+  | 'if_message'
+  | 'if_object'
+  | 'nats_jetstream'
+  | 'nginx'
+  | 'traefik'
+export interface RuntimeEnvironmentService {
+  id: OpsId
+  environmentId: OpsId
+  nodeId: OpsId
+  nodeName: string
+  serviceType: FoundationServiceType
+  desiredStatus: string
+  observedStatus: 'pending' | 'running' | 'stopped' | 'degraded' | 'failed'
+  lastMessage?: string
+  desiredGeneration: number
+  observedGeneration: number
+  operation?: 'apply' | 'migrate'
+  observedAt?: string
+  updatedAt?: string
 }
 export interface NodePackage {
   id: OpsId
@@ -76,6 +144,7 @@ export interface ProjectDeployment {
   nodeId: OpsId
   nodeName?: string
   applicationVersionId: OpsId
+  accessPort: number
   version?: string
   desiredStatus?: string
   observedStatus?: string
@@ -130,6 +199,7 @@ export interface ListParams {
   pageSize?: number
   keyword?: string
   projectId?: OpsId
+  status?: RuntimeEnvironmentStatus
 }
 export interface ListResult<T> {
   items: T[]
@@ -205,6 +275,95 @@ export const opsAPI = {
   async getNode(id: OpsId) {
     return node(unpack<OpsNode>(await request.get(`/ops/nodes/${id}`, config)))
   },
+  async removeNode(id: OpsId) {
+    return unpack<{ status: 'removing' }>(await request.delete(`/ops/nodes/${id}`, config))
+  },
+  async listRuntimeEnvironments(params: ListParams = {}) {
+    return list<RuntimeEnvironment>(
+      await request.get('/ops/runtime-environments', {
+        params: normalizeParams(params),
+        ...config,
+      }),
+    )
+  },
+  async createRuntimeEnvironment(payload: { name: string }) {
+    return unpack<RuntimeEnvironment>(
+      await request.post('/ops/runtime-environments', payload, config),
+    )
+  },
+  async updateRuntimeEnvironment(id: OpsId, payload: { name: string }) {
+    return unpack<RuntimeEnvironment>(
+      await request.patch(`/ops/runtime-environments/${id}`, payload, config),
+    )
+  },
+  async deleteRuntimeEnvironment(id: OpsId, confirmationName: string) {
+    return unpack<{ status: 'deleting' | 'deleted' }>(
+      await request.delete(`/ops/runtime-environments/${id}`, {
+        ...config,
+        data: { confirmationName },
+      }),
+    )
+  },
+  async getRuntimeEnvironment(id: OpsId) {
+    return unpack<RuntimeEnvironment>(await request.get(`/ops/runtime-environments/${id}`, config))
+  },
+  async listRuntimeEnvironmentNodes(id: OpsId, params: ListParams = {}) {
+    const result = list<OpsNode>(
+      await request.get(`/ops/runtime-environments/${id}/nodes`, {
+        params: normalizeParams(params),
+        ...config,
+      }),
+    )
+    return { ...result, items: result.items.map(node) }
+  },
+  async addRuntimeEnvironmentNodes(id: OpsId, nodeIds: OpsId[]) {
+    const result = list<OpsNode>(
+      await request.post(`/ops/runtime-environments/${id}/nodes`, { nodeIds }, config),
+    )
+    return { ...result, items: result.items.map(node) }
+  },
+  async removeRuntimeEnvironmentNode(id: OpsId, nodeId: OpsId) {
+    return unpack<{ removed: boolean }>(
+      await request.delete(`/ops/runtime-environments/${id}/nodes/${nodeId}`, config),
+    )
+  },
+  async listRuntimeEnvironmentEvents(id: OpsId, params: ListParams = {}) {
+    return list<RuntimeEnvironmentEvent>(
+      await request.get(`/ops/runtime-environments/${id}/events`, {
+        params: normalizeParams(params),
+        ...config,
+      }),
+    )
+  },
+  async listRuntimeEnvironmentServices(id: OpsId) {
+    return list<RuntimeEnvironmentService>(
+      await request.get(`/ops/runtime-environments/${id}/foundation-services`, config),
+    )
+  },
+  async deployRuntimeEnvironmentFoundation(
+    id: OpsId,
+    assignments: Array<{ serviceType: FoundationServiceType; nodeId: OpsId }>,
+  ) {
+    return list<RuntimeEnvironmentService>(
+      await request.post(
+        `/ops/runtime-environments/${id}/foundation-services/deploy`,
+        { assignments },
+        config,
+      ),
+    )
+  },
+  async migrateRuntimeEnvironmentFoundation(
+    id: OpsId,
+    assignments: Array<{ serviceType: FoundationServiceType; nodeId: OpsId }>,
+  ) {
+    return list<RuntimeEnvironmentService>(
+      await request.post(
+        `/ops/runtime-environments/${id}/foundation-services/migrate`,
+        { assignments },
+        config,
+      ),
+    )
+  },
   async listNodePackages() {
     const result = list<NodePackage>(await request.get('/ops/node-packages', config))
     return {
@@ -242,6 +401,7 @@ export const opsAPI = {
     projectId: OpsId
     nodeId: OpsId
     applicationVersionId: OpsId
+    accessPort: number
     enableCollector: boolean
   }) {
     const result = unpack<DeploymentCreateResult>(
@@ -249,15 +409,11 @@ export const opsAPI = {
     )
     return { ...deployment(result.deployment), latestRunId: result.run?.id }
   },
-  async runServiceAction(id: OpsId, service: OpsServiceType, action: OpsServiceAction) {
+  async operateProjectDeployment(id: OpsId, action: OpsDeploymentAction) {
     const result = unpack<DeploymentCreateResult>(
-      await request.post(
-        `/ops/project-deployments/${id}/services/${service}/${action}`,
-        undefined,
-        config,
-      ),
+      await request.post(`/ops/project-deployments/${id}/${action}`, undefined, config),
     )
-    return result.run
+    return { deployment: deployment(result.deployment), run: result.run }
   },
   async getDeploymentRun(id: OpsId) {
     const result = unpack<DeploymentRun>(await request.get(`/ops/deployment-runs/${id}`, config))

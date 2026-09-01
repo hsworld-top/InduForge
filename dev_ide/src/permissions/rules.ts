@@ -16,14 +16,7 @@ export type Capability =
 const ROLE_CAPABILITY_MAP: Record<Role, readonly Capability[]> = {
   [ROLES.SUPER_ADMIN]: ['tenant:manage'],
   [ROLES.SYSTEM_ADMIN]: ['*'],
-  [ROLES.PROJECT_ADMIN]: [
-    'project:read',
-    'project:write',
-    'release:publish',
-    'deploy:execute',
-    'runtime:operate',
-    'node:read',
-  ],
+  [ROLES.PROJECT_ADMIN]: ['project:read', 'project:write', 'release:publish', 'deploy:execute'],
   [ROLES.OPS_ADMIN]: [
     'project:read',
     'release:publish',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ROLES } from '@/constants'
-import { canAccessTab, canManageUsers, hasRole } from '@/permissions'
+import { can, canAccessTab, canManageUsers, hasRole } from '@/permissions'
 import type { Role, UserInfo } from '@/types/auth'
 
 const createUser = (role: Role): UserInfo => ({
@@ -36,6 +36,16 @@ describe('permissions/rules', () => {
       expect(canManageUsers(ROLES.USER_ADMIN)).toBe(true)
       expect(canManageUsers(ROLES.SYSTEM_ADMIN)).toBe(true)
       expect(canManageUsers(ROLES.USER)).toBe(false)
+    })
+  })
+
+  describe('运维职责边界', () => {
+    it('工程管理员可部署工程，但不能管理运行环境和物理节点', () => {
+      expect(can(ROLES.PROJECT_ADMIN, 'deploy:execute')).toBe(true)
+      expect(can(ROLES.PROJECT_ADMIN, 'runtime:operate')).toBe(false)
+      expect(can(ROLES.PROJECT_ADMIN, 'node:read')).toBe(false)
+      expect(can(ROLES.OPS_ADMIN, 'runtime:operate')).toBe(true)
+      expect(can(ROLES.OPS_ADMIN, 'node:read')).toBe(true)
     })
   })
 })

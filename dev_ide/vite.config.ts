@@ -1,7 +1,7 @@
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import path from 'node:path'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type PluginOption } from 'vite'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -10,7 +10,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './', // 资源用相对路径，/edit 页面会落到 /edit/assets/...
-    plugins: [vue()],
+    // workspace 同时包含 Vite 7/8 模板，pnpm 提升后插件会携带另一份 Vite 类型；运行时兼容由插件 peer 范围保证。
+    plugins: [vue() as unknown as PluginOption],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

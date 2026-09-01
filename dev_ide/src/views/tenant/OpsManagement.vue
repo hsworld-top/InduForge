@@ -6,7 +6,7 @@
         <h2>节点与工程部署</h2>
         <p>
           用户只需要接入物理节点并选择工程版本。当前仅开放单节点部署方式；只有具备正式 Release
-          的工程版本可部署，工程入口、数据运行和可选采集均由同一节点承载。
+          的工程版本可部署，工程入口、数据运行和可选数据采集均由同一节点承载。
         </p>
       </div>
       <div class="hero-actions">
@@ -72,7 +72,7 @@
               <small class="inline-secondary">{{ row.architecture || '架构待上报' }}</small>
             </template>
           </el-table-column>
-          <el-table-column label="可承载服务" min-width="250">
+          <el-table-column label="运行能力" min-width="250">
             <template #default="{ row }">
               <div class="tag-list">
                 <el-tag
@@ -159,7 +159,7 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="服务组" min-width="310">
+          <el-table-column label="运行组成" min-width="310">
             <template #default="{ row }">
               <div class="service-tags">
                 <el-tag
@@ -184,7 +184,7 @@
               >
                 打开工程
               </el-button>
-              <span v-else class="muted">等待入口服务上报</span>
+              <span v-else class="muted">等待工程入口上报</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="100" fixed="right">
@@ -404,6 +404,10 @@
             没有已批准、在线且同时具备工程入口和数据运行能力的节点。
           </small>
         </el-form-item>
+        <el-form-item label="工程访问端口" required>
+          <el-input-number v-model="deployForm.accessPort" :min="1024" :max="65532" />
+          <small class="form-help">平台会同时检测该端口及后续三个本机运行端口是否冲突。</small>
+        </el-form-item>
         <el-form-item label="数据采集">
           <el-checkbox
             v-model="deployForm.enableCollector"
@@ -593,11 +597,41 @@
               >
                 {{ selectedDeployment.accessUrl }}
               </el-button>
-              <span v-else class="muted">入口服务尚未上报可访问地址</span>
+              <span v-else class="muted">工程入口尚未上报可访问地址</span>
             </el-descriptions-item>
           </el-descriptions>
 
-          <h3 class="detail-heading">服务组</h3>
+          <div class="deployment-actions">
+            <span>工程部署操作</span>
+            <el-button
+              size="small"
+              :loading="deploymentOperation === 'start'"
+              :disabled="Boolean(deploymentOperation) || !canStartSelectedDeployment"
+              @click="operateDeployment('start')"
+            >
+              启动工程
+            </el-button>
+            <el-button
+              size="small"
+              :loading="deploymentOperation === 'restart'"
+              :disabled="Boolean(deploymentOperation) || !selectedDeploymentIsRunning"
+              @click="operateDeployment('restart')"
+            >
+              重启工程
+            </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :loading="deploymentOperation === 'stop'"
+              :disabled="Boolean(deploymentOperation) || !selectedDeploymentIsRunning"
+              @click="operateDeployment('stop')"
+            >
+              停止工程
+            </el-button>
+          </div>
+
+          <h3 class="detail-heading">运行组成</h3>
           <article
             v-for="service in selectedDeployment.services"
             :key="service.serviceType"
@@ -613,36 +647,7 @@
               </el-tag>
             </div>
             <div class="service-meta">
-              <span>目标状态：{{ lifecyclePresentation(service.desiredStatus) }}</span>
-              <span>上报：{{ formatTime(service.observedAt) || '尚未上报' }}</span>
-            </div>
-            <div class="service-actions">
-              <el-button
-                size="small"
-                :loading="operationKey === `${service.serviceType}:start`"
-                :disabled="Boolean(operationKey) || service.observedStatus === 'running'"
-                @click="operateService(service.serviceType, 'start')"
-              >
-                启动
-              </el-button>
-              <el-button
-                size="small"
-                :loading="operationKey === `${service.serviceType}:restart`"
-                :disabled="Boolean(operationKey) || service.observedStatus !== 'running'"
-                @click="operateService(service.serviceType, 'restart')"
-              >
-                重启
-              </el-button>
-              <el-button
-                size="small"
-                type="danger"
-                plain
-                :loading="operationKey === `${service.serviceType}:stop`"
-                :disabled="Boolean(operationKey) || service.observedStatus === 'stopped'"
-                @click="operateService(service.serviceType, 'stop')"
-              >
-                停止
-              </el-button>
+              <span>最后上报：{{ formatTime(service.observedAt) || '尚未上报' }}</span>
             </div>
           </article>
 
@@ -679,9 +684,8 @@ import {
   type DeploymentRunEvent,
   type NodeEnrollment,
   type NodePackage,
+  type OpsDeploymentAction,
   type OpsNode,
-  type OpsServiceAction,
-  type OpsServiceType,
   type ProjectDeployment,
 } from '@/api/ops.api'
 import { formatDateTime, getRelativeTime } from '@/utils/date'
@@ -749,16 +753,18 @@ const selectedDeployment = ref<ProjectDeployment | null>(null)
 const selectedRun = ref<DeploymentRun | null>(null)
 const runEvents = ref<DeploymentRunEvent[]>([])
 const detailLoading = ref(false)
-const operationKey = ref('')
+const deploymentOperation = ref<OpsDeploymentAction | ''>('')
 const existingDeploymentProjectId = ref('')
 let disposed = false
 let projectValidationRequest = 0
 let versionLoadRequest = 0
+let lastExternalDeployRequestId = ''
 
 const deployForm = reactive({
   projectId: '',
   nodeId: '',
   applicationVersionId: '',
+  accessPort: 17800,
   enableCollector: false,
 })
 const enrollForm = reactive({
@@ -817,6 +823,8 @@ const canCreateDeployment = computed(
       deployForm.projectId &&
       deployForm.applicationVersionId &&
       deployForm.nodeId &&
+      deployForm.accessPort >= 1024 &&
+      deployForm.accessPort <= 65532 &&
       selectedDeployNode.value &&
       isDeployableNode(selectedDeployNode.value) &&
       selectedDeployVersion.value &&
@@ -824,6 +832,13 @@ const canCreateDeployment = computed(
     ) &&
     !selectedProjectAlreadyDeployed.value &&
     (!deployForm.enableCollector || selectedDeployNode.value?.capabilities.includes('collector')),
+)
+const selectedDeploymentStatus = computed(() =>
+  String(selectedDeployment.value?.observedStatus || '').toLowerCase(),
+)
+const selectedDeploymentIsRunning = computed(() => selectedDeploymentStatus.value === 'running')
+const canStartSelectedDeployment = computed(() =>
+  ['stopped', 'failed'].includes(selectedDeploymentStatus.value),
 )
 
 watch(
@@ -887,10 +902,12 @@ async function loadDeployments() {
       pageSize: deploymentPage.limit,
       keyword: deploymentPage.keyword.trim() || undefined,
     })
-    deployments.value = result.items
-    deploymentPage.total = result.total
+    if (!disposed) {
+      deployments.value = result.items
+      deploymentPage.total = result.total
+    }
   } finally {
-    loading.deployments = false
+    if (!disposed) loading.deployments = false
   }
 }
 
@@ -994,6 +1011,7 @@ async function onProjectChange(projectId: string) {
   const requestId = ++projectValidationRequest
   versionLoadRequest += 1
   deployForm.applicationVersionId = ''
+  deployForm.accessPort = 17800
   existingDeploymentProjectId.value = ''
   versions.value = []
   versionPage.value = 1
@@ -1067,7 +1085,7 @@ async function loadMoreVersions() {
   }
 }
 
-async function openDeployDialog() {
+async function openDeployDialog(initialProjectId = '') {
   projectValidationRequest += 1
   versionLoadRequest += 1
   deployForm.projectId = ''
@@ -1085,9 +1103,22 @@ async function openDeployDialog() {
   deployDialog.value = true
   try {
     await Promise.all([loadProjects(), loadDeploymentNodes()])
+    if (initialProjectId && projects.value.some((project) => project.id === initialProjectId)) {
+      deployForm.projectId = initialProjectId
+      await onProjectChange(initialProjectId)
+    }
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, '部署准备信息加载失败'))
   }
+}
+
+function handleOpenDeployEvent(event: Event) {
+  const detail = (event as CustomEvent<{ projectId?: string; requestId?: string }>).detail || {}
+  const projectId = String(detail.projectId || '').trim()
+  const requestId = String(detail.requestId || '').trim()
+  if (!projectId || !requestId || requestId === lastExternalDeployRequestId) return
+  lastExternalDeployRequestId = requestId
+  void openDeployDialog(projectId)
 }
 
 async function createDeployment() {
@@ -1101,6 +1132,7 @@ async function createDeployment() {
       projectId: deployForm.projectId,
       nodeId: deployForm.nodeId,
       applicationVersionId: deployForm.applicationVersionId,
+      accessPort: deployForm.accessPort,
       enableCollector: deployForm.enableCollector,
     })
     deployDialog.value = false
@@ -1248,12 +1280,13 @@ async function openDeploymentDetail(item: ProjectDeployment) {
   runEvents.value = []
   try {
     const detail = await opsAPI.getProjectDeployment(item.id)
+    if (disposed) return
     selectedDeployment.value = detail
     if (detail.latestRunId) await loadRun(detail.latestRunId)
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, '工程部署详情加载失败'))
+    if (!disposed) ElMessage.error(apiErrorMessage(error, '工程部署详情加载失败'))
   } finally {
-    detailLoading.value = false
+    if (!disposed) detailLoading.value = false
   }
 }
 
@@ -1262,8 +1295,10 @@ async function loadRun(runId: string) {
     opsAPI.getDeploymentRun(runId),
     opsAPI.listDeploymentRunEvents(runId),
   ])
-  selectedRun.value = run
-  runEvents.value = events.items
+  if (!disposed) {
+    selectedRun.value = run
+    runEvents.value = events.items
+  }
   return run
 }
 
@@ -1273,35 +1308,39 @@ const delay = (milliseconds: number) =>
 async function pollRun(runId: string, deploymentId: string) {
   for (let attempt = 0; attempt < 20 && !disposed; attempt += 1) {
     const run = await loadRun(runId)
-    if (run.status !== 'pending') break
+    if (disposed || run.status !== 'pending') break
     await delay(1500)
   }
+  if (disposed) return
   const detail = await opsAPI.getProjectDeployment(deploymentId)
+  if (disposed) return
   selectedDeployment.value = detail
   await loadDeployments()
 }
 
-async function operateService(service: OpsServiceType, action: OpsServiceAction) {
+async function operateDeployment(action: OpsDeploymentAction) {
   const deployment = selectedDeployment.value
-  if (!deployment) return
+  if (!deployment || deploymentOperation.value) return
   try {
     if (action === 'stop' || action === 'restart') {
       await ElMessageBox.confirm(
-        `${action === 'stop' ? '停止' : '重启'}“${serviceLabel[service]}”会影响工程运行，是否继续？`,
-        '确认服务操作',
+        `${action === 'stop' ? '停止' : '重启'}工程“${deployment.projectName}”会影响其在物理节点上的运行，是否继续？`,
+        '确认工程部署操作',
         { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' },
       )
     }
-    operationKey.value = `${service}:${action}`
-    const run = await opsAPI.runServiceAction(deployment.id, service, action)
-    selectedRun.value = run
-    ElMessage.success('操作已下发到目标物理节点')
-    if (run.id) await pollRun(run.id, deployment.id)
+    deploymentOperation.value = action
+    const result = await opsAPI.operateProjectDeployment(deployment.id, action)
+    if (disposed) return
+    selectedDeployment.value = result.deployment
+    selectedRun.value = result.run
+    ElMessage.success('工程部署操作已下发到目标物理节点')
+    if (result.run.id) await pollRun(result.run.id, deployment.id)
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
-    ElMessage.error(apiErrorMessage(error, '服务操作失败'))
+    if (!disposed) ElMessage.error(apiErrorMessage(error, '工程部署操作失败'))
   } finally {
-    operationKey.value = ''
+    if (!disposed) deploymentOperation.value = ''
   }
 }
 
@@ -1322,10 +1361,13 @@ const shortFingerprint = (value: string) =>
   value.length > 20 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value
 
 onMounted(() => {
+  disposed = false
+  window.addEventListener('ops:open-deploy', handleOpenDeployEvent)
   void loadDashboard()
 })
 onBeforeUnmount(() => {
   disposed = true
+  window.removeEventListener('ops:open-deploy', handleOpenDeployEvent)
 })
 </script>
 
@@ -1340,7 +1382,7 @@ onBeforeUnmount(() => {
 .table-toolbar,
 .panel-heading,
 .service-card-main,
-.service-actions {
+.deployment-actions {
   display: flex;
   align-items: center;
 }
@@ -1625,6 +1667,18 @@ onBeforeUnmount(() => {
   margin-top: 24px;
 }
 
+.deployment-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.deployment-actions > span {
+  margin-right: auto;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
 .service-card {
   margin-top: 10px;
   padding: 16px;
@@ -1644,11 +1698,6 @@ onBeforeUnmount(() => {
   margin-top: 12px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
-}
-
-.service-actions {
-  justify-content: flex-end;
-  margin-top: 14px;
 }
 
 .event-list {

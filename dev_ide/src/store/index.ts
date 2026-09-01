@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { Storage } from '@/utils'
 import type { Role, UserInfo } from '@/types/auth'
-import type { AuthConfigPayload, AuthLoginPayload, AuthUserPayload } from '@/api/auth.api'
+import {
+  authAPI,
+  type AuthConfigPayload,
+  type AuthLoginPayload,
+  type AuthUserPayload,
+} from '@/api/auth.api'
 import { getApiErrorMessage } from '@/utils/request'
 import { applyTenantBrowserBrand } from '@/utils/tenantBrand'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
@@ -164,7 +169,6 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(credentials: LoginCredentials): Promise<LoginResult> {
       try {
-        const { authAPI } = await import('@/api')
         const response = await authAPI.login(credentials)
         const payload = unwrapApiData<AuthLoginPayload>(response)
         const user = payload?.user
@@ -183,7 +187,6 @@ export const useAuthStore = defineStore('auth', {
 
     async restoreSession(): Promise<boolean> {
       try {
-        const { authAPI } = await import('@/api')
         const response = await authAPI.getCurrentUser({ skipAuthRedirect: true })
         const user = unwrapApiData<AuthUserPayload>(response)
         const normalizedUser = user ? normalizeAuthUser(user) : null
@@ -201,7 +204,6 @@ export const useAuthStore = defineStore('auth', {
 
     async logout(): Promise<void> {
       try {
-        const { authAPI } = await import('@/api')
         await authAPI.logout()
       } finally {
         this.clearAuthData()
@@ -278,7 +280,6 @@ export const useAppStore = defineStore('app', {
 
     async loadConfig(tenantCode?: string): Promise<void> {
       try {
-        const { authAPI } = await import('@/api')
         const response = await authAPI.getConfig(tenantCode)
         const config = unwrapApiData<AuthConfigPayload>(response)
         const mergedConfig: AppConfig = {

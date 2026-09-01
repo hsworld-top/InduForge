@@ -924,7 +924,7 @@ describe('project-management-page', () => {
     expect(container.textContent || '').not.toContain('Color Tag')
   })
 
-  test('card/list 两个视图分支仍能切换，成员与权限/发布部署/导出/删除接线点仍可见', async () => {
+  test('card/list 两个视图分支仍能切换，部署入口只引导到正式运维页', async () => {
     primePageMocks()
 
     const { container } = await mountPage()
@@ -985,8 +985,12 @@ describe('project-management-page', () => {
       '[data-testid="project-deploy-action"]',
     ) as HTMLButtonElement
     deployButton.click()
-    await flushPromises()
-    expect(mockRequestGet).toHaveBeenCalled()
+    await nextTick()
+    expect(mockMessageInfo).toHaveBeenCalledWith(
+      '源码快照不能用于正式部署，已前往“运维管理”选择正式 Release 和运行环境。',
+    )
+    expect(mockRequestGet).not.toHaveBeenCalled()
+    expect(container.textContent || '').not.toContain('部署模式')
   })
 
   test('批量删除会复用删除影响评估与强制删除保护路径', async () => {
