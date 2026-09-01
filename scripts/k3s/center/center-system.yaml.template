@@ -268,6 +268,99 @@ automountServiceAccountToken: true
 apiVersion: v1
 kind: Service
 metadata:
+  name: center-data
+  namespace: induforge-system
+spec:
+  selector:
+    app.kubernetes.io/name: center-data
+  ports:
+    - name: http
+      port: 18102
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: center-data
+  namespace: induforge-system
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-data
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-data
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      initContainers:
+        - name: wait-center-infrastructure
+          image: docker.io/rancher/mirrored-library-busybox:1.37.0
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until nc -z center-meta-store 18432; do sleep 2; done
+              until nc -z center-cache-store 18379; do sleep 2; done
+      containers:
+        - name: data
+          image: __DATA_IMAGE__
+          imagePullPolicy: Never
+          envFrom:
+            - secretRef:
+                name: center-env
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DB_AUTO_SCHEMA_SYNC
+              value: "false"
+            - name: DATA_SERVICE_ADDR
+              value: :18102
+            - name: IF_META_STORE_HOST
+              value: center-meta-store
+            - name: IF_META_STORE_PORT
+              value: "18432"
+            - name: IF_CACHE_STORE_HOST
+              value: center-cache-store
+            - name: IF_CACHE_STORE_PORT
+              value: "18379"
+          ports:
+            - name: http
+              containerPort: 18102
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: center-control
   namespace: induforge-system
 spec:
@@ -315,6 +408,7 @@ spec:
               until nc -z center-meta-store 18432; do sleep 2; done
               until nc -z center-cache-store 18379; do sleep 2; done
               until nc -z center-object-store 18500; do sleep 2; done
+              until nc -z center-data 18102; do sleep 2; done
       containers:
         - name: control
           image: __CONTROL_IMAGE__
@@ -339,6 +433,8 @@ spec:
               value: center-object-store
             - name: IF_OBJECT_STORE_PORT
               value: "18500"
+            - name: DATA_SERVICE_URL
+              value: http://center-data:18102
             - name: CODE_WORKSPACE_ROOT
               value: /var/lib/induforge/workspaces
             - name: CODE_SERVER_DOCKER_HOST

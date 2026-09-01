@@ -26,6 +26,7 @@ KUBECONFIG_PATH=${IF_CENTER_KUBECONFIG:-/var/lib/induforge/k3s/server/cred/admin
 CONTAINERD_ADDRESS=${IF_CENTER_CONTAINERD_ADDRESS:-/run/k3s/containerd/containerd.sock}
 CENTER_NODE_NAME=${IF_CENTER_NODE_NAME:-${CENTER_NODE_NAME:-}}
 CONTROL_IMAGE=${IF_CENTER_CONTROL_IMAGE:-${CONTROL_IMAGE:-induforge/control:latest}}
+DATA_IMAGE=${IF_CENTER_DATA_IMAGE:-${DATA_IMAGE:-induforge/data:latest}}
 EDGE_IMAGE=${IF_CENTER_EDGE_IMAGE:-${EDGE_IMAGE:-induforge/edge:latest}}
 DATA_ROOT=${IF_CENTER_DATA_ROOT:-${DATA_ROOT:-/var/lib/induforge/center}}
 HTTP_PORT=${IF_EDGE_HOST_PORT:-${HTTP_PORT:-18080}}
@@ -50,7 +51,7 @@ containerd_images() {
 require_center_images() {
   available=$(containerd_images)
   for image in \
-    "$CONTROL_IMAGE" "$EDGE_IMAGE" \
+    "$CONTROL_IMAGE" "$DATA_IMAGE" "$EDGE_IMAGE" \
     docker.io/timescale/timescaledb:2.26.4-pg16 \
     docker.io/library/redis:7.2-alpine \
     docker.io/chrislusf/seaweedfs:3.85 \
@@ -115,6 +116,9 @@ validate_settings() {
   case "$CONTROL_IMAGE" in
     ''|*[!a-zA-Z0-9._/:@-]*) echo "IF_CENTER_CONTROL_IMAGE is invalid" >&2; exit 1 ;;
   esac
+  case "$DATA_IMAGE" in
+    ''|*[!a-zA-Z0-9._/:@-]*) echo "IF_CENTER_DATA_IMAGE is invalid" >&2; exit 1 ;;
+  esac
   case "$EDGE_IMAGE" in
     ''|*[!a-zA-Z0-9._/:@-]*) echo "IF_CENTER_EDGE_IMAGE is invalid" >&2; exit 1 ;;
   esac
@@ -174,6 +178,7 @@ render_manifest() {
   sed \
     -e "s|__CENTER_NODE_NAME__|$CENTER_NODE_NAME|g" \
     -e "s|__CONTROL_IMAGE__|$CONTROL_IMAGE|g" \
+    -e "s|__DATA_IMAGE__|$DATA_IMAGE|g" \
     -e "s|__EDGE_IMAGE__|$EDGE_IMAGE|g" \
     -e "s|__DATA_ROOT__|$DATA_ROOT|g" \
     -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
@@ -226,7 +231,7 @@ apply_center() {
   kubectl_cmd apply -f "$temp_dir/center-system.yaml"
   # Secret 与 subPath ConfigMap 都只在容器启动时读取；仅在内容变更时触发对应服务更新。
   case "$secret_result" in
-    *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-control ;;
+    *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-data deployment/center-control ;;
   esac
   case "$release_key_result" in *configured*|*created*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-control ;; esac
   case "$edge_config_result" in
@@ -234,7 +239,7 @@ apply_center() {
   esac
   for workload in \
     statefulset/center-meta-store statefulset/center-cache-store statefulset/center-object-store \
-    deployment/center-control deployment/center-edge; do
+    deployment/center-data deployment/center-control deployment/center-edge; do
     kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
   done
   doctor
@@ -250,6 +255,7 @@ show_summary() {
   require_root status
   for item in \
     'control|center-control|deployment' \
+    'data|center-data|deployment' \
     'edge|center-edge|deployment' \
     'database|center-meta-store|statefulset' \
     'cache|center-cache-store|statefulset' \
@@ -279,12 +285,14 @@ doctor() {
     echo "$unavailable" >&2
     failed=1
   fi
-  if ! kubectl_cmd -n "$NAMESPACE" get endpointslice \
-    -l kubernetes.io/service-name=center-control \
-    -o jsonpath='{.items[0].endpoints[0].conditions.ready}' | grep -q true; then
-    echo "center-control has no ready endpoint" >&2
-    failed=1
-  fi
+  for service in center-control center-data; do
+    if ! kubectl_cmd -n "$NAMESPACE" get endpointslice \
+      -l "kubernetes.io/service-name=$service" \
+      -o jsonpath='{.items[0].endpoints[0].conditions.ready}' | grep -q true; then
+      echo "$service has no ready endpoint" >&2
+      failed=1
+    fi
+  done
   if [ "$failed" -ne 0 ]; then
     kubectl_cmd -n "$NAMESPACE" get pods -o wide >&2 || true
     return 1
@@ -297,6 +305,7 @@ show_logs() {
   workload=${1:-center-control}
   case "$workload" in
     center-control) container=control ;;
+    center-data) container=data ;;
     center-edge) container=nginx ;;
     center-meta-store) container=postgres ;;
     center-cache-store) container=redis ;;
@@ -310,7 +319,7 @@ restart_workload() {
   require_root restart
   workload=${1:-}
   case "$workload" in
-    center-control|center-edge) kubectl_cmd -n "$NAMESPACE" rollout restart "deployment/$workload" ;;
+    center-control|center-data|center-edge) kubectl_cmd -n "$NAMESPACE" rollout restart "deployment/$workload" ;;
     center-meta-store|center-cache-store|center-object-store) kubectl_cmd -n "$NAMESPACE" rollout restart "statefulset/$workload" ;;
     *) echo "restart requires a supported center workload" >&2; exit 2 ;;
   esac

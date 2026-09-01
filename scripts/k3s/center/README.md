@@ -18,6 +18,7 @@ sudo /opt/induforge/center-k3s/centerctl import-images /path/to/center-images
 ```bash
 sudo IF_CENTER_NODE_NAME=<k3s-node-name> \
   IF_CENTER_CONTROL_IMAGE=induforge/control:<version> \
+  IF_CENTER_DATA_IMAGE=induforge/data:<version> \
   IF_CENTER_EDGE_IMAGE=induforge/edge:<version> \
   IF_CENTER_DATA_ROOT=/var/lib/induforge/center \
   /opt/induforge/center-k3s/centerctl apply /etc/induforge/center.env
@@ -53,8 +54,9 @@ sudo induforge restart control
 安装流程会将节点名、镜像版本、数据根目录和入口端口写入 root-only 的
 `/etc/induforge/center-k3s.conf`，因此上述诊断命令不依赖当前 shell 的环境变量。
 
-`center-control` 暂时只为现有 Docker 代码工作区挂载宿主 Docker Socket。中心数据库、缓存、对象
-存储、控制面和 IDE 入口均由 K3s 管理；代码工作区改为 K3s 调度后必须删除该兼容挂载和 Docker
+`center-data` 作为独立 Deployment 通过 `center-data:18102` ClusterIP Service 向控制面提供数据域与
+正式 Release 工件，不依赖宿主端口。`center-control` 暂时只为现有 Docker 代码工作区挂载宿主 Docker Socket。中心数据库、缓存、对象
+存储、控制面、数据域和 IDE 入口均由 K3s 管理；代码工作区改为 K3s 调度后必须删除该兼容挂载和 Docker
 依赖。
 
 正式 Release Builder 默认使用独立的受控离线构建镜像

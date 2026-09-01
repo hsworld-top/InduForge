@@ -7,6 +7,7 @@ trap 'rm -rf "$temp_dir"' EXIT INT TERM
 
 IF_CENTER_NODE_NAME=if-center-01 \
 IF_CENTER_CONTROL_IMAGE=induforge/control:1.0.0 \
+IF_CENTER_DATA_IMAGE=induforge/data:1.0.0 \
 IF_CENTER_EDGE_IMAGE=induforge/edge:1.0.0 \
 IF_CENTER_DATA_ROOT=/var/lib/induforge/center \
 IF_EDGE_HOST_PORT=18080 \
@@ -17,6 +18,7 @@ IF_CENTER_DOCKER_GID=998 \
 ln -s "$SCRIPT_DIR/centerctl" "$temp_dir/centerctl"
 IF_CENTER_NODE_NAME=if-center-01 \
 IF_CENTER_CONTROL_IMAGE=induforge/control:1.0.0 \
+IF_CENTER_DATA_IMAGE=induforge/data:1.0.0 \
 IF_CENTER_EDGE_IMAGE=induforge/edge:1.0.0 \
 IF_CENTER_DATA_ROOT=/var/lib/induforge/center \
 IF_CENTER_DOCKER_GID=998 \
@@ -31,7 +33,10 @@ for expected in \
   'namespace: induforge-system' \
   'induforge.io/center-node: "true"' \
   'image: induforge/control:1.0.0' \
+  'image: induforge/data:1.0.0' \
   'image: induforge/edge:1.0.0' \
+  'name: center-data' \
+  'value: http://center-data:18102' \
   'hostPort: 18080' \
   'supplementalGroups: [998]' \
   'name: wait-center-infrastructure' \
@@ -45,7 +50,7 @@ for expected in \
   'path: /var/lib/induforge/center/meta-store'; do
   grep -Fq "$expected" "$temp_dir/rendered.yaml"
 done
-if [ "$(grep -Fc 'induforge.io/center-node: "true"' "$temp_dir/rendered.yaml")" -ne 5 ]; then
+if [ "$(grep -Fc 'induforge.io/center-node: "true"' "$temp_dir/rendered.yaml")" -ne 6 ]; then
   echo "not every center workload is pinned to the center node" >&2
   exit 1
 fi
