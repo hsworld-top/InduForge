@@ -204,6 +204,7 @@ func main() {
 		logger.Info("项目 K3s 调和器未启用", "reason", reconcileErr)
 	} else {
 		reconciler.SetRuntimeContextLoader(opsRepository)
+		reconciler.SetDeploymentSecretManager(ops.NewDeploymentSecretManager(reconciler))
 		go runProjectWorkloadReconciler(signalCtx, opsRepository, reconciler, logger)
 	}
 

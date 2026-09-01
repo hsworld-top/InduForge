@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -38,7 +39,15 @@ func (r *KubernetesProjectReconciler) GetSecret(ctx context.Context, ns, name st
 	if e = json.NewDecoder(resp.Body).Decode(&v); e != nil {
 		return nil, false, e
 	}
-	return v.Data, true, nil
+	decoded := make(map[string]string, len(v.Data))
+	for key, value := range v.Data {
+		plain, decodeErr := base64.StdEncoding.DecodeString(value)
+		if decodeErr != nil {
+			return nil, false, fmt.Errorf("读取 Secret %s 数据失败", name)
+		}
+		decoded[key] = string(plain)
+	}
+	return decoded, true, nil
 }
 func (r *KubernetesProjectReconciler) ApplySecret(ctx context.Context, ns, name string, data map[string]string) error {
 	b, e := json.Marshal(map[string]any{"apiVersion": "v1", "kind": "Secret", "metadata": map[string]string{"name": name, "namespace": ns}, "type": "Opaque", "stringData": data})

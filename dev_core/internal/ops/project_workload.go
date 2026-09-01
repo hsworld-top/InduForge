@@ -110,7 +110,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           image: %s
           imagePullPolicy: IfNotPresent
           env:
-            - {name: COMPUTE_SANDBOX_TOKEN, valueFrom: {secretKeyRef: {name: %s, key: token}}}
+            - {name: COMPUTE_SANDBOX_TOKEN, valueFrom: {secretKeyRef: {name: %s, key: sandbox-token}}}
             - {name: COMPUTE_SANDBOX_SITE_ID, value: %q}
             - {name: COMPUTE_SANDBOX_NODE_ID, value: %q}
             - {name: COMPUTE_SANDBOX_EXECUTION_FORM, value: "native-linux"}

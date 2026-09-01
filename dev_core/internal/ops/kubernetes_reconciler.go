@@ -188,21 +188,22 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if err != nil {
 			return fmt.Errorf("构造运行绑定输入失败: %w", err)
 		}
+		if r.secretManager == nil {
+			return fmt.Errorf("部署 Secret 管理器未配置")
+		}
+		namespace, err := projectNamespace(workload.EnvironmentID)
+		if err != nil {
+			return err
+		}
+		if _, err = r.secretManager.Ensure(ctx, namespace, workload.DeploymentID, workload.Engine, runtimeContext.Support); err != nil {
+			return fmt.Errorf("准备部署运行 Secret 失败: %w", err)
+		}
 		if err := r.applyRuntimeBindingConfigMap(ctx, workload, input); err != nil {
 			return err
 		}
 		digest := sha256.Sum256(input)
 		workload.RuntimeBindingChecksum = "sha256:" + hex.EncodeToString(digest[:])
 		workload.BindingRevision = runtimeContext.BindingRevision
-	}
-	if (workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm) && r.secretManager != nil {
-		namespace, err := projectNamespace(workload.EnvironmentID)
-		if err != nil {
-			return err
-		}
-		if _, err = r.secretManager.Ensure(ctx, namespace, workload.DeploymentID, workload.Engine == ServiceCompute); err != nil {
-			return fmt.Errorf("准备计算部署 Secret 失败: %w", err)
-		}
 	}
 	manifest, err := RenderProjectWorkloadManifest(workload)
 	if err != nil {
