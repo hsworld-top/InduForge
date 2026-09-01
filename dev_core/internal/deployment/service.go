@@ -46,6 +46,9 @@ type Version struct {
 	ArtifactHash   string
 	ArtifactSize   int64
 	Manifest       map[string]any
+	ManifestHash   string
+	ChecksumsHash  string
+	SigningKeyID   string
 	ErrorMessage   string
 	CompletedAt    *time.Time
 	CreatedAt      time.Time

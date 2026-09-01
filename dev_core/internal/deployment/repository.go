@@ -140,7 +140,12 @@ func (r *PostgreSQLRepository) MarkVersionReady(ctx context.Context, tenantID, v
 	if err != nil {
 		return Version{}, err
 	}
-	row, err := r.queries.MarkApplicationVersionReady(ctx, dbsqlc.MarkApplicationVersionReadyParams{ArtifactBucket: nullableText(input.Bucket), ArtifactKey: nullableText(input.ArtifactKey), ArtifactHash: nullableText(input.ArtifactHash), ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, Manifest: manifest, VersionID: version, TenantID: tenant})
+	row, err := r.queries.MarkApplicationVersionReady(ctx, dbsqlc.MarkApplicationVersionReadyParams{
+		ArtifactBucket: nullableText(input.Bucket), ArtifactKey: nullableText(input.ArtifactKey), ArtifactHash: nullableText(input.ArtifactHash),
+		ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, Manifest: manifest,
+		ManifestHash: nullableText(input.ManifestHash), ChecksumsHash: nullableText(input.ChecksumsHash), SigningKeyID: nullableText(input.SigningKeyID),
+		VersionID: version, TenantID: tenant,
+	})
 	if err != nil {
 		return Version{}, mapNotFound(err)
 	}
@@ -292,7 +297,7 @@ func versionFromModel(row dbsqlc.ApplicationVersion) Version {
 		ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), ProjectID: uuidString(row.ProjectID), Version: row.Version,
 		Name: textString(row.Name), Description: textString(row.Description), Status: row.Status,
 		SourceHash: textString(row.SourceHash), ArtifactKey: textString(row.ArtifactKey), ArtifactBucket: textString(row.ArtifactBucket), ArtifactHash: textString(row.ArtifactHash),
-		ArtifactSize: int64Value(row.ArtifactSize), ErrorMessage: textString(row.ErrorMessage), CompletedAt: timePointer(row.CompletedAt),
+		ArtifactSize: int64Value(row.ArtifactSize), ManifestHash: textString(row.ManifestHash), ChecksumsHash: textString(row.ChecksumsHash), SigningKeyID: textString(row.SigningKeyID), ErrorMessage: textString(row.ErrorMessage), CompletedAt: timePointer(row.CompletedAt),
 		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 	}
 	decodeJSONValue(row.Manifest, &item.Manifest)

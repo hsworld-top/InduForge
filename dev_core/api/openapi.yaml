@@ -3761,9 +3761,7 @@ components:
         reason: { type: string }
     PublishVersionRequest:
       type: object
-      required: [version]
       properties:
-        version: { type: string }
         name: { type: string }
         description: { type: string }
     DeployRequest:
