@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -16,84 +17,130 @@ type fakeDockerFrontendEngine struct {
 	err  error
 }
 
-func (e *fakeDockerFrontendEngine) Run(_ context.Context, spec dockerFrontendSpec) error {
-	e.spec = spec
+func (e *fakeDockerFrontendEngine) Run(_ context.Context, s dockerFrontendSpec) error {
+	e.spec = s
 	if e.err != nil {
 		return e.err
 	}
-	if err := os.MkdirAll(filepath.Join(spec.Output, "dist"), 0o755); err != nil {
+	p := filepath.Join(testWorkspaceRoot(s), "dist")
+	if err := os.MkdirAll(p, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(spec.Output, "dist", "index.html"), []byte("ok"), 0o644)
+	return os.WriteFile(filepath.Join(p, "index.html"), []byte("ok"), 0o644)
+}
+func testWorkspaceRoot(s dockerFrontendSpec) string {
+	return filepath.Join(frontendTestRoot, s.OutputSubpath)
 }
 
-func TestDockerFrontendBuildRunnerUsesFixedIsolatedSpec(t *testing.T) {
-	workspace, outputRoot := t.TempDir(), t.TempDir()
-	engine := &fakeDockerFrontendEngine{}
-	runner, err := newDockerFrontendBuildRunner(engine, "induforge/frontend-builder:fixed", outputRoot, 0)
+var frontendTestRoot string
+
+func TestDockerFrontendBuildRunnerUsesReleaseScopedVolumeSpec(t *testing.T) {
+	frontendTestRoot = t.TempDir()
+	e := &fakeDockerFrontendEngine{}
+	r, err := newDockerFrontendBuildRunner(e, DockerFrontendBuildRunnerConfig{Image: "builder:fixed", WorkspaceVolume: "induforge-workspaces", WorkspaceRoot: frontendTestRoot})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dist, err := runner.BuildProjectFrontend(context.Background(), Project{ID: releaseSourceProjectID, WorkspacePath: workspace})
+	v := Version{ID: "22222222-2222-4222-8222-222222222222"}
+	out, err := r.BuildProjectFrontend(context.Background(), Project{ID: releaseSourceProjectID}, v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dist != filepath.Join(outputRoot, releaseSourceProjectID, "dist") || engine.spec.Image != "induforge/frontend-builder:fixed" || engine.spec.Workspace != workspace || engine.spec.Output != filepath.Join(outputRoot, releaseSourceProjectID) {
-		t.Fatalf("受控构建目录或镜像不正确: %#v dist=%s", engine.spec, dist)
+	if !strings.Contains(e.spec.Name, releaseSourceProjectID) || !strings.Contains(e.spec.Name, "-") || e.spec.WorkspaceSubpath != releaseSourceProjectID+"/workspace" || e.spec.CacheSubpath != releaseSourceProjectID+"/cache" || e.spec.OutputSubpath != releaseSourceProjectID+"/release-builds/"+v.ID {
+		t.Fatalf("volume subpath 或一次性名称错误: %#v", e.spec)
 	}
-	if got, want := engine.spec.Command, []string{"pnpm", "run", "build", "--", "--outDir", "/output/dist"}; len(got) != len(want) {
-		t.Fatalf("固定构建命令不正确: %v", got)
+	if out.DistDir != filepath.Join(frontendTestRoot, e.spec.OutputSubpath, "dist") {
+		t.Fatal("返回的 control 可见 dist 路径错误")
+	}
+	if out.Cleanup() == nil {
+		if _, err := os.Stat(filepath.Dir(out.DistDir)); !os.IsNotExist(err) {
+			t.Fatal("cleanup 未删除本次 release 输出")
+		}
 	}
 }
-
 func TestDockerFrontendBuildRunnerCleansFailedOutput(t *testing.T) {
-	workspace, outputRoot := t.TempDir(), t.TempDir()
-	runner, err := newDockerFrontendBuildRunner(&fakeDockerFrontendEngine{err: errors.New("failed")}, "image", outputRoot, 0)
+	frontendTestRoot = t.TempDir()
+	r, err := newDockerFrontendBuildRunner(&fakeDockerFrontendEngine{err: errors.New("failed")}, DockerFrontendBuildRunnerConfig{Image: "image", WorkspaceVolume: "volume", WorkspaceRoot: frontendTestRoot})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runner.BuildProjectFrontend(context.Background(), Project{ID: releaseSourceProjectID, WorkspacePath: workspace}); err == nil {
-		t.Fatal("构建失败不应返回 dist")
+	_, err = r.BuildProjectFrontend(context.Background(), Project{ID: releaseSourceProjectID}, Version{ID: "22222222-2222-4222-8222-222222222222"})
+	if err == nil {
+		t.Fatal("失败构建不得成功")
 	}
-	if _, err := os.Stat(filepath.Join(outputRoot, releaseSourceProjectID)); !os.IsNotExist(err) {
-		t.Fatalf("失败构建残留输出目录: %v", err)
+	if _, err := os.Stat(filepath.Join(frontendTestRoot, releaseSourceProjectID, "release-builds", "22222222-2222-4222-8222-222222222222")); !os.IsNotExist(err) {
+		t.Fatal("失败构建输出未清理")
 	}
 }
 
-func TestDockerFrontendClientCreatesLockedDownBuildContainer(t *testing.T) {
+func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	var create map[string]any
+	var removed bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/version":
 			_ = json.NewEncoder(w).Encode(map[string]string{"ApiVersion": "1.47"})
 		case "/v1.47/containers/create":
 			_ = json.NewDecoder(r.Body).Decode(&create)
-			_ = json.NewEncoder(w).Encode(map[string]string{"Id": "build-id"})
-		case "/v1.47/containers/build-id/start", "/v1.47/containers/build-id":
-			w.WriteHeader(http.StatusNoContent)
-		case "/v1.47/containers/build-id/wait":
+			_ = json.NewEncoder(w).Encode(map[string]string{"Id": "build"})
+		case "/v1.47/containers/build/start":
+			w.WriteHeader(204)
+		case "/v1.47/containers/build/wait":
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 0})
+		case "/v1.47/containers/build":
+			removed = true
+			w.WriteHeader(204)
 		default:
-			t.Fatalf("unexpected Docker path %s", r.URL.Path)
+			t.Fatalf("unexpected %s", r.URL.Path)
 		}
 	}))
 	defer server.Close()
-	client, err := newDockerFrontendEngine(server.URL)
+	c, err := newDockerFrontendEngine(server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := client.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "fixed-image", Workspace: "/trusted/workspace", Output: "/trusted/output", Command: []string{"pnpm", "run", "build"}}); err != nil {
+	err = c.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "image", Volume: "volume", WorkspaceSubpath: "p/workspace", CacheSubpath: "p/cache", OutputSubpath: "p/release-builds/r", MemoryBytes: 123, NanoCPUs: 456, Command: []string{"/bin/sh"}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	host := create["HostConfig"].(map[string]any)
-	if host["NetworkMode"] != "none" || host["ReadonlyRootfs"] != true || host["PidsLimit"] != float64(256) {
-		t.Fatalf("构建容器隔离配置不正确: %#v", host)
+	h := create["HostConfig"].(map[string]any)
+	if h["NetworkMode"] != "none" || h["ReadonlyRootfs"] != true || h["Memory"] != float64(123) || h["NanoCPUs"] != float64(456) || h["PidsLimit"] != float64(256) {
+		t.Fatalf("安全限制缺失: %#v", h)
 	}
-	if caps := host["CapDrop"].([]any); len(caps) != 1 || caps[0] != "ALL" {
-		t.Fatalf("构建容器未删除全部 capabilities: %#v", caps)
+	ms := h["Mounts"].([]any)
+	if len(ms) != 3 || ms[0].(map[string]any)["Type"] != "volume" || ms[0].(map[string]any)["ReadOnly"] != true || ms[0].(map[string]any)["Target"] != "/source" {
+		t.Fatalf("volume 挂载错误: %#v", ms)
 	}
-	mounts := host["Mounts"].([]any)
-	if len(mounts) != 2 || mounts[0].(map[string]any)["ReadOnly"] != true || mounts[0].(map[string]any)["Target"] != "/workspace" || mounts[1].(map[string]any)["Target"] != "/output" {
-		t.Fatalf("构建容器挂载不正确: %#v", mounts)
+	if !removed {
+		t.Fatal("一次性容器未清理")
+	}
+}
+
+func TestDockerFrontendClientTruncatesFailureLogsAndCleansContainer(t *testing.T) {
+	var removed bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/version":
+			_ = json.NewEncoder(w).Encode(map[string]string{"ApiVersion": "1.47"})
+		case "/v1.47/containers/create":
+			_ = json.NewEncoder(w).Encode(map[string]string{"Id": "build"})
+		case "/v1.47/containers/build/start":
+			w.WriteHeader(204)
+		case "/v1.47/containers/build/wait":
+			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 1})
+		case "/v1.47/containers/build/logs":
+			_, _ = w.Write([]byte(strings.Repeat("x", frontendBuildLogLimit+10)))
+		case "/v1.47/containers/build":
+			removed = true
+			w.WriteHeader(204)
+		default:
+			t.Fatalf("unexpected %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	c, _ := newDockerFrontendEngine(server.URL)
+	err := c.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "image", Volume: "v", WorkspaceSubpath: "p/workspace", CacheSubpath: "p/cache", OutputSubpath: "p/out"})
+	if err == nil || !strings.Contains(err.Error(), "日志已截断") || !removed {
+		t.Fatalf("非零退出必须读取截断日志并清理: err=%v removed=%v", err, removed)
 	}
 }

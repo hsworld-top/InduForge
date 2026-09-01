@@ -25,8 +25,8 @@ type fakeFrontendRunner struct {
 	err       error
 }
 
-func (r fakeFrontendRunner) BuildProjectFrontend(context.Context, Project) (string, error) {
-	return r.directory, r.err
+func (r fakeFrontendRunner) BuildProjectFrontend(context.Context, Project, Version) (FrontendBuildOutput, error) {
+	return FrontendBuildOutput{DistDir: r.directory}, r.err
 }
 
 func TestProjectReleaseSourceBuilderBuildsDeterministicAuthorizedSource(t *testing.T) {
@@ -40,14 +40,15 @@ func TestProjectReleaseSourceBuilderBuildsDeterministicAuthorizedSource(t *testi
 	defer server.Close()
 	builder := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist})
 	project := Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}
-	first, err := builder.BuildReleaseSource(context.Background(), project, "Bearer forwarded-token")
+	version := Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}
+	first, err := builder.BuildReleaseSource(context.Background(), project, version, "Bearer forwarded-token")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if gotAuthorization != "Bearer forwarded-token" {
 		t.Fatalf("数据域调用未保留受限身份: auth=%q", gotAuthorization)
 	}
-	second, err := builder.BuildReleaseSource(context.Background(), project, "Bearer forwarded-token")
+	second, err := builder.BuildReleaseSource(context.Background(), project, version, "Bearer forwarded-token")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +104,7 @@ func TestProjectReleaseSourceBuilderRejectsInvalidDataServiceArtifacts(t *testin
 				_ = json.NewEncoder(w).Encode(test.body)
 			}))
 			defer server.Close()
-			if _, err := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist}).BuildReleaseSource(context.Background(), project, ""); err == nil {
+			if _, err := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist}).BuildReleaseSource(context.Background(), project, Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}, ""); err == nil {
 				t.Fatal("非法数据域响应不得进入正式制品")
 			}
 		})
@@ -118,7 +119,7 @@ func TestProjectReleaseSourceBuilderLimitsDataServiceResponse(t *testing.T) {
 	defer server.Close()
 	builder := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist})
 	builder.responseLimit = 32
-	if _, err := builder.BuildReleaseSource(context.Background(), Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}, ""); err == nil {
+	if _, err := builder.BuildReleaseSource(context.Background(), Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}, Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}, ""); err == nil {
 		t.Fatal("超限数据域响应不得进入正式制品")
 	}
 }
@@ -127,7 +128,7 @@ func TestProjectReleaseSourceBuilderRejectsCollectorWithoutTrustedArtifact(t *te
 	workspace, dist := releaseSourceDirectories(t)
 	server := artifactServer(t, runtimeArtifact(releaseSourceProjectID, "collector.point", false))
 	defer server.Close()
-	_, err := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist}).BuildReleaseSource(context.Background(), Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}, "")
+	_, err := releaseSourceBuilder(t, server.URL, fakeFrontendRunner{directory: dist}).BuildReleaseSource(context.Background(), Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}, Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}, "")
 	if err == nil || !strings.Contains(err.Error(), "Collector") {
 		t.Fatalf("采集引擎没有受信制品必须失败关闭: %v", err)
 	}

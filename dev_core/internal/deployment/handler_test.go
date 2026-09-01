@@ -256,7 +256,7 @@ type fakeReleaseSourceBuilder struct {
 	err    error
 }
 
-func (b fakeReleaseSourceBuilder) BuildReleaseSource(context.Context, deployment.Project, string) (deployment.ReleaseSource, error) {
+func (b fakeReleaseSourceBuilder) BuildReleaseSource(context.Context, deployment.Project, deployment.Version, string) (deployment.ReleaseSource, error) {
 	if b.err != nil {
 		return deployment.ReleaseSource{}, b.err
 	}

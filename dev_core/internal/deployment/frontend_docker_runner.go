@@ -10,103 +10,104 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-// DockerFrontendBuildRunnerConfig 的镜像必须由平台运维固定提供，不能来自工程文件。
+const frontendBuildLogLimit = 64 << 10
+
 type DockerFrontendBuildRunnerConfig struct {
-	DockerHost string
-	Image      string
-	OutputRoot string
-	Timeout    time.Duration
+	DockerHost, Image, WorkspaceVolume, WorkspaceRoot string
+	Timeout                                           time.Duration
+	MemoryBytes, NanoCPUs                             int64
 }
 
 type dockerFrontendSpec struct {
-	Name, Image, Workspace, Output string
-	Command                        []string
+	Name, Image, Volume, WorkspaceSubpath, CacheSubpath, OutputSubpath string
+	Command                                                            []string
+	MemoryBytes, NanoCPUs                                              int64
 }
-
 type dockerFrontendEngine interface {
 	Run(context.Context, dockerFrontendSpec) error
 }
 
-// DockerFrontendBuildRunner 在隔离容器中执行固定的 pnpm 构建命令。工程源码只读挂载，
-// 输出仅可写入受控 OutputRoot，且不提供网络、特权、Docker Socket 或环境密钥。
+// DockerFrontendBuildRunner 只使用共享工作空间卷的受限 subpath，绝不把 control
+// 容器内路径作为 Docker bind source，也不复用 code-server。
 type DockerFrontendBuildRunner struct {
-	engine     dockerFrontendEngine
-	image      string
-	outputRoot string
-	timeout    time.Duration
+	engine                       dockerFrontendEngine
+	image, volume, workspaceRoot string
+	timeout                      time.Duration
+	memoryBytes, nanoCPUs        int64
 }
 
 func NewDockerFrontendBuildRunner(config DockerFrontendBuildRunnerConfig) (*DockerFrontendBuildRunner, error) {
-	image, outputRoot := strings.TrimSpace(config.Image), strings.TrimSpace(config.OutputRoot)
-	if image == "" || outputRoot == "" {
-		return nil, fmt.Errorf("前端构建镜像或输出目录未配置")
-	}
-	absolute, err := filepath.Abs(outputRoot)
-	if err != nil {
-		return nil, fmt.Errorf("解析前端构建输出目录失败: %w", err)
-	}
 	engine, err := newDockerFrontendEngine(config.DockerHost)
 	if err != nil {
 		return nil, err
 	}
-	return newDockerFrontendBuildRunner(engine, image, absolute, config.Timeout)
+	return newDockerFrontendBuildRunner(engine, config)
 }
-
-func newDockerFrontendBuildRunner(engine dockerFrontendEngine, image, outputRoot string, timeout time.Duration) (*DockerFrontendBuildRunner, error) {
-	if engine == nil || strings.TrimSpace(image) == "" || strings.TrimSpace(outputRoot) == "" {
+func newDockerFrontendBuildRunner(engine dockerFrontendEngine, config DockerFrontendBuildRunnerConfig) (*DockerFrontendBuildRunner, error) {
+	config.Image, config.WorkspaceVolume, config.WorkspaceRoot = strings.TrimSpace(config.Image), strings.TrimSpace(config.WorkspaceVolume), strings.TrimSpace(config.WorkspaceRoot)
+	if engine == nil || config.Image == "" || config.WorkspaceVolume == "" || config.WorkspaceRoot == "" {
 		return nil, fmt.Errorf("受控前端构建器依赖不完整")
 	}
-	if timeout <= 0 {
-		timeout = 5 * time.Minute
-	}
-	return &DockerFrontendBuildRunner{engine: engine, image: image, outputRoot: outputRoot, timeout: timeout}, nil
-}
-
-func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, project Project) (string, error) {
-	workspace, err := filepath.Abs(project.WorkspacePath)
+	root, err := filepath.Abs(config.WorkspaceRoot)
 	if err != nil {
-		return "", fmt.Errorf("解析工程工作空间失败: %w", err)
+		return nil, err
 	}
-	info, err := os.Lstat(workspace)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("工程工作空间必须是非链接目录")
+	if config.Timeout <= 0 {
+		config.Timeout = 5 * time.Minute
 	}
-	if err := os.MkdirAll(r.outputRoot, 0o755); err != nil {
-		return "", fmt.Errorf("创建前端构建输出根目录失败: %w", err)
+	if config.MemoryBytes <= 0 {
+		config.MemoryBytes = 1 << 30
 	}
-	output := filepath.Join(r.outputRoot, project.ID)
-	if !withinDirectory(r.outputRoot, output) {
-		return "", fmt.Errorf("前端构建输出路径越界")
+	if config.NanoCPUs <= 0 {
+		config.NanoCPUs = 1_000_000_000
 	}
-	// 输出根由 runner 独占，清理上次的同工程临时结果不会影响工程源码或其他项目。
-	if err := os.RemoveAll(output); err != nil {
-		return "", fmt.Errorf("清理上次前端构建结果失败: %w", err)
+	return &DockerFrontendBuildRunner{engine: engine, image: config.Image, volume: config.WorkspaceVolume, workspaceRoot: root, timeout: config.Timeout, memoryBytes: config.MemoryBytes, nanoCPUs: config.NanoCPUs}, nil
+}
+func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, project Project, version Version) (FrontendBuildOutput, error) {
+	if _, err := uuid.Parse(project.ID); err != nil {
+		return FrontendBuildOutput{}, fmt.Errorf("工程 ID 无效")
 	}
-	if err := os.MkdirAll(output, 0o755); err != nil {
-		return "", fmt.Errorf("创建前端构建输出目录失败: %w", err)
+	if _, err := uuid.Parse(version.ID); err != nil {
+		return FrontendBuildOutput{}, fmt.Errorf("Release ID 无效")
+	}
+	projectRoot := filepath.Join(r.workspaceRoot, project.ID)
+	outputRoot := filepath.Join(projectRoot, "release-builds", version.ID)
+	if !withinDirectory(r.workspaceRoot, projectRoot) || !withinDirectory(projectRoot, outputRoot) {
+		return FrontendBuildOutput{}, fmt.Errorf("前端构建输出路径越界")
+	}
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		return FrontendBuildOutput{}, err
+	}
+	if err := os.RemoveAll(outputRoot); err != nil {
+		return FrontendBuildOutput{}, fmt.Errorf("清理上次前端构建结果失败: %w", err)
+	}
+	if err := os.MkdirAll(outputRoot, 0o755); err != nil {
+		return FrontendBuildOutput{}, err
 	}
 	buildCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	spec := dockerFrontendSpec{
-		Name: "induforge-release-build-" + project.ID, Image: r.image, Workspace: workspace, Output: output,
-		Command: []string{"pnpm", "run", "build", "--", "--outDir", "/output/dist"},
-	}
+	buildID := uuid.NewString()
+	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), CacheSubpath: path.Join(project.ID, "cache"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"/bin/sh", "-ec", "mkdir -p /build/src /build/dist; cp -a /source/. /build/src/; cd /build/src; corepack pnpm install --frozen-lockfile --offline; corepack pnpm run build -- --outDir /build/dist"}}
 	if err := r.engine.Run(buildCtx, spec); err != nil {
-		_ = os.RemoveAll(output)
-		return "", fmt.Errorf("受控前端构建失败: %w", err)
+		_ = os.RemoveAll(outputRoot)
+		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建失败: %w", err)
 	}
-	dist := filepath.Join(output, "dist")
-	if info, err := os.Lstat(dist); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		_ = os.RemoveAll(output)
-		return "", fmt.Errorf("受控前端构建未生成 dist 目录")
+	dist := filepath.Join(outputRoot, "dist")
+	info, err := os.Lstat(dist)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		_ = os.RemoveAll(outputRoot)
+		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建未生成 dist 目录")
 	}
-	return dist, nil
+	return FrontendBuildOutput{DistDir: dist, Cleanup: func() error { return os.RemoveAll(outputRoot) }}, nil
 }
 
 type dockerFrontendClient struct {
@@ -116,66 +117,64 @@ type dockerFrontendClient struct {
 	apiVersion string
 }
 
-func newDockerFrontendEngine(rawHost string) (*dockerFrontendClient, error) {
-	host := strings.TrimSpace(rawHost)
+func newDockerFrontendEngine(raw string) (*dockerFrontendClient, error) {
+	host := strings.TrimSpace(raw)
 	if host == "" {
 		host = "unix:///var/run/docker.sock"
 	}
-	parsed, err := url.Parse(host)
+	u, err := url.Parse(host)
 	if err != nil {
-		return nil, fmt.Errorf("解析 Docker Host 失败: %w", err)
+		return nil, err
 	}
-	transport, baseURL := &http.Transport{}, host
-	switch parsed.Scheme {
+	tr := &http.Transport{}
+	base := host
+	switch u.Scheme {
 	case "unix":
-		if parsed.Path == "" {
+		if u.Path == "" {
 			return nil, fmt.Errorf("Docker Unix Socket 路径为空")
 		}
-		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", parsed.Path)
+		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", u.Path)
 		}
-		baseURL = "http://docker"
+		base = "http://docker"
 	case "tcp":
-		parsed.Scheme, baseURL = "http", strings.TrimRight(parsed.String(), "/")
+		u.Scheme = "http"
+		base = strings.TrimRight(u.String(), "/")
 	case "http", "https":
-		baseURL = strings.TrimRight(parsed.String(), "/")
+		base = strings.TrimRight(u.String(), "/")
 	default:
-		return nil, fmt.Errorf("不支持的 Docker Host 协议: %s", parsed.Scheme)
+		return nil, fmt.Errorf("不支持的 Docker Host 协议: %s", u.Scheme)
 	}
-	return &dockerFrontendClient{baseURL: baseURL, httpClient: &http.Client{Transport: transport, Timeout: 30 * time.Second}}, nil
+	return &dockerFrontendClient{baseURL: base, httpClient: &http.Client{Transport: tr, Timeout: 30 * time.Second}}, nil
 }
-
-func (c *dockerFrontendClient) Run(ctx context.Context, spec dockerFrontendSpec) error {
+func (c *dockerFrontendClient) Run(ctx context.Context, s dockerFrontendSpec) error {
+	type volOpt struct {
+		Subpath string `json:"Subpath"`
+	}
 	type mount struct {
 		Type, Source, Target string
-		ReadOnly             bool `json:"ReadOnly"`
+		ReadOnly             bool   `json:"ReadOnly"`
+		VolumeOptions        volOpt `json:"VolumeOptions"`
 	}
-	type hostConfig struct {
-		NetworkMode    string            `json:"NetworkMode"`
-		ReadonlyRootfs bool              `json:"ReadonlyRootfs"`
-		CapDrop        []string          `json:"CapDrop"`
-		SecurityOpt    []string          `json:"SecurityOpt"`
-		PidsLimit      int64             `json:"PidsLimit"`
-		Mounts         []mount           `json:"Mounts"`
-		Tmpfs          map[string]string `json:"Tmpfs"`
+	type host struct {
+		NetworkMode                 string `json:"NetworkMode"`
+		ReadonlyRootfs              bool   `json:"ReadonlyRootfs"`
+		CapDrop, SecurityOpt        []string
+		PidsLimit, Memory, NanoCPUs int64
+		Mounts                      []mount
+		Tmpfs                       map[string]string
 	}
 	body := struct {
-		Image      string            `json:"Image"`
-		Cmd        []string          `json:"Cmd"`
-		User       string            `json:"User"`
-		WorkingDir string            `json:"WorkingDir"`
-		Labels     map[string]string `json:"Labels"`
-		HostConfig hostConfig        `json:"HostConfig"`
-	}{
-		Image: spec.Image, Cmd: spec.Command, User: "1000:1000", WorkingDir: "/workspace",
-		Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"},
-		HostConfig: hostConfig{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256,
-			Mounts: []mount{{Type: "bind", Source: spec.Workspace, Target: "/workspace", ReadOnly: true}, {Type: "bind", Source: spec.Output, Target: "/output"}}, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}},
-	}
+		Image            string
+		Cmd              []string
+		User, WorkingDir string
+		Labels           map[string]string
+		HostConfig       host
+	}{Image: s.Image, Cmd: s.Command, User: "1000:1000", WorkingDir: "/build/src", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}, Mounts: []mount{{Type: "volume", Source: s.Volume, Target: "/source", ReadOnly: true, VolumeOptions: volOpt{Subpath: s.WorkspaceSubpath}}, {Type: "volume", Source: s.Volume, Target: "/cache", VolumeOptions: volOpt{Subpath: s.CacheSubpath}}, {Type: "volume", Source: s.Volume, Target: "/build", VolumeOptions: volOpt{Subpath: s.OutputSubpath}}}}}
 	var created struct {
 		ID string `json:"Id"`
 	}
-	if err := c.request(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(spec.Name), body, &created); err != nil {
+	if err := c.request(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(s.Name), body, &created); err != nil {
 		return err
 	}
 	if created.ID == "" {
@@ -187,91 +186,98 @@ func (c *dockerFrontendClient) Run(ctx context.Context, spec dockerFrontendSpec)
 	if err := c.request(ctx, http.MethodPost, "/containers/"+url.PathEscape(created.ID)+"/start", nil, nil); err != nil {
 		return err
 	}
-	var waited struct {
+	var wait struct {
 		StatusCode int `json:"StatusCode"`
-		Error      *struct {
-			Message string `json:"Message"`
-		} `json:"Error"`
 	}
-	if err := c.request(ctx, http.MethodPost, "/containers/"+url.PathEscape(created.ID)+"/wait", nil, &waited); err != nil {
+	if err := c.request(ctx, http.MethodPost, "/containers/"+url.PathEscape(created.ID)+"/wait", nil, &wait); err != nil {
 		return err
 	}
-	if waited.StatusCode != 0 {
-		message := ""
-		if waited.Error != nil {
-			message = strings.TrimSpace(waited.Error.Message)
-		}
-		return fmt.Errorf("前端构建容器退出码 %d: %s", waited.StatusCode, message)
+	if wait.StatusCode != 0 {
+		logs := c.logs(ctx, created.ID)
+		return fmt.Errorf("前端构建容器退出码 %d: %s", wait.StatusCode, logs)
 	}
 	return nil
 }
-
-func (c *dockerFrontendClient) request(ctx context.Context, method, endpoint string, body, output any) error {
-	version, err := c.version(ctx)
+func (c *dockerFrontendClient) logs(ctx context.Context, id string) string {
+	v, err := c.version(ctx)
+	if err != nil {
+		return ""
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/"+v+"/containers/"+url.PathEscape(id)+"/logs?stdout=1&stderr=1", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, frontendBuildLogLimit+1))
+	if len(raw) > frontendBuildLogLimit {
+		raw = append(raw[:frontendBuildLogLimit], []byte("…(日志已截断)")...)
+	}
+	return strings.TrimSpace(string(raw))
+}
+func (c *dockerFrontendClient) request(ctx context.Context, m, e string, body, out any) error {
+	v, err := c.version(ctx)
 	if err != nil {
 		return err
 	}
-	var reader io.Reader
+	var rd io.Reader
 	if body != nil {
-		encoded, err := json.Marshal(body)
+		b, err := json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		reader = bytes.NewReader(encoded)
+		rd = bytes.NewReader(b)
 	}
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/"+version+endpoint, reader)
+	req, err := http.NewRequestWithContext(ctx, m, c.baseURL+"/"+v+e, rd)
 	if err != nil {
 		return err
 	}
 	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 	}
-	response, err := c.httpClient.Do(request)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("访问 Docker Engine 失败: %w", err)
 	}
-	defer response.Body.Close()
-	if response.StatusCode/100 != 2 {
-		var payload struct {
-			Message string `json:"message"`
-		}
-		_ = json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&payload)
-		return fmt.Errorf("Docker Engine 返回 %d: %s", response.StatusCode, payload.Message)
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("Docker Engine 返回 %d", resp.StatusCode)
 	}
-	if output != nil && response.StatusCode != http.StatusNoContent {
-		if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(output); err != nil {
-			return fmt.Errorf("解析 Docker Engine 响应失败: %w", err)
+	if out != nil && resp.StatusCode != http.StatusNoContent {
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out); err != nil {
+			return err
 		}
 	}
 	return nil
 }
-
 func (c *dockerFrontendClient) version(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.apiVersion != "" {
 		return c.apiVersion, nil
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/version", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/version", nil)
 	if err != nil {
 		return "", err
 	}
-	response, err := c.httpClient.Do(request)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("读取 Docker Engine 版本失败: %w", err)
+		return "", err
 	}
-	defer response.Body.Close()
-	var payload struct {
+	defer resp.Body.Close()
+	var p struct {
 		APIVersion string `json:"ApiVersion"`
 	}
-	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&payload) != nil || strings.TrimSpace(payload.APIVersion) == "" {
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&p) != nil || p.APIVersion == "" {
 		return "", fmt.Errorf("读取 Docker Engine 版本失败")
 	}
-	c.apiVersion = "v" + strings.TrimPrefix(payload.APIVersion, "v")
+	c.apiVersion = "v" + strings.TrimPrefix(p.APIVersion, "v")
 	return c.apiVersion, nil
 }
-
 func withinDirectory(root, target string) bool {
-	relative, err := filepath.Rel(root, target)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	rel, err := filepath.Rel(root, target)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

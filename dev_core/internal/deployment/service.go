@@ -141,7 +141,7 @@ type ReleaseSource struct {
 	SourceRevision, BuilderID                                string
 }
 type ReleaseSourceBuilder interface {
-	BuildReleaseSource(context.Context, Project, string) (ReleaseSource, error)
+	BuildReleaseSource(context.Context, Project, Version, string) (ReleaseSource, error)
 }
 type SigningConfig struct {
 	Key   ed25519.PrivateKey
@@ -219,7 +219,7 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
 		return fail(fmt.Errorf("正式 Release 构建器或签名配置未配置"))
 	}
-	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project, input.Authorization)
+	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project, version, input.Authorization)
 	if err != nil {
 		return fail(fmt.Errorf("读取正式 Release 构建输入失败: %w", err))
 	}

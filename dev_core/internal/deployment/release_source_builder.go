@@ -31,7 +31,12 @@ const (
 // ProjectFrontendBuildRunner 只返回受控构建目录。它的实现将由后续受信构建器提供，
 // 聚合器不执行工作空间中的任意脚本。
 type ProjectFrontendBuildRunner interface {
-	BuildProjectFrontend(context.Context, Project) (string, error)
+	BuildProjectFrontend(context.Context, Project, Version) (FrontendBuildOutput, error)
+}
+
+type FrontendBuildOutput struct {
+	DistDir string
+	Cleanup func() error
 }
 
 type ProjectReleaseSourceBuilderConfig struct {
@@ -79,7 +84,7 @@ func (b *ProjectReleaseSourceBuilder) SetHTTPClient(client *http.Client) {
 	}
 }
 
-func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, project Project, authorization string) (ReleaseSource, error) {
+func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, project Project, version Version, authorization string) (ReleaseSource, error) {
 	if b == nil || b.frontend == nil || b.httpClient == nil {
 		return ReleaseSource{}, fmt.Errorf("正式 ReleaseSource 构建器未初始化")
 	}
@@ -90,11 +95,14 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 	if containsEngine(releasebuilder.DeriveEngineRequirements(artifact), "collector") {
 		return ReleaseSource{}, fmt.Errorf("工程启用了采集引擎，但当前未提供受信 Collector Release 工件")
 	}
-	dist, err := b.frontend.BuildProjectFrontend(ctx, project)
+	frontend, err := b.frontend.BuildProjectFrontend(ctx, project, version)
 	if err != nil {
 		return ReleaseSource{}, fmt.Errorf("构建工程前端失败: %w", err)
 	}
-	client, err := b.packFrontend(dist)
+	if frontend.Cleanup != nil {
+		defer frontend.Cleanup()
+	}
+	client, err := b.packFrontend(frontend.DistDir)
 	if err != nil {
 		return ReleaseSource{}, err
 	}
