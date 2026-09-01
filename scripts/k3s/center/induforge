@@ -1,0 +1,69 @@
+#!/bin/sh
+set -eu
+
+CENTER_MANAGER=/opt/induforge/center-k3s/centerctl
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  induforge status
+  induforge doctor
+  induforge logs [control|edge|database|cache|object-store]
+  induforge restart <control|edge|database|cache|object-store>
+EOF
+}
+
+service_name() {
+  case "$1" in
+    control) echo center-control ;;
+    edge) echo center-edge ;;
+    database) echo center-meta-store ;;
+    cache) echo center-cache-store ;;
+    object-store) echo center-object-store ;;
+    *) echo "unsupported center service: $1" >&2; exit 2 ;;
+  esac
+}
+
+if [ ! -x "$CENTER_MANAGER" ]; then
+  echo "InduForge center manager is not installed" >&2
+  exit 1
+fi
+
+command=${1:-}
+case "$command" in
+  status)
+    if [ "$#" -ne 1 ]; then usage; exit 2; fi
+    exec "$CENTER_MANAGER" summary
+    ;;
+  doctor)
+    if [ "$#" -ne 1 ]; then usage; exit 2; fi
+    if diagnostic=$("$CENTER_MANAGER" doctor 2>&1); then
+      echo "InduForge 中心系统诊断：通过"
+    else
+      echo "$diagnostic" >&2
+      exit 1
+    fi
+    ;;
+  logs)
+    if [ "$#" -gt 2 ]; then usage; exit 2; fi
+    mapped_service=$(service_name "${2:-control}") || exit $?
+    exec "$CENTER_MANAGER" logs "$mapped_service"
+    ;;
+  restart)
+    if [ "$#" -ne 2 ]; then usage; exit 2; fi
+    mapped_service=$(service_name "$2") || exit $?
+    if restart_result=$("$CENTER_MANAGER" restart "$mapped_service" 2>&1); then
+      echo "$2 服务重启已触发"
+    else
+      echo "$restart_result" >&2
+      exit 1
+    fi
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

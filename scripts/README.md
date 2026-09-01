@@ -67,7 +67,8 @@ scripts/docker/
 ```text
 scripts/k3s/center/
   center-system.yaml.template   # induforge-system 中心工作负载
-  centerctl                     # 安装为 induforge-centerctl，提供诊断、日志、重启和幂等应用
+  induforge                     # 安装为统一的 induforge 运维命令
+  centerctl                     # 中心安装器使用的内部实现
   migrate-docker-center.sh      # 旧 Docker/宿主中心的一次性可回滚迁移
 ```
 
