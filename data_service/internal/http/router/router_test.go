@@ -1,11 +1,27 @@
 package router
 
 import (
+	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/http/handler"
+	"github.com/indu-forge/data_service/internal/service"
 )
+
+type routerProjectTenantBindingStore struct{ bindings map[string]string }
+
+func (s *routerProjectTenantBindingStore) BindIfUnbound(_ context.Context, projectID, tenantID string) (string, bool, error) {
+	if existing, ok := s.bindings[projectID]; ok {
+		return existing, false, nil
+	}
+	s.bindings[projectID] = tenantID
+	return tenantID, true, nil
+}
 
 func TestNewRouterKafkaWorkbenchRoutesDoNotConflict(t *testing.T) {
 	validator, err := auth.NewJWTValidator("router-test-secret")
@@ -85,4 +101,18 @@ func TestNewRouterAlarmRoutesDoNotConflict(t *testing.T) {
 		}
 	}()
 	_ = NewRouter(WithAlarmRoutes(handler.NewAlarmHandler(nil), validator))
+}
+
+func TestInternalProjectTenantBindingRouteRejectsBearerToken(t *testing.T) {
+	bindingHandler := handler.NewProjectTenantBindingHandler(service.NewProjectTenantBindingService(&routerProjectTenantBindingStore{bindings: map[string]string{}}))
+	router := NewRouter(WithProjectTenantBindingInternalRoutes(bindingHandler, "internal-token"))
+	projectID, tenantID := uuid.NewString(), uuid.NewString()
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/internal/data/project-bindings/"+projectID, bytes.NewBufferString(`{"tenantId":"`+tenantID+`"}`))
+	request.Header.Set("Authorization", "Bearer not-an-internal-token")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected ordinary bearer token to be rejected with 401, got %d", recorder.Code)
+	}
 }

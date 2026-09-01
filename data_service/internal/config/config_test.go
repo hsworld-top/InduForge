@@ -9,6 +9,7 @@ import (
 
 func TestLoad_UsesDefaultAddr(t *testing.T) {
 	t.Setenv("DATA_SERVICE_ADDR", "")
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 
 	cfg, err := Load()
 	if err != nil {
@@ -20,6 +21,7 @@ func TestLoad_UsesDefaultAddr(t *testing.T) {
 }
 
 func TestLoad_ReadsCollectorSecretKey(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	encoded := base64.StdEncoding.EncodeToString(make([]byte, 32))
 	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY", encoded)
 	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v2")
@@ -34,6 +36,7 @@ func TestLoad_ReadsCollectorSecretKey(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidCollectorSecretKey(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
 
 	if _, err := Load(); err == nil {
@@ -42,6 +45,7 @@ func TestLoad_RejectsInvalidCollectorSecretKey(t *testing.T) {
 }
 
 func TestLoad_ReadsIndependentAlarmSecretKey(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	encoded := base64.StdEncoding.EncodeToString(make([]byte, 32))
 	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY", encoded)
 	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY_VERSION", "alarm-v2")
@@ -56,6 +60,7 @@ func TestLoad_ReadsIndependentAlarmSecretKey(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidAlarmSecretKey(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
 
 	if _, err := Load(); err == nil {
@@ -71,6 +76,7 @@ func TestValidateCollectorSecretKeyRejectsMissingKey(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidAddr(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_ADDR", "invalid-addr")
 
 	_, err := Load()
@@ -80,6 +86,7 @@ func TestLoad_RejectsInvalidAddr(t *testing.T) {
 }
 
 func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_ADDR", ":18102")
 	t.Setenv("DATA_SERVICE_DATABASE_URL", "")
 	t.Setenv("DATA_SERVICE_DATABASE_SCHEMA", "")
@@ -128,6 +135,7 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidRedisDB(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("IF_CACHE_STORE_DATA_DB", "bad")
 
 	_, err := Load()
@@ -145,6 +153,7 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 
 	dotenvPath := filepath.Join(rootDir, ".env")
 	dotenvContent := []byte("DATA_SERVICE_ADDR=:18102\n" +
+		"DATA_SERVICE_INTERNAL_TOKEN=dotenv-internal-token\n" +
 		"IF_META_STORE_HOST=dotenv-meta\n" +
 		"IF_META_STORE_PORT=18432\n" +
 		"IF_META_STORE_USER=dotenv-user\n" +
@@ -162,6 +171,7 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 
 	for _, key := range []string{
 		"DATA_SERVICE_ADDR",
+		"DATA_SERVICE_INTERNAL_TOKEN",
 		"DATA_SERVICE_DATABASE_URL",
 		"DATA_SERVICE_DATABASE_SCHEMA",
 		"DATA_SERVICE_REDIS_ADDR",
@@ -217,6 +227,28 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 	}
 	if cfg.RedisDB != 3 {
 		t.Fatalf("expected redis db from dotenv, got %d", cfg.RedisDB)
+	}
+}
+
+func TestLoad_RejectsMissingInternalToken(t *testing.T) {
+	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "")
+	currentDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(currentDir) })
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected missing internal token to be rejected")
+	}
+}
+
+func TestValidateInternalTokenRejectsMissingToken(t *testing.T) {
+	if err := ValidateInternalToken(Config{}); err == nil {
+		t.Fatal("expected missing internal token to be rejected")
 	}
 }
 

@@ -18,6 +18,7 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 		}
 	}
 	for _, table := range []string{
+		"data_project_tenant_bindings",
 		"data_connections",
 		"data_collector_connections",
 		"data_collector_points",
@@ -46,8 +47,8 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 			t.Fatalf("数据库最终基线仍包含旧字段或旧模型 %s", legacy)
 		}
 	}
-	if count := strings.Count(baseline, "CREATE TABLE "); count != 58 {
-		t.Fatalf("数据库最终基线表数量应为 58，实际为 %d", count)
+	if count := strings.Count(baseline, "CREATE TABLE "); count != 59 {
+		t.Fatalf("数据库最终基线表数量应为 59，实际为 %d", count)
 	}
 }
 

@@ -39,6 +39,7 @@ type Config struct {
 	ConnectionSecretKeyVersion   string
 	ComputeSandboxURL            string
 	ComputeSandboxToken          string
+	DataServiceInternalToken     string
 	CollectorProtocolCatalogPath string
 }
 
@@ -75,6 +76,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	internalToken := strings.TrimSpace(os.Getenv("DATA_SERVICE_INTERNAL_TOKEN"))
+	if internalToken == "" {
+		return Config{}, fmt.Errorf("DATA_SERVICE_INTERNAL_TOKEN 不能为空")
+	}
 
 	return Config{
 		Addr:                         addr,
@@ -99,6 +104,7 @@ func Load() (Config, error) {
 		ConnectionSecretKeyVersion:   firstEnvWithDefault("DATA_SERVICE_CONNECTION_SECRET_KEY_VERSION", "v1"),
 		ComputeSandboxURL:            strings.TrimSpace(os.Getenv("DATA_SERVICE_COMPUTE_SANDBOX_URL")),
 		ComputeSandboxToken:          strings.TrimSpace(os.Getenv("DATA_SERVICE_COMPUTE_SANDBOX_TOKEN")),
+		DataServiceInternalToken:     internalToken,
 		CollectorProtocolCatalogPath: strings.TrimSpace(os.Getenv("DATA_SERVICE_COLLECTOR_PROTOCOL_CATALOG_PATH")),
 	}, nil
 }
@@ -137,6 +143,14 @@ func ValidateCollectorSecretKey(cfg Config) error {
 	}
 	if strings.TrimSpace(cfg.CollectorSecretKeyVersion) == "" {
 		return fmt.Errorf("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION 不能为空")
+	}
+	return nil
+}
+
+// ValidateInternalToken 校验内部控制面调用令牌，避免内部写接口以空令牌启动。
+func ValidateInternalToken(cfg Config) error {
+	if strings.TrimSpace(cfg.DataServiceInternalToken) == "" {
+		return fmt.Errorf("DATA_SERVICE_INTERNAL_TOKEN 不能为空")
 	}
 	return nil
 }

@@ -9,32 +9,34 @@ import (
 )
 
 type options struct {
-	alarmHandler              *handler.AlarmHandler
-	builtinRuntimeHandler     *handler.BuiltinRuntimeHandler
-	connectionHandler         *handler.ConnectionHandler
-	contractCheckHandler      *handler.ContractCheckHandler
-	collectorDevHandler       *handler.CollectorDevHandler
-	collectorCatalogHandler   *handler.CollectorCatalogHandler
-	collectorHandler          *handler.CollectorHandler
-	collectorPointHandler     *handler.CollectorPointHandler
-	collectorImportHandler    *handler.CollectorImportHandler
-	collectorAuthenticator    middleware.CollectorAgentAuthenticator
-	historyStorageHandler     *handler.HistoryStorageHandler
-	queryHandler              *handler.QueryHandler
-	workbenchGroupHandler     *handler.WorkbenchGroupHandler
-	realtimeStoreHandler      *handler.RealtimeStoreHandler
-	dataPointHandler          *handler.DataPointHandler
-	mqttHandler               *handler.MqttHandler
-	kafkaWorkbenchHandler     *handler.KafkaWorkbenchHandler
-	httpWorkbenchHandler      *handler.HTTPWorkbenchHandler
-	websocketWorkbenchHandler *handler.WebSocketWorkbenchHandler
-	protocolConnectionHandler *handler.ProtocolConnectionHandler
-	tdengineOPCHandler        *handler.TDengineOPCHandler
-	previewHandler            *handler.PreviewHandler
-	previewSocketHandler      http.Handler
-	computeHandler            *handler.ComputeHandler
-	projectSnapshotHandler    *handler.ProjectSnapshotHandler
-	jwtValidator              *auth.JWTValidator
+	alarmHandler                *handler.AlarmHandler
+	builtinRuntimeHandler       *handler.BuiltinRuntimeHandler
+	connectionHandler           *handler.ConnectionHandler
+	contractCheckHandler        *handler.ContractCheckHandler
+	collectorDevHandler         *handler.CollectorDevHandler
+	collectorCatalogHandler     *handler.CollectorCatalogHandler
+	collectorHandler            *handler.CollectorHandler
+	collectorPointHandler       *handler.CollectorPointHandler
+	collectorImportHandler      *handler.CollectorImportHandler
+	collectorAuthenticator      middleware.CollectorAgentAuthenticator
+	historyStorageHandler       *handler.HistoryStorageHandler
+	queryHandler                *handler.QueryHandler
+	workbenchGroupHandler       *handler.WorkbenchGroupHandler
+	realtimeStoreHandler        *handler.RealtimeStoreHandler
+	dataPointHandler            *handler.DataPointHandler
+	mqttHandler                 *handler.MqttHandler
+	kafkaWorkbenchHandler       *handler.KafkaWorkbenchHandler
+	httpWorkbenchHandler        *handler.HTTPWorkbenchHandler
+	websocketWorkbenchHandler   *handler.WebSocketWorkbenchHandler
+	protocolConnectionHandler   *handler.ProtocolConnectionHandler
+	tdengineOPCHandler          *handler.TDengineOPCHandler
+	previewHandler              *handler.PreviewHandler
+	previewSocketHandler        http.Handler
+	computeHandler              *handler.ComputeHandler
+	projectSnapshotHandler      *handler.ProjectSnapshotHandler
+	projectTenantBindingHandler *handler.ProjectTenantBindingHandler
+	internalToken               string
+	jwtValidator                *auth.JWTValidator
 }
 
 // WithBuiltinRuntimeRoutes wires IF builtin runtime store routes.
@@ -213,6 +215,14 @@ func WithProjectSnapshotRoutes(projectSnapshotHandler *handler.ProjectSnapshotHa
 	}
 }
 
+// WithProjectTenantBindingInternalRoutes wires control 面专用的项目租户绑定内部路由。
+func WithProjectTenantBindingInternalRoutes(bindingHandler *handler.ProjectTenantBindingHandler, internalToken string) Option {
+	return func(opts *options) {
+		opts.projectTenantBindingHandler = bindingHandler
+		opts.internalToken = internalToken
+	}
+}
+
 // NewRouter builds the base HTTP router for data_service.
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -249,7 +259,17 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountPreviewRoutes(mux, opts)
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
+	mountProjectTenantBindingInternalRoutes(mux, opts)
 	return mux
+}
+
+func mountProjectTenantBindingInternalRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.projectTenantBindingHandler == nil {
+		return
+	}
+	mux.Handle("PUT /api/v1/internal/data/project-bindings/{projectId}", middleware.RequireInternalToken(opts.internalToken)(
+		middleware.ErrorHandler(opts.projectTenantBindingHandler.Put),
+	))
 }
 
 func mountHistoryStorageRoutes(mux *http.ServeMux, opts options) {

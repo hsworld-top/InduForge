@@ -128,6 +128,9 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func(), error) {
+	if err := config.ValidateInternalToken(cfg); err != nil {
+		return nil, nil, err
+	}
 	if err := config.ValidateConnectionsDependencies(cfg); err != nil {
 		return nil, nil, err
 	}
@@ -190,6 +193,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool, connectionCipher)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
+	projectTenantBindingRepository := repository.NewProjectTenantBindingRepository(pool)
 	protocolConnectionRepository := repository.NewProtocolConnectionRepository(pool, connectionCipher)
 	tdengineOPCRepository := repository.NewTDengineOPCRepository(pool, connectionCipher)
 	kafkaWorkbenchRepository := repository.NewKafkaWorkbenchRepository(pool)
@@ -263,6 +267,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 	dataPointService.SetMqttPublisher(mqttService)
 	projectSnapshotService := service.NewProjectSnapshotServiceWithClockAndSchemaRoot(projectSnapshotRepository, time.Now, filepath.Join(config.ResolveCollectorProtocolCatalogPath(cfg.CollectorProtocolCatalogPath), "..", "runtime"))
+	projectTenantBindingService := service.NewProjectTenantBindingService(projectTenantBindingRepository)
 	protocolConnectionService := service.NewProtocolConnectionService(protocolConnectionRepository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolConnectionRepository, service.NewDefaultProtocolPreviewAdapters())
 	protocolPreviewService.SetSecretRepository(connectionSecretRepository)
@@ -301,6 +306,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
+	projectTenantBindingHandler := handler.NewProjectTenantBindingHandler(projectTenantBindingService)
 	protocolConnectionHandler := handler.NewProtocolConnectionHandler(protocolConnectionService, protocolPreviewService)
 	tdengineOPCHandler := handler.NewTDengineOPCHandler(tdengineOPCService)
 	kafkaWorkbenchHandler := handler.NewKafkaWorkbenchHandler(kafkaWorkbenchService)
@@ -321,6 +327,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
+		router.WithProjectTenantBindingInternalRoutes(projectTenantBindingHandler, cfg.DataServiceInternalToken),
 		router.WithProtocolConnectionRoutes(protocolConnectionHandler, jwtValidator),
 		router.WithTDengineOPCRoutes(tdengineOPCHandler, jwtValidator),
 		router.WithKafkaWorkbenchRoutes(kafkaWorkbenchHandler, jwtValidator),
