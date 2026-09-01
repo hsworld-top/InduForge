@@ -123,19 +123,13 @@
         <div v-for="engine in engineRows" :key="engine.key" class="engine-placement-row">
           <div class="engine-name">
             <strong>{{ engine.label }}</strong>
-            <el-switch
-              v-if="engine.optional"
-              v-model="collectorEnabled"
-              size="small"
-              :aria-label="t('projectManagement.collectionEngine')"
-            />
           </div>
           <el-select
             v-model="placements[engine.key]"
             size="small"
             :data-testid="`publish-engine-${engine.key}`"
             :placeholder="t('projectManagement.chooseNode')"
-            :disabled="nodeLoading || (engine.optional && !collectorEnabled)"
+            :disabled="nodeLoading"
             filterable
           >
             <el-option
@@ -242,7 +236,6 @@ const environments = ref<RuntimeEnvironment[]>([])
 const nodes = ref<OpsNode[]>([])
 const versions = ref<ManagedApplicationVersion[]>([])
 const environmentId = ref('')
-const collectorEnabled = ref(false)
 const placements = reactive<Record<EngineKey, string>>({
   runtime: '',
   compute: '',
@@ -255,21 +248,6 @@ const engineRows = computed(() => [
     key: 'runtime' as const,
     label: t('projectManagement.baseEngine'),
     optional: false,
-  },
-  {
-    key: 'compute' as const,
-    label: t('projectManagement.computeEngine'),
-    optional: false,
-  },
-  {
-    key: 'alarm' as const,
-    label: t('projectManagement.alarmEngine'),
-    optional: false,
-  },
-  {
-    key: 'collection' as const,
-    label: t('projectManagement.collectionEngine'),
-    optional: true,
   },
 ])
 
@@ -398,18 +376,16 @@ const nodeOptionLabel = (node: OpsNode) => {
 
 const canConfirm = computed(() => {
   if (!props.project?.id || !environmentId.value || nodeLoading.value) return false
-  if (!placements.runtime || !placements.compute || !placements.alarm) return false
-  return !collectorEnabled.value || Boolean(placements.collection)
+  return Boolean(placements.runtime)
 })
 
 const setDefaultPlacements = () => {
   const readyNodes = nodes.value.filter(isNodeReady)
   const firstNodeId = readyNodes[0]?.id || ''
   const readyNodeIds = new Set(readyNodes.map((node) => node.id))
-  ;(['runtime', 'compute', 'alarm'] as EngineKey[]).forEach((key) => {
+  ;(['runtime'] as EngineKey[]).forEach((key) => {
     if (!readyNodeIds.has(placements[key])) placements[key] = firstNodeId
   })
-  if (!readyNodeIds.has(placements.collection)) placements.collection = firstNodeId
 }
 
 const loadNodes = async (selectedEnvironmentId: string) => {
@@ -467,7 +443,6 @@ const loadPublishContext = async () => {
 const reset = () => {
   mode.value = 'DEV'
   activeView.value = 'publish'
-  collectorEnabled.value = false
   environmentId.value = ''
   environments.value = []
   nodes.value = []
@@ -490,7 +465,7 @@ const submit = () => {
       runtime: placements.runtime,
       compute: placements.compute,
       alarm: placements.alarm,
-      collection: collectorEnabled.value ? placements.collection : null,
+      collection: null,
     },
   })
 }
