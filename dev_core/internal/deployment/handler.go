@@ -52,6 +52,7 @@ func (h *Handler) PublishProjectVersion(w http.ResponseWriter, r *http.Request, 
 		h.invalid(w, r, err)
 		return
 	}
+	input.Authorization = auth.ForwardAuthorization(r)
 	item, err := h.service.Publish(r.Context(), actor, projectID, input)
 	if err != nil {
 		h.writeError(w, r, err)
