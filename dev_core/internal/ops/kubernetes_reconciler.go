@@ -83,7 +83,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 		}
 		if status.Failed {
 			_, _ = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, status.Message, deploymentID)
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,$1,$2 FROM deployment_runs WHERE project_deployment_id=$3 AND observed_status='pending'`, workloadFailureStage(status.Message), status.Message, deploymentID)
 			_ = r.reconcileDeployment(ctx, deploymentID)
 			continue
 		}
@@ -134,9 +134,18 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 			Replicas int `json:"replicas"`
 		}
 		Status struct {
-			ObservedGeneration int64                                            `json:"observedGeneration"`
-			AvailableReplicas  int                                              `json:"availableReplicas"`
-			Conditions         []struct{ Type, Status, Reason, Message string } `json:"conditions"`
+			ObservedGeneration    int64                                            `json:"observedGeneration"`
+			AvailableReplicas     int                                              `json:"availableReplicas"`
+			Conditions            []struct{ Type, Status, Reason, Message string } `json:"conditions"`
+			InitContainerStatuses []struct {
+				Name  string `json:"name"`
+				State struct {
+					Terminated struct {
+						Reason, Message string
+						ExitCode        int `json:"exitCode"`
+					} `json:"terminated"`
+				} `json:"state"`
+			} `json:"initContainerStatuses"`
 		} `json:"status"`
 	}
 	if err = json.NewDecoder(resp.Body).Decode(&value); err != nil {
@@ -147,10 +156,24 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 			return ProjectWorkloadStatus{Failed: true, Message: condition.Message}, nil
 		}
 	}
+	for _, init := range value.Status.InitContainerStatuses {
+		if init.State.Terminated.ExitCode != 0 {
+			return ProjectWorkloadStatus{Failed: true, Message: "初始化阶段 " + init.Name + " 失败"}, nil
+		}
+	}
 	if value.Status.ObservedGeneration >= value.Metadata.Generation && value.Status.AvailableReplicas >= value.Spec.Replicas {
 		return ProjectWorkloadStatus{Ready: true, Message: "Kubernetes rollout 已就绪"}, nil
 	}
 	return ProjectWorkloadStatus{Message: "等待 Kubernetes rollout readiness"}, nil
+}
+
+func workloadFailureStage(message string) string {
+	for name, stage := range map[string]string{"runtime-provision-nats": "provision-nats", "runtime-provision-state": "provision-state", "runtime-binding-prepare": "prepare"} {
+		if strings.Contains(message, name) {
+			return stage
+		}
+	}
+	return "rollout"
 }
 
 func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
