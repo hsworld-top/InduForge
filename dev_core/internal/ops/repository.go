@@ -979,7 +979,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	if e != nil {
 		return d, DeploymentRun{}, mapDeploymentCreateError(e)
 	}
-	types := []string{ServiceProjectEntry, ServiceDataRuntime}
+	types := []string{ServiceBase, ServiceCompute}
 	if in.EnableCollector {
 		types = append(types, ServiceCollector)
 	}
@@ -1367,9 +1367,9 @@ func validateInitialDeploymentBinding(raw []byte, binding bindingMetadata, relea
 		}
 		seenServices[service] = true
 		switch service {
-		case ServiceProjectEntry:
+		case ServiceBase:
 			hasEntry = true
-		case ServiceDataRuntime:
+		case ServiceCompute:
 			hasRuntime = true
 		case ServiceCollector:
 			hasCollector = true

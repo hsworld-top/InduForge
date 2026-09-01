@@ -187,7 +187,7 @@ func TestRemoveOpsNodeHTTPRoute(t *testing.T) {
 type agentCommandRepository struct{ Repository }
 
 func (r *agentCommandRepository) AgentCommands(context.Context, string, string) ([]AgentCommand, error) {
-	return []AgentCommand{{NodeID: "node-1", ServiceID: "service-1", ServiceType: ServiceProjectEntry}}, nil
+	return []AgentCommand{{NodeID: "node-1", ServiceID: "service-1", ServiceType: ServiceBase}}, nil
 }
 func (r *agentCommandRepository) AgentClusterPlan(context.Context, string, string) (*ClusterPlan, error) {
 	return nil, nil
@@ -303,8 +303,8 @@ func TestAgentReleaseStreamsOnlyBundle(t *testing.T) {
 func TestDeploymentPayloadOnlyUsesProjectEntryEndpoint(t *testing.T) {
 	deployment := ProjectDeployment{Services: []DeploymentService{
 		{ServiceType: ServiceCollector, Endpoint: "https://collector.example.invalid"},
-		{ServiceType: ServiceDataRuntime, Endpoint: "https://runtime.example.invalid"},
-		{ServiceType: ServiceProjectEntry, Endpoint: "https://gateway.example.com/engineering"},
+		{ServiceType: ServiceCompute, Endpoint: "https://runtime.example.invalid"},
+		{ServiceType: ServiceBase, Endpoint: "https://gateway.example.com/engineering"},
 	}}
 	payload := deploymentPayload(deployment)
 	if payload["accessUrl"] != "https://gateway.example.com/engineering" {

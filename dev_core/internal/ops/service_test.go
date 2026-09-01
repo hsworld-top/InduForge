@@ -127,18 +127,31 @@ func (r *deploymentRepository) OperateDeployment(_ context.Context, _, deploymen
 	if r.deploymentErr != nil {
 		return ProjectDeployment{}, DeploymentRun{}, r.deploymentErr
 	}
-	return ProjectDeployment{ID: deploymentID, Services: []DeploymentService{{ServiceType: ServiceProjectEntry}, {ServiceType: ServiceDataRuntime}, {ServiceType: ServiceCollector}}}, DeploymentRun{ProjectDeploymentID: deploymentID, Operation: operation}, nil
+	return ProjectDeployment{ID: deploymentID, Services: []DeploymentService{{ServiceType: ServiceBase}, {ServiceType: ServiceCompute}, {ServiceType: ServiceCollector}}}, DeploymentRun{ProjectDeploymentID: deploymentID, Operation: operation}, nil
 }
 
-func TestCreateDeploymentUsesOneNodeAndDerivedCollectorFlag(t *testing.T) {
+func TestCreateDeploymentUsesEnvironmentModeAndPlacements(t *testing.T) {
 	r := &deploymentRepository{}
-	_, _, e := NewService(r, nil).CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, CreateDeploymentInput{ProjectID: testProjectID, NodeID: testNodeID, ApplicationVersionID: testVersionID, AccessPort: 17800, EnableCollector: true})
-	if e != nil || !r.validated || r.input.NodeID != testNodeID || !r.input.EnableCollector {
-		t.Fatalf("single-node deployment not validated: %#v %v", r.input, e)
+	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: testVersionID, Mode: "release", AccessPort: 17800, Placements: map[string]string{ServiceBase: testNodeID}}
+	_, _, e := NewService(r, nil).CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, input)
+	if e != nil || !r.validated || r.input.EnvironmentID != testEnvironmentID || r.input.Mode != "release" || r.input.Placements[ServiceBase] != testNodeID {
+		t.Fatalf("environment deployment not validated: %#v %v", r.input, e)
+	}
+}
+func TestCreateDevelopmentDeploymentDoesNotAcceptUserVersion(t *testing.T) {
+	base := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, Mode: "development", AccessPort: 17800, Placements: map[string]string{ServiceBase: testNodeID}}
+	r := &deploymentRepository{}
+	if _, _, err := NewService(r, nil).CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, base); err != nil || !r.validated {
+		t.Fatalf("development slot request was rejected: %v", err)
+	}
+	base.ApplicationVersionID = testVersionID
+	r = &deploymentRepository{}
+	if _, _, err := NewService(r, nil).CreateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, base); err == nil || r.validated {
+		t.Fatalf("development request accepted a user selected version: %v", err)
 	}
 }
 func TestCreateDeploymentRejectsMalformedNodeOrVersion(t *testing.T) {
-	for _, in := range []CreateDeploymentInput{{ProjectID: testProjectID, NodeID: "bad", ApplicationVersionID: testVersionID}, {ProjectID: testProjectID, NodeID: testNodeID, ApplicationVersionID: "bad"}} {
+	for _, in := range []CreateDeploymentInput{{ProjectID: testProjectID, EnvironmentID: "bad", Mode: "development"}, {ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: "bad", Mode: "release"}} {
 		r := &deploymentRepository{}
 		_, _, e := NewService(r, nil).CreateDeployment(context.Background(), auth.User{Role: "OPS_ADMIN"}, in)
 		if e == nil || !strings.Contains(e.Error(), "格式无效") || r.validated {
@@ -148,7 +161,7 @@ func TestCreateDeploymentRejectsMalformedNodeOrVersion(t *testing.T) {
 }
 
 func TestCreateDeploymentRejectsInvalidCustomerPort(t *testing.T) {
-	input := CreateDeploymentInput{ProjectID: testProjectID, NodeID: testNodeID, ApplicationVersionID: testVersionID, AccessPort: 65533}
+	input := CreateDeploymentInput{ProjectID: testProjectID, EnvironmentID: testEnvironmentID, ApplicationVersionID: testVersionID, Mode: "release", AccessPort: 65533}
 	r := &deploymentRepository{}
 	if _, _, err := NewService(r, nil).CreateDeployment(context.Background(), auth.User{Role: "OPS_ADMIN"}, input); err == nil || !strings.Contains(err.Error(), "工程访问端口") || r.validated {
 		t.Fatalf("invalid customer port reached repository: %v", err)
@@ -182,7 +195,7 @@ func TestOperateDeploymentRequiresOperateCapability(t *testing.T) {
 
 func TestOperateServiceIsFailClosed(t *testing.T) {
 	repository := &deploymentRepository{}
-	_, _, err := NewService(repository, nil).OperateService(context.Background(), auth.User{TenantID: "tenant", Role: "OPERATOR"}, "deployment-1", ServiceProjectEntry, "stop")
+	_, _, err := NewService(repository, nil).OperateService(context.Background(), auth.User{TenantID: "tenant", Role: "OPERATOR"}, "deployment-1", ServiceBase, "stop")
 	if !errors.Is(err, ErrServiceLifecycleDisabled) || repository.deploymentOperation != "" {
 		t.Fatalf("service-level lifecycle route must not reach repository: repository=%#v err=%v", repository, err)
 	}
@@ -240,7 +253,7 @@ func TestHeartbeatRejectsMalformedServiceObservation(t *testing.T) {
 	}
 }
 func TestDefaultServicesAreExplicit(t *testing.T) {
-	if !validServiceType(ServiceProjectEntry) || !validServiceType(ServiceDataRuntime) || !validServiceType(ServiceCollector) || validServiceType("compute") {
+	if !validServiceType(ServiceBase) || !validServiceType(ServiceCompute) || !validServiceType(ServiceAlarm) || !validServiceType(ServiceCollector) || validServiceType("project_entry") {
 		t.Fatal("unexpected service vocabulary")
 	}
 }
@@ -302,7 +315,7 @@ func TestInitialDeploymentBindingUsesCustomerPortAndEmptySecrets(t *testing.T) {
 	manifest := strings.Replace(validReleaseManifest(testProjectID), `"requiredNodeCapabilities":["project_entry","data_runtime"]`, `"requiredNodeCapabilities":["project_entry","data_runtime","collector"]`, 1)
 	release := releaseMetadata{ID: testVersionID, ArtifactKey: "releases/project/release.tar.zst", ArtifactHash: strings.Repeat("a", 64), ManifestHash: strings.Repeat("b", 64), ChecksumsHash: strings.Repeat("c", 64), SigningKeyID: "induforge-release-2026-01", ArtifactSize: 1, Manifest: []byte(manifest)}
 	deploymentID := "55555555-5555-4555-8555-555555555555"
-	bindingID, raw, err := newInitialDeploymentBinding(ProjectDeployment{ID: deploymentID, NodeID: testNodeID, ProjectID: testProjectID, AccessPort: 17800}, release, []string{ServiceProjectEntry, ServiceDataRuntime, ServiceCollector})
+	bindingID, raw, err := newInitialDeploymentBinding(ProjectDeployment{ID: deploymentID, NodeID: testNodeID, ProjectID: testProjectID, AccessPort: 17800}, release, []string{ServiceBase, ServiceCompute, ServiceCollector})
 	if err != nil {
 		t.Fatal(err)
 	}

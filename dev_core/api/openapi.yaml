@@ -3793,17 +3793,22 @@ components:
         ttlMinutes: { type: integer, minimum: 1, maximum: 1440 }
     ProjectDeploymentCreateRequest:
       type: object
-      required: [projectId, nodeId, applicationVersionId, accessPort]
+      required: [projectId, environmentId, mode, accessPort, placements]
       properties:
         projectId: { type: string, format: uuid }
-        nodeId: { type: string, format: uuid }
-        applicationVersionId: { type: string, format: uuid }
+        environmentId: { type: string, format: uuid }
+        mode: { type: string, enum: [development, release] }
+        applicationVersionId:
+          { type: string, format: uuid, description: 仅生产模式需要；开发模式由服务端更新内部 __DEV__ 制品槽位。 }
+        placements:
+          type: object
+          additionalProperties: { type: string, format: uuid }
+          description: 基础与工程实际使用的可选引擎放置节点。基础引擎固定包含 Gateway 和 Runtime API；计算、报警、采集由服务端从工程制品推导。
         accessPort:
           type: integer
           minimum: 1024
           maximum: 65532
-          description: 客户选择的工程访问端口；平台同时保留其后续三个本机运行端口并检查冲突。
-        enableCollector: { type: boolean, default: false }
+          description: 基础引擎的 hostPort。服务端仅在该基础引擎节点检查端口冲突。
     AgentEnrollmentClaimRequest:
       type: object
       required: [code, hostname, platform, architecture, capabilities]

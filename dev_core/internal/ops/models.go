@@ -11,9 +11,12 @@ const (
 	CapabilityDataRuntime  = "data_runtime"
 	CapabilityCollector    = "collector"
 
-	ServiceProjectEntry = "project_entry"
-	ServiceDataRuntime  = "data_runtime"
-	ServiceCollector    = "collector"
+	// ServiceBase 始终包含工程 Gateway 与 Runtime API。计算、报警、采集
+	// 均由工程内容推导，不能由前端任意勾选伪造工作负载。
+	ServiceBase      = "base"
+	ServiceCompute   = "compute"
+	ServiceAlarm     = "alarm"
+	ServiceCollector = "collector"
 )
 
 type Enrollment struct {
@@ -107,13 +110,15 @@ type RuntimeEnvironmentService struct {
 }
 
 type ProjectDeployment struct {
-	ID, TenantID, ProjectID, ProjectName, NodeID, NodeName string
-	ApplicationVersionID, Version, LatestRunID             string
-	DesiredStatus, ObservedStatus, Health                  string
-	Progress                                               int
-	AccessPort                                             int
-	Services                                               []DeploymentService
-	CreatedAt, UpdatedAt                                   time.Time
+	ID, TenantID, ProjectID, ProjectName, EnvironmentID, EnvironmentName string
+	// NodeID/NodeName 不再表示整项部署的放置，仅为旧读取路径保留；真实放置只读取 Services。
+	NodeID, NodeName                            string
+	ApplicationVersionID, Version, LatestRunID  string
+	Mode, DesiredStatus, ObservedStatus, Health string
+	Progress                                    int
+	AccessPort                                  int
+	Services                                    []DeploymentService
+	CreatedAt, UpdatedAt                        time.Time
 }
 
 type DeploymentRun struct {
@@ -126,6 +131,7 @@ type DeploymentRun struct {
 type DeploymentService struct {
 	ID, TenantID, ProjectDeploymentID, NodeID string     `json:"-"`
 	ServiceType                               string     `json:"serviceType"`
+	PublicPort                                *int       `json:"publicPort,omitempty"`
 	DesiredStatus                             string     `json:"desiredStatus"`
 	ObservedStatus                            string     `json:"observedStatus"`
 	LastMessage                               string     `json:"lastMessage"`
@@ -307,9 +313,13 @@ type AgentRelease struct {
 	ArtifactSize                                                                    int64
 }
 type CreateDeploymentInput struct {
-	ProjectID            string `json:"projectId"`
-	NodeID               string `json:"nodeId"`
-	ApplicationVersionID string `json:"applicationVersionId"`
-	AccessPort           int    `json:"accessPort"`
-	EnableCollector      bool   `json:"enableCollector"`
+	ProjectID            string            `json:"projectId"`
+	EnvironmentID        string            `json:"environmentId"`
+	NodeID               string            `json:"nodeId,omitempty"`
+	ApplicationVersionID string            `json:"applicationVersionId"`
+	Mode                 string            `json:"mode"`
+	AccessPort           int               `json:"accessPort"`
+	Placements           map[string]string `json:"placements"`
+	// EnableCollector 仅兼容旧请求；新服务需求由工程内容推导，不能信任此字段。
+	EnableCollector bool `json:"enableCollector,omitempty"`
 }

@@ -732,26 +732,30 @@ CREATE TABLE project_deployments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
-  node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  -- 一个工程在一个运行环境只有一个部署槽位。DEV 与 RELEASE 都是替换该槽位，
+  -- 不能以模式为维度并行运行两个版本。
+  environment_id uuid NOT NULL REFERENCES runtime_environments (id) ON DELETE RESTRICT,
+  -- 生产记录引用不可变 Release；开发记录引用同工程可替换的内部 __DEV__ 制品。
   application_version_id uuid NOT NULL REFERENCES application_versions (id) ON DELETE RESTRICT,
+  mode text NOT NULL CHECK (mode IN ('development', 'release')),
   access_port integer NOT NULL CHECK (access_port BETWEEN 1024 AND 65532),
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT project_deployments_tenant_project_key UNIQUE (tenant_id, project_id),
-  CONSTRAINT project_deployments_tenant_node_access_port_key UNIQUE (tenant_id, node_id, access_port)
+  CONSTRAINT project_deployments_tenant_project_environment_key UNIQUE (tenant_id, project_id, environment_id)
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
 
--- DeploymentBinding 是 Release 之外唯一允许携带节点绑定信息的版本化快照。
--- 当前基础实现只创建 revision=1。客户在部署阶段选择工程访问端口，控制面
--- 为同一原生进程组保留连续四个端口；Secret 仍由节点本地装配。
+-- DeploymentBinding 是制品之外唯一允许携带节点绑定信息的版本化快照。
+-- 每个引擎服务都有自己的节点绑定，DEV 也必须引用内部 __DEV__ 制品，不能绕过
+-- 下载、摘要和签名校验链路。
 CREATE TABLE deployment_bindings (
   id uuid PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
+  deployment_service_id uuid NOT NULL,
   project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
   node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
   application_version_id uuid NOT NULL REFERENCES application_versions (id) ON DELETE RESTRICT,
@@ -759,9 +763,9 @@ CREATE TABLE deployment_bindings (
   binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object'),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (project_deployment_id, revision)
+  UNIQUE (deployment_service_id, revision)
 );
-CREATE INDEX deployment_bindings_agent_lookup_idx ON deployment_bindings (node_id, project_deployment_id, revision DESC);
+CREATE INDEX deployment_bindings_agent_lookup_idx ON deployment_bindings (node_id, deployment_service_id, revision DESC);
 
 CREATE TABLE deployment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -795,7 +799,9 @@ CREATE TABLE deployment_services (
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
   node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
-  service_type text NOT NULL CHECK (service_type IN ('project_entry', 'data_runtime', 'collector')),
+  -- 基础引擎包含工程网关与 Runtime API，始终存在；其余引擎由工程内容自动推导。
+  service_type text NOT NULL CHECK (service_type IN ('base', 'compute', 'alarm', 'collector')),
+  public_port integer CHECK (public_port IS NULL OR public_port BETWEEN 1024 AND 65535),
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'failed')),
   replicas_desired integer NOT NULL DEFAULT 1 CHECK (replicas_desired >= 0),
@@ -817,3 +823,11 @@ CREATE TABLE deployment_services (
   UNIQUE (project_deployment_id, service_type)
 );
 CREATE INDEX deployment_services_node_idx ON deployment_services (node_id, desired_status);
+-- 工程入口采用 hostPort + nodeSelector，入口只绑定基础引擎所在的物理节点。
+-- 因此端口冲突是节点级，不再沿用旧实现的连续四端口假设。
+CREATE UNIQUE INDEX deployment_services_base_access_port_key
+  ON deployment_services (node_id, public_port)
+  WHERE service_type = 'base' AND public_port IS NOT NULL;
+ALTER TABLE deployment_bindings
+  ADD CONSTRAINT deployment_bindings_service_id_fkey
+  FOREIGN KEY (deployment_service_id) REFERENCES deployment_services (id) ON DELETE CASCADE;

@@ -593,7 +593,7 @@ func validCapability(v string) bool {
 	return v == CapabilityProjectEntry || v == CapabilityDataRuntime || v == CapabilityCollector
 }
 func validServiceType(v string) bool {
-	return v == ServiceProjectEntry || v == ServiceDataRuntime || v == ServiceCollector
+	return v == ServiceBase || v == ServiceCompute || v == ServiceAlarm || v == ServiceCollector
 }
 func validateCapabilities(values []string) error {
 	if len(values) == 0 {
@@ -613,13 +613,22 @@ func validateCapabilities(values []string) error {
 	return nil
 }
 func validateDeployment(in CreateDeploymentInput) error {
-	if !validUUID(in.ProjectID) || !validUUID(in.NodeID) || !validUUID(in.ApplicationVersionID) {
-		return fmt.Errorf("工程、节点和正式版本 ID 格式无效")
+	if !validUUID(in.ProjectID) || !validUUID(in.EnvironmentID) {
+		return fmt.Errorf("工程或运行环境 ID 格式无效")
+	}
+	if in.Mode != "development" && in.Mode != "release" {
+		return fmt.Errorf("部署模式无效")
+	}
+	if in.Mode == "release" && !validUUID(in.ApplicationVersionID) {
+		return fmt.Errorf("正式版本 ID 格式无效")
+	}
+	if in.Mode == "development" && in.ApplicationVersionID != "" {
+		return fmt.Errorf("开发部署不能绑定正式版本")
 	}
 	if in.AccessPort < 1024 || in.AccessPort > 65532 {
 		return fmt.Errorf("工程访问端口必须在 1024 到 65532 之间")
 	}
-	return nil
+	return validateEnginePlacements([]string{ServiceBase}, in.Placements)
 }
 func validUUID(value string) bool { _, err := uuid.Parse(value); return err == nil }
 func randomToken(bytes int) (string, error) {

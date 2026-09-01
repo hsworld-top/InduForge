@@ -518,14 +518,14 @@ func nodePayload(x Node) map[string]any {
 func deploymentPayload(x ProjectDeployment) map[string]any {
 	entryStatus := "pending"
 	for _, service := range x.Services {
-		if service.ServiceType == ServiceProjectEntry {
+		if service.ServiceType == ServiceBase {
 			entryStatus = service.ObservedStatus
 			break
 		}
 	}
 	accessURL := ""
 	for _, service := range x.Services {
-		if service.ServiceType == ServiceProjectEntry {
+		if service.ServiceType == ServiceBase {
 			accessURL = service.Endpoint
 			break
 		}
