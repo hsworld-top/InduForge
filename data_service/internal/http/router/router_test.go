@@ -116,3 +116,16 @@ func TestInternalProjectTenantBindingRouteRejectsBearerToken(t *testing.T) {
 		t.Fatalf("expected ordinary bearer token to be rejected with 401, got %d", recorder.Code)
 	}
 }
+
+func TestInternalCollectorBindingRouteRejectsBearerToken(t *testing.T) {
+	bundleHandler := handler.NewCollectorBindingBundleHandler(nil, nil)
+	router := NewRouter(WithCollectorBindingBundleInternalRoutes(bundleHandler, "internal-token"))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/internal/data/projects/11111111-1111-4111-8111-111111111111/collector-binding", bytes.NewBufferString(`{}`))
+	request.Header.Set("Authorization", "Bearer not-an-internal-token")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected ordinary bearer token to be rejected with 401, got %d", recorder.Code)
+	}
+}

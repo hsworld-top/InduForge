@@ -35,6 +35,7 @@ type options struct {
 	computeHandler              *handler.ComputeHandler
 	projectSnapshotHandler      *handler.ProjectSnapshotHandler
 	projectTenantBindingHandler *handler.ProjectTenantBindingHandler
+	collectorBindingHandler     *handler.CollectorBindingBundleHandler
 	internalToken               string
 	jwtValidator                *auth.JWTValidator
 }
@@ -223,6 +224,14 @@ func WithProjectTenantBindingInternalRoutes(bindingHandler *handler.ProjectTenan
 	}
 }
 
+// WithCollectorBindingBundleInternalRoutes wires control-plane-only collector bundle assembly.
+func WithCollectorBindingBundleInternalRoutes(bundleHandler *handler.CollectorBindingBundleHandler, internalToken string) Option {
+	return func(opts *options) {
+		opts.collectorBindingHandler = bundleHandler
+		opts.internalToken = internalToken
+	}
+}
+
 // NewRouter builds the base HTTP router for data_service.
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -260,7 +269,17 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
 	mountProjectTenantBindingInternalRoutes(mux, opts)
+	mountCollectorBindingBundleInternalRoutes(mux, opts)
 	return mux
+}
+
+func mountCollectorBindingBundleInternalRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.collectorBindingHandler == nil {
+		return
+	}
+	mux.Handle("POST /api/v1/internal/data/projects/{projectId}/collector-binding", middleware.RequireInternalToken(opts.internalToken)(
+		middleware.ErrorHandler(opts.collectorBindingHandler.Build),
+	))
 }
 
 func mountProjectTenantBindingInternalRoutes(mux *http.ServeMux, opts options) {

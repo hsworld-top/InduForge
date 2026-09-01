@@ -219,6 +219,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	var collectorHandler *handler.CollectorHandler
 	var collectorPointHandler *handler.CollectorPointHandler
 	var collectorImportHandler *handler.CollectorImportHandler
+	var collectorBindingBundleBuilder *service.CollectorBindingBundleBuilder
 	if collectorKeyErr := config.ValidateCollectorSecretKey(cfg); collectorKeyErr != nil {
 		if strings.EqualFold(strings.TrimSpace(os.Getenv("NODE_ENV")), "production") {
 			joinCleanup(cleanupFns...)()
@@ -227,6 +228,11 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		logf("warn: data_service 启动阶段=collector-routes status=disabled reason=%v", collectorKeyErr)
 	} else {
 		secretCipher, cipherErr := collectorsecurity.NewCollectorSecretCipher(cfg.CollectorSecretKey, cfg.CollectorSecretKeyVersion)
+		if cipherErr != nil {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, cipherErr
+		}
+		collectorBindingBundleBuilder, cipherErr = service.NewCollectorBindingBundleBuilder(secretCipher)
 		if cipherErr != nil {
 			joinCleanup(cleanupFns...)()
 			return nil, nil, cipherErr
@@ -306,6 +312,10 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
+	var collectorBindingBundleHandler *handler.CollectorBindingBundleHandler
+	if collectorBindingBundleBuilder != nil {
+		collectorBindingBundleHandler = handler.NewCollectorBindingBundleHandler(projectSnapshotService, collectorBindingBundleBuilder)
+	}
 	projectTenantBindingHandler := handler.NewProjectTenantBindingHandler(projectTenantBindingService)
 	protocolConnectionHandler := handler.NewProtocolConnectionHandler(protocolConnectionService, protocolPreviewService)
 	tdengineOPCHandler := handler.NewTDengineOPCHandler(tdengineOPCService)
@@ -328,6 +338,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProjectTenantBindingInternalRoutes(projectTenantBindingHandler, cfg.DataServiceInternalToken),
+		router.WithCollectorBindingBundleInternalRoutes(collectorBindingBundleHandler, cfg.DataServiceInternalToken),
 		router.WithProtocolConnectionRoutes(protocolConnectionHandler, jwtValidator),
 		router.WithTDengineOPCRoutes(tdengineOPCHandler, jwtValidator),
 		router.WithKafkaWorkbenchRoutes(kafkaWorkbenchHandler, jwtValidator),
