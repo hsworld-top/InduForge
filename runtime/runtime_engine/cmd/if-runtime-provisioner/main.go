@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -9,13 +10,25 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "prepare" {
-		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner prepare --input FILE")
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats> --input FILE")
 		os.Exit(2)
 	}
+	switch os.Args[1] {
+	case "prepare":
+		runPrepare(os.Args[2:])
+	case "provision-nats":
+		runProvisionNATS(os.Args[2:])
+	default:
+		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats> --input FILE")
+		os.Exit(2)
+	}
+}
+
+func runPrepare(args []string) {
 	flags := flag.NewFlagSet("prepare", flag.ContinueOnError)
 	inputPath := flags.String("input", "", "runtime-binding.input.v1 文件")
-	if err := flags.Parse(os.Args[2:]); err != nil || *inputPath == "" {
+	if err := flags.Parse(args); err != nil || *inputPath == "" {
 		fmt.Fprintln(os.Stderr, "prepare: input invalid")
 		os.Exit(2)
 	}
@@ -34,4 +47,34 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stdout, "prepare: complete")
+}
+
+func runProvisionNATS(args []string) {
+	flags := flag.NewFlagSet("provision-nats", flag.ContinueOnError)
+	inputPath := flags.String("input", "", "runtime-binding.input.v1 文件")
+	credentialsPath := flags.String("credentials", "", "NATS bootstrap 凭据文件")
+	if err := flags.Parse(args); err != nil || *inputPath == "" || *credentialsPath == "" {
+		fmt.Fprintln(os.Stderr, "provision-nats: argument invalid")
+		os.Exit(2)
+	}
+	raw, err := os.ReadFile(*inputPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "provision-nats: input read failed")
+		os.Exit(1)
+	}
+	in, err := provisioner.Decode(raw)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "provision-nats: input invalid")
+		os.Exit(1)
+	}
+	credentials, err := os.ReadFile(*credentialsPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "provision-nats: credentials read failed")
+		os.Exit(1)
+	}
+	if err := provisioner.ProvisionNATS(context.Background(), in, credentials); err != nil {
+		fmt.Fprintln(os.Stderr, "provision-nats: failed")
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stdout, "provision-nats: complete")
 }
