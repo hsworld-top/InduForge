@@ -78,19 +78,27 @@
         </button>
       </div>
 
-      <div v-if="mode === 'RELEASE'" class="release-version-bar">
-        <div class="release-version-item">
-          <span>{{ t('projectManagement.currentVersion') }}</span>
-          <strong>{{ currentVersion ? `v${currentVersion}` : '-' }}</strong>
-        </div>
-        <span class="release-version-arrow">→</span>
-        <div class="release-version-item release-version-item--next">
-          <span>{{ t('projectManagement.nextVersion') }}</span>
-          <strong>v{{ nextVersion }}</strong>
-        </div>
-        <el-tag size="small" type="primary" effect="light">
-          {{ t('projectManagement.autoIncrement') }}
-        </el-tag>
+      <p v-if="mode === 'DEV'" class="publish-mode-hint">
+        开发模式使用服务端生成的开发快照，不需要选择版本。
+      </p>
+
+      <div v-if="mode === 'RELEASE'" class="publish-field">
+        <label for="publish-release">{{ t('projectManagement.releasedVersion') }}</label>
+        <el-select
+          id="publish-release"
+          v-model="applicationVersionId"
+          size="small"
+          :loading="versionLoading"
+          :placeholder="t('projectManagement.chooseRelease')"
+          @change="syncPlacements"
+        >
+          <el-option
+            v-for="version in readyVersions"
+            :key="version.id"
+            :value="version.id"
+            :label="version.name ? `${version.version} · ${version.name}` : version.version"
+          />
+        </el-select>
       </div>
 
       <div v-if="availableEnvironments.length > 1" class="publish-field">
@@ -194,7 +202,7 @@ import request, { getApiErrorMessage } from '@/utils/request'
 import { formatDateTime } from '@/utils'
 
 type PublishMode = 'DEV' | 'RELEASE'
-type EngineKey = 'runtime' | 'compute' | 'alarm' | 'collection'
+type EngineKey = 'base' | 'compute' | 'alarm' | 'collector'
 
 interface ProjectSummary {
   id: string
@@ -203,9 +211,9 @@ interface ProjectSummary {
 
 interface PublishPayload {
   projectId: string
-  mode: PublishMode
+  mode: 'development' | 'production'
   environmentId: string
-  version: string | null
+  applicationVersionId: string | null
   placements: Record<EngineKey, string | null>
 }
 
@@ -236,20 +244,37 @@ const environments = ref<RuntimeEnvironment[]>([])
 const nodes = ref<OpsNode[]>([])
 const versions = ref<ManagedApplicationVersion[]>([])
 const environmentId = ref('')
+const applicationVersionId = ref('')
 const placements = reactive<Record<EngineKey, string>>({
-  runtime: '',
+  base: '',
   compute: '',
   alarm: '',
-  collection: '',
+  collector: '',
 })
 
-const engineRows = computed(() => [
-  {
-    key: 'runtime' as const,
-    label: t('projectManagement.baseEngine'),
-    optional: false,
-  },
-])
+const readyVersions = computed(() => versions.value.filter((item) => item.status === 'ready'))
+const selectedCapabilities = computed(() => {
+  const source =
+    mode.value === 'RELEASE'
+      ? readyVersions.value.find((item) => item.id === applicationVersionId.value)
+      : versions.value.find((item) => item.mode === 'development' || item.version === '__DEV__')
+  const capabilities = (source?.capabilities || source?.manifest?.capabilities || []) as unknown[]
+  return new Set(capabilities.map((item) => String(item).toLowerCase()))
+})
+const engineRows = computed(() => {
+  const rows: Array<{ key: EngineKey; label: string }> = [
+    { key: 'base', label: t('projectManagement.baseEngine') },
+  ]
+  for (const [key, label] of [
+    ['compute', 'computeEngine'],
+    ['alarm', 'alarmEngine'],
+    ['collector', 'collectionEngine'],
+  ]) {
+    if (selectedCapabilities.value.has(key))
+      rows.push({ key: key as EngineKey, label: t(`projectManagement.${label}`) })
+  }
+  return rows
+})
 
 // 单一运行环境不是用户决策，隐藏选择器并直接使用它，避免两个部署入口语义不一致。
 const availableEnvironments = computed(() =>
@@ -289,22 +314,6 @@ const sortedVersions = computed(() =>
     .sort((left, right) => compareVersions(right.version, left.version)),
 )
 
-const currentVersion = computed(
-  () => sortedVersions.value.find((item) => item.status === 'success')?.version || '',
-)
-
-const nextVersion = computed(() => {
-  const latest = sortedVersions.value[0]?.version
-  const parts = versionParts(latest)
-  if (!parts) return '0.1'
-  if (parts.length === 3) {
-    parts[2] += 1
-  } else {
-    parts[1] += 1
-  }
-  return parts.join('.')
-})
-
 const versionStatusType = (status: string | undefined) => {
   if (status === 'success') return 'success'
   if (status === 'failed') return 'danger'
@@ -329,9 +338,7 @@ const loadVersions = async () => {
       page: 1,
       pageSize: 200,
     })
-    versions.value = (result.items as ManagedApplicationVersion[]).filter(
-      (item) => item.mode !== 'DEV' && item.version !== '__DEV__',
-    )
+    versions.value = result.items as ManagedApplicationVersion[]
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, t('projectManagement.versionManageLoadFailed')))
   } finally {
@@ -376,14 +383,15 @@ const nodeOptionLabel = (node: OpsNode) => {
 
 const canConfirm = computed(() => {
   if (!props.project?.id || !environmentId.value || nodeLoading.value) return false
-  return Boolean(placements.runtime)
+  if (mode.value === 'RELEASE' && !applicationVersionId.value) return false
+  return engineRows.value.every((engine) => Boolean(placements[engine.key]))
 })
 
 const setDefaultPlacements = () => {
   const readyNodes = nodes.value.filter(isNodeReady)
   const firstNodeId = readyNodes[0]?.id || ''
   const readyNodeIds = new Set(readyNodes.map((node) => node.id))
-  ;(['runtime'] as EngineKey[]).forEach((key) => {
+  engineRows.value.forEach(({ key }) => {
     if (!readyNodeIds.has(placements[key])) placements[key] = firstNodeId
   })
 }
@@ -425,9 +433,8 @@ const loadPublishContext = async () => {
       opsAPI.listProjectVersions(props.project.id, { page: 1, pageSize: 200 }),
     ])
     environments.value = environmentResult.items.filter((item) => item.desiredStatus !== 'deleting')
-    versions.value = (versionResult.items as ManagedApplicationVersion[]).filter(
-      (item) => item.mode !== 'DEV' && item.version !== '__DEV__',
-    )
+    versions.value = versionResult.items as ManagedApplicationVersion[]
+    applicationVersionId.value = readyVersions.value[0]?.id || ''
     const defaultEnvironment =
       availableEnvironments.value.find((item) => item.isDefault) || availableEnvironments.value[0]
     environmentId.value = defaultEnvironment?.id || ''
@@ -444,28 +451,31 @@ const reset = () => {
   mode.value = 'DEV'
   activeView.value = 'publish'
   environmentId.value = ''
+  applicationVersionId.value = ''
   environments.value = []
   nodes.value = []
   versions.value = []
   loadError.value = ''
-  placements.runtime = ''
+  placements.base = ''
   placements.compute = ''
   placements.alarm = ''
-  placements.collection = ''
+  placements.collector = ''
 }
+
+const syncPlacements = () => setDefaultPlacements()
 
 const submit = () => {
   if (!props.project?.id || !canConfirm.value) return
   emit('confirm', {
     projectId: props.project.id,
-    mode: mode.value,
+    mode: mode.value === 'RELEASE' ? 'production' : 'development',
     environmentId: environmentId.value,
-    version: mode.value === 'RELEASE' ? nextVersion.value : null,
+    applicationVersionId: mode.value === 'RELEASE' ? applicationVersionId.value : null,
     placements: {
-      runtime: placements.runtime,
+      base: placements.base,
       compute: placements.compute,
       alarm: placements.alarm,
-      collection: null,
+      collector: placements.collector,
     },
   })
 }
@@ -506,7 +516,9 @@ watch(
 }
 
 :global(.project-publish-dialog .el-dialog__body) {
+  height: 372px;
   padding: 4px 20px 18px;
+  overflow-y: auto;
 }
 
 :global(.project-publish-dialog .el-dialog__footer) {
@@ -515,7 +527,13 @@ watch(
 }
 
 .publish-dialog-body {
-  min-height: 322px;
+  min-height: 350px;
+}
+
+.publish-mode-hint {
+  margin: 12px 0;
+  color: var(--ck-text-muted);
+  font-size: 12px;
 }
 
 .version-manager {

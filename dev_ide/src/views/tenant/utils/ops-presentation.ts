@@ -14,7 +14,14 @@ export const capabilityLabel: Record<OpsCapability, string> = {
   data_runtime: '数据运行',
   collector: '数据采集',
 }
-export const serviceLabel: Record<OpsServiceType, string> = capabilityLabel
+export const serviceLabel: Record<OpsServiceType | OpsCapability, string> = {
+  base: '基础引擎',
+  compute: '计算引擎',
+  alarm: '报警引擎',
+  collector: '数据采集',
+  project_entry: '工程入口',
+  data_runtime: '数据运行',
+}
 export const platformLabel = (platform?: string) =>
   platform === 'windows' ? 'Windows' : platform === 'linux' ? 'Linux' : '未知平台'
 

@@ -821,7 +821,7 @@ export const messages = {
         unknownProject: '未命名工程',
         removePhysicalTitle: '移除运行节点',
         removePhysicalConfirm:
-          '确认移除“{name}”？节点必须未被任何运行环境或工程使用，系统将卸载 K3s Agent 并撤销接入凭据。',
+          '确认移除“{name}”？节点必须未被任何运行环境或工程使用，系统将停止节点运行服务并撤销接入凭据。',
         removePhysicalStarted: '运行节点移除任务已创建',
         removeFailed: '物理节点移除失败',
         addTitle: '添加节点到{name}',
@@ -2252,7 +2252,7 @@ export const messages = {
         unknownProject: 'Unnamed project',
         removePhysicalTitle: 'Remove Runtime Node',
         removePhysicalConfirm:
-          'Remove “{name}”? It must not be used by any environment or project. K3s Agent will be uninstalled and its credentials revoked.',
+          'Remove “{name}”? It must not be used by any environment or project. Node runtime services will be stopped and its credentials revoked.',
         removePhysicalStarted: 'Runtime node removal task created',
         removeFailed: 'Failed to remove physical node',
         addTitle: 'Add Nodes to {name}',

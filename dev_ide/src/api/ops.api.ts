@@ -3,7 +3,9 @@ import request, { type RawResponseConfig, type RequestConfig } from '@/utils/req
 export type OpsId = string
 export type OpsPlatform = 'linux' | 'windows'
 export type OpsCapability = 'project_entry' | 'data_runtime' | 'collector'
-export type OpsServiceType = OpsCapability
+export type OpsServiceType = DeploymentEngine
+export type DeploymentEngine = 'base' | 'compute' | 'alarm' | 'collector'
+export type DeploymentMode = 'development' | 'production'
 export type OpsDeploymentAction = 'start' | 'stop' | 'restart'
 export type OpsHealth = 'healthy' | 'degraded' | 'unavailable' | 'unknown'
 export type OpsLifecycle = 'running' | 'stopped' | 'failed' | 'pending' | 'online' | 'offline'
@@ -141,9 +143,13 @@ export interface ProjectDeployment {
   id: OpsId
   projectId: OpsId
   projectName: string
-  nodeId: OpsId
+  environmentId: OpsId
+  environmentName?: string
+  mode?: 'development' | 'release'
+  applicationVersionId?: OpsId
+  /** 仅兼容旧单节点列表响应；新部署统一由 environmentId + services 表达。 */
+  nodeId?: OpsId
   nodeName?: string
-  applicationVersionId: OpsId
   accessPort: number
   version?: string
   desiredStatus?: string
@@ -175,8 +181,10 @@ export interface ApplicationVersion {
   version: string
   name?: string
   status?: string
+  mode?: string
   artifactHash?: string
   manifest?: ApplicationVersionManifest | null
+  capabilities?: DeploymentEngine[]
   completedAt?: string
   createdAt?: string
 }
@@ -207,6 +215,22 @@ export interface ListResult<T> {
 }
 type EnrollmentCreateResult = { enrollment: NodeEnrollment; code?: string }
 type DeploymentCreateResult = { deployment: ProjectDeployment; run: DeploymentRun }
+type ProjectDeploymentCreatePayload = {
+  projectId: OpsId
+  environmentId: OpsId
+  mode: DeploymentMode
+  applicationVersionId?: OpsId
+  accessPort: number
+  placements: Partial<Record<DeploymentEngine, OpsId>>
+}
+/** @deprecated 仅供历史单节点页面过渡，新增调用必须使用 ProjectDeploymentCreatePayload。 */
+type LegacyProjectDeploymentCreatePayload = {
+  projectId: OpsId
+  nodeId: OpsId
+  applicationVersionId: OpsId
+  accessPort: number
+  enableCollector: boolean
+}
 const config: RequestConfig = { skipErrorToast: true }
 const normalizeParams = (value: ListParams) => {
   const { keyword, ...params } = value
@@ -397,13 +421,9 @@ export const opsAPI = {
       unpack<ProjectDeployment>(await request.get(`/ops/project-deployments/${id}`, config)),
     )
   },
-  async createProjectDeployment(payload: {
-    projectId: OpsId
-    nodeId: OpsId
-    applicationVersionId: OpsId
-    accessPort: number
-    enableCollector: boolean
-  }) {
+  async createProjectDeployment(
+    payload: ProjectDeploymentCreatePayload | LegacyProjectDeploymentCreatePayload,
+  ) {
     const result = unpack<DeploymentCreateResult>(
       await request.post('/ops/project-deployments', payload, config),
     )

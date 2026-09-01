@@ -1525,18 +1525,18 @@
         <button
           type="button"
           role="tab"
-          :aria-selected="deployForm.mode === 'DEV'"
-          :class="['ops-deploy-mode-tab', { 'is-active': deployForm.mode === 'DEV' }]"
-          @click="deployForm.mode = 'DEV'"
+          :aria-selected="deployForm.mode === 'development'"
+          :class="['ops-deploy-mode-tab', { 'is-active': deployForm.mode === 'development' }]"
+          @click="deployForm.mode = 'development'"
         >
           {{ $t('opsConsole.deployments.developmentMode') }}
         </button>
         <button
           type="button"
           role="tab"
-          :aria-selected="deployForm.mode === 'RELEASE'"
-          :class="['ops-deploy-mode-tab', { 'is-active': deployForm.mode === 'RELEASE' }]"
-          @click="deployForm.mode = 'RELEASE'"
+          :aria-selected="deployForm.mode === 'production'"
+          :class="['ops-deploy-mode-tab', { 'is-active': deployForm.mode === 'production' }]"
+          @click="deployForm.mode = 'production'"
         >
           {{ $t('opsConsole.deployments.productionMode') }}
         </button>
@@ -1544,9 +1544,16 @@
       <div
         :class="[
           'ops-deployment-form',
-          { 'ops-deployment-form--release': deployForm.mode === 'RELEASE' },
+          { 'ops-deployment-form--release': deployForm.mode === 'production' },
         ]"
       >
+        <el-alert
+          v-if="availableEnvironments.length === 0"
+          title="暂无可用运行环境，请先完成运行环境初始化。"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
         <div class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.project') }}</label>
           <el-select
@@ -1564,7 +1571,10 @@
               :value="project.id"
           /></el-select>
         </div>
-        <div v-if="deployForm.mode === 'RELEASE'" class="ops-deployment-field">
+        <p v-if="deployForm.mode === 'development'" class="ops-deployment-mode-hint">
+          开发模式使用服务端固定的开发快照，不需要选择版本。
+        </p>
+        <div v-if="deployForm.mode === 'production'" class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.releasedVersion') }}</label>
           <el-select
             v-model="deployForm.applicationVersionId"
@@ -1572,8 +1582,8 @@
             :placeholder="$t('opsConsole.deployments.chooseRelease')"
             :loading="versionLoading"
             :disabled="!deployForm.projectId"
-            ><el-option
-              v-for="version in versions"
+              ><el-option
+              v-for="version in versions.filter((item) => item.status === 'ready')"
               :key="version.id"
               :label="version.name ? `${version.version} · ${version.name}` : version.version"
               :value="version.id"
@@ -1613,18 +1623,13 @@
             class="ops-engine-placement__row"
           >
             <div>
-              <strong>{{ engine.label }}</strong
-              ><el-switch
-                v-if="engine.optional"
-                v-model="deployForm.enableCollector"
-                size="small"
-              />
+              <strong>{{ engine.label }}</strong>
             </div>
             <el-select
               v-model="deployForm.placements[engine.key]"
               filterable
               :loading="deploymentNodeLoading"
-              :disabled="deploymentNodeLoading || (engine.optional && !deployForm.enableCollector)"
+              :disabled="deploymentNodeLoading"
               :placeholder="$t('opsConsole.deployments.chooseNode')"
             >
               <el-option
@@ -1649,7 +1654,7 @@
             :disabled="!canCreateDeployment"
             @click="createDeployment"
             >{{
-              deployForm.mode === 'RELEASE'
+              deployForm.mode === 'production'
                 ? $t('opsConsole.deployments.deployProduction')
                 : $t('opsConsole.deployments.deployDevelopment')
             }}</el-button
@@ -1737,7 +1742,6 @@ import { formatDateTime } from '@/utils/date'
 import {
   enrollmentCapabilities,
   enrollmentInstallCommand,
-  isDeployableReleaseVersion,
   lifecyclePresentation,
   validateEnrollmentServerUrl,
 } from './utils/ops-presentation'
@@ -1796,7 +1800,7 @@ interface ProjectOption {
   id: string
   name: string
 }
-type DeploymentEngineKey = 'runtime' | 'compute' | 'alarm' | 'collection'
+type DeploymentEngineKey = 'base' | 'compute' | 'alarm' | 'collector'
 interface PageState {
   page: number
   limit: number
@@ -1928,17 +1932,16 @@ const enrollForm = reactive({
   ttlMinutes: 60,
 })
 const deployForm = reactive({
-  mode: 'DEV' as 'DEV' | 'RELEASE',
+  mode: 'development' as 'development' | 'production',
   projectId: '',
   applicationVersionId: '',
   environmentId: '',
   accessPort: 17800,
-  enableCollector: false,
   placements: {
-    runtime: '',
+    base: '',
     compute: '',
     alarm: '',
-    collection: '',
+    collector: '',
   } as Record<DeploymentEngineKey, string>,
 })
 
@@ -2263,19 +2266,21 @@ const deploymentRows = computed<DeploymentRow[]>(() =>
     return {
       id: item.id,
       projectName: item.projectName,
-      version: item.version || item.applicationVersionId,
-      environmentId: '',
-      environmentName: t('opsConsole.deployments.legacyNode', {
-        name: item.nodeName || item.nodeId,
-      }),
-      services: [
-        t('opsConsole.deployments.runtime'),
-        t('opsConsole.deployments.compute'),
-        t('opsConsole.deployments.alarm'),
-        ...(item.services?.some((service) => service.serviceType === 'collector')
-          ? [t('opsConsole.deployments.collection')]
-          : []),
-      ],
+      version: item.version || item.applicationVersionId || '--',
+      environmentId: item.environmentId || '',
+      environmentName:
+        item.environmentName ||
+        t('opsConsole.deployments.legacyNode', { name: item.nodeName || item.nodeId || '--' }),
+      services:
+        item.services?.map((service) => {
+          const labels: Record<string, string> = {
+            base: t('opsConsole.deployments.baseEngine'),
+            compute: t('opsConsole.deployments.computeEngine'),
+            alarm: t('opsConsole.deployments.alarmEngine'),
+            collector: t('opsConsole.deployments.collectionEngine'),
+          }
+          return labels[service.serviceType] || service.serviceType
+        }) || [t('opsConsole.deployments.baseEngine')],
       status: running
         ? t('opsConsole.common.running')
         : failed
@@ -2333,30 +2338,37 @@ const selectedProject = computed(() =>
 const selectedVersion = computed(() =>
   versions.value.find((item) => item.id === deployForm.applicationVersionId),
 )
-const deploymentEngineRows = computed(() => [
-  { key: 'runtime' as const, label: t('opsConsole.deployments.baseEngine'), optional: false },
-  { key: 'compute' as const, label: t('opsConsole.deployments.computeEngine'), optional: false },
-  { key: 'alarm' as const, label: t('opsConsole.deployments.alarmEngine'), optional: false },
-  {
-    key: 'collection' as const,
-    label: t('opsConsole.deployments.collectionEngine'),
-    optional: true,
-  },
-])
+const deploymentCapabilities = computed(() => {
+  const source =
+    deployForm.mode === 'production'
+      ? selectedVersion.value
+      : versions.value.find((item) => item.version === '__DEV__' || item.mode === 'development')
+  const capabilities = (source?.capabilities || source?.manifest?.capabilities || []) as unknown[]
+  return new Set(capabilities.map((item) => String(item).toLowerCase()))
+})
+const deploymentEngineRows = computed(() => {
+  const rows: Array<{ key: DeploymentEngineKey; label: string }> = [
+    { key: 'base', label: t('opsConsole.deployments.baseEngine') },
+  ]
+  for (const [key, label] of [
+    ['compute', 'computeEngine'],
+    ['alarm', 'alarmEngine'],
+    ['collector', 'collectionEngine'],
+  ]) {
+    if (deploymentCapabilities.value.has(key))
+      rows.push({ key: key as DeploymentEngineKey, label: t(`opsConsole.deployments.${label}`) })
+  }
+  return rows
+})
 const canCreateDeployment = computed(() =>
   Boolean(
     deployForm.projectId &&
-    (deployForm.mode === 'DEV' || deployForm.applicationVersionId) &&
+    (deployForm.mode === 'development' || deployForm.applicationVersionId) &&
     deployForm.environmentId &&
-    deployForm.placements.runtime &&
-    deployForm.placements.compute &&
-    deployForm.placements.alarm &&
-    (!deployForm.enableCollector || deployForm.placements.collection) &&
+    deploymentEngineRows.value.every((engine) => deployForm.placements[engine.key]) &&
     deployForm.accessPort >= 1024 &&
     deployForm.accessPort <= 65532 &&
-    (deployForm.mode === 'DEV' ||
-      (selectedVersion.value &&
-        isDeployableReleaseVersion(selectedVersion.value, deployForm.enableCollector))),
+    (deployForm.mode === 'development' || selectedVersion.value),
   ),
 )
 const defaultEnrollmentServerUrl = window.location.origin.replace(/\/$/, '')
@@ -3148,7 +3160,7 @@ async function onProjectChange(projectId: string) {
   versionLoading.value = true
   try {
     const result = await opsAPI.listProjectVersions(projectId, { page: 1, pageSize: 50 })
-    versions.value = result.items.filter((item) => isDeployableReleaseVersion(item))
+    versions.value = result.items
   } catch (error) {
     ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.releasesFailed')))
   } finally {
@@ -3201,14 +3213,13 @@ async function openDeployDialog(initialProjectId = '') {
   activeTab.value = 'deployments'
   selectedEnvironmentId.value = ''
   Object.assign(deployForm, {
-    mode: 'DEV',
+    mode: 'development',
     projectId: '',
     applicationVersionId: '',
     environmentId: availableEnvironments.value[0]?.id || '',
     accessPort: 17800,
-    enableCollector: false,
   })
-  Object.assign(deployForm.placements, { runtime: '', compute: '', alarm: '', collection: '' })
+  Object.assign(deployForm.placements, { base: '', compute: '', alarm: '', collector: '' })
   deploymentNodes.value = []
   versions.value = []
   deployDialog.value = true
@@ -3223,16 +3234,36 @@ async function openDeployDialog(initialProjectId = '') {
     ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.prepareFailed')))
   }
 }
-function createDeployment() {
+async function createDeployment() {
   if (
     !canCreateDeployment.value ||
     !selectedProject.value ||
-    (deployForm.mode === 'RELEASE' && !selectedVersion.value)
+    (deployForm.mode === 'production' && !selectedVersion.value)
   ) {
     ElMessage.warning(t('opsConsole.deployments.selectRequired'))
     return
   }
-  ElMessage.info(t('opsConsole.deployments.nextPhase'))
+  submittingDeployment.value = true
+  try {
+    await opsAPI.createProjectDeployment({
+      projectId: deployForm.projectId,
+      environmentId: deployForm.environmentId,
+      mode: deployForm.mode,
+      applicationVersionId:
+        deployForm.mode === 'production' ? deployForm.applicationVersionId : undefined,
+      accessPort: deployForm.accessPort,
+      placements: Object.fromEntries(
+        deploymentEngineRows.value.map(({ key }) => [key, deployForm.placements[key]]),
+      ),
+    })
+    deployDialog.value = false
+    ElMessage.success(t('opsConsole.deployments.deployCreated'))
+    await loadDeployments()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.createFailed')))
+  } finally {
+    submittingDeployment.value = false
+  }
 }
 function handleOpenDeployEvent(event: Event) {
   const detail = (event as CustomEvent<{ projectId?: string; requestId?: string }>).detail || {}
@@ -3370,6 +3401,7 @@ onMounted(() => {
   void loadDashboard().then(() => {
     const environment = selectedEnvironment.value || defaultEnvironmentOption()
     if (canAdministerOperations.value && environment) void openEnvironment(environment)
+    else if (canAdministerOperations.value) environmentManagementMode.value = true
   })
   environmentReconcileTimer = window.setInterval(
     () => void refreshEnvironmentReconciliation(),
@@ -4104,7 +4136,9 @@ onBeforeUnmount(() => {
   right: 10px;
 }
 :global(.ops-deployment-dialog .el-dialog__body) {
+  height: 468px;
   padding: 4px 20px 18px;
+  overflow: hidden;
 }
 :global(.ops-deployment-dialog .el-dialog__footer) {
   padding: 12px 20px 14px;
@@ -4151,6 +4185,11 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 220px);
   overflow-y: auto;
   box-sizing: border-box;
+}
+.ops-deployment-mode-hint {
+  margin: 0 0 12px;
+  color: var(--ck-text-muted);
+  font-size: 12px;
 }
 .ops-deployment-form--release {
   height: 428px;

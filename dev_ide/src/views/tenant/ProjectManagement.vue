@@ -478,6 +478,7 @@ import { useAuthStore } from '@/store'
 import { can } from '@/permissions'
 import request, { getApiErrorMessage as resolveApiErrorMessage } from '@/utils/request'
 import { projectAPI } from '@/api/project.api'
+import { opsAPI } from '@/api/ops.api'
 import { formatDateTime, formatDate, formatCurrency } from '@/utils'
 import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
@@ -2048,8 +2049,27 @@ export default {
       showDeployDialog.value = true
     }
 
-    const handlePublishConfirm = () => {
-      ElMessage.info(t('projectManagement.publishExecutionPending'))
+    const handlePublishConfirm = async (payload) => {
+      deployLoading.value = true
+      try {
+        await opsAPI.createProjectDeployment({
+          projectId: payload.projectId,
+          environmentId: payload.environmentId,
+          mode: payload.mode,
+          applicationVersionId: payload.applicationVersionId || undefined,
+          accessPort: 17800,
+          placements: Object.fromEntries(
+            Object.entries(payload.placements).filter(([, nodeId]) => Boolean(nodeId)),
+          ),
+        })
+        ElMessage.success(t('projectManagement.deploySuccess', { count: 1 }))
+        showDeployDialog.value = false
+        await fetchProjectOverview()
+      } catch (error) {
+        ElMessage.error(getApiErrorMessage(error, t('projectManagement.deployFailed')))
+      } finally {
+        deployLoading.value = false
+      }
     }
 
     // 确认部署
