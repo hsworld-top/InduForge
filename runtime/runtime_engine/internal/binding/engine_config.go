@@ -29,6 +29,9 @@ type Input struct {
 	JetStream                                                    JetStreamInput
 	StateStore                                                   StateStoreInput
 	ComputeSandbox                                               *model.ComputeSandbox
+	// ComputeSandboxEndpoint 与 ComputeSandboxSecretFile 仅供 source index 使用；
+	// EngineConfig 本身只可保存 ComputeSandbox 中的两个受控引用。
+	ComputeSandboxEndpoint, ComputeSandboxSecretFile string
 }
 
 // ComputeProducer 是 compute role 对一个计算单元的唯一 producer fencing 绑定。
@@ -43,13 +46,18 @@ type ComputeProducer struct {
 type JetStreamInput struct {
 	Endpoint, ServerResourceRef, CredentialSecretRef                string
 	DataRawStream, DataDerivedStream, EventStream, DeadLetterStream string
-	Consumers                                                       []model.Consumer
+	// CredentialSecretFile 是由受控挂载提供的相对文件路径；它只供
+	// resolver index 引用，绝不携带认证值。
+	CredentialSecretFile string
+	Consumers            []model.Consumer
 }
 
 // StateStoreInput 描述状态库的部署支撑。CredentialSecretRef 写入 v2 的
 // dsnSecretRef；resourceRef 与 schema 用于部署预检，v2 正式类型不承载它们。
 type StateStoreInput struct {
 	ResourceRef, CredentialSecretRef, Schema string
+	// CredentialSecretFile 是由受控挂载提供的 PostgreSQL DSN secret 文件路径。
+	CredentialSecretFile string
 }
 
 // BuildEngineConfig 构造仅运行 compute 或 alarm 的 runtime-engine.config.v2。

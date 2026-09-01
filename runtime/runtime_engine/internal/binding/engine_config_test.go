@@ -97,19 +97,22 @@ func validInput(role string) Input {
 		ArtifactFile:      "runtime-project-artifact.json",
 		RoleOwnership:     model.Ownership{OwnerID: "runtime-engine-" + role + "-0", Epoch: 1},
 		JetStream: JetStreamInput{
-			Endpoint:            "nats://nats:4222",
-			ServerResourceRef:   "site-resource://site-a/nats",
-			CredentialSecretRef: "secret://site-a/deployment-a/nats-runtime-engine",
-			DataRawStream:       "DATA_RAW",
-			DataDerivedStream:   "DATA_DERIVED",
-			EventStream:         "EVENT",
-			DeadLetterStream:    "RUNTIME_DLQ",
-			Consumers:           consumers(role),
+			Endpoint:             "nats://nats:4222",
+			ServerResourceRef:    "site-resource://site-a/nats",
+			CredentialSecretRef:  "secret://site-a/deployment-a/nats-runtime-engine",
+			CredentialSecretFile: "secrets/nats-runtime-engine.json",
+			DataRawStream:        "DATA_RAW",
+			DataDerivedStream:    "DATA_DERIVED",
+			EventStream:          "EVENT",
+			DeadLetterStream:     "RUNTIME_DLQ",
+			Consumers:            consumers(role),
 		},
-		StateStore: StateStoreInput{ResourceRef: "site-resource://site-a/postgres", CredentialSecretRef: "secret://site-a/deployment-a/runtime-postgres", Schema: "runtime"},
+		StateStore: StateStoreInput{ResourceRef: "site-resource://site-a/postgres", CredentialSecretRef: "secret://site-a/deployment-a/runtime-postgres", CredentialSecretFile: "secrets/runtime-postgres.json", Schema: "runtime"},
 	}
 	if role == roleCompute {
 		input.ComputeSandbox = &model.ComputeSandbox{ServerResourceRef: "site-resource://site-a/compute-sandbox", CredentialSecretRef: "secret://site-a/deployment-a/compute-sandbox"}
+		input.ComputeSandboxEndpoint = "http://compute-sandbox:18103"
+		input.ComputeSandboxSecretFile = "secrets/compute-sandbox.json"
 		input.ComputeProducers = []ComputeProducer{{ComputeID: "44444444-4444-4444-8444-444444444444", Ownership: model.Ownership{OwnerID: "runtime-engine-compute-0", Epoch: 1}}}
 	} else {
 		input.AlarmOwnership = model.Ownership{OwnerID: "runtime-engine-alarm-0", Epoch: 1}
