@@ -213,6 +213,7 @@ func main() {
 	} else {
 		reconciler.SetRuntimeContextLoader(opsRepository)
 		reconciler.SetDeploymentSecretManager(ops.NewDeploymentSecretManager(reconciler))
+		reconciler.SetCollectorBindingBundleClient(dataServiceClient)
 		go runProjectWorkloadReconciler(signalCtx, opsRepository, reconciler, logger)
 	}
 

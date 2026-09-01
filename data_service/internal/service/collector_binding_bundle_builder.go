@@ -107,7 +107,7 @@ func (b *CollectorBindingBundleBuilder) Build(snapshot TenantProjectSnapshot, in
 		Secrets       map[string]string          `json:"secrets"`
 	}{"collector-runtime-index.v1", resources, secretIndex(secretFiles)}
 	// NATS 文件由 NodeAgent 的站点凭据装配；构建器只发布 ref，绝不接收或回显 token。
-	index.Secrets[input.NATSCredentialSecretRef] = "nats-credential.json"
+	index.Secrets[input.NATSCredentialSecretRef] = "secrets/nats.json"
 	binding := collectorBindingDocument{
 		SchemaVersion: "collector-runtime-binding.v1", BindingID: bindingID, BindingRevision: input.BindingRevision,
 		DeploymentID: input.DeploymentID, AccountID: input.AccountID,
@@ -374,7 +374,7 @@ func secretIndex(files map[string][]byte) map[string]string {
 	out := map[string]string{}
 	for file := range files {
 		id := strings.TrimSuffix(strings.TrimPrefix(file, "connection-"), ".json")
-		out["secret://collector/"+id] = file
+		out["secret://collector/"+id] = "secrets/" + file
 	}
 	return out
 }

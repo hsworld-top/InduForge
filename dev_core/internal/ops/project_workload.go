@@ -22,6 +22,7 @@ type ProjectWorkload struct {
 	RuntimeBindingChecksum                                                           string
 	BindingRevision                                                                  int
 	RuntimeNATSEndpoint                                                              string
+	CollectorBindingChecksum, CollectorSecretName, CollectorArtifactPath             string
 }
 
 func projectNamespace(environmentID string) (string, error) {
@@ -66,6 +67,15 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		return "", fmt.Errorf("工作负载调和字段不完整")
 	}
 	artifactRoot := projectArtifactHostPath(workload.DeploymentID, workload.ReleaseDigest)
+	if workload.Engine == ServiceCollector {
+		if workload.CollectorSecretName == "" {
+			workload.CollectorSecretName, err = collectorBundleSecretName(workload.DeploymentID)
+			if err != nil {
+				return "", err
+			}
+		}
+		return renderCollectorWorkloadManifest(workload, namespace, name, artifactRoot)
+	}
 	image, role := runtimeEngineImage, workload.Engine
 	container := "runtime-engine"
 	if workload.Engine == ServiceBase {
@@ -330,4 +340,88 @@ spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
 `, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
+}
+
+// renderCollectorWorkloadManifest 明确以 collector CLI 消费受信 Release 子工件、
+// binding/index 和只读 Secret。WAL 暂用 Pod 生命周期 emptyDir；Pod 重建会丢失未上游
+// 确认记录，后续节点持久目录交付前不承诺跨 Pod WAL 恢复。
+func renderCollectorWorkloadManifest(w ProjectWorkload, namespace, name, artifactRoot string) (string, error) {
+	if w.CollectorArtifactPath == "" {
+		w.CollectorArtifactPath = collectorArtifactFile
+	}
+	return fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: %s-config
+  namespace: %s
+data:
+  engine-role: "collector"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+  labels: {induforge.io/project-workload: "true", induforge.io/service-id: %q}
+spec:
+  replicas: 1
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector: {matchLabels: {app.kubernetes.io/name: %q}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: %q, induforge.io/release-id: %q}
+      annotations: {induforge.io/collector-binding-sha256: %q, induforge.io/release-id: %q, induforge.io/generation: %q}
+    spec:
+      nodeSelector: {induforge.io/node-id: %q}
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      initContainers:
+        - name: collector-artifact-prepare
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["collector_artifact_unpack"]
+          args: ["--archive", "/opt/induforge/release/%s", "--target", "/work/artifact"]
+          resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: work, mountPath: /work}
+      containers:
+        - name: collector-engine
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["industrial_collector"]
+          args: ["--artifact", "/work/artifact/collector-runtime-artifact.json", "--binding", "/etc/induforge/collector/binding.json", "--index", "/etc/induforge/collector/index.json", "--listen", "0.0.0.0:18080"]
+          ports: [{name: http, containerPort: 18080}]
+          readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 3, periodSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 15, periodSeconds: 10}
+          resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: collector-binding, mountPath: /etc/induforge/collector, readOnly: true}
+            - {name: collector-secrets, mountPath: /etc/induforge/collector/secrets, readOnly: true}
+            - {name: work, mountPath: /work, readOnly: true}
+            - {name: wal, mountPath: /var/lib/induforge/wal}
+      volumes:
+        - name: release
+          hostPath: {path: %q, type: Directory}
+        - name: collector-binding
+          configMap: {name: %s-collector-binding}
+        - name: collector-secrets
+          secret:
+            secretName: %s
+        - name: work
+          emptyDir: {sizeLimit: "256Mi"}
+        - name: wal
+          emptyDir: {sizeLimit: "1Gi"}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  selector: {app.kubernetes.io/name: %q}
+  ports: [{name: http, port: 80, targetPort: http}]
+`, name, namespace, name, namespace, w.ServiceID, name, name, w.ReleaseID, w.CollectorBindingChecksum, w.ReleaseID, fmt.Sprint(w.Generation), w.NodeID, collectorEngineImage, w.CollectorArtifactPath, collectorEngineImage, artifactRoot, name, w.CollectorSecretName, name, namespace, name), nil
 }

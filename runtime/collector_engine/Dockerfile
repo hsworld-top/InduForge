@@ -5,10 +5,12 @@ WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-s -w' -o /out/industrial_collector ./cmd/industrial_collector
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-s -w' -o /out/industrial_collector ./cmd/industrial_collector \
+ && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-s -w' -o /out/collector_artifact_unpack ./cmd/collector_artifact_unpack
 
 FROM gcr.io/distroless/static-debian12:nonroot
 LABEL org.opencontainers.image.version="1.0.0" org.opencontainers.image.ref.name="induforge/collector-engine:1.0.0"
 COPY --from=build /out/industrial_collector /industrial_collector
+COPY --from=build /out/collector_artifact_unpack /collector_artifact_unpack
 USER nonroot:nonroot
 ENTRYPOINT ["/industrial_collector"]

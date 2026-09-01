@@ -49,7 +49,7 @@ func TestCollectorBindingBundleBuildsModbusAndOPCUAWithoutSecretLeak(t *testing.
 	if string(index.Resources["site-resource://collector/"+bundleOPCUAID]) != `{"url":"opc.tcp://opc.example:4840/ua"}` {
 		t.Fatalf("OPC UA resource 错误: %s", index.Resources["site-resource://collector/"+bundleOPCUAID])
 	}
-	if index.Secrets["secret://collector/"+bundleModbusID] != "connection-"+bundleModbusID+".json" {
+	if index.Secrets["secret://collector/"+bundleModbusID] != "secrets/connection-"+bundleModbusID+".json" {
 		t.Fatal("连接 secret index 错误")
 	}
 	for _, raw := range [][]byte{bundle.Binding, bundle.Index} {

@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/indu-forge/dev_core/internal/dataservice"
 )
 
 // KubernetesProjectReconciler 只使用 Pod 注入的 ServiceAccount token。构造失败即
@@ -24,6 +26,9 @@ type KubernetesProjectReconciler struct {
 	runtimeContext  interface {
 		LoadProjectRuntimeContext(context.Context, string) (ProjectRuntimeContext, error)
 	}
+	collectorBundle interface {
+		BuildCollectorBindingBundle(context.Context, dataservice.CollectorBindingBundleRequest) (*dataservice.CollectorBindingBundle, error)
+	}
 }
 
 func (r *KubernetesProjectReconciler) SetDeploymentSecretManager(manager *DeploymentSecretManager) {
@@ -34,6 +39,12 @@ func (r *KubernetesProjectReconciler) SetRuntimeContextLoader(loader interface {
 	LoadProjectRuntimeContext(context.Context, string) (ProjectRuntimeContext, error)
 }) {
 	r.runtimeContext = loader
+}
+
+func (r *KubernetesProjectReconciler) SetCollectorBindingBundleClient(client interface {
+	BuildCollectorBindingBundle(context.Context, dataservice.CollectorBindingBundleRequest) (*dataservice.CollectorBindingBundle, error)
+}) {
+	r.collectorBundle = client
 }
 
 type ProjectWorkloadApplier interface {
@@ -71,7 +82,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 				message = message[:1024]
 			}
 			_, _ = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, message, serviceID)
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, message, deploymentID)
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,$1,$2 FROM deployment_runs WHERE project_deployment_id=$3 AND observed_status='pending'`, workloadFailureStage(message), message, deploymentID)
 			_ = r.reconcileDeployment(ctx, deploymentID)
 			continue
 		}
@@ -168,6 +179,9 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 }
 
 func workloadFailureStage(message string) string {
+	if strings.Contains(message, "collector-binding") {
+		return "collector-binding"
+	}
 	for name, stage := range map[string]string{"runtime-provision-nats": "provision-nats", "runtime-provision-state": "provision-state", "runtime-binding-prepare": "prepare"} {
 		if strings.Contains(message, name) {
 			return stage
@@ -199,6 +213,41 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
 // Kubernetes RollingUpdate 接管。403 明确暴露为 RBAC 配置错误，不能伪报已运行。
 func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload ProjectWorkload) error {
+	if workload.Engine == ServiceCollector {
+		if r.runtimeContext == nil || r.collectorBundle == nil || r.secretManager == nil {
+			return fmt.Errorf("collector-binding 阶段依赖未配置")
+		}
+		runtimeContext, err := r.runtimeContext.LoadProjectRuntimeContext(ctx, workload.DeploymentID)
+		if err != nil {
+			return fmt.Errorf("collector-binding 加载运行上下文失败")
+		}
+		if len(runtimeContext.CollectorSourceSnapshot) == 0 {
+			return fmt.Errorf("collector-binding 缺少 Release 冻结 sourceSnapshot")
+		}
+		collectorPath, err := collectorArtifactPath(runtimeContext.Release.Manifest)
+		if err != nil {
+			return fmt.Errorf("collector-binding Release 工件无效")
+		}
+		bundle, err := r.collectorBundle.BuildCollectorBindingBundle(ctx, dataservice.CollectorBindingBundleRequest{TenantID: runtimeContext.TenantID, ProjectID: runtimeContext.ProjectID, DeploymentID: workload.DeploymentID, EnvironmentID: workload.EnvironmentID, NodeID: workload.NodeID, ReleaseID: workload.ReleaseID, Revision: int64(runtimeContext.BindingRevision), SourceSnapshot: runtimeContext.CollectorSourceSnapshot, AccountID: "if-" + stableRuntimeKey(workload.DeploymentID), NATSEndpoint: runtimeContext.Support.NATSEndpoint, NATSResourceRef: runtimeContext.Support.NATSResourceRef, NATSCredentialSecretRef: runtimeContext.Support.NATSCredentialSecretRef})
+		if err != nil {
+			return fmt.Errorf("collector-binding 构建失败")
+		}
+		namespace, nsErr := projectNamespace(workload.EnvironmentID)
+		if nsErr != nil {
+			return nsErr
+		}
+		secretName, err := r.secretManager.EnsureCollector(ctx, namespace, workload.DeploymentID, runtimeContext.Support, bundle.SecretFiles)
+		if err != nil {
+			return fmt.Errorf("collector-binding 准备 Secret 失败")
+		}
+		if err = r.applyCollectorBindingConfigMap(ctx, workload, bundle); err != nil {
+			return fmt.Errorf("collector-binding 写入 ConfigMap 失败")
+		}
+		workload.CollectorBindingChecksum = bundle.BindingSHA256 + ":" + bundle.IndexSHA256
+		workload.CollectorSecretName = secretName
+		workload.BindingRevision = runtimeContext.BindingRevision
+		workload.CollectorArtifactPath = collectorPath
+	}
 	if workload.Engine == ServiceBase || workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		if r.runtimeContext == nil {
 			return fmt.Errorf("运行绑定上下文加载器未配置")
@@ -269,6 +318,41 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if response.StatusCode/100 != 2 {
 			return fmt.Errorf("Kubernetes 调和 %s/%s 失败: HTTP %d", meta.Kind, meta.Metadata.Name, response.StatusCode)
 		}
+	}
+	return nil
+}
+
+func collectorArtifactPath(raw []byte) (string, error) {
+	var manifest deployableReleaseManifest
+	if json.Unmarshal(raw, &manifest) != nil || manifest.Artifacts.Collector == nil || manifest.Artifacts.Collector.File != collectorArtifactFile {
+		return "", fmt.Errorf("collector artifact 缺失")
+	}
+	return manifest.Artifacts.Collector.File, nil
+}
+
+func (r *KubernetesProjectReconciler) applyCollectorBindingConfigMap(ctx context.Context, workload ProjectWorkload, bundle *dataservice.CollectorBindingBundle) error {
+	namespace, err := projectNamespace(workload.EnvironmentID)
+	if err != nil {
+		return err
+	}
+	name, err := projectWorkloadName(workload.DeploymentID, ServiceCollector)
+	if err != nil {
+		return err
+	}
+	manifest := fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: %s-collector-binding\n  namespace: %s\n  annotations: {induforge.io/binding-sha256: %q, induforge.io/index-sha256: %q}\ndata:\n  binding.json: %q\n  index.json: %q\n", name, namespace, bundle.BindingSHA256, bundle.IndexSHA256, string(bundle.Binding), string(bundle.Index))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.endpoint+"/api/v1/namespaces/"+namespace+"/configmaps/"+name+"-collector-binding?fieldManager=induforge-center&force=true", strings.NewReader(manifest))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	req.Header.Set("Content-Type", "application/apply-patch+yaml")
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
