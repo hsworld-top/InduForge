@@ -59,7 +59,7 @@ func TestDockerFrontendBuildRunnerUsesReleaseScopedVolumeSpec(t *testing.T) {
 	if out.DistDir != filepath.Join(frontendTestRoot, e.spec.OutputSubpath, "dist") {
 		t.Fatal("返回的 control 可见 dist 路径错误")
 	}
-	if len(e.spec.Command) != 1 || !strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/. /cache/pnpm-store/") || !strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/corepack/. /tmp/corepack/") {
+	if len(e.spec.Command) != 1 || !strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/. /cache/pnpm-store/") || !strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/corepack/. /tmp/corepack/") || !strings.Contains(e.spec.Command[0], "chmod -R u+rwX /tmp/corepack /cache/pnpm-store") {
 		t.Fatal("构建器没有把审核的只读离线 store 复制到可写 cache")
 	}
 	if out.Cleanup() == nil {
