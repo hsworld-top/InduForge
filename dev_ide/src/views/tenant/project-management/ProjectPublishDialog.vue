@@ -171,9 +171,11 @@
           @click="submit"
         >
           {{
-            mode === 'RELEASE'
-              ? t('projectManagement.publishAndDeploy')
-              : t('projectManagement.deployDevMode')
+            existingDeployment
+              ? '更新部署'
+              : mode === 'RELEASE'
+                ? t('projectManagement.publishAndDeploy')
+                : t('projectManagement.deployDevMode')
           }}
         </el-button>
       </div>
@@ -196,6 +198,7 @@ import {
   opsAPI,
   type ApplicationVersion,
   type OpsNode,
+  type ProjectDeployment,
   type RuntimeEnvironment,
 } from '@/api/ops.api'
 import request, { getApiErrorMessage } from '@/utils/request'
@@ -243,6 +246,7 @@ const loadError = ref('')
 const environments = ref<RuntimeEnvironment[]>([])
 const nodes = ref<OpsNode[]>([])
 const versions = ref<ManagedApplicationVersion[]>([])
+const deployments = ref<ProjectDeployment[]>([])
 const environmentId = ref('')
 const applicationVersionId = ref('')
 const placements = reactive<Record<EngineKey, string>>({
@@ -280,6 +284,11 @@ const engineRows = computed(() => {
 const availableEnvironments = computed(() =>
   environments.value.filter(
     (item) => item.desiredStatus !== 'deleting' && item.status !== 'uninitialized',
+  ),
+)
+const existingDeployment = computed(() =>
+  deployments.value.find(
+    (item) => item.projectId === props.project?.id && item.environmentId === environmentId.value,
   ),
 )
 
@@ -428,12 +437,14 @@ const loadPublishContext = async () => {
   environmentLoading.value = true
   loadError.value = ''
   try {
-    const [environmentResult, versionResult] = await Promise.all([
+    const [environmentResult, versionResult, deploymentResult] = await Promise.all([
       opsAPI.listRuntimeEnvironments({ page: 1, pageSize: 200 }),
       opsAPI.listProjectVersions(props.project.id, { page: 1, pageSize: 200 }),
+      opsAPI.listProjectDeployments({ page: 1, pageSize: 200, projectId: props.project.id }),
     ])
     environments.value = environmentResult.items.filter((item) => item.desiredStatus !== 'deleting')
     versions.value = versionResult.items as ManagedApplicationVersion[]
+    deployments.value = deploymentResult.items
     applicationVersionId.value = readyVersions.value[0]?.id || ''
     const defaultEnvironment =
       availableEnvironments.value.find((item) => item.isDefault) || availableEnvironments.value[0]
@@ -455,6 +466,7 @@ const reset = () => {
   environments.value = []
   nodes.value = []
   versions.value = []
+  deployments.value = []
   loadError.value = ''
   placements.base = ''
   placements.compute = ''

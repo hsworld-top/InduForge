@@ -1654,7 +1654,9 @@
             :disabled="!canCreateDeployment"
             @click="createDeployment"
             >{{
-              deployForm.mode === 'production'
+              existingDeployment
+                ? $t('opsConsole.deployments.updateDeployment')
+                : deployForm.mode === 'production'
                 ? $t('opsConsole.deployments.deployProduction')
                 : $t('opsConsole.deployments.deployDevelopment')
             }}</el-button
@@ -2337,6 +2339,13 @@ const selectedProject = computed(() =>
 )
 const selectedVersion = computed(() =>
   versions.value.find((item) => item.id === deployForm.applicationVersionId),
+)
+// 同一工程在同一运行环境只能保留一个部署；服务端据此更新/切换，前端明确提示。
+const existingDeployment = computed(() =>
+  deployments.value.find(
+    (item) =>
+      item.projectId === deployForm.projectId && item.environmentId === deployForm.environmentId,
+  ),
 )
 const deploymentCapabilities = computed(() => {
   const source =

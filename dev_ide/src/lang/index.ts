@@ -1015,6 +1015,7 @@ export const messages = {
         runtimeServices: '运行服务',
         enableCollection: '启用 Linux 采集',
         createDeployment: '创建部署',
+        updateDeployment: '更新部署',
         deployDevelopment: '部署开发模式',
         deployProduction: '部署生产版本',
         selectRequired: '请完整选择工程、模式、运行环境和各运行引擎节点',
@@ -2452,6 +2453,7 @@ export const messages = {
         runtimeServices: 'Runtime Services',
         enableCollection: 'Enable Linux collection',
         createDeployment: 'Create Deployment',
+        updateDeployment: 'Update Deployment',
         deployDevelopment: 'Deploy Development Mode',
         deployProduction: 'Deploy Production Release',
         selectRequired:

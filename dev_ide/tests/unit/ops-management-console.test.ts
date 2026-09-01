@@ -104,9 +104,9 @@ describe('ops management console', () => {
     expect(source).toContain(':disabled="isFoundationRepair || row.type === \'if_timeseries\'"')
   })
 
-  it('工程部署与工程快捷入口使用一致的模式和运行引擎分配语义', () => {
-    expect(source).toContain("deployForm.mode === 'DEV'")
-    expect(source).toContain("deployForm.mode === 'RELEASE'")
+  it('工程部署使用新模式与能力推导的运行引擎分配语义', () => {
+    expect(source).toContain("deployForm.mode === 'development'")
+    expect(source).toContain("deployForm.mode === 'production'")
     expect(source).toContain("<label>{{ $t('opsConsole.deployments.targetEnvironment') }}</label>")
     expect(source).toMatch(
       /<div class="ops-deployment-field">\s*<label>\{\{ \$t\('opsConsole\.deployments\.project'\) \}\}<\/label>/,
@@ -118,8 +118,11 @@ describe('ops management console', () => {
     expect(source).toContain("node.platform === 'linux'")
     expect(source).toContain("node.observedStatus === 'online'")
     expect(source).toContain("node.clusterStatus === 'ready'")
-    expect(source).toContain("key: 'alarm' as const")
-    expect(source).toContain("key: 'collection' as const")
+    expect(source).toContain("key: 'base'")
+    expect(source).toContain("['compute', 'computeEngine']")
+    expect(source).toContain("['alarm', 'alarmEngine']")
+    expect(source).toContain("['collector', 'collectionEngine']")
+    expect(source).toContain('deploymentCapabilities')
   })
 
   it('创建工程部署弹窗沿用发布工程弹窗的家族化视觉规则', () => {
@@ -130,7 +133,7 @@ describe('ops management console', () => {
     expect(source).toContain("$t('opsConsole.deployments.deployDevelopment')")
     expect(source).toContain("$t('opsConsole.deployments.deployProduction')")
     expect(source).toContain('background: var(--ck-gradient-primary)')
-    expect(source).toContain("'ops-deployment-form--release': deployForm.mode === 'RELEASE'")
+    expect(source).toContain("'ops-deployment-form--release': deployForm.mode === 'production'")
     expect(source).toMatch(
       /\.ops-deployment-form \{[\s\S]*height: 390px;[\s\S]*max-height: calc\(100vh - 220px\);[\s\S]*overflow-y: auto;/,
     )
@@ -156,11 +159,11 @@ describe('ops management console', () => {
     )
   })
 
-  it('工程部署列表以紧凑标签展示四类运行引擎并保持固定分页', () => {
+  it('工程部署列表以紧凑标签展示服务端返回的运行引擎并保持固定分页', () => {
     expect(source).toContain("$t('opsConsole.deployments.runtimeEngines')")
     expect(source).toContain('class="ops-engine-tags"')
-    expect(source).toContain("t('opsConsole.deployments.alarm')")
-    expect(source).toContain("t('opsConsole.deployments.collection')")
+    expect(source).toContain("base: t('opsConsole.deployments.baseEngine')")
+    expect(source).toContain("collector: t('opsConsole.deployments.collectionEngine')")
   })
 
   it('区分接入物理节点与将已有节点加入运行环境', () => {
@@ -176,10 +179,12 @@ describe('ops management console', () => {
     expect(switcherSource).toContain('props.canAdministerOperations || !section.administratorOnly')
   })
 
-  it('只展示后端真实状态，不制造前端任务或工程部署结果', () => {
+  it('只展示后端真实状态，并以一步式接口创建或更新工程部署', () => {
     expect(source).toContain('const tasks = ref<TaskRow[]>([])')
     expect(source).not.toContain('localDeployments')
-    expect(source).toContain("ElMessage.info(t('opsConsole.deployments.nextPhase'))")
+    expect(source).toContain('await opsAPI.createProjectDeployment({')
+    expect(source).toContain('const existingDeployment = computed')
+    expect(source).toContain("$t('opsConsole.deployments.updateDeployment')")
     expect(source).toContain('foundation_redeploy_requested')
   })
 })

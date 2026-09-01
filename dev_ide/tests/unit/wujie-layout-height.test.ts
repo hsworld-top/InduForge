@@ -24,8 +24,8 @@ describe('Wujie 子应用高度约束', () => {
         /\.datapoint-workspace\s*\{([^}]*)\}/,
       ],
       [
-        'datacenter/src/views/storage-policy/StoragePolicyWorkspace.vue',
-        /\.storage-workspace\s*\{([^}]*)\}/,
+        'datacenter/src/views/history-storage/HistoryStorageWorkspace.vue',
+        /\.history-storage-workspace\s*\{([^}]*)\}/,
       ],
       ['designer/src/App.vue', /#app\s*\{([^}]*)\}/],
       [
