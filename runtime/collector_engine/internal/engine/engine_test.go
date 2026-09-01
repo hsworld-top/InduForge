@@ -26,6 +26,25 @@ type fakePublisher struct {
 	err   error
 	calls int
 }
+type flipBatchDriver struct{ fail bool }
+
+func (*flipBatchDriver) ID() string { return "modbus.tcp" }
+func (*flipBatchDriver) Ready(context.Context, loader.Connection, loader.BindingConnection) error {
+	return nil
+}
+func (*flipBatchDriver) Read(context.Context, loader.Connection, loader.Mapping) (driver.Result, error) {
+	return driver.Result{}, errors.New("unused")
+}
+func (d *flipBatchDriver) ReadBatch(_ context.Context, _ loader.Connection, _ loader.BindingConnection, ms []loader.Mapping) (map[string]driver.Result, error) {
+	if d.fail {
+		return nil, errors.New("modbus exception")
+	}
+	out := map[string]driver.Result{}
+	for _, m := range ms {
+		out[m.DatapointID] = driver.Result{Value: json.RawMessage(`9`), Quality: "good", SourceTimestamp: time.Now().UTC()}
+	}
+	return out, nil
+}
 
 func (p *fakePublisher) Ready(context.Context) error                   { return nil }
 func (p *fakePublisher) Publish(context.Context, string, []byte) error { p.calls++; return p.err }
@@ -81,5 +100,37 @@ func TestConnectionBackoffGrowsCapsAndResets(t *testing.T) {
 	e.succeeded("c")
 	if len(e.retries) != 0 || !h.Ready() {
 		t.Fatal("success must reset retry and ready")
+	}
+}
+func TestBatchFailureNoPublishThenRecoveryReady(t *testing.T) {
+	h := &health.State{}
+	p := &fakePublisher{}
+	d := &flipBatchDriver{fail: true}
+	e, _ := New(fixture(), driver.NewRegistry(d), p, h)
+	e.jitter = func(time.Duration) time.Duration { return 0 }
+	e.readBatch(context.Background(), fixture().Artifact.PointMappings)
+	if h.Ready() || p.calls != 0 {
+		t.Fatal("failed batch must be not-ready and not publish")
+	}
+	d.fail = false
+	e.retries["33333333-3333-4333-8333-333333333333"] = retryState{}
+	e.readBatch(context.Background(), fixture().Artifact.PointMappings)
+	if !h.Ready() || p.calls != 1 {
+		t.Fatal("recovered batch must publish and become ready")
+	}
+}
+func TestRunStopsOnContextCancel(t *testing.T) {
+	h := &health.State{}
+	p := &fakePublisher{}
+	e, _ := New(fixture(), driver.NewRegistry(fakeDriver{}), p, h)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- e.Run(ctx) }()
+	time.Sleep(5 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("run did not stop after cancel")
 	}
 }
