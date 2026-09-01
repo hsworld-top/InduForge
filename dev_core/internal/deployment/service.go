@@ -94,6 +94,11 @@ type CreateVersionInput struct {
 	CreatedBy    string
 	Bucket       string
 }
+type VersionReadyInput struct {
+	Bucket, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
+	ArtifactSize                                                                 int64
+	Manifest                                                                     map[string]any
+}
 
 type DeployInput struct {
 	Project       Project
@@ -114,7 +119,7 @@ type Repository interface {
 	GetDeployment(context.Context, string, string) (Deployment, error)
 	CreateVersion(context.Context, CreateVersionInput) (Version, error)
 	BeginProductionBuild(context.Context, Project, string, string, string) (Version, error)
-	MarkVersionReady(context.Context, string, string, CreateVersionInput) (Version, error)
+	MarkVersionReady(context.Context, string, string, VersionReadyInput) (Version, error)
 	MarkVersionFailed(context.Context, string, string, string) (Version, error)
 	DeleteVersion(context.Context, string, string) error
 	ListProjectDeployments(context.Context, string, string) ([]Deployment, error)

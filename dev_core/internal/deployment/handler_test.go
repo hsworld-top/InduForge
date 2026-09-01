@@ -215,8 +215,15 @@ func (r *fakeRepository) CreateVersion(_ context.Context, input deployment.Creat
 func (r *fakeRepository) BeginProductionBuild(_ context.Context, project deployment.Project, userID, name, description string) (deployment.Version, error) {
 	return deployment.Version{ID: "building", TenantID: project.TenantID, ProjectID: project.ID, Version: "1.0.0", Status: "building", Name: name, Description: description}, nil
 }
-func (r *fakeRepository) MarkVersionReady(_ context.Context, tenantID, id string, input deployment.CreateVersionInput) (deployment.Version, error) {
-	return r.CreateVersion(context.Background(), input)
+func (r *fakeRepository) MarkVersionReady(_ context.Context, tenantID, id string, input deployment.VersionReadyInput) (deployment.Version, error) {
+	item, ok := r.versions[id]
+	if !ok {
+		return deployment.Version{}, deployment.ErrNotFound
+	}
+	item.Status = "ready"
+	item.ArtifactKey = input.ArtifactKey
+	r.versions[id] = item
+	return item, nil
 }
 func (r *fakeRepository) MarkVersionFailed(_ context.Context, tenantID, id, message string) (deployment.Version, error) {
 	item, ok := r.versions[id]

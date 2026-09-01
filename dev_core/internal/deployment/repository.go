@@ -131,7 +131,7 @@ func (r *PostgreSQLRepository) BeginProductionBuild(ctx context.Context, project
 	return versionFromModel(result), nil
 }
 
-func (r *PostgreSQLRepository) MarkVersionReady(ctx context.Context, tenantID, versionID string, input CreateVersionInput) (Version, error) {
+func (r *PostgreSQLRepository) MarkVersionReady(ctx context.Context, tenantID, versionID string, input VersionReadyInput) (Version, error) {
 	tenant, version, err := parsePair(tenantID, versionID)
 	if err != nil {
 		return Version{}, ErrNotFound
