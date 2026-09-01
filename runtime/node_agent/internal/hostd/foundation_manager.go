@@ -200,7 +200,7 @@ kind: Pod
 metadata: {name: %s-source, namespace: %s, labels: {app: %s}}
 spec:
   restartPolicy: Never
-  nodeSelector: {kubernetes.io/hostname: %s}
+  nodeSelector: {induforge.io/host-node-id: %s}
   containers:
     - name: exporter
       image: nginx:1.28-alpine
@@ -221,7 +221,7 @@ kind: Pod
 metadata: {name: %s-target, namespace: %s}
 spec:
   restartPolicy: Never
-  nodeSelector: {kubernetes.io/hostname: %s}
+  nodeSelector: {induforge.io/host-node-id: %s}
   containers:
     - name: importer
       image: nginx:1.28-alpine
@@ -230,7 +230,7 @@ spec:
       args: ["until wget -q -O /tmp/data.tgz http://%s/data.tgz; do sleep 2; done; tar -C /target -xzf /tmp/data.tgz"]
       volumeMounts: [{name: target, mountPath: /target}]
   volumes: [{name: target, persistentVolumeClaim: {claimName: %s}}]
-`, targetClaim, namespace, prefix, namespace, prefix, foundationNodeName(sourceNode), sourceClaim, prefix, namespace, prefix, prefix, namespace, foundationNodeName(targetNode), prefix, targetClaim)
+`, targetClaim, namespace, prefix, namespace, prefix, strings.ToLower(sourceNode), sourceClaim, prefix, namespace, prefix, prefix, namespace, strings.ToLower(targetNode), prefix, targetClaim)
 }
 
 func (m *Manager) DeleteFoundation(ctx context.Context, request FoundationDeleteRequest) (FoundationState, error) {

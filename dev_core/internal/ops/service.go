@@ -125,6 +125,15 @@ func (s *Service) DeployRuntimeEnvironmentFoundation(ctx context.Context, actor 
 	if assignments["if_history"] != assignments["if_timeseries"] {
 		return nil, fmt.Errorf("IF 历史库与 IF 时序库共享同一存储实例，必须部署到同一节点")
 	}
+	if s.foundationNodePreflight != nil {
+		ids := make([]string, 0, len(assignments))
+		for _, id := range assignments {
+			ids = append(ids, id)
+		}
+		if err := s.foundationNodePreflight.EnsureHostNodeLabels(ctx, ids); err != nil {
+			return nil, fmt.Errorf("基础服务节点标签预检失败: %w", err)
+		}
+	}
 	return s.repository.DeployRuntimeEnvironmentFoundation(ctx, actor.TenantID, environmentID, actor.ID, input.Assignments)
 }
 
@@ -145,6 +154,15 @@ func (s *Service) MigrateRuntimeEnvironmentFoundation(ctx context.Context, actor
 	if assignments["if_history"] != assignments["if_timeseries"] {
 		return nil, fmt.Errorf("IF 历史库与 IF 时序库共享同一存储实例，必须部署到同一节点")
 	}
+	if s.foundationNodePreflight != nil {
+		ids := make([]string, 0, len(assignments))
+		for _, id := range assignments {
+			ids = append(ids, id)
+		}
+		if err := s.foundationNodePreflight.EnsureHostNodeLabels(ctx, ids); err != nil {
+			return nil, fmt.Errorf("基础服务节点标签预检失败: %w", err)
+		}
+	}
 	return s.repository.MigrateRuntimeEnvironmentFoundation(ctx, actor.TenantID, environmentID, actor.ID, input.Assignments)
 }
 
@@ -156,11 +174,20 @@ type ReleaseStore interface {
 	Open(context.Context, string) (objectstore.ObjectReader, error)
 }
 type Service struct {
-	repository         Repository
-	packages           PackageStore
-	releases           ReleaseStore
-	clusterTokenKey    []byte
-	developmentBuilder DevelopmentArtifactBuilder
+	repository              Repository
+	packages                PackageStore
+	releases                ReleaseStore
+	clusterTokenKey         []byte
+	developmentBuilder      DevelopmentArtifactBuilder
+	foundationNodePreflight interface {
+		EnsureHostNodeLabels(context.Context, []string) error
+	}
+}
+
+func (s *Service) SetFoundationNodePreflight(preflight interface {
+	EnsureHostNodeLabels(context.Context, []string) error
+}) {
+	s.foundationNodePreflight = preflight
 }
 
 // SetClusterTokenKey 配置集群令牌派生根密钥。调用方使用已有控制面密钥，避免
@@ -471,7 +498,18 @@ func (s *Service) AgentFoundationPlan(ctx context.Context, nodeID, token string)
 	if strings.TrimSpace(token) == "" {
 		return nil, ErrAgentUnauthorized
 	}
-	return s.repository.AgentFoundationPlan(ctx, nodeID, hashToken(token))
+	plan, err := s.repository.AgentFoundationPlan(ctx, nodeID, hashToken(token))
+	if err != nil || plan == nil || s.foundationNodePreflight == nil {
+		return plan, err
+	}
+	ids := make([]string, 0, len(plan.Assignments))
+	for _, id := range plan.Assignments {
+		ids = append(ids, id)
+	}
+	if err := s.foundationNodePreflight.EnsureHostNodeLabels(ctx, ids); err != nil {
+		return nil, fmt.Errorf("基础服务节点标签预检失败: %w", err)
+	}
+	return plan, nil
 }
 
 func (s *Service) AgentTimeSyncPlan(ctx context.Context, nodeID, token string) (*TimeSyncPlan, error) {

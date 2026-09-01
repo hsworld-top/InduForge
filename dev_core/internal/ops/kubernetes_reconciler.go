@@ -29,6 +29,18 @@ type KubernetesProjectReconciler struct {
 	collectorBundle interface {
 		BuildCollectorBindingBundle(context.Context, dataservice.CollectorBindingBundleRequest) (*dataservice.CollectorBindingBundle, error)
 	}
+	hostNodes interface {
+		LoadHostNodeAddresses(context.Context, []string) (map[string]string, error)
+	}
+}
+
+const hostNodeIDLabel = "induforge.io/host-node-id"
+
+type KubernetesNode struct {
+	Name       string
+	InternalIP string
+	Ready      bool
+	Labels     map[string]string
 }
 
 func (r *KubernetesProjectReconciler) SetDeploymentSecretManager(manager *DeploymentSecretManager) {
@@ -45,6 +57,144 @@ func (r *KubernetesProjectReconciler) SetCollectorBindingBundleClient(client int
 	BuildCollectorBindingBundle(context.Context, dataservice.CollectorBindingBundleRequest) (*dataservice.CollectorBindingBundle, error)
 }) {
 	r.collectorBundle = client
+}
+
+func (r *KubernetesProjectReconciler) SetHostNodeAddressLoader(loader interface {
+	LoadHostNodeAddresses(context.Context, []string) (map[string]string, error)
+}) {
+	r.hostNodes = loader
+}
+
+// ListNodes 只读取调度节点的名称、InternalIP、Ready 和标签，禁止使用 hostname 推断身份。
+func (r *KubernetesProjectReconciler) ListNodes(ctx context.Context) ([]KubernetesNode, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint+"/api/v1/nodes", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("读取 Kubernetes 节点失败: HTTP %d", resp.StatusCode)
+	}
+	var body struct {
+		Items []struct {
+			Metadata struct {
+				Name   string            `json:"name"`
+				Labels map[string]string `json:"labels"`
+			} `json:"metadata"`
+			Status struct {
+				Addresses []struct {
+					Type    string `json:"type"`
+					Address string `json:"address"`
+				} `json:"addresses"`
+				Conditions []struct {
+					Type   string `json:"type"`
+					Status string `json:"status"`
+				} `json:"conditions"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	result := make([]KubernetesNode, 0, len(body.Items))
+	for _, item := range body.Items {
+		node := KubernetesNode{Name: item.Metadata.Name, Labels: item.Metadata.Labels}
+		for _, address := range item.Status.Addresses {
+			if address.Type == "InternalIP" {
+				node.InternalIP = address.Address
+				break
+			}
+		}
+		for _, condition := range item.Status.Conditions {
+			if condition.Type == "Ready" && condition.Status == "True" {
+				node.Ready = true
+			}
+		}
+		result = append(result, node)
+	}
+	return result, nil
+}
+
+// PatchNodeLabel 仅写入平台节点身份标签，调用方须先完成唯一性和冲突校验。
+func (r *KubernetesProjectReconciler) PatchNodeLabel(ctx context.Context, name, value string) error {
+	body := fmt.Sprintf(`{"metadata":{"labels":{%q:%q}}}`, hostNodeIDLabel, value)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.endpoint+"/api/v1/nodes/"+name, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	req.Header.Set("Content-Type", "application/merge-patch+json")
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("写入 Kubernetes 节点标签失败: HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (r *KubernetesProjectReconciler) EnsureHostNodeLabels(ctx context.Context, hostNodeIDs []string) error {
+	if r.hostNodes == nil {
+		return fmt.Errorf("Kubernetes 节点地址加载器未配置")
+	}
+	unique := make([]string, 0, len(hostNodeIDs))
+	seen := make(map[string]struct{}, len(hostNodeIDs))
+	for _, id := range hostNodeIDs {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			unique = append(unique, id)
+		}
+	}
+	addresses, err := r.hostNodes.LoadHostNodeAddresses(ctx, unique)
+	if err != nil {
+		return err
+	}
+	nodes, err := r.ListNodes(ctx)
+	if err != nil {
+		return err
+	}
+	matchedHosts := make(map[string]string, len(unique))
+	for _, hostNodeID := range unique {
+		address := strings.TrimSpace(addresses[hostNodeID])
+		if address == "" {
+			return fmt.Errorf("物理节点 %s 缺少管理 IP", hostNodeID)
+		}
+		matches := make([]KubernetesNode, 0, 1)
+		for _, node := range nodes {
+			if node.InternalIP == address {
+				matches = append(matches, node)
+			}
+		}
+		if len(matches) != 1 {
+			return fmt.Errorf("物理节点 %s 的管理 IP %s 匹配到 %d 个 Kubernetes 节点", hostNodeID, address, len(matches))
+		}
+		node := matches[0]
+		if !node.Ready {
+			return fmt.Errorf("Kubernetes 节点 %s 未就绪", node.Name)
+		}
+		if owner := matchedHosts[node.Name]; owner != "" && owner != hostNodeID {
+			return fmt.Errorf("Kubernetes 节点 %s 同时匹配物理节点 %s 和 %s", node.Name, owner, hostNodeID)
+		}
+		matchedHosts[node.Name] = hostNodeID
+		existing := node.Labels[hostNodeIDLabel]
+		if existing != "" && existing != hostNodeID {
+			return fmt.Errorf("Kubernetes 节点 %s 已被物理节点 %s 占用", node.Name, existing)
+		}
+		if existing == hostNodeID {
+			continue
+		}
+		if err := r.PatchNodeLabel(ctx, node.Name, hostNodeID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type ProjectWorkloadApplier interface {
@@ -213,6 +363,11 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
 // Kubernetes RollingUpdate 接管。403 明确暴露为 RBAC 配置错误，不能伪报已运行。
 func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload ProjectWorkload) error {
+	if r.hostNodes != nil {
+		if err := r.EnsureHostNodeLabels(ctx, []string{workload.NodeID}); err != nil {
+			return fmt.Errorf("工程节点标签预检失败: %w", err)
+		}
+	}
 	if workload.Engine == ServiceCollector {
 		if r.runtimeContext == nil || r.collectorBundle == nil || r.secretManager == nil {
 			return fmt.Errorf("collector-binding 阶段依赖未配置")

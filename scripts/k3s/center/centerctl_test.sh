@@ -36,6 +36,9 @@ for expected in \
   'image: induforge/data:1.0.0' \
   'image: induforge/edge:1.0.0' \
   'name: center-data' \
+  'name: induforge-center-control-node-labeler' \
+  'resources: ["nodes"]' \
+  'verbs: ["get", "list", "patch"]' \
   'value: http://center-data:18102' \
 	'DATA_SERVICE_INTERNAL_TOKEN' \
   'value: /contracts/collector-protocols' \

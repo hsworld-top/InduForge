@@ -265,6 +265,28 @@ metadata:
   namespace: induforge-system
 automountServiceAccountToken: true
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: induforge-center-control-node-labeler
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: induforge-center-control-node-labeler
+subjects:
+  - kind: ServiceAccount
+    name: center-control
+    namespace: induforge-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: induforge-center-control-node-labeler
+---
 apiVersion: v1
 kind: Service
 metadata:

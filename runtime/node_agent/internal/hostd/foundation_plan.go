@@ -78,8 +78,10 @@ func foundationNamespace(environmentID string) string {
 	return "if-env-" + strings.ReplaceAll(strings.ToLower(environmentID), "-", "")[:12]
 }
 
+const hostNodeIDLabel = "induforge.io/host-node-id"
+
 func foundationNodeName(nodeID string) string {
-	return "if-" + strings.ReplaceAll(strings.ToLower(nodeID), "-", "")[:12]
+	return strings.ToLower(nodeID)
 }
 
 func (plan FoundationPlan) RenderManifest(secret string) string {
@@ -109,7 +111,7 @@ func (plan FoundationPlan) RenderManifest(secret string) string {
 		renderEMQXCredentialJob(namespace, plan.Assignments["emqx"]),
 	}
 	sort.Strings(parts[4:])
-	return strings.Join(parts, "\n---\n") + "\n"
+	return strings.ReplaceAll(strings.Join(parts, "\n---\n"), "kubernetes.io/hostname", hostNodeIDLabel) + "\n"
 }
 
 func renderStatefulSet(namespace, name, image, nodeID, claim string, ports, env []string, mountPath string) string {

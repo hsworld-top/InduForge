@@ -13,6 +13,73 @@ import (
 	"github.com/indu-forge/dev_core/internal/dataservice"
 )
 
+type hostNodeAddressLoaderFunc func(context.Context, []string) (map[string]string, error)
+
+func (f hostNodeAddressLoaderFunc) LoadHostNodeAddresses(ctx context.Context, ids []string) (map[string]string, error) {
+	return f(ctx, ids)
+}
+
+func TestKubernetesProjectReconcilerLabelsHistoricalK3sNodeByInternalIP(t *testing.T) {
+	patches := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/v1/nodes":
+			_, _ = w.Write([]byte(`{"items":[{"metadata":{"name":"if-5fb-history","labels":{}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.129"}],"conditions":[{"type":"Ready","status":"True"}]}}]}`))
+		case "PATCH /api/v1/nodes/if-5fb-history":
+			patches++
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	r := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	r.SetHostNodeAddressLoader(hostNodeAddressLoaderFunc(func(context.Context, []string) (map[string]string, error) {
+		return map[string]string{testNodeID: "10.0.0.129"}, nil
+	}))
+	if err := r.EnsureHostNodeLabels(context.Background(), []string{testNodeID}); err != nil || patches != 1 {
+		t.Fatalf("historical node name must be labelled by IP: err=%v patches=%d", err, patches)
+	}
+}
+
+func TestKubernetesProjectReconcilerRejectsNodeLabelConflictAndNotReady(t *testing.T) {
+	for name, node := range map[string]string{"conflict": `{"metadata":{"name":"if-old","labels":{"induforge.io/host-node-id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.130"}],"conditions":[{"type":"Ready","status":"True"}]}}`, "not-ready": `{"metadata":{"name":"if-old","labels":{}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.130"}],"conditions":[{"type":"Ready","status":"False"}]}}`} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Fatal("invalid node must not be patched")
+				}
+				_, _ = w.Write([]byte(`{"items":[` + node + `]}`))
+			}))
+			defer server.Close()
+			r := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+			r.SetHostNodeAddressLoader(hostNodeAddressLoaderFunc(func(context.Context, []string) (map[string]string, error) {
+				return map[string]string{testNodeID: "10.0.0.130"}, nil
+			}))
+			if err := r.EnsureHostNodeLabels(context.Background(), []string{testNodeID}); err == nil {
+				t.Fatal("conflict or offline node accepted")
+			}
+		})
+	}
+}
+
+func TestKubernetesProjectReconcilerKeepsCorrectNodeLabel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatal("existing correct label must not be patched")
+		}
+		_, _ = w.Write([]byte(`{"items":[{"metadata":{"name":"if-08b-history","labels":{"induforge.io/host-node-id":"` + testNodeID + `"}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.130"}],"conditions":[{"type":"Ready","status":"True"}]}}]}`))
+	}))
+	defer server.Close()
+	r := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	r.SetHostNodeAddressLoader(hostNodeAddressLoaderFunc(func(context.Context, []string) (map[string]string, error) {
+		return map[string]string{testNodeID: "10.0.0.130"}, nil
+	}))
+	if err := r.EnsureHostNodeLabels(context.Background(), []string{testNodeID}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestKubernetesProjectReconcilerAppliesStableRollout(t *testing.T) {
 	paths := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {

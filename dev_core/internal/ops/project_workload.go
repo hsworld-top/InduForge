@@ -296,7 +296,7 @@ spec:
       labels: {app.kubernetes.io/name: %q, induforge.io/release-id: %q}
       annotations: {induforge.io/runtime-binding-sha256: %q, induforge.io/release-id: %q, induforge.io/generation: %q, induforge.io/binding-revision: %q}
     spec:
-      nodeSelector: {induforge.io/node-id: %q}
+      nodeSelector: {induforge.io/host-node-id: %q}
       securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
 %s
       containers:
@@ -373,7 +373,7 @@ spec:
       labels: {app.kubernetes.io/name: %q, induforge.io/release-id: %q}
       annotations: {induforge.io/collector-binding-sha256: %q, induforge.io/release-id: %q, induforge.io/generation: %q}
     spec:
-      nodeSelector: {induforge.io/node-id: %q}
+      nodeSelector: {induforge.io/host-node-id: %q}
       securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
       initContainers:
         - name: collector-artifact-prepare

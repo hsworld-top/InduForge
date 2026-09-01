@@ -26,6 +26,9 @@ func TestFoundationPlanRendersFixedValidManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := plan.RenderManifest("private-secret-value-0123456789")
+	if strings.Contains(manifest, "kubernetes.io/hostname") || !strings.Contains(manifest, "induforge.io/host-node-id: 33333333-3333-4333-8333-333333333333") {
+		t.Fatal("基础服务必须使用完整平台节点 ID 的稳定标签调度")
+	}
 	for _, expected := range []string{"kind: Role\nmetadata:\n  name: induforge-project-reconciler", "kind: RoleBinding", "name: center-control\n    namespace: induforge-system", "resources: [\"deployments\"]"} {
 		if !strings.Contains(manifest, expected) {
 			t.Fatalf("环境级 project reconciler RBAC 缺失 %q", expected)

@@ -266,6 +266,33 @@ func (r *PostgreSQLRepository) ListNodes(ctx context.Context, tenant string, f P
 	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM host_nodes WHERE tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR hostname ILIKE '%'||$2||'%')`, tenant, f.Search).Scan(&total)
 	return items, total, e
 }
+
+// LoadHostNodeAddresses 为 Kubernetes 身份标签提供唯一、已登记的管理地址。
+func (r *PostgreSQLRepository) LoadHostNodeAddresses(ctx context.Context, ids []string) (map[string]string, error) {
+	result := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id::text,COALESCE(ip_address,'') FROM host_nodes WHERE id=ANY($1::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, address string
+		if err := rows.Scan(&id, &address); err != nil {
+			return nil, err
+		}
+		result[id] = address
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(result) != len(ids) {
+		return nil, fmt.Errorf("存在未登记的物理节点")
+	}
+	return result, nil
+}
 func (r *PostgreSQLRepository) GetNode(ctx context.Context, tenant, id string) (Node, error) {
 	x, e := scanNodeWithAssignments(r.pool.QueryRow(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND n.id=$2`, tenant, id))
 	if e != nil {

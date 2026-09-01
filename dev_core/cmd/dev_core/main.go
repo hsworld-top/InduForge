@@ -211,6 +211,8 @@ func main() {
 	if reconciler, reconcileErr := ops.NewInClusterProjectReconciler(); reconcileErr != nil {
 		logger.Info("项目 K3s 调和器未启用", "reason", reconcileErr)
 	} else {
+		reconciler.SetHostNodeAddressLoader(opsRepository)
+		opsService.SetFoundationNodePreflight(reconciler)
 		reconciler.SetRuntimeContextLoader(opsRepository)
 		reconciler.SetDeploymentSecretManager(ops.NewDeploymentSecretManager(reconciler))
 		reconciler.SetCollectorBindingBundleClient(dataServiceClient)
