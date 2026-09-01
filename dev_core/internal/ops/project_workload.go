@@ -77,6 +77,10 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 			return "", nameErr
 		}
 		bindingName := name + "-runtime-binding"
+		runtimeSecretItems := "\n              - {key: nats.json, path: nats.json}\n              - {key: postgres.json, path: postgres.json}"
+		if workload.Engine == ServiceCompute {
+			runtimeSecretItems += "\n              - {key: sandbox.json, path: sandbox.json}"
+		}
 		runtimeInit = fmt.Sprintf(`
       initContainers:
         - name: runtime-binding-prepare
@@ -87,18 +91,35 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           volumeMounts:
             - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
-            - {name: work, mountPath: /work}`, runtimeEngineImage)
+            - {name: work, mountPath: /work}
+            - {name: bootstrap-secrets, mountPath: /var/run/induforge/bootstrap, readOnly: true}`, runtimeEngineImage)
 		runtimeArgs = `
           command: ["runtime-engine"]
           args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/artifact", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
 		runtimeMounts = `
             - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
-            - {name: deployment-secrets, mountPath: /work/bundle/secrets, readOnly: true}`
+            - {name: runtime-secrets, mountPath: /work/bundle/secrets, readOnly: true}`
 		runtimeVolumes = fmt.Sprintf(`
         - name: runtime-binding
           configMap: {name: %s}
-        - name: deployment-secrets
-          secret: {secretName: %s}`, bindingName, secretName)
+        - name: runtime-secrets
+          secret:
+            secretName: %s
+            items:%s
+        - name: bootstrap-secrets
+          secret:
+            secretName: %s
+            items:
+              - {key: nats.json, path: nats.json}
+              - {key: postgres-bootstrap.json, path: postgres-bootstrap.json}`, bindingName, secretName, runtimeSecretItems, secretName)
+		if workload.Engine == ServiceCompute {
+			runtimeVolumes += fmt.Sprintf(`
+        - name: sandbox-secret
+          secret:
+            secretName: %s
+            items:
+              - {key: sandbox-token, path: sandbox-token}`, secretName)
+		}
 	}
 	if workload.Engine == ServiceCompute {
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
@@ -125,7 +146,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
-            - {name: deployment-secrets, mountPath: /var/run/induforge/secrets, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.DeploymentID)
+            - {name: sandbox-secret, mountPath: /var/run/induforge/secrets, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.DeploymentID)
 	}
 	if workload.Engine == ServiceBase {
 		if workload.HostPort == nil || *workload.HostPort < 1024 || *workload.HostPort > 65535 {

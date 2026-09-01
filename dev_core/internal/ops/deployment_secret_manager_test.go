@@ -42,12 +42,12 @@ func TestDeploymentSecretManagerBuildsResolverFilesAndRefreshesSources(t *testin
 		t.Fatal(err)
 	}
 	data := client.values["project/"+name]
-	for _, key := range []string{resolverNATSFile, resolverPostgresFile, resolverSandboxFile, "runtime-db-username", "runtime-db-password", "sandbox-token"} {
+	for _, key := range []string{resolverNATSFile, resolverPostgresFile, bootstrapPostgresFile, resolverSandboxFile, "runtime-db-username", "runtime-db-password", "sandbox-token"} {
 		if data[key] == "" {
 			t.Fatalf("missing target key %q", key)
 		}
 	}
-	if !strings.Contains(data[resolverNATSFile], "source-token") || !strings.Contains(data[resolverPostgresFile], "postgres.runtime.svc") || !strings.Contains(data[resolverPostgresFile], "source-password") {
+	if !strings.Contains(data[resolverNATSFile], "source-token") || !strings.Contains(data[resolverPostgresFile], data["runtime-db-username"]) || strings.Contains(data[resolverPostgresFile], "source-password") || !strings.Contains(data[bootstrapPostgresFile], "source-password") {
 		t.Fatal("resolver files missing source values")
 	}
 	password, applies := data["runtime-db-password"], client.applies
@@ -79,5 +79,17 @@ func TestBuildResolverSecretFilesKeepsResolverShapeInMemory(t *testing.T) {
 	}
 	if !strings.Contains(files[resolverNATSFile], `"authType":"token"`) || !strings.Contains(files[resolverPostgresFile], `"schemaVersion":"postgres-dsn.v1"`) {
 		t.Fatalf("resolver file shapes invalid")
+	}
+}
+
+func TestRuntimePostgresDSNSeparatesUsersAndEscapesCredentials(t *testing.T) {
+	support := RuntimeSupportResources{StateStoreEndpoint: "postgres.runtime.svc:5432", StateStoreDatabase: "induforge_runtime", StateStoreAdminUser: "admin"}
+	admin, err := runtimePostgresDSN(support, "admin", "p@ss:/?")
+	if err != nil || !strings.Contains(admin, "admin:p%40ss%3A%2F%3F@") {
+		t.Fatalf("admin DSN escaping failed: %v %s", err, admin)
+	}
+	runtime, err := runtimePostgresDSN(support, "runtime_abc", "runtime-password")
+	if err != nil || !strings.Contains(runtime, "runtime_abc:runtime-password@") || strings.Contains(runtime, "admin") {
+		t.Fatalf("runtime DSN isolation failed: %v %s", err, runtime)
 	}
 }

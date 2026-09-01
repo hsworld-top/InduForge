@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	resolverNATSFile     = "nats.json"
-	resolverPostgresFile = "postgres.json"
-	resolverSandboxFile  = "sandbox.json"
+	resolverNATSFile      = "nats.json"
+	resolverPostgresFile  = "postgres.json"
+	bootstrapPostgresFile = "postgres-bootstrap.json"
+	resolverSandboxFile   = "sandbox.json"
 )
 
 type DeploymentSecretManager struct{ client KubeSecretClient }
@@ -36,14 +37,6 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	if err != nil {
 		return "", fmt.Errorf("读取状态库凭据失败")
 	}
-	postgres, err := runtimePostgresDSN(support, postgresPassword)
-	if err != nil {
-		return "", fmt.Errorf("构造状态库连接失败")
-	}
-	files, err := BuildResolverSecretFiles(nats, postgres)
-	if err != nil {
-		return "", fmt.Errorf("构造 resolver 凭据失败")
-	}
 	name, err := computeSandboxSecretName(deploymentID)
 	if err != nil {
 		return "", err
@@ -57,7 +50,7 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	}
 	changed := false
 	if data["runtime-db-username"] == "" {
-		data["runtime-db-username"] = "runtime"
+		data["runtime-db-username"] = runtimeDatabaseUser(deploymentID)
 		changed = true
 	}
 	if data["runtime-db-password"] == "" {
@@ -68,6 +61,23 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 		data["runtime-db-password"] = value
 		changed = true
 	}
+	bootstrapDSN, err := runtimePostgresDSN(support, support.StateStoreAdminUser, postgresPassword)
+	if err != nil {
+		return "", fmt.Errorf("构造 bootstrap 状态库连接失败")
+	}
+	runtimeDSN, err := runtimePostgresDSN(support, data["runtime-db-username"], data["runtime-db-password"])
+	if err != nil {
+		return "", fmt.Errorf("构造运行状态库连接失败")
+	}
+	files, err := BuildResolverSecretFiles(nats, runtimeDSN)
+	if err != nil {
+		return "", fmt.Errorf("构造 resolver 凭据失败")
+	}
+	bootstrap, err := postgresSecretFile(bootstrapDSN)
+	if err != nil {
+		return "", fmt.Errorf("构造 bootstrap 凭据失败")
+	}
+	files[bootstrapPostgresFile] = bootstrap
 	for name, value := range files {
 		if data[name] != value {
 			data[name] = value
@@ -100,15 +110,19 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	return name, nil
 }
 
-func runtimePostgresDSN(support RuntimeSupportResources, password string) (string, error) {
-	if support.StateStoreEndpoint == "" || support.StateStoreDatabase == "" || support.StateStoreAdminUser == "" || password == "" {
+func runtimePostgresDSN(support RuntimeSupportResources, username, password string) (string, error) {
+	if support.StateStoreEndpoint == "" || support.StateStoreDatabase == "" || username == "" || password == "" {
 		return "", fmt.Errorf("状态库连接元数据缺失")
 	}
 	endpoint := strings.TrimPrefix(support.StateStoreEndpoint, "postgres://")
 	if strings.Contains(endpoint, "/") || strings.ContainsAny(endpoint, "?@") {
 		return "", fmt.Errorf("状态库 endpoint 非法")
 	}
-	return "postgres://" + url.QueryEscape(support.StateStoreAdminUser) + ":" + url.QueryEscape(password) + "@" + endpoint + "/" + url.PathEscape(support.StateStoreDatabase) + "?sslmode=disable", nil
+	return "postgres://" + url.QueryEscape(username) + ":" + url.QueryEscape(password) + "@" + endpoint + "/" + url.PathEscape(support.StateStoreDatabase) + "?sslmode=disable", nil
+}
+
+func runtimeDatabaseUser(deploymentID string) string {
+	return "runtime_" + strings.ReplaceAll(strings.ToLower(deploymentID), "-", "")[:12]
 }
 
 func (m *DeploymentSecretManager) sourceValue(ctx context.Context, source KubernetesSecretSource, key string) (string, error) {
@@ -132,11 +146,15 @@ func BuildResolverSecretFiles(natsCredential, postgresDSN string) (map[string]st
 	if err != nil {
 		return nil, err
 	}
-	pg, err := json.Marshal(map[string]string{"schemaVersion": "postgres-dsn.v1", "dsn": postgresDSN})
+	pg, err := postgresSecretFile(postgresDSN)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]string{resolverNATSFile: string(nats), resolverPostgresFile: string(pg)}, nil
+	return map[string]string{resolverNATSFile: string(nats), resolverPostgresFile: pg}, nil
+}
+func postgresSecretFile(dsn string) (string, error) {
+	raw, err := json.Marshal(map[string]string{"schemaVersion": "postgres-dsn.v1", "dsn": dsn})
+	return string(raw), err
 }
 func (m *DeploymentSecretManager) Delete(ctx context.Context, ns, deploymentID string) error {
 	name, e := computeSandboxSecretName(deploymentID)
