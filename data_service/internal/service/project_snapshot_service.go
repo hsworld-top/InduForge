@@ -23,11 +23,11 @@ type ProjectSnapshotService struct {
 
 // BuildCollectorArtifact 从权威快照生成 collector 运行定义；请求中的 sourceSnapshot
 // 只能证明调用方读取的版本，绝不参与点位、连接或 secret 的生成。
-func (s *ProjectSnapshotService) BuildCollectorArtifact(ctx context.Context, projectID, artifactID string, revision int64, sourceSnapshot json.RawMessage) (map[string]any, error) {
+func (s *ProjectSnapshotService) BuildCollectorArtifact(ctx context.Context, projectID, tenantID, artifactID string, revision int64, sourceSnapshot json.RawMessage) (map[string]any, error) {
 	if err := validateProjectID(projectID); err != nil || revision < 1 || len(sourceSnapshot) == 0 {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集工件请求无效")
 	}
-	current, err := s.GetArtifact(ctx, projectID)
+	current, err := s.GetArtifact(ctx, projectID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *ProjectSnapshotService) BuildCollectorArtifact(ctx context.Context, pro
 	if string(currentCanonical) != string(providedRaw) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "采集工件快照已变化")
 	}
-	snapshot, err := s.repository.GetByProject(ctx, projectID)
+	snapshot, err := s.repository.GetByProject(ctx, projectID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,19 +83,19 @@ func NewProjectSnapshotServiceWithClockAndSchemaRoot(repo *repository.ProjectSna
 }
 
 // Get 读取项目快照。
-func (s *ProjectSnapshotService) Get(ctx context.Context, projectID string) (*repository.ProjectSnapshot, error) {
+func (s *ProjectSnapshotService) Get(ctx context.Context, projectID, tenantID string) (*repository.ProjectSnapshot, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
-	return s.repository.GetByProject(ctx, projectID)
+	return s.repository.GetByProject(ctx, projectID, tenantID)
 }
 
 // GetArtifact 基于项目快照生成数据域发布产物。
-func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID string) (*repository.RuntimeProjectArtifactV1, error) {
+func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID, tenantID string) (*repository.RuntimeProjectArtifactV1, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
-	snapshot, err := s.repository.GetByProject(ctx, projectID)
+	snapshot, err := s.repository.GetByProject(ctx, projectID, tenantID)
 	if err != nil {
 		return nil, err
 	}

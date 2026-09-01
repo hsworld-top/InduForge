@@ -31,12 +31,17 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "snapshot-artifact-secret-01"
+	tenantID := "tenant-artifact"
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_project_tenant_bindings(project_id, tenant_id) VALUES($1, $2)`, projectID, tenantID); err != nil {
+		t.Fatalf("bind project tenant failed: %v", err)
+	}
 
 	srv, err := app.NewServer(config.Config{
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
 		JWTSecret:                  secret,
+		DataServiceInternalToken:   "integration-internal-token",
 		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
 		ConnectionSecretKeyVersion: "v1",
 	})
@@ -50,7 +55,7 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 
 	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
 		UserID:       userID,
-		TenantID:     "tenant-artifact",
+		TenantID:     tenantID,
 		ProjectIDs:   []string{projectID},
 		Capabilities: []string{"project:read", "project:write"},
 	})

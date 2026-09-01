@@ -499,7 +499,10 @@ func NewProjectSnapshotRepository(pool *pgxpool.Pool) *ProjectSnapshotRepository
 }
 
 // GetByProject 读取项目级完整快照。
-func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID string) (*ProjectSnapshot, error) {
+func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID, tenantID string) (*ProjectSnapshot, error) {
+	if err := r.requireProjectTenantBinding(ctx, projectID, tenantID); err != nil {
+		return nil, err
+	}
 	connections, err := r.listConnections(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -600,6 +603,24 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		AlarmChannelSecrets:  alarmChannelSecrets,
 		HistoryStorage:       historyStorage,
 	}, nil
+}
+
+// requireProjectTenantBinding 是所有正式快照与工件读取的租户边界；未绑定和跨租户均统一为不存在。
+func (r *ProjectSnapshotRepository) requireProjectTenantBinding(ctx context.Context, projectID, tenantID string) error {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM data_project_tenant_bindings
+			WHERE project_id = $1 AND tenant_id = $2
+		)
+	`, projectID, tenantID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("校验项目租户归属失败: %w", err)
+	}
+	if !exists {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "项目快照不存在")
+	}
+	return nil
 }
 
 // ReplaceProjectData 用快照内容覆盖项目下的数据域数据。

@@ -19,7 +19,8 @@ type ProjectSnapshotHandler struct {
 
 // BuildCollectorArtifact 仅把调用方 snapshot 当作一致性证明，实际内容由服务端权威快照生成。
 func (h *ProjectSnapshotHandler) BuildCollectorArtifact(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
+	claims, err := requireClaims(r)
+	if err != nil {
 		return err
 	}
 	var input struct {
@@ -33,7 +34,7 @@ func (h *ProjectSnapshotHandler) BuildCollectorArtifact(w http.ResponseWriter, r
 		return err
 	}
 	projectID := r.PathValue("projectId")
-	if input.ProjectID != projectID || input.TenantID == "" || input.Revision < 1 || len(input.SourceSnapshot) == 0 {
+	if input.ProjectID != projectID || input.TenantID != claims.TenantID || input.Revision < 1 || len(input.SourceSnapshot) == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集工件请求身份不一致")
 	}
 	if _, err := uuid.Parse(projectID); err != nil {
@@ -42,7 +43,7 @@ func (h *ProjectSnapshotHandler) BuildCollectorArtifact(w http.ResponseWriter, r
 	if _, err := uuid.Parse(input.ReleaseID); err != nil {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Release ID 非法")
 	}
-	result, err := h.service.BuildCollectorArtifact(r.Context(), projectID, "collector-"+input.ReleaseID, input.Revision, input.SourceSnapshot)
+	result, err := h.service.BuildCollectorArtifact(r.Context(), projectID, claims.TenantID, "collector-"+input.ReleaseID, input.Revision, input.SourceSnapshot)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -57,11 +58,12 @@ func NewProjectSnapshotHandler(snapshotService *service.ProjectSnapshotService) 
 
 // Get 返回项目快照。
 func (h *ProjectSnapshotHandler) Get(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
+	claims, err := requireClaims(r)
+	if err != nil {
 		return err
 	}
 
-	result, err := h.service.Get(r.Context(), r.PathValue("projectId"))
+	result, err := h.service.Get(r.Context(), r.PathValue("projectId"), claims.TenantID)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -72,11 +74,12 @@ func (h *ProjectSnapshotHandler) Get(w http.ResponseWriter, r *http.Request) err
 
 // GetArtifact 返回项目级 artifact v1 产物。
 func (h *ProjectSnapshotHandler) GetArtifact(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
+	claims, err := requireClaims(r)
+	if err != nil {
 		return err
 	}
 
-	result, err := h.service.GetArtifact(r.Context(), r.PathValue("projectId"))
+	result, err := h.service.GetArtifact(r.Context(), r.PathValue("projectId"), claims.TenantID)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
