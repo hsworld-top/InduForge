@@ -46,6 +46,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	if workload.Generation < 1 || strings.TrimSpace(workload.NodeID) == "" || strings.TrimSpace(workload.ReleaseID) == "" {
 		return "", fmt.Errorf("工作负载调和字段不完整")
 	}
+	artifactRoot := projectArtifactHostPath(workload.DeploymentID)
 	image, role := "induforge/runtime-engine:latest", workload.Engine
 	container := "runtime-engine"
 	if workload.Engine == ServiceBase {
@@ -92,11 +93,17 @@ spec:
           env:
             - {name: IF_ENGINE_ROLE, valueFrom: {configMapKeyRef: {name: %s-config, key: engine-role}}}
             - {name: IF_RELEASE_ID, valueFrom: {configMapKeyRef: {name: %s-config, key: release-id}}}
+            - {name: IF_RELEASE_ROOT, value: "/opt/induforge/release/current"}
           ports:
             - name: http
               containerPort: 18080%s
           readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 15, periodSeconds: 10}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, hostPort), nil
+          volumeMounts:
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+      volumes:
+        - name: release
+          hostPath: {path: %q, type: Directory}
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, hostPort, artifactRoot), nil
 }
