@@ -1541,9 +1541,10 @@
           {{ $t('opsConsole.deployments.productionMode') }}
         </button>
       </div>
-      <el-form label-position="top" class="ops-deployment-form">
-        <el-form-item :label="$t('opsConsole.deployments.project')" required
-          ><el-select
+      <div class="ops-deployment-form">
+        <div class="ops-deployment-field">
+          <label>{{ $t('opsConsole.deployments.project') }}</label>
+          <el-select
             v-model="deployForm.projectId"
             filterable
             remote
@@ -1555,13 +1556,12 @@
               v-for="project in projects"
               :key="project.id"
               :label="project.name"
-              :value="project.id" /></el-select
-        ></el-form-item>
-        <el-form-item
-          v-if="deployForm.mode === 'RELEASE'"
-          :label="$t('opsConsole.deployments.releasedVersion')"
-          required
-          ><el-select
+              :value="project.id"
+          /></el-select>
+        </div>
+        <div v-if="deployForm.mode === 'RELEASE'" class="ops-deployment-field">
+          <label>{{ $t('opsConsole.deployments.releasedVersion') }}</label>
+          <el-select
             v-model="deployForm.applicationVersionId"
             filterable
             :placeholder="$t('opsConsole.deployments.chooseRelease')"
@@ -1571,10 +1571,12 @@
               v-for="version in versions"
               :key="version.id"
               :label="version.name ? `${version.version} · ${version.name}` : version.version"
-              :value="version.id" /></el-select
-        ></el-form-item>
-        <el-form-item :label="$t('opsConsole.deployments.targetEnvironment')" required
-          ><el-select
+              :value="version.id"
+          /></el-select>
+        </div>
+        <div class="ops-deployment-field">
+          <label>{{ $t('opsConsole.deployments.targetEnvironment') }}</label>
+          <el-select
             v-model="deployForm.environmentId"
             :placeholder="$t('opsConsole.deployments.chooseEnvironment')"
             @change="loadDeploymentNodes"
@@ -1582,12 +1584,16 @@
               v-for="environment in availableEnvironments"
               :key="environment.id"
               :label="environment.name"
-              :value="environment.id" /></el-select
-        ></el-form-item>
-        <el-form-item :label="$t('opsConsole.deployments.accessPort')" required>
-          <el-input-number v-model="deployForm.accessPort" :min="1024" :max="65532" />
-          <small class="ops-form-help">{{ $t('opsConsole.deployments.accessPortHint') }}</small>
-        </el-form-item>
+              :value="environment.id"
+          /></el-select>
+        </div>
+        <div class="ops-deployment-field">
+          <label>{{ $t('opsConsole.deployments.accessPort') }}</label>
+          <div class="ops-deployment-port">
+            <el-input-number v-model="deployForm.accessPort" :min="1024" :max="65532" />
+            <small>{{ $t('opsConsole.deployments.accessPortHint') }}</small>
+          </div>
+        </div>
         <section
           class="ops-engine-placement"
           :aria-label="$t('opsConsole.deployments.runtimeEngines')"
@@ -1626,17 +1632,25 @@
             </el-select>
           </div>
         </section>
-      </el-form>
-      <template #footer
-        ><el-button @click="deployDialog = false">{{ $t('opsConsole.common.cancel') }}</el-button
-        ><el-button
-          type="primary"
-          :loading="submittingDeployment"
-          :disabled="!canCreateDeployment"
-          @click="createDeployment"
-          >{{ $t('opsConsole.deployments.createDeployment') }}</el-button
-        ></template
-      >
+      </div>
+      <template #footer>
+        <div class="ops-deployment-footer">
+          <span class="ops-deployment-footer__spacer" />
+          <el-button @click="deployDialog = false">{{ $t('opsConsole.common.cancel') }}</el-button>
+          <el-button
+            type="primary"
+            class="ops-deployment-confirm"
+            :loading="submittingDeployment"
+            :disabled="!canCreateDeployment"
+            @click="createDeployment"
+            >{{
+              deployForm.mode === 'RELEASE'
+                ? $t('opsConsole.deployments.deployProduction')
+                : $t('opsConsole.deployments.deployDevelopment')
+            }}</el-button
+          >
+        </div>
+      </template>
     </el-dialog>
 
     <el-drawer
@@ -2315,10 +2329,14 @@ const selectedVersion = computed(() =>
   versions.value.find((item) => item.id === deployForm.applicationVersionId),
 )
 const deploymentEngineRows = computed(() => [
-  { key: 'runtime' as const, label: t('opsConsole.deployments.runtime'), optional: false },
-  { key: 'compute' as const, label: t('opsConsole.deployments.compute'), optional: false },
-  { key: 'alarm' as const, label: t('opsConsole.deployments.alarm'), optional: false },
-  { key: 'collection' as const, label: t('opsConsole.deployments.collection'), optional: true },
+  { key: 'runtime' as const, label: t('opsConsole.deployments.runtimeEngine'), optional: false },
+  { key: 'compute' as const, label: t('opsConsole.deployments.computeEngine'), optional: false },
+  { key: 'alarm' as const, label: t('opsConsole.deployments.alarmEngine'), optional: false },
+  {
+    key: 'collection' as const,
+    label: t('opsConsole.deployments.collectionEngine'),
+    optional: true,
+  },
 ])
 const canCreateDeployment = computed(() =>
   Boolean(
@@ -4060,66 +4078,182 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 5px;
 }
+:global(.ops-deployment-dialog.el-dialog) {
+  overflow: hidden;
+  border: 1px solid var(--ck-border);
+  border-radius: var(--ck-radius-lg);
+  background: var(--ck-bg-secondary);
+  box-shadow: var(--ck-shadow-lg);
+}
+:global(.ops-deployment-dialog .el-dialog__header) {
+  margin: 0;
+  padding: 16px 20px 12px;
+}
+:global(.ops-deployment-dialog .el-dialog__title) {
+  color: var(--ck-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+:global(.ops-deployment-dialog .el-dialog__headerbtn) {
+  top: 8px;
+  right: 10px;
+}
+:global(.ops-deployment-dialog .el-dialog__body) {
+  padding: 4px 20px 18px;
+}
+:global(.ops-deployment-dialog .el-dialog__footer) {
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--ck-border-light);
+}
 .ops-deploy-mode-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
   padding: 3px;
-  border-radius: 7px;
-  background: var(--el-fill-color-light);
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: rgb(15 23 42 / 4%);
 }
 .ops-deploy-mode-tab {
   height: 32px;
   border: 0;
-  border-radius: 5px;
-  color: var(--el-text-color-secondary);
+  border-radius: 8px;
+  color: var(--ck-text-muted);
+  font-size: 13px;
+  font-weight: 400;
   background: transparent;
   cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.ops-deploy-mode-tab:hover {
+  color: var(--ck-text-primary);
+  background: rgb(255 255 255 / 55%);
+}
+.ops-deploy-mode-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ck-primary-light);
 }
 .ops-deploy-mode-tab.is-active {
-  color: var(--el-color-primary);
-  background: var(--el-bg-color);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
-  font-weight: 600;
+  color: var(--ck-primary);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
 }
 .ops-deployment-form {
+  min-height: 390px;
+}
+.ops-deployment-field {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 14px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
-.ops-deployment-form :deep(.el-form-item) {
-  margin-bottom: 14px;
+.ops-deployment-field label {
+  color: var(--ck-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
-.ops-deployment-form :deep(.el-select) {
+.ops-deployment-field :deep(.el-select),
+.ops-deployment-port :deep(.el-input-number) {
   width: 100%;
 }
+.ops-deployment-field :deep(.el-select__wrapper),
+.ops-deployment-port :deep(.el-input__wrapper),
+.ops-engine-placement :deep(.el-select__wrapper) {
+  min-height: 30px;
+  border: 1px solid var(--ck-border);
+  border-radius: 8px;
+  background: var(--ck-bg-card);
+  box-shadow: none;
+}
+.ops-deployment-field :deep(.el-select__wrapper:hover),
+.ops-deployment-port :deep(.el-input__wrapper:hover),
+.ops-engine-placement :deep(.el-select__wrapper:hover) {
+  border-color: var(--ck-primary);
+}
+.ops-deployment-port {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.ops-deployment-port small {
+  color: var(--ck-text-muted);
+  font-size: 11px;
+}
 .ops-engine-placement {
-  grid-column: 1 / -1;
   overflow: hidden;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 7px;
+  border: 1px solid rgb(15 23 42 / 6%);
+  border-radius: var(--ck-radius-md);
+  background: var(--ck-bg-tertiary);
 }
 .ops-engine-placement__header,
 .ops-engine-placement__row {
   display: grid;
-  grid-template-columns: 150px 1fr;
+  grid-template-columns: minmax(170px, 0.72fr) minmax(240px, 1.28fr);
   align-items: center;
-  gap: 14px;
-  padding: 9px 12px;
+  column-gap: 12px;
 }
 .ops-engine-placement__header {
-  color: var(--el-text-color-secondary);
-  background: var(--el-fill-color-lighter);
-  font-size: 12px;
+  padding: 8px 12px;
+  color: var(--ck-text-muted);
+  font-size: 11px;
+  background: transparent;
 }
-.ops-engine-placement__row + .ops-engine-placement__row {
-  border-top: 1px solid var(--el-border-color-lighter);
+.ops-engine-placement__row {
+  min-height: 52px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--ck-border-light);
+  background: var(--ck-bg-card);
 }
 .ops-engine-placement__row > div {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
+}
+.ops-engine-placement__row strong {
+  color: var(--ck-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+.ops-engine-placement :deep(.el-switch) {
+  --el-switch-on-color: var(--ck-primary);
+}
+.ops-deployment-footer {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.ops-deployment-footer__spacer {
+  flex: 1;
+}
+.ops-deployment-footer :deep(.el-button) {
+  min-width: 72px;
+  height: 32px;
+  border-radius: var(--ck-radius-md);
+  font-size: 12px;
+}
+.ops-deployment-footer :deep(.ops-deployment-confirm) {
+  border-color: transparent;
+  background: var(--ck-gradient-primary);
+  box-shadow: 0 8px 16px rgb(29 78 216 / 18%);
+}
+:global(html.dark) .ops-deploy-mode-tabs,
+:global([data-theme='dark']) .ops-deploy-mode-tabs {
+  background: rgb(255 255 255 / 6%);
+}
+:global(html.dark) .ops-deploy-mode-tab:hover,
+:global([data-theme='dark']) .ops-deploy-mode-tab:hover {
+  background: rgb(255 255 255 / 8%);
+}
+:global(html.dark) .ops-deploy-mode-tab.is-active,
+:global([data-theme='dark']) .ops-deploy-mode-tab.is-active {
+  color: #ffffff;
+  background: #334155;
 }
 .ops-drawer-heading {
   margin: 24px 0 16px;
@@ -4184,8 +4318,21 @@ onBeforeUnmount(() => {
   .ops-node-grid {
     grid-template-columns: 1fr;
   }
-  .ops-deployment-form {
+  .ops-engine-placement__header {
+    display: none;
+  }
+  .ops-engine-placement__row {
+    grid-template-columns: minmax(112px, 0.78fr) minmax(145px, 1.22fr);
+    column-gap: 8px;
+    padding-inline: 10px;
+  }
+  .ops-deployment-field {
     grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .ops-deployment-port {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 }
 </style>

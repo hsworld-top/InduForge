@@ -107,13 +107,26 @@ describe('ops management console', () => {
   it('工程部署与工程快捷入口使用一致的模式和运行引擎分配语义', () => {
     expect(source).toContain("deployForm.mode === 'DEV'")
     expect(source).toContain("deployForm.mode === 'RELEASE'")
-    expect(source).toContain(':label="$t(\'opsConsole.deployments.targetEnvironment\')"')
+    expect(source).toContain("<label>{{ $t('opsConsole.deployments.targetEnvironment') }}</label>")
     expect(source).toContain('opsAPI.listRuntimeEnvironmentNodes(environmentId')
     expect(source).toContain("node.platform === 'linux'")
     expect(source).toContain("node.observedStatus === 'online'")
     expect(source).toContain("node.clusterStatus === 'ready'")
     expect(source).toContain("key: 'alarm' as const")
     expect(source).toContain("key: 'collection' as const")
+  })
+
+  it('创建工程部署弹窗沿用发布工程弹窗的家族化视觉规则', () => {
+    expect(source).toContain('class="ops-deployment-dialog"')
+    expect(source).toContain('class="ops-deployment-field"')
+    expect(source).toContain('class="ops-deployment-footer"')
+    expect(source).toContain('class="ops-deployment-confirm"')
+    expect(source).toContain("$t('opsConsole.deployments.deployDevelopment')")
+    expect(source).toContain("$t('opsConsole.deployments.deployProduction')")
+    expect(source).toContain('background: var(--ck-gradient-primary)')
+    for (const engine of ['runtimeEngine', 'computeEngine', 'alarmEngine', 'collectionEngine']) {
+      expect(source).toContain(`t('opsConsole.deployments.${engine}')`)
+    }
   })
 
   it('工程访问端口使用适合双列布局的简短提示', () => {
