@@ -57,7 +57,9 @@ sudo induforge restart control
 存储、控制面和 IDE 入口均由 K3s 管理；代码工作区改为 K3s 调度后必须删除该兼容挂载和 Docker
 依赖。
 
-正式 Release Builder 默认使用受控的离线前端构建镜像和 Docker local bind volume
+正式 Release Builder 默认使用独立的受控离线构建镜像
+`induforge/release-builder:1.0.0-node24-pnpm11.21.0`，它只包含 Node、Corepack 与
+审核后的 pnpm 离线 store，不复用包含 IDE 和 code-server 的开发镜像。它使用 Docker local bind volume
 `induforge-center-workspaces`。`centerctl apply` 会核验该卷必须精确绑定
 `$IF_CENTER_DATA_ROOT/workspaces`，已有不同配置的卷会失败，不会覆盖。它还会在首次安装时于
 `$IF_CENTER_DATA_ROOT/secrets/release-signing-key.pem` 创建 PKCS#8 Ed25519 私钥（目录 `0700`、文件

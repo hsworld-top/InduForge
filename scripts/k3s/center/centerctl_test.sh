@@ -38,6 +38,7 @@ for expected in \
   'name: wait-center-control' \
   'name: release-signing-key' \
   'RELEASE_BUILDER_ENABLED' \
+  'value: induforge/release-builder:1.0.0-node24-pnpm11.21.0' \
   'value: induforge-center-workspaces' \
   'defaultMode: 0400' \
   'publishNotReadyAddresses: true' \
