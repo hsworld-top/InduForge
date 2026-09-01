@@ -969,9 +969,19 @@
                     min-width="180"
                     prop="environmentName"
                   />
-                  <el-table-column :label="$t('opsConsole.deployments.services')" min-width="250"
+                  <el-table-column
+                    :label="$t('opsConsole.deployments.runtimeEngines')"
+                    min-width="280"
                     ><template #default="{ row }"
-                      ><span>{{ row.services.join(' · ') }}</span></template
+                      ><div class="ops-engine-tags">
+                        <el-tag
+                          v-for="service in row.services"
+                          :key="service"
+                          size="small"
+                          effect="plain"
+                          >{{ service }}</el-tag
+                        >
+                      </div></template
                     ></el-table-column
                   >
                   <el-table-column :label="$t('opsConsole.deployments.state')" width="130"
@@ -981,11 +991,14 @@
                       }}</span></template
                     ></el-table-column
                   >
-                  <el-table-column
-                    :label="$t('opsConsole.deployments.latest')"
-                    min-width="190"
-                    prop="updatedAt"
-                  />
+                  <el-table-column :label="$t('opsConsole.deployments.latest')" min-width="190"
+                    ><template #default="{ row }"
+                      ><div class="ops-primary-cell">
+                        <strong>{{ row.updatedAt }}</strong
+                        ><small>{{ row.status }}</small>
+                      </div></template
+                    ></el-table-column
+                  >
                   <el-table-column
                     :label="$t('opsConsole.common.actions')"
                     width="100"
@@ -1504,9 +1517,31 @@
     <el-dialog
       v-model="deployDialog"
       :title="$t('opsConsole.deployments.dialogTitle')"
-      width="620px"
+      width="min(680px, 92vw)"
+      destroy-on-close
+      class="ops-deployment-dialog"
     >
-      <el-form label-position="top">
+      <div class="ops-deploy-mode-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="deployForm.mode === 'DEV'"
+          :class="['ops-deploy-mode-tab', { 'is-active': deployForm.mode === 'DEV' }]"
+          @click="deployForm.mode = 'DEV'"
+        >
+          {{ $t('opsConsole.deployments.developmentMode') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="deployForm.mode === 'RELEASE'"
+          :class="['ops-deploy-mode-tab', { 'is-active': deployForm.mode === 'RELEASE' }]"
+          @click="deployForm.mode = 'RELEASE'"
+        >
+          {{ $t('opsConsole.deployments.productionMode') }}
+        </button>
+      </div>
+      <el-form label-position="top" class="ops-deployment-form">
         <el-form-item :label="$t('opsConsole.deployments.project')" required
           ><el-select
             v-model="deployForm.projectId"
@@ -1522,7 +1557,10 @@
               :label="project.name"
               :value="project.id" /></el-select
         ></el-form-item>
-        <el-form-item :label="$t('opsConsole.deployments.releasedVersion')" required
+        <el-form-item
+          v-if="deployForm.mode === 'RELEASE'"
+          :label="$t('opsConsole.deployments.releasedVersion')"
+          required
           ><el-select
             v-model="deployForm.applicationVersionId"
             filterable
@@ -1539,29 +1577,55 @@
           ><el-select
             v-model="deployForm.environmentId"
             :placeholder="$t('opsConsole.deployments.chooseEnvironment')"
+            @change="loadDeploymentNodes"
             ><el-option
               v-for="environment in availableEnvironments"
               :key="environment.id"
               :label="environment.name"
               :value="environment.id" /></el-select
-          ><small class="ops-form-help">{{
-            $t('opsConsole.deployments.allocationHint')
-          }}</small></el-form-item
-        >
+        ></el-form-item>
         <el-form-item :label="$t('opsConsole.deployments.accessPort')" required>
           <el-input-number v-model="deployForm.accessPort" :min="1024" :max="65532" />
           <small class="ops-form-help">{{ $t('opsConsole.deployments.accessPortHint') }}</small>
         </el-form-item>
-        <el-form-item :label="$t('opsConsole.deployments.runtimeServices')"
-          ><div class="ops-service-summary">
-            <el-tag>{{ $t('opsConsole.deployments.frontend') }}</el-tag
-            ><el-tag>{{ $t('opsConsole.deployments.compute') }}</el-tag
-            ><el-tag>{{ $t('opsConsole.deployments.alarm') }}</el-tag
-            ><el-checkbox v-model="deployForm.enableCollector">{{
-              $t('opsConsole.deployments.enableCollection')
-            }}</el-checkbox>
-          </div></el-form-item
+        <section
+          class="ops-engine-placement"
+          :aria-label="$t('opsConsole.deployments.runtimeEngines')"
         >
+          <div class="ops-engine-placement__header">
+            <span>{{ $t('opsConsole.deployments.runtimeEngines') }}</span
+            ><span>{{ $t('opsConsole.deployments.deployNode') }}</span>
+          </div>
+          <div
+            v-for="engine in deploymentEngineRows"
+            :key="engine.key"
+            class="ops-engine-placement__row"
+          >
+            <div>
+              <strong>{{ engine.label }}</strong
+              ><el-switch
+                v-if="engine.optional"
+                v-model="deployForm.enableCollector"
+                size="small"
+              />
+            </div>
+            <el-select
+              v-model="deployForm.placements[engine.key]"
+              filterable
+              :loading="deploymentNodeLoading"
+              :disabled="deploymentNodeLoading || (engine.optional && !deployForm.enableCollector)"
+              :placeholder="$t('opsConsole.deployments.chooseNode')"
+            >
+              <el-option
+                v-for="node in deploymentNodes"
+                :key="node.id"
+                :value="node.id"
+                :label="deploymentNodeLabel(node)"
+                :disabled="!isDeploymentNodeReady(node)"
+              />
+            </el-select>
+          </div>
+        </section>
       </el-form>
       <template #footer
         ><el-button @click="deployDialog = false">{{ $t('opsConsole.common.cancel') }}</el-button
@@ -1596,7 +1660,7 @@
               selectedDeploymentRow.status
             }}</span></el-descriptions-item
           >
-          <el-descriptions-item :label="$t('opsConsole.deployments.services')" :span="2">{{
+          <el-descriptions-item :label="$t('opsConsole.deployments.runtimeEngines')" :span="2">{{
             selectedDeploymentRow.services.join('、')
           }}</el-descriptions-item>
         </el-descriptions>
@@ -1713,6 +1777,7 @@ interface ProjectOption {
   id: string
   name: string
 }
+type DeploymentEngineKey = 'runtime' | 'compute' | 'alarm' | 'collection'
 interface PageState {
   page: number
   limit: number
@@ -1791,6 +1856,8 @@ const enrollments = ref<NodeEnrollment[]>([])
 const packages = ref<NodePackage[]>([])
 const projects = ref<ProjectOption[]>([])
 const versions = ref<ApplicationVersion[]>([])
+const deploymentNodes = ref<OpsNode[]>([])
+const deploymentNodeLoading = ref(false)
 const environmentNodeNames = ref<string[]>([])
 const projectLoading = ref(false)
 const versionLoading = ref(false)
@@ -1842,11 +1909,18 @@ const enrollForm = reactive({
   ttlMinutes: 60,
 })
 const deployForm = reactive({
+  mode: 'DEV' as 'DEV' | 'RELEASE',
   projectId: '',
   applicationVersionId: '',
   environmentId: '',
   accessPort: 17800,
   enableCollector: false,
+  placements: {
+    runtime: '',
+    compute: '',
+    alarm: '',
+    collection: '',
+  } as Record<DeploymentEngineKey, string>,
 })
 
 const refreshing = computed(() => Object.values(loading).some(Boolean))
@@ -2176,8 +2250,9 @@ const deploymentRows = computed<DeploymentRow[]>(() =>
         name: item.nodeName || item.nodeId,
       }),
       services: [
-        t('opsConsole.deployments.frontend'),
+        t('opsConsole.deployments.runtime'),
         t('opsConsole.deployments.compute'),
+        t('opsConsole.deployments.alarm'),
         ...(item.services?.some((service) => service.serviceType === 'collector')
           ? [t('opsConsole.deployments.collection')]
           : []),
@@ -2239,15 +2314,26 @@ const selectedProject = computed(() =>
 const selectedVersion = computed(() =>
   versions.value.find((item) => item.id === deployForm.applicationVersionId),
 )
+const deploymentEngineRows = computed(() => [
+  { key: 'runtime' as const, label: t('opsConsole.deployments.runtime'), optional: false },
+  { key: 'compute' as const, label: t('opsConsole.deployments.compute'), optional: false },
+  { key: 'alarm' as const, label: t('opsConsole.deployments.alarm'), optional: false },
+  { key: 'collection' as const, label: t('opsConsole.deployments.collection'), optional: true },
+])
 const canCreateDeployment = computed(() =>
   Boolean(
     deployForm.projectId &&
-    deployForm.applicationVersionId &&
+    (deployForm.mode === 'DEV' || deployForm.applicationVersionId) &&
     deployForm.environmentId &&
+    deployForm.placements.runtime &&
+    deployForm.placements.compute &&
+    deployForm.placements.alarm &&
+    (!deployForm.enableCollector || deployForm.placements.collection) &&
     deployForm.accessPort >= 1024 &&
     deployForm.accessPort <= 65532 &&
-    selectedVersion.value &&
-    isDeployableReleaseVersion(selectedVersion.value, deployForm.enableCollector),
+    (deployForm.mode === 'DEV' ||
+      (selectedVersion.value &&
+        isDeployableReleaseVersion(selectedVersion.value, deployForm.enableCollector))),
   ),
 )
 const defaultEnrollmentServerUrl = window.location.origin.replace(/\/$/, '')
@@ -3046,20 +3132,66 @@ async function onProjectChange(projectId: string) {
     versionLoading.value = false
   }
 }
+const isDeploymentNodeReady = (node: OpsNode) =>
+  node.platform === 'linux' &&
+  node.observedStatus === 'online' &&
+  (!node.clusterStatus || node.clusterStatus === 'ready')
+
+function deploymentNodeLabel(node: OpsNode) {
+  const address = node.ipAddress ? ` · ${node.ipAddress}` : ''
+  const unavailable = isDeploymentNodeReady(node)
+    ? ''
+    : ` · ${t('opsConsole.deployments.nodeUnavailable')}`
+  return `${node.name}${address}${unavailable}`
+}
+
+function setDefaultDeploymentPlacements() {
+  const readyNodes = deploymentNodes.value.filter(isDeploymentNodeReady)
+  const readyNodeIds = new Set(readyNodes.map((node) => node.id))
+  const firstNodeId = readyNodes[0]?.id || ''
+  deploymentEngineRows.value.forEach(({ key }) => {
+    if (!readyNodeIds.has(deployForm.placements[key])) deployForm.placements[key] = firstNodeId
+  })
+}
+
+async function loadDeploymentNodes(environmentId: string) {
+  deploymentNodes.value = []
+  if (!environmentId) {
+    setDefaultDeploymentPlacements()
+    return
+  }
+  deploymentNodeLoading.value = true
+  try {
+    const result = await opsAPI.listRuntimeEnvironmentNodes(environmentId, {
+      page: 1,
+      pageSize: 200,
+    })
+    deploymentNodes.value = result.items
+    setDefaultDeploymentPlacements()
+  } catch (error) {
+    ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.nodesFailed')))
+  } finally {
+    deploymentNodeLoading.value = false
+  }
+}
 async function openDeployDialog(initialProjectId = '') {
   activeTab.value = 'deployments'
   selectedEnvironmentId.value = ''
   Object.assign(deployForm, {
+    mode: 'DEV',
     projectId: '',
     applicationVersionId: '',
     environmentId: availableEnvironments.value[0]?.id || '',
     accessPort: 17800,
     enableCollector: false,
   })
+  Object.assign(deployForm.placements, { runtime: '', compute: '', alarm: '', collection: '' })
+  deploymentNodes.value = []
   versions.value = []
   deployDialog.value = true
   try {
     await loadProjects()
+    await loadDeploymentNodes(deployForm.environmentId)
     if (initialProjectId && projects.value.some((item) => item.id === initialProjectId)) {
       deployForm.projectId = initialProjectId
       await onProjectChange(initialProjectId)
@@ -3069,7 +3201,11 @@ async function openDeployDialog(initialProjectId = '') {
   }
 }
 function createDeployment() {
-  if (!canCreateDeployment.value || !selectedProject.value || !selectedVersion.value) {
+  if (
+    !canCreateDeployment.value ||
+    !selectedProject.value ||
+    (deployForm.mode === 'RELEASE' && !selectedVersion.value)
+  ) {
     ElMessage.warning(t('opsConsole.deployments.selectRequired'))
     return
   }
@@ -3919,6 +4055,72 @@ onBeforeUnmount(() => {
 .ops-service-summary :deep(.el-checkbox) {
   margin-left: 8px;
 }
+.ops-engine-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ops-deploy-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 18px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--el-fill-color-light);
+}
+.ops-deploy-mode-tab {
+  height: 32px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--el-text-color-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+.ops-deploy-mode-tab.is-active {
+  color: var(--el-color-primary);
+  background: var(--el-bg-color);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  font-weight: 600;
+}
+.ops-deployment-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+}
+.ops-deployment-form :deep(.el-form-item) {
+  margin-bottom: 14px;
+}
+.ops-deployment-form :deep(.el-select) {
+  width: 100%;
+}
+.ops-engine-placement {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 7px;
+}
+.ops-engine-placement__header,
+.ops-engine-placement__row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 12px;
+}
+.ops-engine-placement__header {
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-lighter);
+  font-size: 12px;
+}
+.ops-engine-placement__row + .ops-engine-placement__row {
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.ops-engine-placement__row > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .ops-drawer-heading {
   margin: 24px 0 16px;
 }
@@ -3980,6 +4182,9 @@ onBeforeUnmount(() => {
     overflow-x: auto;
   }
   .ops-node-grid {
+    grid-template-columns: 1fr;
+  }
+  .ops-deployment-form {
     grid-template-columns: 1fr;
   }
 }

@@ -103,10 +103,23 @@ describe('ops management console', () => {
     expect(source).toContain(':disabled="isFoundationRepair || row.type === \'if_timeseries\'"')
   })
 
-  it('工程部署只选择正式版本和运行环境，不要求开发人员选择物理节点', () => {
+  it('工程部署与工程快捷入口使用一致的模式和运行引擎分配语义', () => {
+    expect(source).toContain("deployForm.mode === 'DEV'")
+    expect(source).toContain("deployForm.mode === 'RELEASE'")
     expect(source).toContain(':label="$t(\'opsConsole.deployments.targetEnvironment\')"')
-    expect(source).toContain("$t('opsConsole.deployments.allocationHint')")
-    expect(source).toContain("$t('opsConsole.deployments.frontend')")
+    expect(source).toContain('opsAPI.listRuntimeEnvironmentNodes(environmentId')
+    expect(source).toContain("node.platform === 'linux'")
+    expect(source).toContain("node.observedStatus === 'online'")
+    expect(source).toContain("node.clusterStatus === 'ready'")
+    expect(source).toContain("key: 'alarm' as const")
+    expect(source).toContain("key: 'collection' as const")
+  })
+
+  it('工程部署列表以紧凑标签展示四类运行引擎并保持固定分页', () => {
+    expect(source).toContain("$t('opsConsole.deployments.runtimeEngines')")
+    expect(source).toContain('class="ops-engine-tags"')
+    expect(source).toContain("t('opsConsole.deployments.alarm')")
+    expect(source).toContain("t('opsConsole.deployments.collection')")
   })
 
   it('区分接入物理节点与将已有节点加入运行环境', () => {
