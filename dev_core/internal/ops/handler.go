@@ -525,10 +525,14 @@ func deploymentPayload(x ProjectDeployment) map[string]any {
 		}
 	}
 	accessURL := ""
+	updating := x.LastReadyAt == nil
 	for _, service := range x.Services {
 		if service.ServiceType == ServiceBase {
 			accessURL = service.Endpoint
 			break
+		}
+		if service.DesiredStatus == "running" && service.DesiredGeneration != x.LastReadyGeneration {
+			updating = true
 		}
 	}
 	return map[string]any{
@@ -542,7 +546,7 @@ func deploymentPayload(x ProjectDeployment) map[string]any {
 		"version":              x.Version,
 		"lastReadyVersion":     x.LastReadyVersion,
 		"lastReadyAt":          x.LastReadyAt,
-		"updating":             x.LastReadyAt != nil && x.ObservedStatus == "pending",
+		"updating":             updating,
 		"latestRunId":          x.LatestRunID,
 		"accessPort":           x.AccessPort,
 		"desiredStatus":        x.DesiredStatus,

@@ -1237,12 +1237,34 @@ func (r *PostgreSQLRepository) reconcileDeployment(ctx context.Context, did stri
 	if e != nil || observed == "pending" {
 		return e
 	}
+	if observed == "running" {
+		var generation int64
+		if e = r.pool.QueryRow(ctx, `SELECT min(desired_generation) FROM deployment_services WHERE project_deployment_id=$1 AND desired_status='running'`, did).Scan(&generation); e != nil {
+			return e
+		}
+		if _, e = r.PromoteDeploymentLastReady(ctx, did, generation); e != nil {
+			return e
+		}
+	}
 	var run string
 	e = r.pool.QueryRow(ctx, `WITH latest AS (SELECT id FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending' ORDER BY started_at DESC LIMIT 1) UPDATE deployment_runs SET observed_status=$2,progress=100,completed_at=now() WHERE id=(SELECT id FROM latest) RETURNING id`, did, observed).Scan(&run)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return nil
 	}
 	return e
+}
+
+// PromoteDeploymentLastReady 只在全部运行服务确认同一代次 ready 后推进可恢复快照。
+// 0 rows 是并发更新/状态变化，调用方不得覆盖此前 last-ready。
+func (r *PostgreSQLRepository) PromoteDeploymentLastReady(ctx context.Context, deploymentID string, expectedGeneration int64) (bool, error) {
+	if expectedGeneration < 1 {
+		return false, fmt.Errorf("last-ready generation 非法")
+	}
+	tag, err := r.pool.Exec(ctx, `UPDATE project_deployments d SET last_ready_mode=d.mode,last_ready_application_version_id=CASE WHEN d.mode='release' THEN d.application_version_id ELSE NULL END,last_ready_artifact_descriptor=CASE WHEN d.mode='development' THEN d.artifact_descriptor ELSE NULL END,last_ready_generation=$2,last_ready_at=now(),updated_at=now() WHERE d.id=$1 AND d.desired_status='running' AND NOT EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.desired_status<>'running' OR s.desired_generation<>$2 OR s.observed_generation<>$2 OR s.observed_status<>'running')) AND (d.last_ready_generation IS NULL OR d.last_ready_generation<>$2)`, deploymentID, expectedGeneration)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 func (r *PostgreSQLRepository) attachEnrollmentNode(ctx context.Context, en *Enrollment) {
 	if en.ClaimedByNodeID == "" {
