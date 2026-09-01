@@ -1605,7 +1605,13 @@
         <div class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.accessPort') }}</label>
           <div class="ops-deployment-port">
-            <el-input-number v-model="deployForm.accessPort" :min="1024" :max="65532" />
+            <el-input-number
+              v-model="deployForm.accessPort"
+              :min="1024"
+              :max="65532"
+              clearable
+              :placeholder="$t('opsConsole.deployments.accessPortAuto')"
+            />
             <small>{{ $t('opsConsole.deployments.accessPortHint') }}</small>
           </div>
         </div>
@@ -1938,7 +1944,7 @@ const deployForm = reactive({
   projectId: '',
   applicationVersionId: '',
   environmentId: '',
-  accessPort: 17800,
+  accessPort: null as number | null,
   placements: {
     base: '',
     compute: '',
@@ -2375,8 +2381,8 @@ const canCreateDeployment = computed(() =>
     (deployForm.mode === 'development' || deployForm.applicationVersionId) &&
     deployForm.environmentId &&
     deploymentEngineRows.value.every((engine) => deployForm.placements[engine.key]) &&
-    deployForm.accessPort >= 1024 &&
-    deployForm.accessPort <= 65532 &&
+    (deployForm.accessPort === null ||
+      (deployForm.accessPort >= 1024 && deployForm.accessPort <= 65532)) &&
     (deployForm.mode === 'development' || selectedVersion.value),
   ),
 )
@@ -3226,7 +3232,7 @@ async function openDeployDialog(initialProjectId = '') {
     projectId: '',
     applicationVersionId: '',
     environmentId: availableEnvironments.value[0]?.id || '',
-    accessPort: 17800,
+    accessPort: null,
   })
   Object.assign(deployForm.placements, { base: '', compute: '', alarm: '', collector: '' })
   deploymentNodes.value = []
@@ -3260,7 +3266,7 @@ async function createDeployment() {
       mode: deployForm.mode,
       applicationVersionId:
         deployForm.mode === 'production' ? deployForm.applicationVersionId : undefined,
-      accessPort: deployForm.accessPort,
+      accessPort: deployForm.accessPort ?? undefined,
       placements: Object.fromEntries(
         deploymentEngineRows.value.map(({ key }) => [key, deployForm.placements[key]]),
       ),

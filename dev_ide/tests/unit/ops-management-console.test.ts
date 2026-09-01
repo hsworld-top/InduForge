@@ -152,10 +152,10 @@ describe('ops management console', () => {
     }
   })
 
-  it('工程访问端口使用适合双列布局的简短提示', () => {
-    expect(langSource).toContain("accessPortHint: '平台将自动检测端口冲突。'")
+  it('工程访问端口说明服务端自动分配与冲突检测', () => {
+    expect(langSource).toContain("accessPortHint: '留空由平台自动分配；填写时将检测节点端口冲突。'")
     expect(langSource).toContain(
-      "accessPortHint: 'The platform automatically checks for port conflicts.'",
+      "accessPortHint: 'Leave blank for server-side allocation; specified ports are checked for node conflicts.'",
     )
   })
 

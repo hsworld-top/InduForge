@@ -220,7 +220,7 @@ type ProjectDeploymentCreatePayload = {
   environmentId: OpsId
   mode: DeploymentMode
   applicationVersionId?: OpsId
-  accessPort: number
+  accessPort?: number
   placements: Partial<Record<DeploymentEngine, OpsId>>
 }
 /** @deprecated 仅供历史单节点页面过渡，新增调用必须使用 ProjectDeploymentCreatePayload。 */
