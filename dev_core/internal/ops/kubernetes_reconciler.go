@@ -23,6 +23,14 @@ type KubernetesProjectReconciler struct {
 type ProjectWorkloadApplier interface {
 	Reconcile(context.Context, ProjectWorkload) error
 }
+type ProjectWorkloadStatus struct {
+	Ready   bool
+	Failed  bool
+	Message string
+}
+type ProjectWorkloadInspector interface {
+	Status(context.Context, ProjectWorkload) (ProjectWorkloadStatus, error)
+}
 
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
@@ -51,7 +59,24 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 			_ = r.reconcileDeployment(ctx, deploymentID)
 			continue
 		}
-		if _, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='running',observed_generation=desired_generation,last_message='Kubernetes rollout 已提交，等待 readiness',observed_at=now(),updated_at=now() WHERE id=$1`, serviceID); err != nil {
+		status := ProjectWorkloadStatus{Message: "Kubernetes rollout 已提交，等待 readiness"}
+		if inspector, ok := applier.(ProjectWorkloadInspector); ok {
+			if status, err = inspector.Status(ctx, workload); err != nil {
+				return count, err
+			}
+		}
+		if status.Failed {
+			_, _ = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, status.Message, deploymentID)
+			_ = r.reconcileDeployment(ctx, deploymentID)
+			continue
+		}
+		if status.Ready {
+			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='running',observed_generation=desired_generation,last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
+		} else {
+			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='pending',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
+		}
+		if err != nil {
 			return count, err
 		}
 		_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'dispatched','Kubernetes 工作负载已提交' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
@@ -61,6 +86,55 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 		count++
 	}
 	return count, rows.Err()
+}
+
+func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload ProjectWorkload) (ProjectWorkloadStatus, error) {
+	namespace, err := projectNamespace(workload.EnvironmentID)
+	if err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	name, err := projectWorkloadName(workload.DeploymentID, workload.Engine)
+	if err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint+"/apis/apps/v1/namespaces/"+namespace+"/deployments/"+name, nil)
+	if err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return ProjectWorkloadStatus{}, fmt.Errorf("读取 Kubernetes rollout 状态失败: HTTP %d", resp.StatusCode)
+	}
+	var value struct {
+		Metadata struct {
+			Generation int64 `json:"generation"`
+		}
+		Spec struct {
+			Replicas int `json:"replicas"`
+		}
+		Status struct {
+			ObservedGeneration int64                                            `json:"observedGeneration"`
+			AvailableReplicas  int                                              `json:"availableReplicas"`
+			Conditions         []struct{ Type, Status, Reason, Message string } `json:"conditions"`
+		} `json:"status"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&value); err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	for _, condition := range value.Status.Conditions {
+		if condition.Type == "Progressing" && condition.Status == "False" && condition.Reason == "ProgressDeadlineExceeded" {
+			return ProjectWorkloadStatus{Failed: true, Message: condition.Message}, nil
+		}
+	}
+	if value.Status.ObservedGeneration >= value.Metadata.Generation && value.Status.AvailableReplicas >= value.Spec.Replicas {
+		return ProjectWorkloadStatus{Ready: true, Message: "Kubernetes rollout 已就绪"}, nil
+	}
+	return ProjectWorkloadStatus{Message: "等待 Kubernetes rollout readiness"}, nil
 }
 
 func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {

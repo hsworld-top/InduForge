@@ -38,3 +38,15 @@ func TestKubernetesProjectReconcilerReportsApplyFailure(t *testing.T) {
 		t.Fatalf("RBAC failure must be reported, got %v", err)
 	}
 }
+
+func TestKubernetesProjectReconcilerStatusRequiresObservedReady(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":1}}`))
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase})
+	if err != nil || !status.Ready || status.Failed {
+		t.Fatalf("ready rollout status=%+v err=%v", status, err)
+	}
+}
