@@ -207,6 +207,19 @@ func (r *fakeRepository) CreateVersion(_ context.Context, input deployment.Creat
 	r.versions[item.ID] = item
 	return item, nil
 }
+func (r *fakeRepository) MarkVersionReady(_ context.Context, tenantID, id string, input deployment.CreateVersionInput) (deployment.Version, error) {
+	return r.CreateVersion(context.Background(), input)
+}
+func (r *fakeRepository) MarkVersionFailed(_ context.Context, tenantID, id, message string) (deployment.Version, error) {
+	item, ok := r.versions[id]
+	if !ok || item.TenantID != tenantID {
+		return deployment.Version{}, deployment.ErrNotFound
+	}
+	item.Status = "failed"
+	item.ErrorMessage = message
+	r.versions[id] = item
+	return item, nil
+}
 
 func (r *fakeRepository) DeleteVersion(_ context.Context, tenantID, id string) error {
 	item, ok := r.versions[id]

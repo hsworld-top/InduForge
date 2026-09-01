@@ -101,6 +101,33 @@ func (r *PostgreSQLRepository) CreateVersion(ctx context.Context, input CreateVe
 	return versionFromModel(row), nil
 }
 
+func (r *PostgreSQLRepository) MarkVersionReady(ctx context.Context, tenantID, versionID string, input CreateVersionInput) (Version, error) {
+	tenant, version, err := parsePair(tenantID, versionID)
+	if err != nil {
+		return Version{}, ErrNotFound
+	}
+	manifest, err := json.Marshal(input.Manifest)
+	if err != nil {
+		return Version{}, err
+	}
+	row, err := r.queries.MarkApplicationVersionReady(ctx, dbsqlc.MarkApplicationVersionReadyParams{ArtifactBucket: nullableText(input.Bucket), ArtifactKey: nullableText(input.ArtifactKey), ArtifactHash: nullableText(input.ArtifactHash), ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, Manifest: manifest, VersionID: version, TenantID: tenant})
+	if err != nil {
+		return Version{}, mapNotFound(err)
+	}
+	return versionFromModel(row), nil
+}
+func (r *PostgreSQLRepository) MarkVersionFailed(ctx context.Context, tenantID, versionID, message string) (Version, error) {
+	tenant, version, err := parsePair(tenantID, versionID)
+	if err != nil {
+		return Version{}, ErrNotFound
+	}
+	row, err := r.queries.MarkApplicationVersionFailed(ctx, dbsqlc.MarkApplicationVersionFailedParams{VersionID: version, TenantID: tenant, ErrorMessage: nullableText(message)})
+	if err != nil {
+		return Version{}, mapNotFound(err)
+	}
+	return versionFromModel(row), nil
+}
+
 func (r *PostgreSQLRepository) DeleteVersion(ctx context.Context, tenantID, versionID string) error {
 	if _, err := r.GetVersion(ctx, tenantID, versionID); err != nil {
 		return err

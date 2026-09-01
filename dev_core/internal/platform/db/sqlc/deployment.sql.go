@@ -41,7 +41,7 @@ VALUES (
   'ready', $6, $7, $8,
   $9, $10, $11, $12, now()
 )
-RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
+RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
 `
 
 type CreateApplicationVersionParams struct {
@@ -89,6 +89,9 @@ func (q *Queries) CreateApplicationVersion(ctx context.Context, arg CreateApplic
 		&i.ArtifactHash,
 		&i.ArtifactSize,
 		&i.Manifest,
+		&i.ManifestHash,
+		&i.ChecksumsHash,
+		&i.SigningKeyID,
 		&i.BuildLog,
 		&i.ErrorMessage,
 		&i.CreatedBy,
@@ -237,7 +240,7 @@ func (q *Queries) DeleteApplicationVersion(ctx context.Context, arg DeleteApplic
 }
 
 const getApplicationVersion = `-- name: GetApplicationVersion :one
-SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
+SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.manifest_hash, v.checksums_hash, v.signing_key_id, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
 JOIN projects p ON p.id = v.project_id
 WHERE v.id = $1 AND v.tenant_id = $2
   AND p.status <> 'deleted' AND v.status <> 'deleted'
@@ -266,6 +269,9 @@ func (q *Queries) GetApplicationVersion(ctx context.Context, arg GetApplicationV
 		&i.ArtifactHash,
 		&i.ArtifactSize,
 		&i.Manifest,
+		&i.ManifestHash,
+		&i.ChecksumsHash,
+		&i.SigningKeyID,
 		&i.BuildLog,
 		&i.ErrorMessage,
 		&i.CreatedBy,
@@ -360,7 +366,7 @@ func (q *Queries) GetNodeDeployment(ctx context.Context, arg GetNodeDeploymentPa
 }
 
 const listApplicationVersions = `-- name: ListApplicationVersions :many
-SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
+SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.manifest_hash, v.checksums_hash, v.signing_key_id, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
 JOIN projects p ON p.id = v.project_id
 WHERE v.project_id = $1 AND v.tenant_id = $2
   AND p.status <> 'deleted' AND v.status <> 'deleted'
@@ -403,6 +409,9 @@ func (q *Queries) ListApplicationVersions(ctx context.Context, arg ListApplicati
 			&i.ArtifactHash,
 			&i.ArtifactSize,
 			&i.Manifest,
+			&i.ManifestHash,
+			&i.ChecksumsHash,
+			&i.SigningKeyID,
 			&i.BuildLog,
 			&i.ErrorMessage,
 			&i.CreatedBy,
@@ -554,6 +563,114 @@ func (q *Queries) ListStaleNodeCommands(ctx context.Context) ([]ListStaleNodeCom
 		return nil, err
 	}
 	return items, nil
+}
+
+const markApplicationVersionFailed = `-- name: MarkApplicationVersionFailed :one
+UPDATE application_versions SET status='failed', error_message=$1, completed_at=now(), updated_at=now()
+WHERE id=$2 AND tenant_id=$3 AND status='building'
+RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
+`
+
+type MarkApplicationVersionFailedParams struct {
+	ErrorMessage pgtype.Text `json:"error_message"`
+	VersionID    pgtype.UUID `json:"version_id"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) MarkApplicationVersionFailed(ctx context.Context, arg MarkApplicationVersionFailedParams) (ApplicationVersion, error) {
+	row := q.db.QueryRow(ctx, markApplicationVersionFailed, arg.ErrorMessage, arg.VersionID, arg.TenantID)
+	var i ApplicationVersion
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Version,
+		&i.Name,
+		&i.Description,
+		&i.Status,
+		&i.SourceHash,
+		&i.ArtifactBucket,
+		&i.ArtifactKey,
+		&i.ArtifactHash,
+		&i.ArtifactSize,
+		&i.Manifest,
+		&i.ManifestHash,
+		&i.ChecksumsHash,
+		&i.SigningKeyID,
+		&i.BuildLog,
+		&i.ErrorMessage,
+		&i.CreatedBy,
+		&i.CompletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markApplicationVersionReady = `-- name: MarkApplicationVersionReady :one
+UPDATE application_versions
+SET status='ready', artifact_bucket=$1, artifact_key=$2,
+    artifact_hash=$3, artifact_size=$4, manifest=$5,
+    manifest_hash=$6, checksums_hash=$7, signing_key_id=$8,
+    completed_at=now(), error_message=NULL, updated_at=now()
+WHERE id=$9 AND tenant_id=$10 AND status='building'
+RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
+`
+
+type MarkApplicationVersionReadyParams struct {
+	ArtifactBucket pgtype.Text `json:"artifact_bucket"`
+	ArtifactKey    pgtype.Text `json:"artifact_key"`
+	ArtifactHash   pgtype.Text `json:"artifact_hash"`
+	ArtifactSize   pgtype.Int8 `json:"artifact_size"`
+	Manifest       []byte      `json:"manifest"`
+	ManifestHash   pgtype.Text `json:"manifest_hash"`
+	ChecksumsHash  pgtype.Text `json:"checksums_hash"`
+	SigningKeyID   pgtype.Text `json:"signing_key_id"`
+	VersionID      pgtype.UUID `json:"version_id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) MarkApplicationVersionReady(ctx context.Context, arg MarkApplicationVersionReadyParams) (ApplicationVersion, error) {
+	row := q.db.QueryRow(ctx, markApplicationVersionReady,
+		arg.ArtifactBucket,
+		arg.ArtifactKey,
+		arg.ArtifactHash,
+		arg.ArtifactSize,
+		arg.Manifest,
+		arg.ManifestHash,
+		arg.ChecksumsHash,
+		arg.SigningKeyID,
+		arg.VersionID,
+		arg.TenantID,
+	)
+	var i ApplicationVersion
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Version,
+		&i.Name,
+		&i.Description,
+		&i.Status,
+		&i.SourceHash,
+		&i.ArtifactBucket,
+		&i.ArtifactKey,
+		&i.ArtifactHash,
+		&i.ArtifactSize,
+		&i.Manifest,
+		&i.ManifestHash,
+		&i.ChecksumsHash,
+		&i.SigningKeyID,
+		&i.BuildLog,
+		&i.ErrorMessage,
+		&i.CreatedBy,
+		&i.CompletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const recoverStaleNodeCommand = `-- name: RecoverStaleNodeCommand :execrows

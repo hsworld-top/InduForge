@@ -131,3 +131,17 @@ SET status = CASE WHEN attempts >= max_attempts THEN 'dead_letter' ELSE 'pending
 WHERE id = sqlc.arg(command_id)
   AND status IN ('issued', 'acknowledged')
   AND COALESCE(issued_at, requested_at) < now() - timeout_seconds * interval '1 second';
+
+-- name: MarkApplicationVersionReady :one
+UPDATE application_versions
+SET status='ready', artifact_bucket=sqlc.arg(artifact_bucket), artifact_key=sqlc.arg(artifact_key),
+    artifact_hash=sqlc.arg(artifact_hash), artifact_size=sqlc.arg(artifact_size), manifest=sqlc.arg(manifest),
+    manifest_hash=sqlc.arg(manifest_hash), checksums_hash=sqlc.arg(checksums_hash), signing_key_id=sqlc.arg(signing_key_id),
+    completed_at=now(), error_message=NULL, updated_at=now()
+WHERE id=sqlc.arg(version_id) AND tenant_id=sqlc.arg(tenant_id) AND status='building'
+RETURNING *;
+
+-- name: MarkApplicationVersionFailed :one
+UPDATE application_versions SET status='failed', error_message=sqlc.arg(error_message), completed_at=now(), updated_at=now()
+WHERE id=sqlc.arg(version_id) AND tenant_id=sqlc.arg(tenant_id) AND status='building'
+RETURNING *;

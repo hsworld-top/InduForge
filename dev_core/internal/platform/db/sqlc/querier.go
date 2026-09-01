@@ -93,6 +93,8 @@ type Querier interface {
 	ListStaleNodeCommands(ctx context.Context) ([]ListStaleNodeCommandsRow, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]ListTenantsRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
+	MarkApplicationVersionFailed(ctx context.Context, arg MarkApplicationVersionFailedParams) (ApplicationVersion, error)
+	MarkApplicationVersionReady(ctx context.Context, arg MarkApplicationVersionReadyParams) (ApplicationVersion, error)
 	MarkNodeCommandIssued(ctx context.Context, commandID pgtype.UUID) error
 	RecoverStaleNodeCommand(ctx context.Context, arg RecoverStaleNodeCommandParams) (int64, error)
 	RecoverStaleNodeCommands(ctx context.Context) (int64, error)
