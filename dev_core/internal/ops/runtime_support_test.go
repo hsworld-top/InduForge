@@ -3,7 +3,7 @@ package ops
 import "testing"
 
 func TestResolveRuntimeSupportResourcesRejectsMissingReferences(t *testing.T) {
-	refs := map[string]map[string]string{"nats_jetstream": {"service": "nats", "resourceRef": "site-resource://env/nats", "credentialSecretRef": "secret://env/nats", "secretNamespace": "runtime", "secretName": "nats", "secretKey": "token"}, "if_history": {"dsnSecretRef": "secret://env/postgres", "schema": "runtime_engine", "secretNamespace": "runtime", "secretName": "postgres", "secretKey": "dsn"}}
+	refs := map[string]map[string]string{"nats_jetstream": {"service": "nats", "resourceRef": "site-resource://env/nats", "credentialSecretRef": "secret://env/nats", "secretNamespace": "runtime", "secretName": "nats", "secretKey": "token"}, "if_history": {"resourceRef": "site-resource://env/postgres", "dsnSecretRef": "secret://env/postgres", "schema": "runtime_engine", "secretNamespace": "runtime", "secretName": "postgres", "secretKey": "dsn"}}
 	if _, err := ResolveRuntimeSupportResources(refs); err != nil {
 		t.Fatal(err)
 	}

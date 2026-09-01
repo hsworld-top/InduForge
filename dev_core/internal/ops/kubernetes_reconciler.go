@@ -3,8 +3,10 @@ package ops
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,10 +21,19 @@ type KubernetesProjectReconciler struct {
 	client          *http.Client
 	endpoint, token string
 	secretManager   *DeploymentSecretManager
+	runtimeContext  interface {
+		LoadProjectRuntimeContext(context.Context, string) (ProjectRuntimeContext, error)
+	}
 }
 
 func (r *KubernetesProjectReconciler) SetDeploymentSecretManager(manager *DeploymentSecretManager) {
 	r.secretManager = manager
+}
+
+func (r *KubernetesProjectReconciler) SetRuntimeContextLoader(loader interface {
+	LoadProjectRuntimeContext(context.Context, string) (ProjectRuntimeContext, error)
+}) {
+	r.runtimeContext = loader
 }
 
 type ProjectWorkloadApplier interface {
@@ -165,6 +176,22 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
 // Kubernetes RollingUpdate 接管。403 明确暴露为 RBAC 配置错误，不能伪报已运行。
 func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload ProjectWorkload) error {
+	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
+		if r.runtimeContext == nil {
+			return fmt.Errorf("运行绑定上下文加载器未配置")
+		}
+		runtimeContext, err := r.runtimeContext.LoadProjectRuntimeContext(ctx, workload.DeploymentID)
+		if err != nil {
+			return fmt.Errorf("加载运行绑定上下文失败: %w", err)
+		}
+		input, err := BuildRuntimeBindingInput(workload, runtimeContext)
+		if err != nil {
+			return fmt.Errorf("构造运行绑定输入失败: %w", err)
+		}
+		if err := r.applyRuntimeBindingConfigMap(ctx, workload, input); err != nil {
+			return err
+		}
+	}
 	if workload.Engine == ServiceCompute && r.secretManager != nil {
 		namespace, err := projectNamespace(workload.EnvironmentID)
 		if err != nil {
@@ -214,6 +241,34 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if response.StatusCode/100 != 2 {
 			return fmt.Errorf("Kubernetes 调和 %s/%s 失败: HTTP %d", meta.Kind, meta.Metadata.Name, response.StatusCode)
 		}
+	}
+	return nil
+}
+
+func (r *KubernetesProjectReconciler) applyRuntimeBindingConfigMap(ctx context.Context, workload ProjectWorkload, input []byte) error {
+	namespace, err := projectNamespace(workload.EnvironmentID)
+	if err != nil {
+		return err
+	}
+	name, err := projectWorkloadName(workload.DeploymentID, workload.Engine)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(input)
+	manifest := fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: %s-runtime-binding\n  namespace: %s\n  annotations: {induforge.io/input-sha256: %q}\ndata:\n  input.json: %q\n", name, namespace, "sha256:"+hex.EncodeToString(digest[:]), string(input))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.endpoint+"/api/v1/namespaces/"+namespace+"/configmaps/"+name+"-runtime-binding?fieldManager=induforge-center&force=true", strings.NewReader(manifest))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+r.token)
+	request.Header.Set("Content-Type", "application/apply-patch+yaml")
+	response, err := r.client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode/100 != 2 {
+		return fmt.Errorf("Kubernetes 调和 ConfigMap/%s-runtime-binding 失败: HTTP %d", name, response.StatusCode)
 	}
 	return nil
 }

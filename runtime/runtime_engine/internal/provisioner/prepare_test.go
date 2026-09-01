@@ -2,12 +2,19 @@ package provisioner
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/indu-forge/runtime-engine/internal/binding"
 	"github.com/indu-forge/runtime-engine/internal/model"
 )
+
+func TestDecodeAcceptsDevCoreGoldenFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/dev-core.runtime-binding.input.v1.json")
+	if err != nil { t.Fatal(err) }
+	if _, err = Decode(raw); err != nil { t.Fatalf("dev_core golden fixture rejected: %v", err) }
+}
 
 func TestDecodeRejectsUnknownFields(t *testing.T) {
 	raw := []byte(`{"schemaVersion":"runtime-binding.input.v1","unknown":true}`)

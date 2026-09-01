@@ -203,6 +203,7 @@ func main() {
 	if reconciler, reconcileErr := ops.NewInClusterProjectReconciler(); reconcileErr != nil {
 		logger.Info("项目 K3s 调和器未启用", "reason", reconcileErr)
 	} else {
+		reconciler.SetRuntimeContextLoader(opsRepository)
 		go runProjectWorkloadReconciler(signalCtx, opsRepository, reconciler, logger)
 	}
 

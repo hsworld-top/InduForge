@@ -9,8 +9,8 @@ import (
 // RuntimeSupportResources 是环境基础设施向工程运行时公开的非敏感资源索引。
 // Secret 字段均为 Kubernetes Secret 名称或键引用，真实值只由 Pod 挂载读取。
 type RuntimeSupportResources struct {
-	NATSEndpoint, NATSResourceRef, NATSCredentialSecretRef string
-	StateStoreDSNSecretRef, StateStoreSchema               string
+	NATSEndpoint, NATSResourceRef, NATSCredentialSecretRef          string
+	StateStoreResourceRef, StateStoreDSNSecretRef, StateStoreSchema string
 	// NATS 使用环境级 credential；项目隔离依赖 project subject，而非伪造独立 account。
 	NATSCredentialSource, StateStoreCredentialSource KubernetesSecretSource
 }
@@ -33,11 +33,11 @@ func ResolveRuntimeSupportResources(refs map[string]map[string]string) (RuntimeS
 	lookup := func(service, key string) string { return strings.TrimSpace(refs[service][key]) }
 	resources := RuntimeSupportResources{
 		NATSEndpoint: lookup("nats_jetstream", "service"), NATSResourceRef: lookup("nats_jetstream", "resourceRef"), NATSCredentialSecretRef: lookup("nats_jetstream", "credentialSecretRef"),
-		StateStoreDSNSecretRef: lookup("if_history", "dsnSecretRef"), StateStoreSchema: lookup("if_history", "schema"),
+		StateStoreResourceRef: lookup("if_history", "resourceRef"), StateStoreDSNSecretRef: lookup("if_history", "dsnSecretRef"), StateStoreSchema: lookup("if_history", "schema"),
 	}
 	resources.NATSCredentialSource = KubernetesSecretSource{Namespace: lookup("nats_jetstream", "secretNamespace"), Name: lookup("nats_jetstream", "secretName"), Keys: map[string]string{"credential": lookup("nats_jetstream", "secretKey")}}
 	resources.StateStoreCredentialSource = KubernetesSecretSource{Namespace: lookup("if_history", "secretNamespace"), Name: lookup("if_history", "secretName"), Keys: map[string]string{"dsn": lookup("if_history", "secretKey")}}
-	for label, value := range map[string]string{"NATS Service": resources.NATSEndpoint, "NATS resourceRef": resources.NATSResourceRef, "NATS credentialSecretRef": resources.NATSCredentialSecretRef, "state-store dsnSecretRef": resources.StateStoreDSNSecretRef, "state-store schema": resources.StateStoreSchema} {
+	for label, value := range map[string]string{"NATS Service": resources.NATSEndpoint, "NATS resourceRef": resources.NATSResourceRef, "NATS credentialSecretRef": resources.NATSCredentialSecretRef, "state-store resourceRef": resources.StateStoreResourceRef, "state-store dsnSecretRef": resources.StateStoreDSNSecretRef, "state-store schema": resources.StateStoreSchema} {
 		if value == "" {
 			return RuntimeSupportResources{}, fmt.Errorf("运行环境缺少 %s", label)
 		}
