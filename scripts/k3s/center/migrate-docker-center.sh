@@ -129,6 +129,8 @@ install -d -m 0755 /opt/induforge/center-k3s
 cp -a "$SCRIPT_DIR/." /opt/induforge/center-k3s/
 chmod 0755 /opt/induforge/center-k3s/centerctl
 ln -sfn /opt/induforge/center-k3s/centerctl /usr/local/sbin/induforge-centerctl
+# `induforge-centerctl` 是正式命令；短名称仅用于兼容早期文档和现场操作习惯。
+ln -sfn /opt/induforge/center-k3s/centerctl /usr/local/sbin/centerctl
 
 # 非密钥运行参数独立持久化，确保前端失效后 centerctl 仍可直接诊断和恢复。
 install -d -m 0755 "$(dirname -- "$CENTER_CONFIG_FILE")"

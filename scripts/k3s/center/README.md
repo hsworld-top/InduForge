@@ -12,7 +12,7 @@ SeaweedFS、代码工作区、IDE 静态资源和 TLS 文件。目录不在界�
 中心数据目录、`/etc/induforge/center.env`、IDE 与 TLS 资产后执行：
 
 ```bash
-sudo centerctl import-images /path/to/center-images
+sudo induforge-centerctl import-images /path/to/center-images
 ```
 
 ```bash
@@ -20,7 +20,7 @@ sudo IF_CENTER_NODE_NAME=<k3s-node-name> \
   IF_CENTER_CONTROL_IMAGE=induforge/control:<version> \
   IF_CENTER_EDGE_IMAGE=induforge/edge:<version> \
   IF_CENTER_DATA_ROOT=/var/lib/induforge/center \
-  ./centerctl apply /etc/induforge/center.env
+  induforge-centerctl apply /etc/induforge/center.env
 ```
 
 旧版 Docker/宿主进程中心可在确认镜像已经导入 K3s 后执行一次性迁移脚本。脚本先保存 PostgreSQL
@@ -39,10 +39,10 @@ sudo IF_CENTER_NODE_NAME=<k3s-node-name> \
 常用诊断命令：
 
 ```bash
-sudo centerctl status
-sudo centerctl doctor
-sudo centerctl logs center-control
-sudo centerctl restart center-control
+sudo induforge-centerctl status
+sudo induforge-centerctl doctor
+sudo induforge-centerctl logs center-control
+sudo induforge-centerctl restart center-control
 ```
 
 安装流程会将节点名、镜像版本、数据根目录和入口端口写入 root-only 的

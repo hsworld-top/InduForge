@@ -13,6 +13,10 @@ done
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
 CONFIG_FILE=${IF_CENTER_CONFIG_FILE:-/etc/induforge/center-k3s.conf}
 if [ -f "$CONFIG_FILE" ]; then
+  if [ ! -r "$CONFIG_FILE" ]; then
+    echo "center configuration is root-only; run induforge-centerctl with sudo" >&2
+    exit 1
+  fi
   # 该文件由中心安装流程生成且仅允许 root 修改，用于保证故障时无需依赖交互式环境变量即可诊断。
   # shellcheck disable=SC1090
   . "$CONFIG_FILE"
@@ -29,7 +33,7 @@ HTTPS_PORT=${IF_EDGE_TLS_HOST_PORT:-${HTTPS_PORT:-18443}}
 DOCKER_GID=${IF_CENTER_DOCKER_GID:-${DOCKER_GID:-}}
 
 usage() {
-  echo "Usage: centerctl <render|import-images|apply|status|doctor|logs|restart> [arguments]" >&2
+  echo "Usage: induforge-centerctl <render|import-images|apply|status|doctor|logs|restart> [arguments]" >&2
   exit 2
 }
 
@@ -191,11 +195,13 @@ apply_center() {
 }
 
 show_status() {
+  require_root status
   kubectl_cmd -n "$NAMESPACE" get pods -o wide
   kubectl_cmd -n "$NAMESPACE" get deployments,statefulsets,services
 }
 
 doctor() {
+  require_root doctor
   failed=0
   ready=$(kubectl_cmd get node "$CENTER_NODE_NAME" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
   if [ "$ready" != "True" ]; then
@@ -222,6 +228,7 @@ doctor() {
 }
 
 show_logs() {
+  require_root logs
   workload=${1:-center-control}
   case "$workload" in
     center-control|center-edge|center-meta-store|center-cache-store|center-object-store) ;;
