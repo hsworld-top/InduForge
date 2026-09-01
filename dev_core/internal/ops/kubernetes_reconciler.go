@@ -18,6 +18,11 @@ import (
 type KubernetesProjectReconciler struct {
 	client          *http.Client
 	endpoint, token string
+	secretManager   *DeploymentSecretManager
+}
+
+func (r *KubernetesProjectReconciler) SetDeploymentSecretManager(manager *DeploymentSecretManager) {
+	r.secretManager = manager
 }
 
 type ProjectWorkloadApplier interface {
@@ -160,6 +165,15 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
 // Kubernetes RollingUpdate 接管。403 明确暴露为 RBAC 配置错误，不能伪报已运行。
 func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload ProjectWorkload) error {
+	if workload.Engine == ServiceCompute && r.secretManager != nil {
+		namespace, err := projectNamespace(workload.EnvironmentID)
+		if err != nil {
+			return err
+		}
+		if _, err = r.secretManager.Ensure(ctx, namespace, workload.DeploymentID, true); err != nil {
+			return fmt.Errorf("准备计算部署 Secret 失败: %w", err)
+		}
+	}
 	manifest, err := RenderProjectWorkloadManifest(workload)
 	if err != nil {
 		return err
