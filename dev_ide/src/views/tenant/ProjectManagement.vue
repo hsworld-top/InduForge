@@ -318,122 +318,8 @@
       </template>
     </el-dialog>
 
-    <!-- 部署对话框 -->
-    <el-dialog v-model="showDeployDialog" :title="t('projectManagement.deployDialog', {
-      name: deployForm.project?.name || '',
-    })
-      " width="min(860px, 92vw)" :close-on-click-modal="true" :lock-scroll="true" append-to-body class="deploy-dialog">
-      <!-- 当前模式显示 -->
-      <div class="mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded">
-        <span class="text-gray-600 dark:text-gray-400">{{
-          t('projectManagement.currentMode')
-          }}</span>
-        <el-tag :type="getModeTagType(deployForm.currentMode)">
-          {{ getModeDisplayLabel(deployForm.currentMode) }}
-        </el-tag>
-      </div>
-
-      <!-- 部署模式选择 -->
-      <el-form :model="deployForm" label-width="100px">
-        <el-form-item :label="t('projectManagement.deployMode')">
-          <el-radio-group v-model="deployForm.mode">
-            <el-radio value="DEV">{{ t('projectManagement.devModeDesc') }}</el-radio>
-            <el-radio value="RELEASE">{{ t('projectManagement.releaseModeDesc') }}</el-radio>
-          </el-radio-group>
-        </el-form-item>
-
-        <!-- RELEASE模式：选择版本 -->
-        <template v-if="deployForm.mode === 'RELEASE'">
-          <el-form-item :label="t('projectManagement.currentVersion')">
-            <el-tag type="info">
-              {{
-                deployForm.currentVersion
-                  ? `v${deployForm.currentVersion}`
-                  : t('projectManagement.noReleaseVersion')
-              }}
-            </el-tag>
-          </el-form-item>
-          <el-form-item :label="t('projectManagement.version')" required>
-            <el-select v-model="deployForm.version" :placeholder="t('projectManagement.selectVersion')" filterable
-              style="width: 100%">
-              <el-option v-for="v in releaseVersionOptions" :key="v.id || v.version" :label="v.isGenerated
-                  ? `v${v.version}（${t('projectManagement.newVersion')}）`
-                  : `v${v.version} - ${formatDateTime(v.createdAt)}`
-                " :value="v.version" />
-            </el-select>
-            <el-button class="ml-2" type="primary" plain :disabled="!canAddReleaseVersion"
-              @click="addReleaseVersionOption">
-              {{ t('projectManagement.addVersion') }}
-            </el-button>
-            <el-button class="ml-2" type="info" plain @click="openVersionManageDialog">
-              {{ t('projectManagement.versionManage') }}
-            </el-button>
-            <div class="text-xs text-gray-500 mt-1">
-              {{ t('projectManagement.versionHelpAuto') }}
-            </div>
-          </el-form-item>
-        </template>
-
-        <!-- 选择节点 -->
-        <el-form-item :label="t('projectManagement.targetNode')" required>
-          <div class="deploy-node-selector w-full">
-            <div class="deploy-node-toolbar">
-              <el-input v-model="nodeKeyword" clearable :placeholder="t('projectManagement.nodeSearchPlaceholder')"
-                class="deploy-node-search" />
-            </div>
-
-            <div class="deploy-node-list" role="radiogroup">
-              <button v-for="n in filteredAvailableNodes" :key="n.id" type="button"
-                :class="['deploy-node-item', { 'is-selected': selectedTargetNodeId === n.id }]"
-                @click="selectedTargetNodeId = n.id">
-                <span class="deploy-node-indicator" :class="{ selected: selectedTargetNodeId === n.id }" />
-                <div class="deploy-node-option">
-                  <div class="deploy-node-row">
-                    <span class="deploy-node-name">{{ n.name || '-' }}</span>
-                    <span class="deploy-node-ip">{{ n.ipAddress || '-' }}</span>
-                    <el-tag size="small" :type="getModeTagType(nodeModes[n.id])">
-                      {{ getModeDisplayLabel(nodeModes[n.id]) }}
-                    </el-tag>
-                  </div>
-                </div>
-              </button>
-              <el-empty v-if="filteredAvailableNodes.length === 0" :description="t('projectManagement.noMatchedNodes')"
-                :image-size="72" />
-            </div>
-          </div>
-        </el-form-item>
-
-        <!-- 部署说明 -->
-        <el-alert v-if="deployForm.mode === 'RELEASE'" type="warning" :closable="false" show-icon class="mt-4">
-          <template #title>{{ t('projectManagement.releaseGuideTitle') }}</template>
-          <ul class="text-sm mt-1">
-            <li>{{ t('projectManagement.releaseGuide1') }}</li>
-            <li>{{ t('projectManagement.releaseGuide2') }}</li>
-            <li>{{ t('projectManagement.releaseGuide3') }}</li>
-          </ul>
-        </el-alert>
-
-        <el-alert v-if="deployForm.mode === 'DEV'" type="info" :closable="false" show-icon class="mt-4">
-          <template #title>{{ t('projectManagement.devGuideTitle') }}</template>
-          <ul class="text-sm mt-1">
-            <li>{{ t('projectManagement.devGuide1') }}</li>
-            <li>{{ t('projectManagement.devGuide2') }}</li>
-            <li>{{ t('projectManagement.devGuide3') }}</li>
-          </ul>
-        </el-alert>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="showDeployDialog = false">{{ t('projectManagement.cancel') }}</el-button>
-        <el-button type="primary" @click="confirmDeploy" :loading="deployLoading">
-          {{
-            deployForm.mode === 'RELEASE'
-              ? t('projectManagement.publishAndDeploy')
-              : t('projectManagement.deployDevMode')
-          }}
-        </el-button>
-      </template>
-    </el-dialog>
+    <ProjectPublishDialog v-model:visible="showDeployDialog" :project="deployForm.project"
+      @manage-versions="openVersionManageDialog" @confirm="handlePublishConfirm" />
 
     <el-dialog v-model="showVersionManageDialog" :title="t('projectManagement.versionManageDialog')" width="760px"
       append-to-body>
@@ -639,6 +525,7 @@ import ProjectOverviewToolbar from './project-management/ProjectOverviewToolbar.
 import ProjectOverviewGrid from './project-management/ProjectOverviewGrid.vue'
 import ProjectOverviewTable from './project-management/ProjectOverviewTable.vue'
 import ProjectOverviewPagination from './project-management/ProjectOverviewPagination.vue'
+import ProjectPublishDialog from './project-management/ProjectPublishDialog.vue'
 import ProjectGroupCards from './project-management/ProjectGroupCards.vue'
 import ProjectGroupManageDialog from './project-management/ProjectGroupManageDialog.vue'
 import ProjectGroupProjectPickerDialog from './project-management/ProjectGroupProjectPickerDialog.vue'
@@ -656,6 +543,7 @@ export default {
     ProjectOverviewGrid,
     ProjectOverviewTable,
     ProjectOverviewPagination,
+    ProjectPublishDialog,
     ProjectGroupCards,
     ProjectGroupManageDialog,
     ProjectGroupProjectPickerDialog,
@@ -2293,22 +2181,14 @@ export default {
       })
     }
 
-    // 打开部署对话框
-    const openDeployDialog = async (project) => {
-      // 工程列表不再承载旧的源码 ZIP/DEV 双轨部署。统一打开正式物理节点部署页，
-      // 并用一次性 requestId 让异步标签挂载后安全回填当前工程。
-      const requestId = `${project?.id || 'unknown'}:${Date.now()}`
-      ElMessage.info(t('projectManagement.formalDeploymentOnly'))
-      emit('open-tab', 'ops-management')
-      ;[80, 220, 420].forEach((delay) => {
-        window.setTimeout(() => {
-          window.dispatchEvent(
-            new window.CustomEvent('ops:open-deploy', {
-              detail: { projectId: project?.id || '', requestId },
-            }),
-          )
-        }, delay)
-      })
+    // 发布入口留在工程卡片内；运行环境和运行引擎分布在同一弹窗完成选择。
+    const openDeployDialog = (project) => {
+      deployForm.project = project
+      showDeployDialog.value = true
+    }
+
+    const handlePublishConfirm = () => {
+      ElMessage.info(t('projectManagement.publishExecutionPending'))
     }
 
     // 确认部署
@@ -2603,6 +2483,7 @@ export default {
       openDesignCenter,
       openDataCenter,
       openDeployDialog,
+      handlePublishConfirm,
       openVersionManageDialog,
       canDeleteVersion,
       getVersionStatusTagType,

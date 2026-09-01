@@ -305,6 +305,33 @@ vi.mock('@/views/tenant/project-management/ProjectOverviewTable.vue', () => ({
   }),
 }))
 
+vi.mock('@/views/tenant/project-management/ProjectPublishDialog.vue', () => ({
+  default: defineComponent({
+    name: 'ProjectPublishDialogStub',
+    props: {
+      visible: {
+        type: Boolean,
+        default: false,
+      },
+      project: {
+        type: Object,
+        default: null,
+      },
+    },
+    emits: ['update:visible', 'manage-versions', 'confirm'],
+    setup(props) {
+      return () =>
+        props.visible
+          ? h(
+              'section',
+              { 'data-testid': 'project-publish-dialog' },
+              `publish:${(props.project as Record<string, unknown> | null)?.name || ''}`,
+            )
+          : null
+    },
+  }),
+}))
+
 vi.mock('@/views/tenant/project-management/ProjectGroupCards.vue', () => ({
   default: defineComponent({
     name: 'ProjectGroupCardsStub',
@@ -924,7 +951,7 @@ describe('project-management-page', () => {
     expect(container.textContent || '').not.toContain('Color Tag')
   })
 
-  test('card/list 两个视图分支仍能切换，部署入口只引导到正式运维页', async () => {
+  test('card/list 两个视图分支仍能切换，发布入口在工程管理内打开', async () => {
     primePageMocks()
 
     const { container } = await mountPage()
@@ -986,11 +1013,11 @@ describe('project-management-page', () => {
     ) as HTMLButtonElement
     deployButton.click()
     await nextTick()
-    expect(mockMessageInfo).toHaveBeenCalledWith(
-      '源码快照不能用于正式部署，已前往“运维管理”选择正式 Release 和运行环境。',
+    expect(container.querySelector('[data-testid="project-publish-dialog"]')?.textContent).toBe(
+      'publish:示例工程',
     )
+    expect(mockMessageInfo).not.toHaveBeenCalled()
     expect(mockRequestGet).not.toHaveBeenCalled()
-    expect(container.textContent || '').not.toContain('部署模式')
   })
 
   test('批量删除会复用删除影响评估与强制删除保护路径', async () => {
