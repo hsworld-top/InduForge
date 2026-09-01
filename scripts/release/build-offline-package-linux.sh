@@ -42,6 +42,38 @@ PRODUCT_INFRA_IMAGES=(
   "object-store"
 )
 
+BUSINESS_IMAGES=(
+  "induforge/edge:latest"
+  "induforge/control:latest"
+  "induforge/designer-code-server:4.131.0-node22-pnpm10.19.0"
+  "induforge/data:latest"
+)
+
+# 工程运行镜像只在 ARM64 Linux 节点执行。构建机仅使用 Docker，不导入 K3s。
+ARM64_RUNTIME_IMAGES=(
+  "induforge/project-gateway:1.0.0"
+  "induforge/project-runtime-api:1.0.0"
+  "induforge/runtime-engine:1.0.0"
+  "induforge/compute-sandbox:1.0.0"
+  "induforge/collector-engine:1.0.0"
+)
+
+ARM64_RUNTIME_DOCKERFILES=(
+  "runtime/project_gateway/Dockerfile"
+  "runtime/runtime_api/Dockerfile"
+  "runtime/runtime_engine/Dockerfile"
+  "compute_sandbox/Dockerfile"
+  "runtime/collector_engine/Dockerfile"
+)
+
+ARM64_RUNTIME_CONTEXTS=(
+  "runtime/project_gateway"
+  "runtime/runtime_api"
+  "runtime/runtime_engine"
+  "compute_sandbox"
+  "runtime/collector_engine"
+)
+
 PACKAGE_IMAGES=(
   "induforge/edge:latest"
   "induforge/control:latest"
@@ -129,11 +161,24 @@ build_business_images() {
   echo "构建边缘入口镜像..."
   docker build -t induforge/edge:latest -f "$REPO_ROOT/scripts/docker/edge/Dockerfile" "$REPO_ROOT"
 
-  echo "构建 ARM64 采集引擎镜像..."
-  docker build --platform linux/arm64 -t induforge/collector-engine:1.0.0 -f "$REPO_ROOT/runtime/collector_engine/Dockerfile" "$REPO_ROOT/runtime/collector_engine"
+  build_arm64_runtime_images
+}
 
-  echo "构建 ARM64 工程 Runtime API 镜像..."
-  docker build --platform linux/arm64 -t induforge/project-runtime-api:1.0.0 -f "$REPO_ROOT/runtime/runtime_api/Dockerfile" "$REPO_ROOT/runtime/runtime_api"
+build_arm64_runtime_images() {
+  local index image dockerfile context
+
+  if [ "${#ARM64_RUNTIME_IMAGES[@]}" -ne "${#ARM64_RUNTIME_DOCKERFILES[@]}" ] || [ "${#ARM64_RUNTIME_IMAGES[@]}" -ne "${#ARM64_RUNTIME_CONTEXTS[@]}" ]; then
+    echo "ARM64 运行镜像构建清单不一致" >&2
+    exit 1
+  fi
+
+  for index in "${!ARM64_RUNTIME_IMAGES[@]}"; do
+    image="${ARM64_RUNTIME_IMAGES[$index]}"
+    dockerfile="$REPO_ROOT/${ARM64_RUNTIME_DOCKERFILES[$index]}"
+    context="$REPO_ROOT/${ARM64_RUNTIME_CONTEXTS[$index]}"
+    echo "构建 ARM64 工程运行镜像: $image"
+    docker build --platform linux/arm64 -t "$image" -f "$dockerfile" "$context"
+  done
 }
 
 build_product_infra_images() {
@@ -171,4 +216,6 @@ main() {
   echo "测试安装包构建完成: $REPO_ROOT/dist/induforge-offline-package.tar.gz"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

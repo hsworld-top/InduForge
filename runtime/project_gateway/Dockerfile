@@ -1,9 +1,11 @@
 FROM golang:1.25-alpine AS build
+ARG TARGETOS=linux
+ARG TARGETARCH=arm64
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/project-gateway ./cmd/project-gateway
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-s -w' -o /out/project-gateway ./cmd/project-gateway
 
 # Release 子制品在 NodeAgent 激活的只读根目录中。入口脚本只解开 client
 # 到 emptyDir，绝不改写 Release，也不下载或解释外部路径。

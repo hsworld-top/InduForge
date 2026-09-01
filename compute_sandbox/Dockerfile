@@ -1,9 +1,11 @@
 FROM golang:1.25-bookworm AS builder
+ARG TARGETOS=linux
+ARG TARGETARCH=arm64
 WORKDIR /src
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/compute-sandbox ./cmd
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-s -w' -o /out/compute-sandbox ./cmd
 
 FROM node:22-bookworm-slim
 RUN apt-get update \
