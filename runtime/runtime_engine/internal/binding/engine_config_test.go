@@ -10,7 +10,7 @@ import (
 
 func TestBuildEngineConfigComputeBuildsV2WithoutSecretValues(t *testing.T) {
 	input := validInput(roleCompute)
-	config, err := BuildEngineConfig(input)
+	config, err := BuildEngineConfig(buildInput(input))
 	if err != nil {
 		t.Fatalf("build compute config: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestBuildEngineConfigComputeBuildsV2WithoutSecretValues(t *testing.T) {
 	if config.ComputeSandbox == nil || config.ComputeSandbox.ServerResourceRef != input.ComputeSandbox.ServerResourceRef || config.ComputeSandbox.CredentialSecretRef != input.ComputeSandbox.CredentialSecretRef {
 		t.Fatalf("compute sandbox reference mismatch: %+v", config.ComputeSandbox)
 	}
-	if len(config.ProducerAssignments) != 1 || config.ProducerAssignments[0].ProducerType != "compute" || config.ProducerAssignments[0].ComputeID != input.ComputeProducers[0].ComputeID {
+	if len(config.ProducerAssignments) != 1 || config.ProducerAssignments[0].ProducerType != "compute" || config.ProducerAssignments[0].ComputeID != "44444444-4444-4444-8444-444444444444" {
 		t.Fatalf("compute producer mismatch: %+v", config.ProducerAssignments)
 	}
 
@@ -47,7 +47,7 @@ func TestBuildEngineConfigComputeBuildsV2WithoutSecretValues(t *testing.T) {
 
 func TestBuildEngineConfigAlarmBuildsSingleAlarmProducer(t *testing.T) {
 	input := validInput(roleAlarm)
-	config, err := BuildEngineConfig(input)
+	config, err := BuildEngineConfig(buildInput(input))
 	if err != nil {
 		t.Fatalf("build alarm config: %v", err)
 	}
@@ -63,21 +63,21 @@ func TestBuildEngineConfigRejectsIncompleteOrInvalidTopology(t *testing.T) {
 	t.Run("deployment context missing", func(t *testing.T) {
 		input := validInput(roleCompute)
 		input.StateStore.Schema = ""
-		if _, err := BuildEngineConfig(input); err == nil || !strings.Contains(err.Error(), "stateStore.schema") {
+		if _, err := BuildEngineConfig(buildInput(input)); err == nil || !strings.Contains(err.Error(), "stateStore.schema") {
 			t.Fatalf("expected state-store context rejection, got %v", err)
 		}
 	})
 	t.Run("role boundary", func(t *testing.T) {
 		input := validInput(roleAlarm)
 		input.ComputeSandbox = &model.ComputeSandbox{ServerResourceRef: "site-resource://site-a/sandbox", CredentialSecretRef: "secret://site-a/sandbox"}
-		if _, err := BuildEngineConfig(input); err == nil || !strings.Contains(err.Error(), "不得声明 compute") {
+		if _, err := BuildEngineConfig(buildInput(input)); err == nil || !strings.Contains(err.Error(), "不得声明 compute") {
 			t.Fatalf("expected mixed-role rejection, got %v", err)
 		}
 	})
 	t.Run("formal validator", func(t *testing.T) {
 		input := validInput(roleCompute)
 		input.JetStream.Consumers[0].BackoffMS = []int64{5000, 1000}
-		if _, err := BuildEngineConfig(input); err == nil || !strings.Contains(err.Error(), "非递减") {
+		if _, err := BuildEngineConfig(buildInput(input)); err == nil || !strings.Contains(err.Error(), "非递减") {
 			t.Fatalf("expected formal validator error, got %v", err)
 		}
 	})
@@ -88,14 +88,13 @@ func validInput(role string) Input {
 		TenantID:          "tenant-a",
 		SiteID:            "site-a",
 		NodeID:            "node-a",
+		InstanceID:        "runtime-engine-" + role + "-0",
 		ProjectID:         "11111111-1111-4111-8111-111111111111",
 		DeploymentID:      "deployment-a",
 		AccountID:         "account-a",
 		Role:              role,
-		ProjectArtifact:   model.ArtifactRef{ArtifactID: "runtime-artifact-a", ArtifactRevision: 1, ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		ArtifactMountPath: "/opt/induforge/release/current",
 		ArtifactFile:      "runtime-project-artifact.json",
-		RoleOwnership:     model.Ownership{OwnerID: "runtime-engine-" + role + "-0", Epoch: 1},
 		JetStream: JetStreamInput{
 			Endpoint:             "nats://nats:4222",
 			ServerResourceRef:    "site-resource://site-a/nats",
@@ -113,11 +112,18 @@ func validInput(role string) Input {
 		input.ComputeSandbox = &model.ComputeSandbox{ServerResourceRef: "site-resource://site-a/compute-sandbox", CredentialSecretRef: "secret://site-a/deployment-a/compute-sandbox"}
 		input.ComputeSandboxEndpoint = "http://compute-sandbox:18103"
 		input.ComputeSandboxSecretFile = "secrets/compute-sandbox.json"
-		input.ComputeProducers = []ComputeProducer{{ComputeID: "44444444-4444-4444-8444-444444444444", Ownership: model.Ownership{OwnerID: "runtime-engine-compute-0", Epoch: 1}}}
-	} else {
-		input.AlarmOwnership = model.Ownership{OwnerID: "runtime-engine-alarm-0", Epoch: 1}
 	}
 	return input
+}
+
+func buildInput(input Input) BuildInput {
+	build := BuildInput{Input: input, ProjectArtifact: model.ArtifactRef{ArtifactID: "11111111-1111-4111-8111-111111111111", ArtifactRevision: 1, ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, RoleOwnership: model.Ownership{OwnerID: "runtime-engine-" + input.Role + "-0", Epoch: 1}}
+	if input.Role == roleCompute {
+		build.ComputeProducers = []ComputeProducer{{ComputeID: "44444444-4444-4444-8444-444444444444", Ownership: model.Ownership{OwnerID: "runtime-engine-compute-0", Epoch: 1}}}
+	} else {
+		build.AlarmOwnership = model.Ownership{OwnerID: "runtime-engine-alarm-0", Epoch: 1}
+	}
+	return build
 }
 
 func consumers(role string) []model.Consumer {

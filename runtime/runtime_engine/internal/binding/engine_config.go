@@ -22,16 +22,13 @@ type Input struct {
 	TenantID          string                `json:"tenantId"`
 	SiteID            string                `json:"siteId"`
 	NodeID            string                `json:"nodeId"`
+	InstanceID        string                `json:"instanceId"`
 	ProjectID         string                `json:"projectId"`
 	DeploymentID      string                `json:"deploymentId"`
 	AccountID         string                `json:"accountId"`
 	Role              string                `json:"role"`
-	ProjectArtifact   model.ArtifactRef     `json:"projectArtifact"`
 	ArtifactMountPath string                `json:"artifactMountPath"`
 	ArtifactFile      string                `json:"artifactFile"`
-	RoleOwnership     model.Ownership       `json:"roleOwnership"`
-	ComputeProducers  []ComputeProducer     `json:"computeProducers,omitempty"`
-	AlarmOwnership    model.Ownership       `json:"alarmOwnership,omitempty"`
 	JetStream         JetStreamInput        `json:"jetStream"`
 	StateStore        StateStoreInput       `json:"stateStore"`
 	ComputeSandbox    *model.ComputeSandbox `json:"computeSandbox,omitempty"`
@@ -39,6 +36,16 @@ type Input struct {
 	// EngineConfig 本身只可保存 ComputeSandbox 中的两个受控引用。
 	ComputeSandboxEndpoint   string `json:"computeSandboxEndpoint,omitempty"`
 	ComputeSandboxSecretFile string `json:"computeSandboxSecretFile,omitempty"`
+}
+
+// BuildInput 是安全解包并验证 runtime-project-artifact 后才可获得的内部快照。
+// 这些字段不得出现在 runtime-binding.input.v1，避免 Ops 输入伪造 producer fence。
+type BuildInput struct {
+	Input
+	ProjectArtifact  model.ArtifactRef
+	RoleOwnership    model.Ownership
+	ComputeProducers []ComputeProducer
+	AlarmOwnership   model.Ownership
 }
 
 // ComputeProducer 是 compute role 对一个计算单元的唯一 producer fencing 绑定。
@@ -77,7 +84,7 @@ type StateStoreInput struct {
 // BuildEngineConfig 构造仅运行 compute 或 alarm 的 runtime-engine.config.v2。
 // 它不加载文件、不解析索引、也不接触任何 secret 值；调用方必须在此之前完成
 // 资源与 secret 引用的受控准备。
-func BuildEngineConfig(input Input) (model.EngineConfig, error) {
+func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 	if err := validateInput(input); err != nil {
 		return model.EngineConfig{}, err
 	}
@@ -147,11 +154,12 @@ func BuildEngineConfig(input Input) (model.EngineConfig, error) {
 	return config, nil
 }
 
-func validateInput(input Input) error {
+func validateInput(input BuildInput) error {
 	for label, value := range map[string]string{
 		"tenantId":                       input.TenantID,
 		"siteId":                         input.SiteID,
 		"nodeId":                         input.NodeID,
+		"instanceId":                     input.InstanceID,
 		"projectId":                      input.ProjectID,
 		"deploymentId":                   input.DeploymentID,
 		"accountId":                      input.AccountID,

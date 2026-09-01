@@ -14,6 +14,7 @@ import (
 
 	"github.com/indu-forge/runtime-engine/internal/binding"
 	"github.com/indu-forge/runtime-engine/internal/loader"
+	"github.com/indu-forge/runtime-engine/internal/model"
 	"github.com/indu-forge/runtime-engine/internal/provision"
 )
 
@@ -78,11 +79,11 @@ func Prepare(in Input) error {
 	if err != nil {
 		return fmt.Errorf("读取项目制品失败")
 	}
-	d := sha256.Sum256(b)
-	if in.Binding.ProjectArtifact.ArtifactDigest != "sha256:"+hex.EncodeToString(d[:]) {
-		return fmt.Errorf("项目制品摘要不匹配")
+	derived, err := deriveBuildInput(in.Binding, b)
+	if err != nil {
+		return fmt.Errorf("派生项目制品角色绑定失败: %w", err)
 	}
-	config, err := binding.BuildEngineConfig(in.Binding)
+	config, err := binding.BuildEngineConfig(derived)
 	if err != nil {
 		return fmt.Errorf("配置构造失败: %w", err)
 	}
@@ -107,12 +108,9 @@ func Prepare(in Input) error {
 		return fmt.Errorf("写入配置校验文件失败")
 	}
 	readOnly := false
-	loaded, err := loader.Load(loader.Options{ConfigPath: checkPath, ConfigRoot: in.ArtifactDir, RequireReadOnlyMount: &readOnly})
+	_, err = loader.Load(loader.Options{ConfigPath: checkPath, ConfigRoot: in.ArtifactDir, RequireReadOnlyMount: &readOnly})
 	if err != nil {
 		return fmt.Errorf("项目制品与角色分配不匹配")
-	}
-	if in.Binding.Role == "alarm" && len(loaded.Artifact.AlarmItems) == 0 {
-		return fmt.Errorf("报警角色缺少报警制品")
 	}
 	index, err := binding.BuildResolverIndex(in.Binding)
 	if err != nil {
@@ -124,8 +122,66 @@ func Prepare(in Input) error {
 	return nil
 }
 
+// deriveBuildInput 只以已安全解包的 Artifact 原始 bytes 决定 Artifact ref 与
+// producer fencing；部署输入不能覆盖 compute/alarm 的 ID、revision 或 ownership。
+func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, error) {
+	var artifact model.ProjectArtifact
+	if err := json.Unmarshal(raw, &artifact); err != nil {
+		return binding.BuildInput{}, fmt.Errorf("项目制品 JSON 非法")
+	}
+	digest := sha256.Sum256(raw)
+	build := binding.BuildInput{
+		Input: input,
+		ProjectArtifact: model.ArtifactRef{
+			ArtifactID:       artifact.ProjectID,
+			ArtifactRevision: artifactRevision(artifact.ProjectArtifactVersion),
+			ArtifactDigest:   "sha256:" + hex.EncodeToString(digest[:]),
+		},
+		RoleOwnership: model.Ownership{OwnerID: input.InstanceID, Epoch: 1},
+	}
+	if build.ProjectArtifact.ArtifactRevision < 1 {
+		return binding.BuildInput{}, fmt.Errorf("项目制品版本非法")
+	}
+	switch input.Role {
+	case "compute":
+		for _, unit := range artifact.ComputeUnits {
+			if !unit.Enabled {
+				continue
+			}
+			if unit.Revision < 1 {
+				return binding.BuildInput{}, fmt.Errorf("compute %q revision 非法", unit.ID)
+			}
+			build.ComputeProducers = append(build.ComputeProducers, binding.ComputeProducer{ComputeID: unit.ID, Ownership: model.Ownership{OwnerID: input.InstanceID, Epoch: unit.Revision}})
+		}
+		if len(build.ComputeProducers) == 0 {
+			return binding.BuildInput{}, fmt.Errorf("compute 角色缺少可用 producer")
+		}
+	case "alarm":
+		var epoch int64
+		for _, item := range artifact.AlarmItems {
+			if item.Enabled && item.Revision > epoch {
+				epoch = item.Revision
+			}
+		}
+		if epoch < 1 {
+			return binding.BuildInput{}, fmt.Errorf("alarm 角色缺少可用 producer")
+		}
+		build.AlarmOwnership = model.Ownership{OwnerID: input.InstanceID, Epoch: epoch}
+	default:
+		return binding.BuildInput{}, fmt.Errorf("RuntimeEngine role 必须为 compute 或 alarm")
+	}
+	return build, nil
+}
+
+func artifactRevision(version string) int64 {
+	if version == "1.0" {
+		return 1
+	}
+	return 0
+}
+
 func validateInput(in Input) error {
-	if strings.TrimSpace(in.ReleaseID) == "" || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !strings.HasPrefix(in.RuntimeArtifactSHA256, "sha256:") {
+	if strings.TrimSpace(in.ReleaseID) == "" || strings.TrimSpace(in.Binding.InstanceID) == "" || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !strings.HasPrefix(in.RuntimeArtifactSHA256, "sha256:") {
 		return fmt.Errorf("输入路径或 Release 身份非法")
 	}
 	for _, p := range []string{in.Binding.JetStream.CredentialSecretFile, in.Binding.StateStore.CredentialSecretFile, in.Binding.ComputeSandboxSecretFile} {

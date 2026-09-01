@@ -93,7 +93,7 @@ func TestBuildResolverIndexIsDeterministic(t *testing.T) {
 
 func TestWriteBundleUsesPrivateFilesAndRestoresOldBundleOnInstallFailure(t *testing.T) {
 	input := validInput(roleCompute)
-	config, err := BuildEngineConfig(input)
+	config, err := BuildEngineConfig(buildInput(input))
 	if err != nil {
 		t.Fatal(err)
 	}

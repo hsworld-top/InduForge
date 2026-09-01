@@ -12,6 +12,39 @@
     "runtimeArtifactSha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "artifactDir": {"type": "string", "pattern": "^/work/"},
     "bundleDir": {"type": "string", "pattern": "^/work/"},
-    "binding": {"type": "object"}
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "siteId", "nodeId", "instanceId", "projectId", "deploymentId", "accountId", "role", "artifactMountPath", "artifactFile", "jetStream", "stateStore"],
+      "properties": {
+        "tenantId": {"type": "string", "minLength": 1},
+        "siteId": {"type": "string", "minLength": 1},
+        "nodeId": {"type": "string", "minLength": 1},
+        "instanceId": {"type": "string", "minLength": 1},
+        "projectId": {"type": "string", "minLength": 1},
+        "deploymentId": {"type": "string", "minLength": 1},
+        "accountId": {"type": "string", "minLength": 1},
+        "role": {"enum": ["compute", "alarm"]},
+        "artifactMountPath": {"type": "string", "pattern": "^/work/"},
+        "artifactFile": {"const": "runtime-project-artifact.json"},
+        "jetStream": {
+          "type": "object", "additionalProperties": false,
+          "required": ["endpoint", "serverResourceRef", "credentialSecretRef", "credentialSecretFile", "dataRawStream", "dataDerivedStream", "eventStream", "deadLetterStream", "consumers"],
+          "properties": {
+            "endpoint": {"type": "string", "minLength": 1}, "serverResourceRef": {"type": "string", "minLength": 1}, "credentialSecretRef": {"type": "string", "minLength": 1}, "credentialSecretFile": {"type": "string", "minLength": 1},
+            "dataRawStream": {"type": "string", "minLength": 1}, "dataDerivedStream": {"type": "string", "minLength": 1}, "eventStream": {"type": "string", "minLength": 1}, "deadLetterStream": {"type": "string", "minLength": 1},
+            "consumers": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["role", "consumerKey", "stream", "durableName", "filterSubject", "ackPolicy", "ackWaitMs", "maxDeliver", "backoffMs", "maxAckPending", "maxWaiting", "maxRequestBatch", "maxRequestExpiresMs", "maxRequestMaxBytes", "deadLetterSubject"], "properties": {"role": {"type": "string"}, "consumerKey": {"type": "string"}, "stream": {"type": "string"}, "durableName": {"type": "string"}, "filterSubject": {"type": "string"}, "ackPolicy": {"type": "string"}, "ackWaitMs": {"type": "integer"}, "maxDeliver": {"type": "integer"}, "backoffMs": {"type": "array", "items": {"type": "integer"}}, "maxAckPending": {"type": "integer"}, "maxWaiting": {"type": "integer"}, "maxRequestBatch": {"type": "integer"}, "maxRequestExpiresMs": {"type": "integer"}, "maxRequestMaxBytes": {"type": "integer"}, "deadLetterSubject": {"type": "string"}}}}
+          }
+        },
+        "stateStore": {"type": "object", "additionalProperties": false, "required": ["resourceRef", "credentialSecretRef", "credentialSecretFile", "schema"], "properties": {"resourceRef": {"type": "string", "minLength": 1}, "credentialSecretRef": {"type": "string", "minLength": 1}, "credentialSecretFile": {"type": "string", "minLength": 1}, "schema": {"type": "string", "minLength": 1}}},
+        "computeSandbox": {"type": "object", "additionalProperties": false, "required": ["serverResourceRef", "credentialSecretRef"], "properties": {"serverResourceRef": {"type": "string", "minLength": 1}, "credentialSecretRef": {"type": "string", "minLength": 1}}},
+        "computeSandboxEndpoint": {"type": "string"},
+        "computeSandboxSecretFile": {"type": "string"}
+      },
+      "allOf": [
+        {"if": {"properties": {"role": {"const": "compute"}}}, "then": {"required": ["computeSandbox", "computeSandboxEndpoint", "computeSandboxSecretFile"]}},
+        {"if": {"properties": {"role": {"const": "alarm"}}}, "then": {"not": {"anyOf": [{"required": ["computeSandbox"]}, {"required": ["computeSandboxEndpoint"]}, {"required": ["computeSandboxSecretFile"]}]}}}
+      ]
+    }
   }
 }
