@@ -1,16 +1,60 @@
 #!/bin/sh
 set -eu
 
-CENTER_MANAGER=/opt/induforge/center-k3s/centerctl
+CENTER_MANAGER=${INDUFORGE_CENTER_MANAGER:-/opt/induforge/center-k3s/centerctl}
+COLOR_ENABLED=0
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
+  COLOR_ENABLED=1
+fi
+
+if [ "$COLOR_ENABLED" -eq 1 ]; then
+  RESET=$(printf '\033[0m')
+  BOLD=$(printf '\033[1m')
+  DIM=$(printf '\033[2m')
+  CYAN=$(printf '\033[36m')
+  GREEN=$(printf '\033[32m')
+  RED=$(printf '\033[31m')
+else
+  RESET= BOLD= DIM= CYAN= GREEN= RED=
+fi
 
 usage() {
-  cat >&2 <<'EOF'
-Usage:
-  induforge status
-  induforge doctor
+  cat <<EOF
+${BOLD}InduForge 中心开发系统运维${RESET}
+
+用法：
+  induforge status [--json]
+  induforge doctor [--json]
   induforge logs [control|edge|database|cache|object-store]
   induforge restart <control|edge|database|cache|object-store>
+  induforge help
+
+环境变量：
+  NO_COLOR=1    禁用终端颜色
 EOF
+}
+
+banner() {
+  [ "$COLOR_ENABLED" -eq 1 ] || return 0
+  printf '%s%s  ██╗███████╗%s\n' "$BOLD" "$CYAN" "$RESET"
+  printf '%s%s  ██║██╔════╝%s   %sInduForge%s\n' "$BOLD" "$CYAN" "$RESET" "$BOLD" "$RESET"
+  printf '%s%s  ██║█████╗%s     %sIndustrial Runtime Platform%s\n' "$BOLD" "$CYAN" "$RESET" "$DIM" "$RESET"
+  printf '%s%s  ██║██╔══╝%s\n' "$BOLD" "$CYAN" "$RESET"
+  printf '%s%s  ██║██║%s\n' "$BOLD" "$CYAN" "$RESET"
+  printf '%s%s  ╚═╝╚═╝%s\n\n' "$BOLD" "$CYAN" "$RESET"
+}
+
+section() {
+  printf '%s%s%s\n' "$BOLD" "$1" "$RESET"
+  printf '%s%s%s\n' "$DIM" '────────────────────────────────────────────────' "$RESET"
+}
+
+state_text() {
+  if [ "$1" = healthy ]; then
+    printf '%s● 正常%s' "$GREEN" "$RESET"
+  else
+    printf '%s● 异常%s' "$RED" "$RESET"
+  fi
 }
 
 service_name() {
@@ -20,50 +64,114 @@ service_name() {
     database) echo center-meta-store ;;
     cache) echo center-cache-store ;;
     object-store) echo center-object-store ;;
-    *) echo "unsupported center service: $1" >&2; exit 2 ;;
+    *) echo "不支持的开发系统服务：$1" >&2; exit 2 ;;
   esac
 }
 
-if [ ! -x "$CENTER_MANAGER" ]; then
-  echo "InduForge center manager is not installed" >&2
-  exit 1
-fi
+display_name() {
+  case "$1" in
+    control) echo 控制服务 ;;
+    edge) echo IDE 访问入口 ;;
+    database) echo 中心数据库 ;;
+    cache) echo 中心缓存 ;;
+    object-store) echo 对象存储 ;;
+  esac
+}
+
+require_manager() {
+  if [ ! -x "$CENTER_MANAGER" ]; then
+    echo "InduForge 开发系统管理程序未安装" >&2
+    exit 1
+  fi
+}
+
+run_status() {
+  require_manager
+  json=0
+  if [ "${2:-}" = "--json" ] && [ "$#" -eq 2 ]; then
+    json=1
+  elif [ "$#" -ne 1 ]; then
+    usage >&2
+    exit 2
+  fi
+  summary=$("$CENTER_MANAGER" summary)
+  if [ "$json" -eq 1 ]; then
+    services=
+    overall=healthy
+    while IFS='|' read -r key status; do
+      [ -n "$key" ] || continue
+      if [ "$status" != healthy ]; then overall=unhealthy; fi
+      if [ -n "$services" ]; then services="$services,"; fi
+      services="$services{\"name\":\"$key\",\"status\":\"$status\"}"
+    done <<EOF
+$summary
+EOF
+    printf '{"status":"%s","services":[%s]}\n' "$overall" "$services"
+    return
+  fi
+  banner
+  section "中心开发系统"
+  printf '  %s%-20s %s%s\n' "$DIM" "服务" "状态" "$RESET"
+  while IFS='|' read -r key status; do
+    [ -n "$key" ] || continue
+    printf '  %-20s %s\n' "$(display_name "$key")" "$(state_text "$status")"
+  done <<EOF
+$summary
+EOF
+  printf '\n  %s只展示中心开发系统；物理节点和运行环境请在 Web 运维管理中查看。%s\n' "$DIM" "$RESET"
+}
+
+run_doctor() {
+  require_manager
+  json=0
+  if [ "${2:-}" = "--json" ] && [ "$#" -eq 2 ]; then
+    json=1
+  elif [ "$#" -ne 1 ]; then
+    usage >&2
+    exit 2
+  fi
+  if diagnostic=$("$CENTER_MANAGER" doctor 2>&1); then
+    if [ "$json" -eq 1 ]; then
+      printf '{"status":"healthy"}\n'
+      return
+    fi
+    banner
+    section "开发系统诊断"
+    printf '  %s✓%s 开发系统调度基础可用\n' "$GREEN" "$RESET"
+    printf '  %s✓%s 所有开发系统服务正常\n' "$GREEN" "$RESET"
+    printf '  %s✓%s 控制服务入口可用\n\n' "$GREEN" "$RESET"
+    printf '  %s%s诊断通过%s\n' "$BOLD" "$GREEN" "$RESET"
+  else
+    if [ "$json" -eq 1 ]; then printf '{"status":"unhealthy"}\n'; else echo "$diagnostic" >&2; fi
+    exit 1
+  fi
+}
 
 command=${1:-}
 case "$command" in
-  status)
-    if [ "$#" -ne 1 ]; then usage; exit 2; fi
-    exec "$CENTER_MANAGER" summary
-    ;;
-  doctor)
-    if [ "$#" -ne 1 ]; then usage; exit 2; fi
-    if diagnostic=$("$CENTER_MANAGER" doctor 2>&1); then
-      echo "InduForge 中心系统诊断：通过"
-    else
-      echo "$diagnostic" >&2
-      exit 1
-    fi
-    ;;
+  status) run_status "$@" ;;
+  doctor) run_doctor "$@" ;;
   logs)
-    if [ "$#" -gt 2 ]; then usage; exit 2; fi
-    mapped_service=$(service_name "${2:-control}") || exit $?
+    require_manager
+    if [ "$#" -gt 2 ]; then usage >&2; exit 2; fi
+    public_service=${2:-control}
+    mapped_service=$(service_name "$public_service") || exit $?
+    banner
+    section "$(display_name "$public_service") 日志"
     exec "$CENTER_MANAGER" logs "$mapped_service"
     ;;
   restart)
-    if [ "$#" -ne 2 ]; then usage; exit 2; fi
+    require_manager
+    if [ "$#" -ne 2 ]; then usage >&2; exit 2; fi
     mapped_service=$(service_name "$2") || exit $?
     if restart_result=$("$CENTER_MANAGER" restart "$mapped_service" 2>&1); then
-      echo "$2 服务重启已触发"
+      banner
+      printf '%s✓%s %s重启请求已提交\n' "$GREEN" "$RESET" "$(display_name "$2")"
     else
       echo "$restart_result" >&2
       exit 1
     fi
     ;;
-  help|-h|--help)
-    usage
-    ;;
-  *)
-    usage
-    exit 2
-    ;;
+  help|-h|--help) banner; usage ;;
+  *) usage >&2; exit 2 ;;
 esac

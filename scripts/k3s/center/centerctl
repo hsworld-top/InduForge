@@ -202,25 +202,20 @@ show_status() {
 
 show_summary() {
   require_root status
-  node_ready=$(kubectl_cmd get node "$CENTER_NODE_NAME" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
-  if [ "$node_ready" = "True" ]; then center_status="正常"; else center_status="异常"; fi
-  printf 'InduForge 中心系统：%s\n' "$center_status"
-  printf '%s\t%s\t%s\n' "服务" "状态" "位置"
   for item in \
-    'control|控制服务|deployment' \
-    'edge|访问入口|deployment' \
-    'meta-store|中心数据库|statefulset' \
-    'cache-store|中心缓存|statefulset' \
-    'object-store|对象存储|statefulset'; do
-    short_name=${item%%|*}
+    'control|center-control|deployment' \
+    'edge|center-edge|deployment' \
+    'database|center-meta-store|statefulset' \
+    'cache|center-cache-store|statefulset' \
+    'object-store|center-object-store|statefulset'; do
+    public_name=${item%%|*}
     rest=${item#*|}
-    display_name=${rest%%|*}
+    workload=${rest%%|*}
     kind=${rest#*|}
-    workload="center-$short_name"
     replicas=$(kubectl_cmd -n "$NAMESPACE" get "$kind/$workload" -o jsonpath='{.spec.replicas}')
     ready=$(kubectl_cmd -n "$NAMESPACE" get "$kind/$workload" -o jsonpath='{.status.readyReplicas}')
-    if [ "${ready:-0}" = "$replicas" ]; then state="正常"; else state="异常"; fi
-    printf '%s\t%s\t%s\n' "$display_name" "$state" "中心节点"
+    if [ "${ready:-0}" = "$replicas" ]; then state=healthy; else state=unhealthy; fi
+    printf '%s|%s\n' "$public_name" "$state"
   done
 }
 

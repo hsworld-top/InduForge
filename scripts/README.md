@@ -68,6 +68,7 @@ scripts/docker/
 scripts/k3s/center/
   center-system.yaml.template   # induforge-system 中心工作负载
   induforge                     # 安装为统一的 induforge 运维命令
+  induforge_test.sh             # 品牌终端、纯文本和 JSON 输出回归测试
   centerctl                     # 中心安装器使用的内部实现
   migrate-docker-center.sh      # 旧 Docker/宿主中心的一次性可回滚迁移
 ```
