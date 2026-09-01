@@ -5,6 +5,8 @@ ENV GOPROXY=https://goproxy.cn,direct
 WORKDIR /src
 
 COPY go.mod go.sum ./
+# go.mod 使用本地 socket.io replace，依赖下载前必须先提供该模块元数据。
+COPY third_party/socket.io-golang ./third_party/socket.io-golang
 RUN go mod download
 
 COPY . .
