@@ -62,7 +62,7 @@ func TestDockerFrontendBuildRunnerUsesReleaseScopedVolumeSpec(t *testing.T) {
 	if len(e.spec.Command) != 1 || strings.Contains(e.spec.Command[0], "cp -a /opt/induforge/pnpm-store/.") || !strings.Contains(e.spec.Command[0], "chmod u+rw /tmp/pnpm-store/v11/index.db") || !strings.Contains(e.spec.Command[0], "find files -type f -exec sh -c") || !strings.Contains(e.spec.Command[0], "--config.trust-lockfile=true") || !strings.Contains(e.spec.Command[0], "--package-import-method=copy") {
 		t.Fatal("构建器必须只覆盖小索引并复用镜像只读 files")
 	}
-	if strings.Contains(e.spec.Command[0], "/build/") || !strings.Contains(e.spec.Command[0], "/output/src") || !strings.Contains(e.spec.Command[0], "/output/dist") || !e.spec.WorkspaceReadOnly {
+	if strings.Contains(e.spec.Command[0], "/build/") || strings.Contains(e.spec.Command[0], "pnpm run build") || !strings.Contains(e.spec.Command[0], "/output/src") || !strings.Contains(e.spec.Command[0], "pnpm exec vite build --outDir /output/dist --emptyOutDir") || !e.spec.WorkspaceReadOnly {
 		t.Fatal("源码必须只读，构建副本和产物必须写入独立 output 挂载")
 	}
 	if out.Cleanup() == nil {
@@ -100,6 +100,8 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 			w.WriteHeader(204)
 		case "/v1.47/containers/build/wait":
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 0})
+		case "/v1.47/containers/build/logs":
+			_, _ = w.Write([]byte("vite build complete"))
 		case "/v1.47/containers/build":
 			removed = true
 			w.WriteHeader(204)

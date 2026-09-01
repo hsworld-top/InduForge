@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -113,7 +114,7 @@ func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, pr
 	buildID := uuid.NewString()
 	// 大型内容寻址 files 始终留在镜像只读层；每次构建只在 tmpfs 复制 27MB 级索引和
 	// 离线策略元数据，依赖安装结果与本次输出一起清理，绝不占用工程共享卷。
-	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), WorkspaceReadOnly: true, MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"mkdir -p /tmp/home /tmp/corepack /tmp/pnpm-cache /tmp/pnpm-store/v11/files /output/src /output/dist; cp -a /opt/induforge/corepack/. /tmp/corepack/; cp /opt/induforge/pnpm-store/v11/index.db /tmp/pnpm-store/v11/; chmod u+rw /tmp/pnpm-store/v11/index.db; cp -a /opt/induforge/pnpm-store/v11/projects /tmp/pnpm-store/v11/projects; chmod -R u+rwX /tmp/pnpm-store/v11/projects; cd /opt/induforge/pnpm-store/v11; find files -type f -exec sh -c 'for rel do mkdir -p \"/tmp/pnpm-store/v11/$(dirname \"$rel\")\"; ln -s \"/opt/induforge/pnpm-store/v11/$rel\" \"/tmp/pnpm-store/v11/$rel\"; done' sh {} +; if test -d /opt/induforge/pnpm-store/v11/file+; then cp -a /opt/induforge/pnpm-store/v11/file+ /tmp/pnpm-store/v11/file+; chmod -R u+rwX /tmp/pnpm-store/v11/file+; fi; cp -a /source/. /output/src; cd /output/src; corepack pnpm install --config.trust-lockfile=true --frozen-lockfile --offline --package-import-method=copy; corepack pnpm run build -- --outDir /output/dist"}}
+	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), WorkspaceReadOnly: true, MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"mkdir -p /tmp/home /tmp/corepack /tmp/pnpm-cache /tmp/pnpm-store/v11/files /output/src /output/dist; cp -a /opt/induforge/corepack/. /tmp/corepack/; cp /opt/induforge/pnpm-store/v11/index.db /tmp/pnpm-store/v11/; chmod u+rw /tmp/pnpm-store/v11/index.db; cp -a /opt/induforge/pnpm-store/v11/projects /tmp/pnpm-store/v11/projects; chmod -R u+rwX /tmp/pnpm-store/v11/projects; cd /opt/induforge/pnpm-store/v11; find files -type f -exec sh -c 'for rel do mkdir -p \"/tmp/pnpm-store/v11/$(dirname \"$rel\")\"; ln -s \"/opt/induforge/pnpm-store/v11/$rel\" \"/tmp/pnpm-store/v11/$rel\"; done' sh {} +; if test -d /opt/induforge/pnpm-store/v11/file+; then cp -a /opt/induforge/pnpm-store/v11/file+ /tmp/pnpm-store/v11/file+; chmod -R u+rwX /tmp/pnpm-store/v11/file+; fi; cp -a /source/. /output/src; cd /output/src; corepack pnpm install --config.trust-lockfile=true --frozen-lockfile --offline --package-import-method=copy; corepack pnpm exec vite build --outDir /output/dist --emptyOutDir"}}
 	if err := r.engine.Run(buildCtx, spec); err != nil {
 		_ = os.RemoveAll(outputRoot)
 		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建失败: %w", err)
@@ -124,6 +125,7 @@ func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, pr
 		_ = os.RemoveAll(outputRoot)
 		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建未生成 dist 目录: %s", buildOutputSummary(outputRoot))
 	}
+	log.Printf("Release 前端构建输出 projectId=%s versionId=%s items=%s", project.ID, version.ID, buildOutputSummary(outputRoot))
 	return FrontendBuildOutput{DistDir: dist, Cleanup: func() error { return os.RemoveAll(outputRoot) }}, nil
 }
 
@@ -301,6 +303,8 @@ func (c *dockerFrontendClient) Run(ctx context.Context, s dockerFrontendSpec) er
 		logs := c.logs(ctx, created.ID)
 		return fmt.Errorf("前端构建容器退出码 %d: %s", wait.StatusCode, logs)
 	}
+	// 成功时仅记录 stdout/stderr 的受限摘要长度；不把用户构建脚本的原文写入中心日志。
+	log.Printf("受控前端构建容器完成 name=%s exitCode=0 logBytes=%d", s.Name, len(c.logs(context.Background(), created.ID)))
 	return nil
 }
 func (c *dockerFrontendClient) logs(ctx context.Context, id string) string {
