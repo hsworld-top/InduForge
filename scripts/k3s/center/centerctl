@@ -1,0 +1,253 @@
+#!/bin/sh
+set -eu
+
+NAMESPACE="induforge-system"
+SCRIPT_PATH=$0
+while [ -L "$SCRIPT_PATH" ]; do
+  link_target=$(readlink "$SCRIPT_PATH")
+  case "$link_target" in
+    /*) SCRIPT_PATH=$link_target ;;
+    *) SCRIPT_PATH=$(dirname -- "$SCRIPT_PATH")/$link_target ;;
+  esac
+done
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
+CONFIG_FILE=${IF_CENTER_CONFIG_FILE:-/etc/induforge/center-k3s.conf}
+if [ -f "$CONFIG_FILE" ]; then
+  # 该文件由中心安装流程生成且仅允许 root 修改，用于保证故障时无需依赖交互式环境变量即可诊断。
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE"
+fi
+K3S_BIN=${IF_CENTER_K3S_BIN:-/usr/local/bin/k3s}
+KUBECONFIG_PATH=${IF_CENTER_KUBECONFIG:-/var/lib/induforge/k3s/server/cred/admin.kubeconfig}
+CONTAINERD_ADDRESS=${IF_CENTER_CONTAINERD_ADDRESS:-/run/k3s/containerd/containerd.sock}
+CENTER_NODE_NAME=${IF_CENTER_NODE_NAME:-${CENTER_NODE_NAME:-}}
+CONTROL_IMAGE=${IF_CENTER_CONTROL_IMAGE:-${CONTROL_IMAGE:-induforge/control:latest}}
+EDGE_IMAGE=${IF_CENTER_EDGE_IMAGE:-${EDGE_IMAGE:-induforge/edge:latest}}
+DATA_ROOT=${IF_CENTER_DATA_ROOT:-${DATA_ROOT:-/var/lib/induforge/center}}
+HTTP_PORT=${IF_EDGE_HOST_PORT:-${HTTP_PORT:-18080}}
+HTTPS_PORT=${IF_EDGE_TLS_HOST_PORT:-${HTTPS_PORT:-18443}}
+DOCKER_GID=${IF_CENTER_DOCKER_GID:-${DOCKER_GID:-}}
+
+usage() {
+  echo "Usage: centerctl <render|import-images|apply|status|doctor|logs|restart> [arguments]" >&2
+  exit 2
+}
+
+containerd_images() {
+  "$K3S_BIN" ctr --address "$CONTAINERD_ADDRESS" --namespace k8s.io images list -q
+}
+
+require_center_images() {
+  available=$(containerd_images)
+  for image in \
+    "$CONTROL_IMAGE" "$EDGE_IMAGE" \
+    docker.io/timescale/timescaledb:2.26.4-pg16 \
+    docker.io/library/redis:7.2-alpine \
+    docker.io/chrislusf/seaweedfs:3.85 \
+    docker.io/rancher/mirrored-library-busybox:1.37.0; do
+    canonical=$image
+    case "$canonical" in */*) ;;
+      *) canonical="docker.io/library/$canonical" ;;
+    esac
+    case "$canonical" in
+      */*/*) ;;
+      *) canonical="docker.io/$canonical" ;;
+    esac
+    if ! printf '%s\n' "$available" | grep -Fxq "$canonical"; then
+      echo "required center image is not loaded in K3s: $canonical" >&2
+      exit 1
+    fi
+  done
+}
+
+import_images() {
+  require_root import-images
+  image_dir=${1:-}
+  case "$image_dir" in
+    ''|/|*[!a-zA-Z0-9._/-]*) echo "safe image directory is required" >&2; exit 2 ;;
+    /*) ;;
+    *) echo "image directory must be absolute" >&2; exit 2 ;;
+  esac
+  if [ ! -d "$image_dir" ] || [ -L "$image_dir" ]; then
+    echo "image directory does not exist or is unsafe: $image_dir" >&2
+    exit 1
+  fi
+  found=0
+  for archive in "$image_dir"/*.tar; do
+    if [ ! -f "$archive" ] || [ -L "$archive" ]; then
+      continue
+    fi
+    found=1
+    echo "importing center image archive: $archive"
+    "$K3S_BIN" ctr --address "$CONTAINERD_ADDRESS" --namespace k8s.io images import "$archive"
+  done
+  if [ "$found" -eq 0 ]; then
+    echo "no image archives found under $image_dir" >&2
+    exit 1
+  fi
+}
+
+kubectl_cmd() {
+  "$K3S_BIN" kubectl --kubeconfig "$KUBECONFIG_PATH" "$@"
+}
+
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "centerctl $1 must run as root" >&2
+    exit 1
+  fi
+}
+
+validate_settings() {
+  case "$CENTER_NODE_NAME" in
+    ''|*[!a-zA-Z0-9._-]*) echo "IF_CENTER_NODE_NAME is missing or invalid" >&2; exit 1 ;;
+  esac
+  case "$CONTROL_IMAGE" in
+    ''|*[!a-zA-Z0-9._/:@-]*) echo "IF_CENTER_CONTROL_IMAGE is invalid" >&2; exit 1 ;;
+  esac
+  case "$EDGE_IMAGE" in
+    ''|*[!a-zA-Z0-9._/:@-]*) echo "IF_CENTER_EDGE_IMAGE is invalid" >&2; exit 1 ;;
+  esac
+  case "$DATA_ROOT" in
+    /|/var|/var/lib|*[!a-zA-Z0-9._/-]*) echo "IF_CENTER_DATA_ROOT is unsafe" >&2; exit 1 ;;
+    /*) ;;
+    *) echo "IF_CENTER_DATA_ROOT must be absolute" >&2; exit 1 ;;
+  esac
+  for port in "$HTTP_PORT" "$HTTPS_PORT"; do
+    case "$port" in ''|*[!0-9]*) echo "center edge port is invalid" >&2; exit 1 ;; esac
+    if [ "$port" -lt 1024 ] || [ "$port" -gt 65535 ]; then
+      echo "center edge port must be between 1024 and 65535" >&2
+      exit 1
+    fi
+  done
+  if [ "$HTTP_PORT" -eq "$HTTPS_PORT" ]; then
+    echo "center HTTP and HTTPS ports must differ" >&2
+    exit 1
+  fi
+  if [ -z "$DOCKER_GID" ] && [ -S /var/run/docker.sock ]; then
+    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+  fi
+  case "$DOCKER_GID" in ''|*[!0-9]*) echo "IF_CENTER_DOCKER_GID is missing or invalid" >&2; exit 1 ;; esac
+}
+
+render_manifest() {
+  validate_settings
+  sed \
+    -e "s|__CENTER_NODE_NAME__|$CENTER_NODE_NAME|g" \
+    -e "s|__CONTROL_IMAGE__|$CONTROL_IMAGE|g" \
+    -e "s|__EDGE_IMAGE__|$EDGE_IMAGE|g" \
+    -e "s|__DATA_ROOT__|$DATA_ROOT|g" \
+    -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
+    -e "s|__HTTPS_PORT__|$HTTPS_PORT|g" \
+    -e "s|__DOCKER_GID__|$DOCKER_GID|g" \
+    "$SCRIPT_DIR/center-system.yaml.template"
+}
+
+apply_center() {
+  require_root apply
+  validate_settings
+  require_center_images
+  env_file=${1:-/etc/induforge/center.env}
+  if [ ! -f "$env_file" ]; then
+    echo "center environment file does not exist: $env_file" >&2
+    exit 1
+  fi
+  if [ ! -f "$DATA_ROOT/tls/center.crt" ] || [ ! -f "$DATA_ROOT/tls/center.key" ]; then
+    echo "center TLS assets are incomplete under $DATA_ROOT" >&2
+    exit 1
+  fi
+  install -d -m 0755 "$DATA_ROOT"
+  install -d -m 0750 \
+    "$DATA_ROOT/meta-store" "$DATA_ROOT/cache-store" "$DATA_ROOT/object-store" \
+    "$DATA_ROOT/workspaces" "$DATA_ROOT/tls"
+
+  temp_dir=$(mktemp -d)
+  trap 'rm -rf "$temp_dir"' EXIT INT TERM
+  tr -d '\r' < "$env_file" > "$temp_dir/center.env"
+  render_manifest > "$temp_dir/center-system.yaml"
+
+  kubectl_cmd apply -f "$SCRIPT_DIR/namespace.yaml"
+  kubectl_cmd label node "$CENTER_NODE_NAME" induforge.io/center-node=true --overwrite
+  secret_result=$(kubectl_cmd -n "$NAMESPACE" create secret generic center-env \
+    --from-env-file="$temp_dir/center.env" --dry-run=client -o yaml | kubectl_cmd apply -f -)
+  echo "$secret_result"
+  edge_config_result=$(kubectl_cmd -n "$NAMESPACE" create configmap center-edge-config \
+    --from-file=nginx.conf="$SCRIPT_DIR/nginx.conf" --dry-run=client -o yaml | kubectl_cmd apply -f -)
+  echo "$edge_config_result"
+  kubectl_cmd apply -f "$temp_dir/center-system.yaml"
+  # Secret 与 subPath ConfigMap 都只在容器启动时读取；仅在内容变更时触发对应服务更新。
+  case "$secret_result" in
+    *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-control ;;
+  esac
+  case "$edge_config_result" in
+    *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-edge ;;
+  esac
+  for workload in \
+    statefulset/center-meta-store statefulset/center-cache-store statefulset/center-object-store \
+    deployment/center-control deployment/center-edge; do
+    kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
+  done
+  doctor
+}
+
+show_status() {
+  kubectl_cmd -n "$NAMESPACE" get pods -o wide
+  kubectl_cmd -n "$NAMESPACE" get deployments,statefulsets,services
+}
+
+doctor() {
+  failed=0
+  ready=$(kubectl_cmd get node "$CENTER_NODE_NAME" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
+  if [ "$ready" != "True" ]; then
+    echo "center node is not Ready: $CENTER_NODE_NAME" >&2
+    failed=1
+  fi
+  unavailable=$(kubectl_cmd -n "$NAMESPACE" get deployment,statefulset -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.readyReplicas}{"/"}{.spec.replicas}{"\n"}{end}' | awk -F'[ /]' '$2 != $3 {print $1}')
+  if [ -n "$unavailable" ]; then
+    echo "center workloads are not ready:" >&2
+    echo "$unavailable" >&2
+    failed=1
+  fi
+  if ! kubectl_cmd -n "$NAMESPACE" get endpointslice \
+    -l kubernetes.io/service-name=center-control \
+    -o jsonpath='{.items[0].endpoints[0].conditions.ready}' | grep -q true; then
+    echo "center-control has no ready endpoint" >&2
+    failed=1
+  fi
+  if [ "$failed" -ne 0 ]; then
+    kubectl_cmd -n "$NAMESPACE" get pods -o wide >&2 || true
+    return 1
+  fi
+  echo "InduForge center is healthy"
+}
+
+show_logs() {
+  workload=${1:-center-control}
+  case "$workload" in
+    center-control|center-edge|center-meta-store|center-cache-store|center-object-store) ;;
+    *) echo "unsupported center workload: $workload" >&2; exit 2 ;;
+  esac
+  kubectl_cmd -n "$NAMESPACE" logs "$(kubectl_cmd -n "$NAMESPACE" get pod -l "app.kubernetes.io/name=$workload" -o jsonpath='{.items[0].metadata.name}')" --tail=200
+}
+
+restart_workload() {
+  require_root restart
+  workload=${1:-}
+  case "$workload" in
+    center-control|center-edge) kubectl_cmd -n "$NAMESPACE" rollout restart "deployment/$workload" ;;
+    center-meta-store|center-cache-store|center-object-store) kubectl_cmd -n "$NAMESPACE" rollout restart "statefulset/$workload" ;;
+    *) echo "restart requires a supported center workload" >&2; exit 2 ;;
+  esac
+}
+
+command=${1:-}
+case "$command" in
+  render) render_manifest ;;
+  import-images) shift; import_images "$@" ;;
+  apply) shift; apply_center "$@" ;;
+  status) show_status ;;
+  doctor) validate_settings; doctor ;;
+  logs) shift; show_logs "$@" ;;
+  restart) shift; restart_workload "$@" ;;
+  *) usage ;;
+esac

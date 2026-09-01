@@ -62,6 +62,18 @@ scripts/docker/
 
 `scripts/docker/images/` 只保留目录和 `.gitkeep`，镜像 tar 体积较大，不提交 Git。测试构建脚本会优先加载该目录下已有 tar，缺失时再拉取或构建。
 
+## 中心 K3s 部署
+
+```text
+scripts/k3s/center/
+  center-system.yaml.template   # induforge-system 中心工作负载
+  centerctl                     # 状态、诊断、日志、重启和幂等应用
+  migrate-docker-center.sh      # 旧 Docker/宿主中心的一次性可回滚迁移
+```
+
+正式用户环境使用该入口，不使用生产 Compose 直接托管中心核心服务。详细安装边界见
+[`scripts/k3s/center/README.md`](k3s/center/README.md)。
+
 ## 控制面数据库 bootstrap
 
 ```text

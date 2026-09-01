@@ -1,0 +1,461 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: center-meta-store
+  namespace: induforge-system
+spec:
+  selector:
+    app.kubernetes.io/name: center-meta-store
+  ports:
+    - name: postgres
+      port: 18432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: center-meta-store
+  namespace: induforge-system
+spec:
+  serviceName: center-meta-store
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-meta-store
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-meta-store
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      containers:
+        - name: postgres
+          image: docker.io/timescale/timescaledb:2.26.4-pg16
+          imagePullPolicy: Never
+          args: ["-p", "18432"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_ADMIN_DATABASE
+          ports:
+            - name: postgres
+              containerPort: 18432
+          readinessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          hostPath:
+            path: __DATA_ROOT__/meta-store
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: center-cache-store
+  namespace: induforge-system
+spec:
+  selector:
+    app.kubernetes.io/name: center-cache-store
+  ports:
+    - name: redis
+      port: 18379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: center-cache-store
+  namespace: induforge-system
+spec:
+  serviceName: center-cache-store
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-cache-store
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-cache-store
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      containers:
+        - name: redis
+          image: docker.io/library/redis:7.2-alpine
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              if [ -n "${IF_CACHE_STORE_PASSWORD}" ]; then
+                exec redis-server --port 18379 --appendonly yes --requirepass "${IF_CACHE_STORE_PASSWORD}"
+              fi
+              exec redis-server --port 18379 --appendonly yes
+          env:
+            - name: IF_CACHE_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_CACHE_STORE_PASSWORD
+          ports:
+            - name: redis
+              containerPort: 18379
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          hostPath:
+            path: __DATA_ROOT__/cache-store
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: center-object-store
+  namespace: induforge-system
+spec:
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: center-object-store
+  ports:
+    - name: master
+      port: 18333
+      targetPort: 18333
+    - name: master-grpc
+      port: 28333
+      targetPort: 28333
+    - name: volume
+      port: 18081
+      targetPort: 18081
+    - name: volume-grpc
+      port: 28081
+      targetPort: 28081
+    - name: filer
+      port: 18888
+      targetPort: 18888
+    - name: filer-grpc
+      port: 28888
+      targetPort: 28888
+    - name: s3
+      port: 18500
+      targetPort: s3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: center-object-store
+  namespace: induforge-system
+spec:
+  serviceName: center-object-store
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-object-store
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-object-store
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      containers:
+        - name: seaweedfs
+          image: docker.io/chrislusf/seaweedfs:3.85
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              umask 077
+              cat > /tmp/induforge-s3.json <<EOF
+              {"identities":[{"name":"induforge-admin","credentials":[{"accessKey":"${IF_OBJECT_STORE_ACCESS_KEY}","secretKey":"${IF_OBJECT_STORE_SECRET_KEY}"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+              EOF
+              exec weed server -ip=center-object-store -ip.bind=0.0.0.0 -master.port=18333 -master.volumeSizeLimitMB=1024 -volume.port=18081 -volume.max=0 -dir=/data/volume -filer -filer.port=18888 -s3 -s3.port=18500 -s3.config=/tmp/induforge-s3.json
+          env:
+            - name: IF_OBJECT_STORE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_OBJECT_STORE_ACCESS_KEY
+            - name: IF_OBJECT_STORE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_OBJECT_STORE_SECRET_KEY
+          ports:
+            - name: s3
+              containerPort: 18500
+          readinessProbe:
+            tcpSocket:
+              port: s3
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: s3
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          hostPath:
+            path: __DATA_ROOT__/object-store
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: center-control
+  namespace: induforge-system
+spec:
+  selector:
+    app.kubernetes.io/name: center-control
+  ports:
+    - name: http
+      port: 18101
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: center-control
+  namespace: induforge-system
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-control
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-control
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      securityContext:
+        supplementalGroups: [__DOCKER_GID__]
+      initContainers:
+        - name: wait-center-infrastructure
+          image: docker.io/rancher/mirrored-library-busybox:1.37.0
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until nc -z center-meta-store 18432; do sleep 2; done
+              until nc -z center-cache-store 18379; do sleep 2; done
+              until nc -z center-object-store 18500; do sleep 2; done
+      containers:
+        - name: control
+          image: __CONTROL_IMAGE__
+          imagePullPolicy: Never
+          envFrom:
+            - secretRef:
+                name: center-env
+          env:
+            - name: DEV_CORE_ADDR
+              value: :18101
+            - name: DB_AUTO_SCHEMA_SYNC
+              value: "false"
+            - name: IF_META_STORE_HOST
+              value: center-meta-store
+            - name: IF_META_STORE_PORT
+              value: "18432"
+            - name: IF_CACHE_STORE_HOST
+              value: center-cache-store
+            - name: IF_CACHE_STORE_PORT
+              value: "18379"
+            - name: IF_OBJECT_STORE_ENDPOINT
+              value: center-object-store
+            - name: IF_OBJECT_STORE_PORT
+              value: "18500"
+            - name: CODE_WORKSPACE_ROOT
+              value: /var/lib/induforge/workspaces
+            - name: CODE_SERVER_DOCKER_HOST
+              value: unix:///var/run/docker.sock
+          ports:
+            - name: http
+              containerPort: 18101
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: workspaces
+              mountPath: /var/lib/induforge/workspaces
+            # 兼容当前 Docker 代码工作区，待工作区调度切换到 K3s 后删除。
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: ca-certificates
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              readOnly: true
+            - name: temp
+              mountPath: /tmp
+      volumes:
+        - name: workspaces
+          hostPath:
+            path: __DATA_ROOT__/workspaces
+            type: Directory
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: ca-certificates
+          hostPath:
+            path: /etc/ssl/certs/ca-certificates.crt
+            type: File
+        - name: temp
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: center-edge
+  namespace: induforge-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-edge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-edge
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      terminationGracePeriodSeconds: 5
+      initContainers:
+        - name: wait-center-control
+          image: docker.io/rancher/mirrored-library-busybox:1.37.0
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - until nc -z center-control 18101; do sleep 2; done
+      containers:
+        - name: nginx
+          image: __EDGE_IMAGE__
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 80
+              hostPort: __HTTP_PORT__
+            - name: https
+              containerPort: 443
+              hostPort: __HTTPS_PORT__
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tls
+              mountPath: /etc/nginx/tls
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: center-edge-config
+        - name: tls
+          hostPath:
+            path: __DATA_ROOT__/tls
+            type: Directory
