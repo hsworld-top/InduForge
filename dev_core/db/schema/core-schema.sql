@@ -736,15 +736,20 @@ CREATE TABLE project_deployments (
   -- 不能以模式为维度并行运行两个版本。
   environment_id uuid NOT NULL REFERENCES runtime_environments (id) ON DELETE RESTRICT,
   -- 生产记录引用不可变 Release；开发记录引用同工程可替换的内部 __DEV__ 制品。
-  application_version_id uuid NOT NULL REFERENCES application_versions (id) ON DELETE RESTRICT,
+  application_version_id uuid REFERENCES application_versions (id) ON DELETE RESTRICT,
   mode text NOT NULL CHECK (mode IN ('development', 'release')),
+  artifact_descriptor jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(artifact_descriptor) = 'object'),
   access_port integer NOT NULL CHECK (access_port BETWEEN 1024 AND 65532),
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT project_deployments_tenant_project_environment_key UNIQUE (tenant_id, project_id, environment_id)
+  CONSTRAINT project_deployments_tenant_project_environment_key UNIQUE (tenant_id, project_id, environment_id),
+  CONSTRAINT project_deployments_artifact_source_check CHECK (
+    (mode = 'release' AND application_version_id IS NOT NULL AND artifact_descriptor = '{}'::jsonb) OR
+    (mode = 'development' AND application_version_id IS NULL AND artifact_descriptor ? 'releaseId')
+  )
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
 
@@ -758,12 +763,19 @@ CREATE TABLE deployment_bindings (
   deployment_service_id uuid NOT NULL,
   project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
   node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
-  application_version_id uuid NOT NULL REFERENCES application_versions (id) ON DELETE RESTRICT,
+  -- RELEASE 绑定不可变 application_version；DEV 绑定只保存内部、已签名制品描述。
+  application_version_id uuid REFERENCES application_versions (id) ON DELETE RESTRICT,
+  artifact_mode text NOT NULL CHECK (artifact_mode IN ('release', 'development')),
+  artifact_descriptor jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(artifact_descriptor) = 'object'),
   revision integer NOT NULL CHECK (revision > 0),
   binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object'),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (deployment_service_id, revision)
+  UNIQUE (deployment_service_id, revision),
+  CONSTRAINT deployment_bindings_artifact_source_check CHECK (
+    (artifact_mode = 'release' AND application_version_id IS NOT NULL AND artifact_descriptor = '{}'::jsonb) OR
+    (artifact_mode = 'development' AND application_version_id IS NULL AND artifact_descriptor ? 'releaseId')
+  )
 );
 CREATE INDEX deployment_bindings_agent_lookup_idx ON deployment_bindings (node_id, deployment_service_id, revision DESC);
 

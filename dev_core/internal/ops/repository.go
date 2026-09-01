@@ -25,12 +25,12 @@ const defaultK3sVersion = "v1.36.4+k3s1"
 const defaultRuntimeEnvironmentCode = "default-runtime"
 
 // deploymentSelect 不从 project_deployments 推断节点；节点归属是 deployment_services 的属性。
-const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,d.application_version_id,COALESCE(v.version,''),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id`
+const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,COALESCE(d.application_version_id::text,''),COALESCE(v.version,CASE WHEN d.mode='development' THEN '__DEV__' ELSE '' END),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id`
 
 type releaseMetadata struct {
-	ID, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
-	ArtifactSize                                                             int64
-	Manifest                                                                 []byte
+	ID, Version, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
+	ArtifactSize                                                                      int64
+	Manifest                                                                          []byte
 }
 
 // pendingServicesSQL 只由服务自身的 node_id 调度。一个工程部署可将不同引擎放在不同节点。
@@ -810,17 +810,15 @@ func (r *PostgreSQLRepository) AgentCommands(ctx context.Context, id, hash strin
 	}
 	out := make([]AgentCommand, 0, len(services))
 	for _, s := range services {
-		var run, ver string
-		var metadata releaseMetadata
-		var binding bindingMetadata
-		err := r.pool.QueryRow(ctx, `SELECT COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending' ORDER BY started_at DESC LIMIT 1),''),v.version,v.id::text,COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),v.manifest,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM project_deployments d JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding FROM deployment_bindings WHERE deployment_service_id=$2 AND node_id=$3 AND application_version_id=v.id ORDER BY revision DESC LIMIT 1) b ON true WHERE d.id=$1`, s.ProjectDeploymentID, s.ID, n.ID).Scan(&run, &ver, &metadata.ID, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
+		metadata, binding, err := r.agentDeploymentAccess(ctx, n.ID, hash, s.ProjectDeploymentID, s.ID)
 		if err != nil {
-			return nil, fmt.Errorf("读取节点正式 Release 命令失败: %w", err)
+			return nil, fmt.Errorf("读取节点制品命令失败: %w", err)
 		}
-		if err := validateInitialDeploymentBinding(binding.Content, binding, metadata, n.ID, s.ProjectDeploymentID); err != nil {
+		var run string
+		if err = r.pool.QueryRow(ctx, `SELECT COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending' ORDER BY started_at DESC LIMIT 1),'')`, s.ProjectDeploymentID).Scan(&run); err != nil {
 			return nil, err
 		}
-		out = append(out, AgentCommand{NodeID: n.ID, RunID: run, DeploymentID: s.ProjectDeploymentID, ReleaseID: metadata.ID, ServiceID: s.ID, ServiceType: s.ServiceType, DesiredStatus: s.DesiredStatus, Operation: s.LastOperation, Generation: s.DesiredGeneration, Version: ver, ArchiveSHA256: sha256Value(metadata.ArtifactHash), ManifestSHA256: sha256Value(metadata.ManifestHash), ChecksumsSHA256: sha256Value(metadata.ChecksumsHash), SigningKeyID: metadata.SigningKeyID, BindingRevision: binding.Revision, ReplicasDesired: s.ReplicasDesired})
+		out = append(out, AgentCommand{NodeID: n.ID, RunID: run, DeploymentID: s.ProjectDeploymentID, ReleaseID: metadata.ID, ServiceID: s.ID, ServiceType: s.ServiceType, DesiredStatus: s.DesiredStatus, Operation: s.LastOperation, Generation: s.DesiredGeneration, Version: metadata.Version, ArchiveSHA256: sha256Value(metadata.ArtifactHash), ManifestSHA256: sha256Value(metadata.ManifestHash), ChecksumsSHA256: sha256Value(metadata.ChecksumsHash), SigningKeyID: metadata.SigningKeyID, BindingRevision: binding.Revision, ReplicasDesired: s.ReplicasDesired})
 	}
 	return out, nil
 }
@@ -854,14 +852,25 @@ type bindingMetadata struct {
 func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string) (releaseMetadata, bindingMetadata, error) {
 	var metadata releaseMetadata
 	var binding bindingMetadata
-	err := r.pool.QueryRow(ctx, `SELECT v.id::text,COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),v.manifest,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM host_nodes n JOIN deployment_services s ON s.node_id=n.id JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=n.tenant_id JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding FROM deployment_bindings WHERE deployment_service_id=s.id AND node_id=n.id AND application_version_id=v.id ORDER BY revision DESC LIMIT 1) b ON true WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' AND n.approved_at IS NOT NULL AND d.id=$3 AND s.id=$4 AND d.desired_status='running' AND v.status='ready' AND v.deleted_at IS NULL`, nodeID, tokenHash, deploymentID, serviceID).Scan(&metadata.ID, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
+	var mode string
+	var descriptor []byte
+	err := r.pool.QueryRow(ctx, `SELECT d.mode,COALESCE(v.id::text,''),COALESCE(v.version,''),COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),COALESCE(v.manifest,'{}'::jsonb),b.artifact_descriptor,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM host_nodes n JOIN deployment_services s ON s.node_id=n.id JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=n.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding,artifact_descriptor FROM deployment_bindings WHERE deployment_service_id=s.id AND node_id=n.id AND artifact_mode=CASE WHEN d.mode='development' THEN 'development' ELSE 'release' END ORDER BY revision DESC LIMIT 1) b ON true WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' AND n.approved_at IS NOT NULL AND d.id=$3 AND s.id=$4 AND d.desired_status='running' AND (d.mode='development' OR (v.status='ready' AND v.deleted_at IS NULL))`, nodeID, tokenHash, deploymentID, serviceID).Scan(&mode, &metadata.ID, &metadata.Version, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &descriptor, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return releaseMetadata{}, bindingMetadata{}, ErrAgentUnauthorized
 	}
 	if err != nil {
 		return releaseMetadata{}, bindingMetadata{}, err
 	}
-	if err := validateReleaseMetadata(metadata, binding.ProjectID, false); err != nil {
+	if mode == "development" {
+		var artifact DevelopmentArtifact
+		if err := json.Unmarshal(descriptor, &artifact); err != nil {
+			return releaseMetadata{}, bindingMetadata{}, fmt.Errorf("%w: 开发制品描述损坏", ErrAgentUnauthorized)
+		}
+		metadata, err = developmentReleaseMetadata(&artifact, binding.ProjectID)
+	} else {
+		err = validateReleaseMetadata(metadata, binding.ProjectID, false)
+	}
+	if err != nil {
 		return releaseMetadata{}, bindingMetadata{}, err
 	}
 	if err := validateInitialDeploymentBinding(binding.Content, binding, metadata, nodeID, deploymentID); err != nil {
@@ -890,7 +899,7 @@ func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant strin
 	return out, total, e
 }
 func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, tenant string, in CreateDeploymentInput) error {
-	metadata, err := loadReleaseMetadata(ctx, r.pool, tenant, in.ProjectID, in.ApplicationVersionID)
+	metadata, err := deploymentMetadata(ctx, r.pool, tenant, in)
 	if err != nil {
 		return err
 	}
@@ -933,7 +942,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	if e = tx.QueryRow(ctx, lockDeploymentProjectSQL, tenant, in.ProjectID).Scan(new(string)); e != nil {
 		return ProjectDeployment{}, DeploymentRun{}, mapNotFound(e)
 	}
-	metadata, err := loadReleaseMetadata(ctx, tx, tenant, in.ProjectID, in.ApplicationVersionID)
+	metadata, err := deploymentMetadata(ctx, tx, tenant, in)
 	if err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
@@ -957,8 +966,12 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("%s 引擎节点当前不能调度", engine)
 		}
 	}
+	descriptor, err := deploymentArtifactDescriptor(in)
+	if err != nil {
+		return ProjectDeployment{}, DeploymentRun{}, err
+	}
 	var d ProjectDeployment
-	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,access_port,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',$4,'','',$5,$6,desired_status,observed_status,0,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, in.AccessPort, user))
+	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,artifact_descriptor,access_port,created_by) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,artifact_descriptor=EXCLUDED.artifact_descriptor,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',COALESCE(application_version_id::text,''),'',$5,$7,desired_status,observed_status,0,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, descriptor, in.AccessPort, user))
 	if e != nil {
 		return d, DeploymentRun{}, mapDeploymentCreateError(e)
 	}
@@ -1005,7 +1018,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		if bindErr != nil {
 			return d, DeploymentRun{}, bindErr
 		}
-		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,revision,binding) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, revision, bindingJSON); e != nil {
+		if _, e = tx.Exec(ctx, `INSERT INTO deployment_bindings(id,tenant_id,project_deployment_id,deployment_service_id,project_id,node_id,application_version_id,artifact_mode,artifact_descriptor,revision,binding) VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,$8,$9,$10,$11)`, bindingID, tenant, d.ID, serviceID, in.ProjectID, in.Placements[kind], in.ApplicationVersionID, artifactMode(in.Mode), descriptor, revision, bindingJSON); e != nil {
 			return d, DeploymentRun{}, e
 		}
 	}
@@ -1290,7 +1303,7 @@ type releaseMetadataReader interface {
 func loadReleaseMetadata(ctx context.Context, reader releaseMetadataReader, tenant, projectID, releaseID string) (releaseMetadata, error) {
 	metadata := releaseMetadata{ID: releaseID}
 	var status string
-	err := reader.QueryRow(ctx, `SELECT status,COALESCE(artifact_key,''),COALESCE(artifact_hash,''),COALESCE(manifest_hash,''),COALESCE(checksums_hash,''),COALESCE(signing_key_id,''),COALESCE(artifact_size,0),manifest FROM application_versions WHERE id=$1 AND project_id=$2 AND tenant_id=$3 AND deleted_at IS NULL`, releaseID, projectID, tenant).Scan(&status, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest)
+	err := reader.QueryRow(ctx, `SELECT status,version,COALESCE(artifact_key,''),COALESCE(artifact_hash,''),COALESCE(manifest_hash,''),COALESCE(checksums_hash,''),COALESCE(signing_key_id,''),COALESCE(artifact_size,0),manifest FROM application_versions WHERE id=$1 AND project_id=$2 AND tenant_id=$3 AND deleted_at IS NULL`, releaseID, projectID, tenant).Scan(&status, &metadata.Version, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return releaseMetadata{}, ErrNotFound
 	}
@@ -1301,6 +1314,44 @@ func loadReleaseMetadata(ctx context.Context, reader releaseMetadataReader, tena
 		return releaseMetadata{}, fmt.Errorf("%w: 版本尚未构建成功", ErrReleaseNotDeployable)
 	}
 	return metadata, nil
+}
+
+func developmentReleaseMetadata(artifact *DevelopmentArtifact, projectID string) (releaseMetadata, error) {
+	if artifact == nil || artifact.Version != "__DEV__" || !validUUID(artifact.ReleaseID) ||
+		!strings.HasPrefix(artifact.ArtifactKey, "development/") {
+		return releaseMetadata{}, fmt.Errorf("%w: 开发制品描述无效", ErrReleaseNotDeployable)
+	}
+	metadata := releaseMetadata{ID: artifact.ReleaseID, Version: "__DEV__", ArtifactKey: artifact.ArtifactKey, ArtifactHash: artifact.ArtifactHash,
+		ManifestHash: artifact.ManifestHash, ChecksumsHash: artifact.ChecksumsHash, SigningKeyID: artifact.SigningKeyID,
+		ArtifactSize: artifact.ArtifactSize, Manifest: artifact.Manifest}
+	if _, err := deploymentRequirementsForRelease(metadata, projectID); err != nil {
+		return releaseMetadata{}, err
+	}
+	return metadata, nil
+}
+
+func deploymentMetadata(ctx context.Context, reader releaseMetadataReader, tenant string, in CreateDeploymentInput) (releaseMetadata, error) {
+	if in.Mode == "development" {
+		return developmentReleaseMetadata(in.DevelopmentArtifact, in.ProjectID)
+	}
+	return loadReleaseMetadata(ctx, reader, tenant, in.ProjectID, in.ApplicationVersionID)
+}
+
+func artifactMode(mode string) string {
+	if mode == "development" {
+		return "development"
+	}
+	return "release"
+}
+
+func deploymentArtifactDescriptor(in CreateDeploymentInput) ([]byte, error) {
+	if in.Mode != "development" {
+		return []byte(`{}`), nil
+	}
+	if _, err := developmentReleaseMetadata(in.DevelopmentArtifact, in.ProjectID); err != nil {
+		return nil, err
+	}
+	return json.Marshal(in.DevelopmentArtifact)
 }
 
 func validateReleaseMetadata(metadata releaseMetadata, projectID string, requireCollector bool) error {
@@ -1407,6 +1458,15 @@ type deploymentBindingDocument struct {
 }
 
 func validateInitialDeploymentBinding(raw []byte, binding bindingMetadata, release releaseMetadata, nodeID, deploymentID string) error {
+	var header struct {
+		SchemaVersion string `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(raw, &header); err != nil {
+		return fmt.Errorf("%w: DeploymentBinding 内容无效", ErrReleaseNotDeployable)
+	}
+	if header.SchemaVersion == "deployment-binding.v2" {
+		return validateEngineDeploymentBinding(raw, binding, release, nodeID, deploymentID)
+	}
 	var document deploymentBindingDocument
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
@@ -1447,6 +1507,34 @@ func validateInitialDeploymentBinding(raw []byte, binding bindingMetadata, relea
 		return fmt.Errorf("%w: DeploymentBinding 签发时间无效", ErrReleaseNotDeployable)
 	}
 	return nil
+}
+
+func validateEngineDeploymentBinding(raw []byte, binding bindingMetadata, release releaseMetadata, nodeID, deploymentID string) error {
+	var document struct {
+		SchemaVersion, BindingID, NodeID, DeploymentID, ProjectID, ServiceID, Mode, Engine string
+		Revision                                                                    int
+		Release                                                                     struct {
+			ID, ArchiveSHA256, ManifestSHA256, ChecksumsSHA256, SigningKeyID string
+		}
+		Ports struct{ HostPort *int `json:"hostPort"` }
+		Secrets []any `json:"secrets"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil || document.SchemaVersion != "deployment-binding.v2" ||
+		document.BindingID != binding.ID || document.Revision != binding.Revision || document.NodeID != nodeID ||
+		document.DeploymentID != deploymentID || document.ProjectID != binding.ProjectID || !validServiceType(document.Engine) ||
+		(document.Mode != "release" && document.Mode != "development") || len(document.Secrets) != 0 ||
+		document.Release.ID != release.ID || document.Release.ArchiveSHA256 != sha256Value(release.ArtifactHash) ||
+		document.Release.ManifestSHA256 != sha256Value(release.ManifestHash) || document.Release.ChecksumsSHA256 != sha256Value(release.ChecksumsHash) || document.Release.SigningKeyID != release.SigningKeyID {
+		return fmt.Errorf("%w: 引擎 DeploymentBinding 与节点或制品不匹配", ErrReleaseNotDeployable)
+	}
+	if document.Engine == ServiceBase {
+		if document.Ports.HostPort == nil || *document.Ports.HostPort < 1024 || *document.Ports.HostPort > 65532 {
+			return fmt.Errorf("%w: 基础引擎端口无效", ErrReleaseNotDeployable)
+		}
+	} else if document.Ports.HostPort != nil {
+		return fmt.Errorf("%w: 非基础引擎不能暴露主机端口", ErrReleaseNotDeployable)
+	}
+	return validateReleaseMetadata(release, binding.ProjectID, document.Engine == ServiceCollector)
 }
 
 func sha256Value(value string) string { return "sha256:" + strings.ToLower(value) }

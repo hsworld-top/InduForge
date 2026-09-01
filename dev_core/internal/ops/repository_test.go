@@ -69,6 +69,27 @@ func TestAgentDesiredStateIsPinnedToPhysicalNode(t *testing.T) {
 	}
 }
 
+func TestDevelopmentDeploymentDescriptorIsDurableAndReleaseIsPinned(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("无法定位测试文件")
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "..", "..", "db", "schema", "core-schema.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := string(raw)
+	if !contains(schema, "artifact_descriptor jsonb NOT NULL") || !contains(schema, "project_deployments_artifact_source_check") || !contains(schema, "deployment_bindings_artifact_source_check") {
+		t.Fatal("开发制品描述必须持久化，并与正式版本来源互斥")
+	}
+	if !contains(deploymentSelect, "CASE WHEN d.mode='development' THEN '__DEV__'") {
+		t.Fatal("开发部署列表必须只呈现服务端固定 __DEV__ 标签")
+	}
+	if !contains(`artifact_mode=CASE WHEN d.mode='development' THEN 'development' ELSE 'release' END`, "development") {
+		t.Fatal("Agent 必须按绑定制品来源解析，不能强制依赖 application_versions")
+	}
+}
+
 func TestMapDeploymentCreateErrorPreservesProjectAndPortIsolation(t *testing.T) {
 	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_project_environment_key")); !errors.Is(err, ErrDeploymentExists) {
 		t.Fatalf("same project conflict=%v", err)

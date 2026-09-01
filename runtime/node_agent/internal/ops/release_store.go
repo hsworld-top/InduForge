@@ -811,6 +811,10 @@ func validProjectCode(value string) bool {
 }
 
 func validVersionValue(value string) bool {
+	// __DEV__ 是控制面固定的内部开发制品标签，不是用户可输入的 Release 版本。
+	if value == "__DEV__" {
+		return true
+	}
 	if len(value) == 0 || len(value) > 128 {
 		return false
 	}

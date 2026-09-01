@@ -35,7 +35,7 @@ type ProjectWorkloadInspector interface {
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,d.application_version_id::text,s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}

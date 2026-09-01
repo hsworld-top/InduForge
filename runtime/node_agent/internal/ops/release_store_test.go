@@ -169,6 +169,15 @@ func TestReleaseInstallerRejectsIncompatibleManifestBeforeActivation(t *testing.
 	}
 }
 
+func TestDevelopmentVersionIsOnlyAcceptedForInternalFixedTag(t *testing.T) {
+	if !validVersionValue("__DEV__") {
+		t.Fatal("固定内部开发标签必须可安装")
+	}
+	if validVersionValue("_user-version") {
+		t.Fatal("不得放宽用户可输入版本的首字符约束")
+	}
+}
+
 func TestCompatibilityVersionUsesStrictSemVerPrecedence(t *testing.T) {
 	tests := []struct {
 		name            string
