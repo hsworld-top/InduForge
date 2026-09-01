@@ -114,6 +114,9 @@ type RuntimeEnvironmentService struct {
 type ProjectDeployment struct {
 	ID, TenantID, ProjectID, ProjectName, EnvironmentID, EnvironmentName string
 	ApplicationVersionID, Version, LatestRunID                           string
+	LastReadyMode, LastReadyApplicationVersionID, LastReadyVersion       string
+	LastReadyGeneration                                                  int64
+	LastReadyAt                                                          *time.Time
 	Mode, DesiredStatus, ObservedStatus, Health                          string
 	Progress                                                             int
 	AccessPort                                                           int

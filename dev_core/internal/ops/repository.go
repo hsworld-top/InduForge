@@ -25,7 +25,7 @@ const defaultK3sVersion = "v1.36.4+k3s1"
 const defaultRuntimeEnvironmentCode = "default-runtime"
 
 // deploymentSelect 不从 project_deployments 推断节点；节点归属是 deployment_services 的属性。
-const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,COALESCE(d.application_version_id::text,''),COALESCE(v.version,CASE WHEN d.mode='development' THEN '__DEV__' ELSE '' END),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id`
+const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,COALESCE(d.application_version_id::text,''),COALESCE(v.version,CASE WHEN d.mode='development' THEN '__DEV__' ELSE '' END),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),COALESCE(d.last_ready_mode,''),COALESCE(d.last_ready_application_version_id::text,''),COALESCE(lv.version,CASE WHEN d.last_ready_mode='development' THEN '__DEV__' ELSE '' END),COALESCE(d.last_ready_generation,0),d.last_ready_at,d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id LEFT JOIN application_versions lv ON lv.id=d.last_ready_application_version_id AND lv.tenant_id=d.tenant_id`
 
 type releaseMetadata struct {
 	ID, Version, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
@@ -462,11 +462,17 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 			}
 			if desired.Status == "running" {
 				refs, refErr := foundationResourceRefs(environmentID, serviceType)
-				if refErr != nil { return n, nil, refErr }
+				if refErr != nil {
+					return n, nil, refErr
+				}
 				if refs != nil {
 					raw, marshalErr := json.Marshal(refs)
-					if marshalErr != nil { return n, nil, marshalErr }
-					if _, refErr = r.pool.Exec(ctx, `UPDATE runtime_environment_services SET resource_refs=$1::jsonb,updated_at=now() WHERE environment_id=$2 AND service_type=$3`, raw, environmentID, serviceType); refErr != nil { return n, nil, refErr }
+					if marshalErr != nil {
+						return n, nil, marshalErr
+					}
+					if _, refErr = r.pool.Exec(ctx, `UPDATE runtime_environment_services SET resource_refs=$1::jsonb,updated_at=now() WHERE environment_id=$2 AND service_type=$3`, raw, environmentID, serviceType); refErr != nil {
+						return n, nil, refErr
+					}
 				}
 			}
 			changed = changed || serviceChanged
@@ -980,7 +986,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
 	var d ProjectDeployment
-	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,artifact_descriptor,access_port,created_by) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,artifact_descriptor=EXCLUDED.artifact_descriptor,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',COALESCE(application_version_id::text,''),'',$5,$7,desired_status,observed_status,0,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, descriptor, in.AccessPort, user))
+	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,artifact_descriptor,access_port,created_by) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,artifact_descriptor=EXCLUDED.artifact_descriptor,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',COALESCE(application_version_id::text,''),'',$5,$7,desired_status,observed_status,0,COALESCE(last_ready_mode,''),COALESCE(last_ready_application_version_id::text,''),'',COALESCE(last_ready_generation,0),last_ready_at,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, descriptor, in.AccessPort, user))
 	if e != nil {
 		return d, DeploymentRun{}, mapDeploymentCreateError(e)
 	}
@@ -1278,7 +1284,7 @@ func hydrateNode(x *Node, caps, summary []byte) {
 }
 func scanDeployment(s scanner) (ProjectDeployment, error) {
 	var x ProjectDeployment
-	e := s.Scan(&x.ID, &x.TenantID, &x.ProjectID, &x.ProjectName, &x.EnvironmentID, &x.EnvironmentName, &x.ApplicationVersionID, &x.Version, &x.LatestRunID, &x.Mode, &x.AccessPort, &x.DesiredStatus, &x.ObservedStatus, &x.Progress, &x.CreatedAt, &x.UpdatedAt)
+	e := s.Scan(&x.ID, &x.TenantID, &x.ProjectID, &x.ProjectName, &x.EnvironmentID, &x.EnvironmentName, &x.ApplicationVersionID, &x.Version, &x.LatestRunID, &x.Mode, &x.AccessPort, &x.DesiredStatus, &x.ObservedStatus, &x.Progress, &x.LastReadyMode, &x.LastReadyApplicationVersionID, &x.LastReadyVersion, &x.LastReadyGeneration, &x.LastReadyAt, &x.CreatedAt, &x.UpdatedAt)
 	x.Health = normalizeHealth(x.ObservedStatus)
 	return x, e
 }
@@ -1521,11 +1527,13 @@ func validateInitialDeploymentBinding(raw []byte, binding bindingMetadata, relea
 func validateEngineDeploymentBinding(raw []byte, binding bindingMetadata, release releaseMetadata, nodeID, deploymentID string) error {
 	var document struct {
 		SchemaVersion, BindingID, NodeID, DeploymentID, ProjectID, ServiceID, Mode, Engine string
-		Revision                                                                    int
-		Release                                                                     struct {
+		Revision                                                                           int
+		Release                                                                            struct {
 			ID, ArchiveSHA256, ManifestSHA256, ChecksumsSHA256, SigningKeyID string
 		}
-		Ports struct{ HostPort *int `json:"hostPort"` }
+		Ports struct {
+			HostPort *int `json:"hostPort"`
+		}
 		Secrets []any `json:"secrets"`
 	}
 	if err := json.Unmarshal(raw, &document); err != nil || document.SchemaVersion != "deployment-binding.v2" ||

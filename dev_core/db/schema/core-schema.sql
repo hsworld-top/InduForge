@@ -741,6 +741,11 @@ CREATE TABLE project_deployments (
   application_version_id uuid REFERENCES application_versions (id) ON DELETE RESTRICT,
   mode text NOT NULL CHECK (mode IN ('development', 'release')),
   artifact_descriptor jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(artifact_descriptor) = 'object'),
+  last_ready_mode text CHECK (last_ready_mode IN ('development', 'release')),
+  last_ready_application_version_id uuid REFERENCES application_versions (id) ON DELETE RESTRICT,
+  last_ready_artifact_descriptor jsonb CHECK (last_ready_artifact_descriptor IS NULL OR jsonb_typeof(last_ready_artifact_descriptor) = 'object'),
+  last_ready_generation bigint,
+  last_ready_at timestamptz,
   access_port integer NOT NULL CHECK (access_port BETWEEN 1024 AND 65532),
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
@@ -751,6 +756,11 @@ CREATE TABLE project_deployments (
   CONSTRAINT project_deployments_artifact_source_check CHECK (
     (mode = 'release' AND application_version_id IS NOT NULL AND artifact_descriptor = '{}'::jsonb) OR
     (mode = 'development' AND application_version_id IS NULL AND artifact_descriptor ? 'releaseId')
+  ),
+  CONSTRAINT project_deployments_last_ready_check CHECK (
+    (last_ready_mode IS NULL AND last_ready_application_version_id IS NULL AND last_ready_artifact_descriptor IS NULL AND last_ready_generation IS NULL AND last_ready_at IS NULL) OR
+    (last_ready_mode = 'release' AND last_ready_application_version_id IS NOT NULL AND last_ready_artifact_descriptor IS NULL AND last_ready_generation IS NOT NULL AND last_ready_at IS NOT NULL) OR
+    (last_ready_mode = 'development' AND last_ready_application_version_id IS NULL AND last_ready_artifact_descriptor IS NOT NULL AND last_ready_artifact_descriptor ? 'releaseId' AND last_ready_generation IS NOT NULL AND last_ready_at IS NOT NULL)
   )
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
