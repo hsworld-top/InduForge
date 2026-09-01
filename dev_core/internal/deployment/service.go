@@ -122,7 +122,7 @@ type Repository interface {
 	Operate(context.Context, string, string, string) (Deployment, error)
 }
 
-type ServiceConfig struct{ ArtifactBucket string }
+type ServiceConfig struct{ ArtifactBucket, MinNodeAgentVersion, MinRuntimeVersion string }
 
 // ReleaseSource 是正式构建器唯一接受的已构建输入；服务层不执行任意工程命令。
 type ReleaseSource struct {
