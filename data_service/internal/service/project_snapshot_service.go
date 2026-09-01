@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -16,6 +19,46 @@ type ProjectSnapshotService struct {
 	repository *repository.ProjectSnapshotRepository
 	now        func() time.Time
 	schemaRoot string
+}
+
+// BuildCollectorArtifact 从权威快照生成 collector 运行定义；请求中的 sourceSnapshot
+// 只能证明调用方读取的版本，绝不参与点位、连接或 secret 的生成。
+func (s *ProjectSnapshotService) BuildCollectorArtifact(ctx context.Context, projectID, artifactID string, revision int64, sourceSnapshot json.RawMessage) (map[string]any, error) {
+	if err := validateProjectID(projectID); err != nil || revision < 1 || len(sourceSnapshot) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集工件请求无效")
+	}
+	current, err := s.GetArtifact(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	var provided map[string]any
+	if json.Unmarshal(sourceSnapshot, &provided) != nil || provided["projectId"] != projectID {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集工件快照无效")
+	}
+	currentRaw, _ := json.Marshal(current)
+	var currentMap map[string]any
+	_ = json.Unmarshal(currentRaw, &currentMap)
+	delete(currentMap, "generatedAt") // 构建时钟不是快照版本，不能造成伪冲突。
+	delete(provided, "generatedAt")
+	currentCanonical, _ := json.Marshal(currentMap)
+	providedRaw, _ := json.Marshal(provided)
+	if string(currentCanonical) != string(providedRaw) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "采集工件快照已变化")
+	}
+	snapshot, err := s.repository.GetByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	artifact, err := repository.BuildCollectorRuntimeArtifactV1(s.schemaRoot, projectID, artifactID, revision, "1.0.0", snapshot)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(artifact)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(raw)
+	return map[string]any{"schemaVersion": artifact.SchemaVersion, "projectId": projectID, "artifactRevision": revision, "sha256": "sha256:" + hex.EncodeToString(sum[:]), "size": len(raw), "artifact": json.RawMessage(raw)}, nil
 }
 
 // NewProjectSnapshotService 创建快照服务。

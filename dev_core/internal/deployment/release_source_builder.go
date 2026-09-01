@@ -134,7 +134,7 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 // fetchCollectorArtifact 只接受 data service 生成且携带自身完整性元数据的 bytes；
 // 不支持 URL、路径或调用方提供的工件，避免 ReleaseBuilder 变成下载器。
 func (b *ProjectReleaseSourceBuilder) fetchCollectorArtifact(ctx context.Context, project Project, version Version, snapshot map[string]any, authorization string) ([]byte, error) {
-	body, err := json.Marshal(map[string]any{"tenantId": project.TenantID, "projectId": project.ID, "releaseId": version.ID, "revision": version.Version, "sourceSnapshot": snapshot})
+	body, err := json.Marshal(map[string]any{"tenantId": project.TenantID, "projectId": project.ID, "releaseId": version.ID, "revision": 1, "sourceSnapshot": snapshot})
 	if err != nil {
 		return nil, fmt.Errorf("构造采集工件请求失败")
 	}

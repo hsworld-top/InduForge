@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
+	"github.com/google/uuid"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/response"
 	"github.com/indu-forge/data_service/internal/repository"
@@ -12,6 +15,39 @@ import (
 // ProjectSnapshotHandler 负责项目快照读写请求。
 type ProjectSnapshotHandler struct {
 	service *service.ProjectSnapshotService
+}
+
+// BuildCollectorArtifact 仅把调用方 snapshot 当作一致性证明，实际内容由服务端权威快照生成。
+func (h *ProjectSnapshotHandler) BuildCollectorArtifact(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var input struct {
+		TenantID       string          `json:"tenantId"`
+		ProjectID      string          `json:"projectId"`
+		ReleaseID      string          `json:"releaseId"`
+		Revision       int64           `json:"revision"`
+		SourceSnapshot json.RawMessage `json:"sourceSnapshot"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	projectID := r.PathValue("projectId")
+	if input.ProjectID != projectID || input.TenantID == "" || input.Revision < 1 || len(input.SourceSnapshot) == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集工件请求身份不一致")
+	}
+	if _, err := uuid.Parse(projectID); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "项目 ID 非法")
+	}
+	if _, err := uuid.Parse(input.ReleaseID); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Release ID 非法")
+	}
+	result, err := h.service.BuildCollectorArtifact(r.Context(), projectID, "collector-"+input.ReleaseID, input.Revision, input.SourceSnapshot)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
 }
 
 // NewProjectSnapshotHandler 创建项目快照处理器。

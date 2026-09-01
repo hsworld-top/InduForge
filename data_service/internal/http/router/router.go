@@ -1237,6 +1237,14 @@ func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/collector-artifact",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.projectSnapshotHandler.BuildCollectorArtifact),
+			),
+		),
+	)
+	mux.Handle(
 		"PUT /api/v1/data/projects/{projectId}/snapshot",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
