@@ -1541,7 +1541,12 @@
           {{ $t('opsConsole.deployments.productionMode') }}
         </button>
       </div>
-      <div class="ops-deployment-form">
+      <div
+        :class="[
+          'ops-deployment-form',
+          { 'ops-deployment-form--release': deployForm.mode === 'RELEASE' },
+        ]"
+      >
         <div class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.project') }}</label>
           <el-select
@@ -4142,7 +4147,13 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
 }
 .ops-deployment-form {
-  min-height: 390px;
+  height: 390px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.ops-deployment-form--release {
+  height: 419px;
 }
 .ops-deployment-field {
   display: grid;

@@ -124,6 +124,11 @@ describe('ops management console', () => {
     expect(source).toContain("$t('opsConsole.deployments.deployDevelopment')")
     expect(source).toContain("$t('opsConsole.deployments.deployProduction')")
     expect(source).toContain('background: var(--ck-gradient-primary)')
+    expect(source).toContain("'ops-deployment-form--release': deployForm.mode === 'RELEASE'")
+    expect(source).toMatch(
+      /\.ops-deployment-form \{[\s\S]*height: 390px;[\s\S]*max-height: calc\(100vh - 220px\);[\s\S]*overflow-y: auto;/,
+    )
+    expect(source).toMatch(/\.ops-deployment-form--release \{[\s\S]*height: 419px;/)
     expect(source).toMatch(
       /\.ops-engine-placement :deep\(\.el-select\) \{[\s\S]*width: 100%;[\s\S]*min-width: 0;/,
     )
