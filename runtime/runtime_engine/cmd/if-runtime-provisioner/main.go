@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/indu-forge/runtime-engine/internal/provision"
 	"github.com/indu-forge/runtime-engine/internal/provisioner"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats|provision-state> --input FILE")
+		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats|provision-state|unpack-runtime> --input FILE")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -21,9 +22,31 @@ func main() {
 		runProvisionNATS(os.Args[2:])
 	case "provision-state":
 		runProvisionState(os.Args[2:])
+	case "unpack-runtime":
+		runUnpackRuntime(os.Args[2:])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats|provision-state> --input FILE")
+		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats|provision-state|unpack-runtime> --input FILE")
 		os.Exit(2)
+	}
+}
+
+func runUnpackRuntime(args []string) {
+	flags := flag.NewFlagSet("unpack-runtime", flag.ContinueOnError)
+	archive := flags.String("archive", "", "已验签 Release 中的 runtime-artifact.tar.zst")
+	target := flags.String("target", "", "emptyDir 解包目录")
+	if err := flags.Parse(args); err != nil || *archive == "" || *target == "" {
+		fmt.Fprintln(os.Stderr, "unpack-runtime: argument invalid")
+		os.Exit(2)
+	}
+	file, err := os.Open(*archive)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unpack-runtime: archive read failed")
+		os.Exit(1)
+	}
+	defer file.Close()
+	if err := provision.UnpackRuntimeArtifact(file, *target, provision.Limits{MaxFiles: 10000, MaxFileBytes: 128 << 20, MaxTotalBytes: 512 << 20}); err != nil {
+		fmt.Fprintln(os.Stderr, "unpack-runtime: failed")
+		os.Exit(1)
 	}
 }
 

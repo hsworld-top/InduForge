@@ -14,8 +14,8 @@ const runtimeStateSchema = "runtime_engine"
 // BuildRuntimeBindingInput 从受信 deployment context 生成 prepare 的唯一输入。它不
 // 接收外部 producer/ownership/Artifact digest，运行制品身份只能来自 Release Manifest。
 func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeContext) ([]byte, error) {
-	if workload.Engine != ServiceCompute && workload.Engine != ServiceAlarm {
-		return nil, fmt.Errorf("仅 compute/alarm 需要运行绑定输入")
+	if workload.Engine != ServiceBase && workload.Engine != ServiceCompute && workload.Engine != ServiceAlarm {
+		return nil, fmt.Errorf("仅 base/compute/alarm 需要运行绑定输入")
 	}
 	if workload.DeploymentID != context.DeploymentID || workload.EnvironmentID != context.EnvironmentID || workload.ReleaseID != context.Release.ID || workload.NodeID == "" || workload.Generation < 1 {
 		return nil, fmt.Errorf("工作负载与运行上下文身份不一致")

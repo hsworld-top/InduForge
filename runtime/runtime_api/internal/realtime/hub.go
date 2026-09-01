@@ -143,6 +143,7 @@ type NATSSubscriber struct {
 type NATSOptions struct {
 	URL             string
 	CredentialsFile string
+	Token           string
 	Name            string
 }
 
@@ -159,8 +160,14 @@ func ConnectNATS(ctx context.Context, options NATSOptions, hub *Hub) (*NATSSubsc
 		nats.ReconnectHandler(func(_ *nats.Conn) { hub.SetConnected(true) }),
 		nats.ClosedHandler(func(_ *nats.Conn) { hub.SetConnected(false) }),
 	}
+	if strings.TrimSpace(options.CredentialsFile) != "" && strings.TrimSpace(options.Token) != "" {
+		return nil, errors.New("NATS 凭据文件与 token 不能同时使用")
+	}
 	if strings.TrimSpace(options.CredentialsFile) != "" {
 		natsOptions = append(natsOptions, nats.UserCredentials(options.CredentialsFile))
+	}
+	if strings.TrimSpace(options.Token) != "" {
+		natsOptions = append(natsOptions, nats.Token(options.Token))
 	}
 	connection, err := nats.Connect(options.URL, natsOptions...)
 	if err != nil {

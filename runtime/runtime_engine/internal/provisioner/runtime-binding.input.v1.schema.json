@@ -24,7 +24,7 @@
         "projectId": {"type": "string", "minLength": 1},
         "deploymentId": {"type": "string", "minLength": 1},
         "accountId": {"type": "string", "minLength": 1},
-        "role": {"enum": ["compute", "alarm"]},
+        "role": {"enum": ["base", "compute", "alarm"]},
         "artifactMountPath": {"type": "string", "pattern": "^/work/"},
         "artifactFile": {"const": "runtime-project-artifact.json"},
         "jetStream": {

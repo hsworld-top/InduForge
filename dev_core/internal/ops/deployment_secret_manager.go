@@ -3,7 +3,9 @@ package ops
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -11,10 +13,13 @@ import (
 )
 
 const (
-	resolverNATSFile      = "nats.json"
-	resolverPostgresFile  = "postgres.json"
-	bootstrapPostgresFile = "postgres-bootstrap.json"
-	resolverSandboxFile   = "sandbox.json"
+	resolverNATSFile       = "nats.json"
+	resolverPostgresFile   = "postgres.json"
+	bootstrapPostgresFile  = "postgres-bootstrap.json"
+	resolverSandboxFile    = "sandbox.json"
+	runtimeAPINATSFile     = "runtime-api-nats.json"
+	runtimeAPIPostgresFile = "runtime-api-postgres.json"
+	runtimeAPITokensFile   = "runtime-api-tokens.json"
 )
 
 type DeploymentSecretManager struct{ client KubeSecretClient }
@@ -26,7 +31,7 @@ func NewDeploymentSecretManager(c KubeSecretClient) *DeploymentSecretManager {
 // Ensure 将环境级 source Secret 的最小凭据在内存中封装为 resolver 的严格 JSON，
 // 写入 deployment 专属 Secret。不会返回、记录或持久化任何源 Secret 值。
 func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, projectID, environmentID, role string, support RuntimeSupportResources) (string, error) {
-	if role != ServiceCompute && role != ServiceAlarm {
+	if role != ServiceBase && role != ServiceCompute && role != ServiceAlarm {
 		return "", fmt.Errorf("运行角色非法")
 	}
 	database := runtimeStateDatabaseName(projectID, environmentID)
@@ -84,6 +89,26 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 		return "", fmt.Errorf("构造 bootstrap 凭据失败")
 	}
 	files[bootstrapPostgresFile] = bootstrap
+	if role == ServiceBase {
+		// Runtime API 只得到运行库用户 DSN 与项目 NATS token；admin bootstrap
+		// 凭据不会投影到 API 容器。
+		files[runtimeAPINATSFile] = files[resolverNATSFile]
+		files[runtimeAPIPostgresFile] = files[resolverPostgresFile]
+		if data["runtime-api-token"] == "" {
+			value, e := secretValue()
+			if e != nil {
+				return "", e
+			}
+			data["runtime-api-token"] = value
+			changed = true
+		}
+		digest := sha256.Sum256([]byte(data["runtime-api-token"]))
+		tokens, e := json.Marshal(map[string]any{"schemaVersion": "runtime-api-tokens.v1", "tokens": []map[string]any{{"tokenSha256": hex.EncodeToString(digest[:]), "subjectId": "deployment-user", "roles": []string{"viewer"}}}})
+		if e != nil {
+			return "", fmt.Errorf("构造 Runtime API token 凭据失败")
+		}
+		files[runtimeAPITokensFile] = string(tokens)
+	}
 	for name, value := range files {
 		if data[name] != value {
 			data[name] = value

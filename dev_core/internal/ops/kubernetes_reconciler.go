@@ -199,7 +199,7 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
 // Kubernetes RollingUpdate 接管。403 明确暴露为 RBAC 配置错误，不能伪报已运行。
 func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload ProjectWorkload) error {
-	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
+	if workload.Engine == ServiceBase || workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		if r.runtimeContext == nil {
 			return fmt.Errorf("运行绑定上下文加载器未配置")
 		}
@@ -227,6 +227,7 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		digest := sha256.Sum256(input)
 		workload.RuntimeBindingChecksum = "sha256:" + hex.EncodeToString(digest[:])
 		workload.BindingRevision = runtimeContext.BindingRevision
+		workload.RuntimeNATSEndpoint = runtimeContext.Support.NATSEndpoint
 	}
 	manifest, err := RenderProjectWorkloadManifest(workload)
 	if err != nil {

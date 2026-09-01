@@ -7,6 +7,7 @@ import (
 
 const (
 	projectGatewayImage  = "induforge/project-gateway:1.0.0"
+	runtimeAPIImage      = "induforge/project-runtime-api:1.0.0"
 	runtimeEngineImage   = "induforge/runtime-engine:1.0.0"
 	collectorEngineImage = "induforge/collector-engine:1.0.0"
 	computeSandboxImage  = "induforge/compute-sandbox:1.0.0"
@@ -20,6 +21,7 @@ type ProjectWorkload struct {
 	HostPort                                                                         *int
 	RuntimeBindingChecksum                                                           string
 	BindingRevision                                                                  int
+	RuntimeNATSEndpoint                                                              string
 }
 
 func projectNamespace(environmentID string) (string, error) {
@@ -73,7 +75,82 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	}
 	hostPort := ""
 	sandbox := ""
-	runtimeInit, runtimeArgs, runtimeMounts, runtimeVolumes := "", "", "", ""
+	runtimeInit, runtimeArgs, runtimeMounts, runtimeVolumes, apiSidecar := "", "", "", "", ""
+	if workload.Engine == ServiceBase {
+		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
+		if nameErr != nil {
+			return "", nameErr
+		}
+		if strings.TrimSpace(workload.RuntimeNATSEndpoint) == "" {
+			return "", fmt.Errorf("基础引擎缺少 Runtime API NATS endpoint")
+		}
+		bindingName := name + "-runtime-binding"
+		runtimeInit = fmt.Sprintf(`
+      initContainers:
+        - name: runtime-provision-nats
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner"]
+          args: ["provision-nats", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/nats.json"]
+          resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: bootstrap-nats, mountPath: /var/run/induforge/bootstrap, readOnly: true}
+        - name: runtime-provision-state
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner"]
+          args: ["provision-state", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/postgres-bootstrap.json"]
+          resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: bootstrap-state, mountPath: /var/run/induforge/bootstrap, readOnly: true}
+        - name: runtime-api-artifact-prepare
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner"]
+          args: ["unpack-runtime", "--archive", "/opt/induforge/release/runtime-artifact.tar.zst", "--target", "/work/runtime-api-artifact"]
+          resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: work, mountPath: /work}`, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage)
+		runtimeVolumes = fmt.Sprintf(`
+        - name: runtime-binding
+          configMap: {name: %s}
+        - name: bootstrap-nats
+          secret:
+            secretName: %s
+            items:
+              - {key: nats.json, path: nats.json}
+        - name: bootstrap-state
+          secret:
+            secretName: %s
+            items:
+              - {key: postgres-bootstrap.json, path: postgres-bootstrap.json}
+        - name: runtime-api-secrets
+          secret:
+            secretName: %s
+            items:
+              - {key: runtime-api-nats.json, path: nats.json}
+              - {key: runtime-api-postgres.json, path: postgres.json}
+              - {key: runtime-api-tokens.json, path: tokens.json}`, bindingName, secretName, secretName, secretName)
+		apiSidecar = fmt.Sprintf(`
+        - name: runtime-api
+          image: %s
+          imagePullPolicy: IfNotPresent
+          args: ["--listen", "127.0.0.1:18081", "--artifact", "/work/runtime-api-artifact/runtime-project-artifact.json", "--postgres-secret", "/var/run/induforge/runtime-api/postgres.json", "--token-secret", "/var/run/induforge/runtime-api/tokens.json", "--nats-credentials", "/var/run/induforge/runtime-api/nats.json", "--deployment-id", %q, "--project-id", %q, "--account-id", %q, "--site-id", %q, "--node-id", %q, "--version", %q, "--execution-form", "k3s-workload"]
+          env: [{name: IF_RUNTIME_NATS_URL, value: %q}]
+          resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
+          readinessProbe: {httpGet: {path: /health, port: 18081}, initialDelaySeconds: 3, periodSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 18081}, initialDelaySeconds: 15, periodSeconds: 10}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: work, mountPath: /work, readOnly: true}
+            - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.DeploymentID, "if-"+stableRuntimeKey(workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, workload.RuntimeNATSEndpoint)
+	}
 	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
 		if nameErr != nil {
@@ -252,5 +329,5 @@ metadata:
 spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
 }

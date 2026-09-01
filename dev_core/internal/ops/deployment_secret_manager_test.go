@@ -82,6 +82,25 @@ func TestBuildResolverSecretFilesKeepsResolverShapeInMemory(t *testing.T) {
 	}
 }
 
+func TestDeploymentSecretManagerBuildsBaseRuntimeAPIFilesWithoutBootstrapLeak(t *testing.T) {
+	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {"token": "environment-token"}, "runtime/postgres": {"password": "admin-password"}}}
+	manager := NewDeploymentSecretManager(client)
+	support := RuntimeSupportResources{StateStoreEndpoint: "postgres.runtime.svc:5432", StateStoreAdminUser: "postgres", NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"password": "password"}}}
+	name, err := manager.Ensure(context.Background(), "project", "99999999-9999-4999-8999-999999999999", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", ServiceBase, support)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := client.values["project/"+name]
+	for _, key := range []string{runtimeAPINATSFile, runtimeAPIPostgresFile, runtimeAPITokensFile} {
+		if data[key] == "" {
+			t.Fatalf("base Runtime API missing %s", key)
+		}
+	}
+	if strings.Contains(data[runtimeAPIPostgresFile], "admin-password") || strings.Contains(data[runtimeAPITokensFile], data["runtime-api-token"]) || strings.Contains(data[runtimeAPITokensFile], "runtime-db-password") || data["sandbox-token"] != "" {
+		t.Fatalf("base API Secret leaked admin/sandbox value: %#v", data)
+	}
+}
+
 func TestRuntimePostgresDSNSeparatesUsersAndEscapesCredentials(t *testing.T) {
 	support := RuntimeSupportResources{StateStoreEndpoint: "postgres.runtime.svc:5432", StateStoreDatabase: "induforge_runtime", StateStoreAdminUser: "admin"}
 	admin, err := runtimePostgresDSN(support, "admin", "p@ss:/?")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -51,6 +52,9 @@ func main() {
 	flag.StringVar(&input.executionForm, "execution-form", nativeExecutionForm(), "native-linux 或 native-windows")
 	flag.BoolVar(&input.secureCookies, "secure-cookies", true, "仅通过 HTTPS 发送运行会话 Cookie")
 	flag.Parse()
+	if strings.TrimSpace(input.natsURL) == "" {
+		input.natsURL = strings.TrimSpace(os.Getenv("IF_RUNTIME_NATS_URL"))
+	}
 
 	if err := validateOptions(input); err != nil {
 		slog.Error("runtime-api 配置无效", "error", err)
@@ -76,8 +80,12 @@ func main() {
 	}
 	defer store.Close()
 	hub := realtime.NewHub(input.deploymentID, input.accountID, catalog)
+	natsToken, err := loadNATSToken(input.natsCredentials)
+	if err != nil {
+		fatal("runtime-api NATS 凭据无效", err)
+	}
 	natsSubscriber, err := realtime.ConnectNATS(startup, realtime.NATSOptions{
-		URL: input.natsURL, CredentialsFile: input.natsCredentials, Name: "runtime-api-" + input.deploymentID,
+		URL: input.natsURL, Token: natsToken, Name: "runtime-api-" + input.deploymentID,
 	}, hub)
 	if err != nil {
 		fatal("runtime-api NATS 不可用", err)
@@ -129,14 +137,38 @@ func validateOptions(input options) error {
 	if input.executionForm != "native-linux" && input.executionForm != "native-windows" && input.executionForm != "k3s-workload" {
 		return errors.New("execution-form 不受支持")
 	}
-	credentials, err := os.Lstat(input.natsCredentials)
-	if err != nil || !credentials.Mode().IsRegular() || credentials.Mode()&os.ModeSymlink != 0 {
-		return errors.New("NATS credentials 必须是普通文件且不能是符号链接")
-	}
-	if credentials.Mode().Perm()&0o077 != 0 {
-		return errors.New("NATS credentials 不能被所属组或其他用户读取")
-	}
 	return nil
+}
+
+func loadNATSToken(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > 1<<20 {
+		return "", errors.New("NATS 凭据必须是小于 1MiB 的普通文件")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return "", errors.New("NATS 凭据不能被所属组或其他用户读取")
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var credential struct {
+		SchemaVersion string `json:"schemaVersion"`
+		AuthType      string `json:"authType"`
+		Token         string `json:"token"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(payload)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&credential); err != nil {
+		return "", err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return "", errors.New("NATS 凭据包含尾随内容")
+	}
+	if credential.SchemaVersion != "nats-credential.v1" || credential.AuthType != "token" || strings.TrimSpace(credential.Token) == "" {
+		return "", errors.New("NATS 凭据格式无效")
+	}
+	return credential.Token, nil
 }
 
 func loadPostgresSecret(path string) (postgresSecret, error) {

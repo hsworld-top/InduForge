@@ -8,11 +8,11 @@ import (
 func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	port := 17800
 	digest := "sha256:" + strings.Repeat("a", 64)
-	base, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2, HostPort: &port})
+	base, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2, HostPort: &port, RuntimeNATSEndpoint: "nats://nats:4222"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/node-id", "maxUnavailable: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
+	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/node-id", "maxUnavailable: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "image: induforge/project-runtime-api:1.0.0", "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
 		if !strings.Contains(base, expected) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
@@ -46,7 +46,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if err != nil || !strings.Contains(alarm, `"alarm"`) || strings.Contains(alarm, `"compute"`) {
 		t.Fatalf("alarm role isolation failed: %v\n%s", err, alarm)
 	}
-	if !strings.Contains(alarm, "runtime-binding-prepare") || strings.Contains(base, "runtime-binding-prepare") || strings.Contains(base, "runtime-provision-nats") || strings.Contains(base, "runtime-provision-state") || strings.Contains(base, "deployment-secrets") {
+	if !strings.Contains(alarm, "runtime-binding-prepare") || !strings.Contains(base, "runtime-provision-nats") || !strings.Contains(base, "runtime-provision-state") || !strings.Contains(base, "runtime-api-artifact-prepare") || strings.Contains(base, "sandbox-token") || strings.Contains(base, "runtime-db-password") {
 		t.Fatalf("runtime binding/base isolation failed:\nbase=%s\nalarm=%s", base, alarm)
 	}
 	if strings.Contains(alarm, "sandbox.json") || strings.Contains(alarm, "sandbox-token") || strings.Contains(alarm, "sandbox-secret") {
@@ -78,7 +78,7 @@ func TestRenderProjectWorkloadManifestBindingChecksumChangesTemplate(t *testing.
 }
 
 func TestRenderProjectWorkloadUsesImmutableReleaseDigest(t *testing.T) {
-	base := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: "sha256:" + strings.Repeat("a", 64), Generation: 1, HostPort: func() *int { p := 17800; return &p }()}
+	base := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: "sha256:" + strings.Repeat("a", 64), Generation: 1, HostPort: func() *int { p := 17800; return &p }(), RuntimeNATSEndpoint: "nats://nats:4222"}
 	first, err := RenderProjectWorkloadManifest(base)
 	if err != nil || strings.Contains(first, "/release/current") {
 		t.Fatalf("immutable release mount failed: %v", err)

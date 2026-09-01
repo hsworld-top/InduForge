@@ -52,6 +52,7 @@ PACKAGE_IMAGES=(
   "induforge/message-hub:latest"
   "induforge/object-store:latest"
   "induforge/project-gateway:1.0.0"
+  "induforge/project-runtime-api:1.0.0"
   "induforge/runtime-engine:1.0.0"
   "induforge/compute-sandbox:1.0.0"
   "induforge/collector-engine:1.0.0"
@@ -130,6 +131,9 @@ build_business_images() {
 
   echo "构建 ARM64 采集引擎镜像..."
   docker build --platform linux/arm64 -t induforge/collector-engine:1.0.0 -f "$REPO_ROOT/runtime/collector_engine/Dockerfile" "$REPO_ROOT/runtime/collector_engine"
+
+  echo "构建 ARM64 工程 Runtime API 镜像..."
+  docker build --platform linux/arm64 -t induforge/project-runtime-api:1.0.0 -f "$REPO_ROOT/runtime/runtime_api/Dockerfile" "$REPO_ROOT/runtime/runtime_api"
 }
 
 build_product_infra_images() {
