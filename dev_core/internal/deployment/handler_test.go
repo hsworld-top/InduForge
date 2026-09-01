@@ -285,6 +285,7 @@ func TestPublishMarksBuildFailedOnPipelineErrors(t *testing.T) {
 		markReady error
 	}{
 		{name: "source", builder: fakeReleaseSourceBuilder{err: errors.New("source unavailable")}, store: &fakeStore{}, config: deployment.ServiceConfig{MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0"}},
+		{name: "source with docker multiplex NUL", builder: fakeReleaseSourceBuilder{err: errors.New("source log\x00contains NUL")}, store: &fakeStore{}, config: deployment.ServiceConfig{MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0"}},
 		{name: "build", builder: fakeReleaseSourceBuilder{source: deployment.ReleaseSource{}}, store: &fakeStore{}, config: deployment.ServiceConfig{MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0"}},
 		{name: "invalid compatibility config", builder: fakeReleaseSourceBuilder{source: validReleaseSource()}, store: &fakeStore{}, config: deployment.ServiceConfig{MinNodeAgentVersion: "invalid", MinRuntimeVersion: "1.0.0"}},
 		{name: "upload", builder: fakeReleaseSourceBuilder{source: validReleaseSource()}, store: &fakeStore{putErr: errors.New("object store unavailable")}, config: deployment.ServiceConfig{MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0"}},
@@ -305,6 +306,9 @@ func TestPublishMarksBuildFailedOnPipelineErrors(t *testing.T) {
 			}
 			if repository.markFailedTenant != testsupport.TenantID || repository.markFailedVersion != testBuildingID || !repository.markFailedBackground {
 				t.Fatalf("失败回写必须使用后台上下文和当前租户版本: tenant=%s version=%s background=%v", repository.markFailedTenant, repository.markFailedVersion, repository.markFailedBackground)
+			}
+			if strings.IndexByte(repository.versions[testBuildingID].ErrorMessage, 0) >= 0 {
+				t.Fatal("失败回写文本不得含 PostgreSQL 不接受的 NUL")
 			}
 		})
 	}

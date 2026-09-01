@@ -220,8 +220,9 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 		// 尝试完成终态回写；若数据库暂不可用，下次发布的超时调和仍会兜底。
 		markCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if _, markErr := s.repository.MarkVersionFailed(markCtx, actor.TenantID, version.ID, cause.Error()); markErr != nil {
-			slog.Default().Error("正式 Release 失败状态回写失败", "requestId", input.RequestID, "versionId", version.ID, "stage", stage, "error", releaseDiagnosticError(markErr))
+		message := releaseDiagnosticError(cause)
+		if _, markErr := s.repository.MarkVersionFailed(markCtx, actor.TenantID, version.ID, message); markErr != nil {
+			slog.Default().Error("正式 Release 失败状态回写失败", "requestId", input.RequestID, "versionId", version.ID, "stage", stage, "cause", message, "error", releaseDiagnosticError(markErr))
 		} else {
 			slog.Default().Error("正式 Release 构建失败", "requestId", input.RequestID, "versionId", version.ID, "stage", stage, "error", releaseDiagnosticError(cause))
 		}
@@ -253,6 +254,14 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 // releaseDiagnosticError 截断可能来自外部依赖的错误，避免意外把认证信息写入日志。
 func releaseDiagnosticError(err error) string {
 	message := strings.TrimSpace(err.Error())
+	// PostgreSQL text 不接受 NUL。Docker multiplex 日志或异常上游响应可能含控制字节，
+	// 统一替换后再作为失败状态与运维日志内容，保证错误回写本身不会再次失败。
+	message = strings.Map(func(value rune) rune {
+		if value == 0 || (value < 0x20 && value != '\n' && value != '\t') {
+			return ' '
+		}
+		return value
+	}, message)
 	for _, prefix := range []string{"Bearer ", "bearer ", "Basic ", "basic "} {
 		if index := strings.Index(message, prefix); index >= 0 {
 			end := strings.IndexAny(message[index:], " \t\r\n\"'")
