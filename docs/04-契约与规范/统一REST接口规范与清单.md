@@ -251,6 +251,25 @@
 - `24003` 工程创建失败
 - `24006` 工程运维操作失败
 
+### 4.6.1 运维节点与运行环境 `/api/v1/ops`
+
+运维管理员负责节点接入和运行环境管理；工程管理员只能读取可部署的运行环境，不能新增环境或调整节点归属。运行环境是用户可见的工程运行边界，接口不暴露 K3s、Pod、容器或资源池概念。
+
+| 方法     | 路径                                                        | 功能概要                     |
+| -------- | ----------------------------------------------------------- | ---------------------------- |
+| `GET`    | `/api/v1/ops/node-enrollments`                              | 分页查询节点接入申请         |
+| `POST`   | `/api/v1/ops/node-enrollments`                              | 创建一次性节点接入码         |
+| `GET`    | `/api/v1/ops/nodes`                                         | 分页查询物理节点及环境归属   |
+| `GET`    | `/api/v1/ops/runtime-environments`                          | 分页查询运行环境             |
+| `POST`   | `/api/v1/ops/runtime-environments`                          | 仅按名称创建运行环境         |
+| `GET`    | `/api/v1/ops/runtime-environments/:id`                      | 查询环境聚合状态             |
+| `GET`    | `/api/v1/ops/runtime-environments/:id/nodes`                | 分页查询环境内物理节点       |
+| `POST`   | `/api/v1/ops/runtime-environments/:id/nodes`                | 将已批准 Linux 节点加入环境  |
+| `DELETE` | `/api/v1/ops/runtime-environments/:id/nodes/:nodeId`        | 从环境移除未承载服务的节点   |
+| `GET`    | `/api/v1/ops/runtime-environments/:id/events`               | 分页查询环境运维事件         |
+
+运行环境标识由服务端生成。一个物理节点最多属于一个运行环境；Windows 采集节点不加入运行环境。环境状态由节点心跳和基础服务观测派生，不能由前端写入或伪造。未部署基础服务时固定为 `uninitialized`，存在离线节点或不健康服务时为 `attention`，全部节点与基础服务健康后才为 `available`。
+
 ### 4.7 2D/3D 场景与资源库
 
 场景与资源接口统一使用短期编辑会话。除缩略图、文件内容和 ZIP 流外，响应均使用
