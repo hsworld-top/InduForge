@@ -51,6 +51,9 @@ PACKAGE_IMAGES=(
   "induforge/cache-store:latest"
   "induforge/message-hub:latest"
   "induforge/object-store:latest"
+  "induforge/project-gateway:1.0.0"
+  "induforge/runtime-engine:1.0.0"
+  "induforge/compute-sandbox:1.0.0"
 )
 
 image_tar_name() {
