@@ -54,6 +54,7 @@ PACKAGE_IMAGES=(
   "induforge/project-gateway:1.0.0"
   "induforge/runtime-engine:1.0.0"
   "induforge/compute-sandbox:1.0.0"
+  "induforge/collector-engine:1.0.0"
 )
 
 image_tar_name() {
@@ -126,6 +127,9 @@ build_business_images() {
 
   echo "构建边缘入口镜像..."
   docker build -t induforge/edge:latest -f "$REPO_ROOT/scripts/docker/edge/Dockerfile" "$REPO_ROOT"
+
+  echo "构建 ARM64 采集引擎镜像..."
+  docker build --platform linux/arm64 -t induforge/collector-engine:1.0.0 -f "$REPO_ROOT/runtime/collector_engine/Dockerfile" "$REPO_ROOT/runtime/collector_engine"
 }
 
 build_product_infra_images() {
