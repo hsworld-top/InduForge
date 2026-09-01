@@ -304,6 +304,7 @@ spec:
         induforge.io/center-node: "true"
       securityContext:
         supplementalGroups: [__DOCKER_GID__]
+        fsGroup: 1000
       initContainers:
         - name: wait-center-infrastructure
           image: docker.io/rancher/mirrored-library-busybox:1.37.0
@@ -342,6 +343,22 @@ spec:
               value: /var/lib/induforge/workspaces
             - name: CODE_SERVER_DOCKER_HOST
               value: unix:///var/run/docker.sock
+            - name: CODE_WORKSPACE_VOLUME
+              value: __RELEASE_WORKSPACE_VOLUME__
+            - name: RELEASE_BUILDER_ENABLED
+              value: "true"
+            - name: RELEASE_BUILDER_IMAGE
+              value: __RELEASE_BUILDER_IMAGE__
+            - name: RELEASE_BUILDER_ID
+              value: __RELEASE_BUILDER_ID__
+            - name: RELEASE_SIGNING_KEY_FILE
+              value: /var/run/induforge/release-signing-key.pem
+            - name: RELEASE_SIGNING_KEY_ID
+              value: __RELEASE_KEY_ID__
+            - name: RELEASE_MIN_NODE_AGENT_VERSION
+              value: __RELEASE_MIN_AGENT_VERSION__
+            - name: RELEASE_MIN_RUNTIME_VERSION
+              value: __RELEASE_MIN_RUNTIME_VERSION__
           ports:
             - name: http
               containerPort: 18101
@@ -378,6 +395,10 @@ spec:
               readOnly: true
             - name: temp
               mountPath: /tmp
+            - name: release-signing-key
+              mountPath: /var/run/induforge/release-signing-key.pem
+              subPath: release-signing-key.pem
+              readOnly: true
       volumes:
         - name: workspaces
           hostPath:
@@ -393,6 +414,10 @@ spec:
             type: File
         - name: temp
           emptyDir: {}
+        - name: release-signing-key
+          secret:
+            secretName: release-signing-key
+            defaultMode: 0400
 ---
 apiVersion: apps/v1
 kind: Deployment

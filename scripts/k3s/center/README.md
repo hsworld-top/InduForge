@@ -56,3 +56,11 @@ sudo induforge restart control
 `center-control` 暂时只为现有 Docker 代码工作区挂载宿主 Docker Socket。中心数据库、缓存、对象
 存储、控制面和 IDE 入口均由 K3s 管理；代码工作区改为 K3s 调度后必须删除该兼容挂载和 Docker
 依赖。
+
+正式 Release Builder 默认使用受控的离线前端构建镜像和 Docker local bind volume
+`induforge-center-workspaces`。`centerctl apply` 会核验该卷必须精确绑定
+`$IF_CENTER_DATA_ROOT/workspaces`，已有不同配置的卷会失败，不会覆盖。它还会在首次安装时于
+`$IF_CENTER_DATA_ROOT/secrets/release-signing-key.pem` 创建 PKCS#8 Ed25519 私钥（目录 `0700`、文件
+`0600`），并同步为命名空间 Secret。请把该私钥纳入离线安全备份：丢失后历史 Release 的签名信任
+链无法延续，必须经过显式密钥轮换和公钥分发流程；公钥分发将在后续节点发布阶段实现。私钥绝不能写入
+`center.env`、配置文件或命令输出。

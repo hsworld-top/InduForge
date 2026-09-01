@@ -31,6 +31,12 @@ DATA_ROOT=${IF_CENTER_DATA_ROOT:-${DATA_ROOT:-/var/lib/induforge/center}}
 HTTP_PORT=${IF_EDGE_HOST_PORT:-${HTTP_PORT:-18080}}
 HTTPS_PORT=${IF_EDGE_TLS_HOST_PORT:-${HTTPS_PORT:-18443}}
 DOCKER_GID=${IF_CENTER_DOCKER_GID:-${DOCKER_GID:-}}
+RELEASE_BUILDER_IMAGE=${IF_RELEASE_BUILDER_IMAGE:-${RELEASE_BUILDER_IMAGE:-induforge/designer-code-server:workspace-templates-source}}
+RELEASE_BUILDER_ID=${IF_RELEASE_BUILDER_ID:-${RELEASE_BUILDER_ID:-release-builder-v1}}
+RELEASE_WORKSPACE_VOLUME=${IF_RELEASE_WORKSPACE_VOLUME:-${RELEASE_WORKSPACE_VOLUME:-induforge-center-workspaces}}
+RELEASE_KEY_ID=${IF_RELEASE_SIGNING_KEY_ID:-${RELEASE_KEY_ID:-release-signing-key-v1}}
+RELEASE_MIN_AGENT_VERSION=${IF_RELEASE_MIN_NODE_AGENT_VERSION:-${RELEASE_MIN_AGENT_VERSION:-1.0.0}}
+RELEASE_MIN_RUNTIME_VERSION=${IF_RELEASE_MIN_RUNTIME_VERSION:-${RELEASE_MIN_RUNTIME_VERSION:-1.0.0}}
 
 usage() {
   echo "Usage: internal center manager <render|import-images|apply|status|summary|doctor|logs|restart> [arguments]" >&2
@@ -112,6 +118,10 @@ validate_settings() {
   case "$EDGE_IMAGE" in
     ''|*[!a-zA-Z0-9._/:@-]*) echo "IF_CENTER_EDGE_IMAGE is invalid" >&2; exit 1 ;;
   esac
+  for value in "$RELEASE_BUILDER_IMAGE" "$RELEASE_BUILDER_ID" "$RELEASE_WORKSPACE_VOLUME" "$RELEASE_KEY_ID" "$RELEASE_MIN_AGENT_VERSION" "$RELEASE_MIN_RUNTIME_VERSION"; do
+    case "$value" in ''|*[!a-zA-Z0-9._/:@+-]*) echo "release builder setting is invalid" >&2; exit 1;; esac
+  done
+  case "$RELEASE_WORKSPACE_VOLUME" in *[/:@+]*|.*) echo "release workspace volume name is invalid" >&2; exit 1;; esac
   case "$DATA_ROOT" in
     /|/var|/var/lib|*[!a-zA-Z0-9._/-]*) echo "IF_CENTER_DATA_ROOT is unsafe" >&2; exit 1 ;;
     /*) ;;
@@ -134,6 +144,31 @@ validate_settings() {
   case "$DOCKER_GID" in ''|*[!0-9]*) echo "IF_CENTER_DOCKER_GID is missing or invalid" >&2; exit 1 ;; esac
 }
 
+ensure_release_workspace_volume() {
+  workspace_device=$DATA_ROOT/workspaces
+  if docker volume inspect "$RELEASE_WORKSPACE_VOLUME" >/dev/null 2>&1; then
+    actual=$(docker volume inspect -f '{{.Options.type}}|{{.Options.o}}|{{.Options.device}}' "$RELEASE_WORKSPACE_VOLUME")
+    if [ "$actual" != "none|bind|$workspace_device" ]; then echo "release workspace volume options do not match center data root" >&2; exit 1; fi
+  else
+    docker volume create --driver local --opt type=none --opt o=bind --opt device="$workspace_device" "$RELEASE_WORKSPACE_VOLUME" >/dev/null
+  fi
+  if ! docker image inspect "$RELEASE_BUILDER_IMAGE" >/dev/null 2>&1; then echo "required release builder image is not available in Docker: $RELEASE_BUILDER_IMAGE" >&2; exit 1; fi
+}
+
+ensure_release_signing_key() {
+  key_dir=$DATA_ROOT/secrets; key_file=$key_dir/release-signing-key.pem
+  install -d -m 0700 "$key_dir"
+  if [ -e "$key_file" ] || [ -L "$key_file" ]; then
+    if [ -L "$key_file" ] || [ ! -f "$key_file" ] || [ "$(stat -c '%a' "$key_file")" != 600 ]; then echo "release signing key is unsafe" >&2; exit 1; fi
+  else
+    temp_key=$(mktemp "$key_dir/.release-signing-key.XXXXXX")
+    umask 077; openssl genpkey -algorithm ED25519 -out "$temp_key"
+    chmod 0600 "$temp_key"; mv "$temp_key" "$key_file"
+  fi
+  if ! openssl pkey -in "$key_file" -check -noout >/dev/null 2>&1; then echo "release signing key validation failed" >&2; exit 1; fi
+  RELEASE_KEY_FILE=$key_file
+}
+
 render_manifest() {
   validate_settings
   sed \
@@ -144,6 +179,12 @@ render_manifest() {
     -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
     -e "s|__HTTPS_PORT__|$HTTPS_PORT|g" \
     -e "s|__DOCKER_GID__|$DOCKER_GID|g" \
+    -e "s|__RELEASE_BUILDER_IMAGE__|$RELEASE_BUILDER_IMAGE|g" \
+    -e "s|__RELEASE_BUILDER_ID__|$RELEASE_BUILDER_ID|g" \
+    -e "s|__RELEASE_WORKSPACE_VOLUME__|$RELEASE_WORKSPACE_VOLUME|g" \
+    -e "s|__RELEASE_KEY_ID__|$RELEASE_KEY_ID|g" \
+    -e "s|__RELEASE_MIN_AGENT_VERSION__|$RELEASE_MIN_AGENT_VERSION|g" \
+    -e "s|__RELEASE_MIN_RUNTIME_VERSION__|$RELEASE_MIN_RUNTIME_VERSION|g" \
     "$SCRIPT_DIR/center-system.yaml.template"
 }
 
@@ -164,6 +205,8 @@ apply_center() {
   install -d -m 0750 \
     "$DATA_ROOT/meta-store" "$DATA_ROOT/cache-store" "$DATA_ROOT/object-store" \
     "$DATA_ROOT/workspaces" "$DATA_ROOT/tls"
+  ensure_release_workspace_volume
+  ensure_release_signing_key
 
   temp_dir=$(mktemp -d)
   trap 'rm -rf "$temp_dir"' EXIT INT TERM
@@ -175,6 +218,8 @@ apply_center() {
   secret_result=$(kubectl_cmd -n "$NAMESPACE" create secret generic center-env \
     --from-env-file="$temp_dir/center.env" --dry-run=client -o yaml | kubectl_cmd apply -f -)
   echo "$secret_result"
+  release_key_result=$(kubectl_cmd -n "$NAMESPACE" create secret generic release-signing-key --from-file=release-signing-key.pem="$RELEASE_KEY_FILE" --dry-run=client -o yaml | kubectl_cmd apply -f -)
+  echo "$release_key_result"
   edge_config_result=$(kubectl_cmd -n "$NAMESPACE" create configmap center-edge-config \
     --from-file=nginx.conf="$SCRIPT_DIR/nginx.conf" --dry-run=client -o yaml | kubectl_cmd apply -f -)
   echo "$edge_config_result"
@@ -183,6 +228,7 @@ apply_center() {
   case "$secret_result" in
     *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-control ;;
   esac
+  case "$release_key_result" in *configured*|*created*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-control ;; esac
   case "$edge_config_result" in
     *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-edge ;;
   esac

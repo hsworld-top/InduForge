@@ -36,6 +36,10 @@ for expected in \
   'supplementalGroups: [998]' \
   'name: wait-center-infrastructure' \
   'name: wait-center-control' \
+  'name: release-signing-key' \
+  'RELEASE_BUILDER_ENABLED' \
+  'value: induforge-center-workspaces' \
+  'defaultMode: 0400' \
   'publishNotReadyAddresses: true' \
   'path: /var/lib/induforge/center/meta-store'; do
   grep -Fq "$expected" "$temp_dir/rendered.yaml"
@@ -59,6 +63,10 @@ if IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DATA_ROOT=/ IF_CENTER_DOCKER_GID=9
 fi
 if IF_CENTER_NODE_NAME=if-center-01 IF_EDGE_HOST_PORT=18080 IF_EDGE_TLS_HOST_PORT=18080 IF_CENTER_DOCKER_GID=998 "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
   echo "duplicate edge ports were accepted" >&2
+  exit 1
+fi
+if IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DOCKER_GID=998 IF_RELEASE_WORKSPACE_VOLUME=bad/name "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
+  echo "unsafe release workspace volume was accepted" >&2
   exit 1
 fi
 
