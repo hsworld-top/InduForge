@@ -64,8 +64,11 @@ func TestProjectReleaseSourceBuilderBuildsDeterministicAuthorizedSource(t *testi
 		}
 	}
 	clientFiles := unpackReleaseSource(t, first.Client)
-	if string(clientFiles["dist/index.html"]) != "<main>demo</main>" {
+	if string(clientFiles["index.html"]) != "<main>demo</main>" {
 		t.Fatalf("前端 dist 未进入 client 归档: %v", mapKeys(clientFiles))
+	}
+	if _, ok := clientFiles["dist/index.html"]; ok {
+		t.Fatal("client 归档不得额外包含 dist 根目录")
 	}
 	runtimeFiles := unpackReleaseSource(t, first.Runtime)
 	for _, file := range []string{"runtime-project-artifact.json", "displays/panel.json", "symbols/pump.svg", ".induforge/scenes/main.json"} {

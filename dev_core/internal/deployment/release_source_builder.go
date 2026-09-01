@@ -180,11 +180,11 @@ func validateRuntimeArtifact(projectID string, artifact map[string]any) error {
 }
 
 func (b *ProjectReleaseSourceBuilder) packFrontend(dist string) ([]byte, error) {
-	files, err := readTreeFiles(dist, "dist", b.archiveLimit)
+	files, err := readTreeFiles(dist, "", b.archiveLimit)
 	if err != nil {
 		return nil, fmt.Errorf("读取前端构建目录失败: %w", err)
 	}
-	if _, ok := files["dist/index.html"]; !ok {
+	if _, ok := files["index.html"]; !ok {
 		return nil, fmt.Errorf("前端构建目录缺少 index.html")
 	}
 	return packReleaseSourceArchive(files)
