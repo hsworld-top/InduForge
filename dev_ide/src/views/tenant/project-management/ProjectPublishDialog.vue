@@ -93,7 +93,7 @@
         </el-tag>
       </div>
 
-      <div class="publish-field">
+      <div v-if="availableEnvironments.length > 1" class="publish-field">
         <label for="publish-environment">{{ t('projectManagement.targetEnvironment') }}</label>
         <el-select
           id="publish-environment"
@@ -105,7 +105,7 @@
           @change="handleEnvironmentChange"
         >
           <el-option
-            v-for="environment in environments"
+            v-for="environment in availableEnvironments"
             :key="environment.id"
             :value="environment.id"
             :label="environment.name"
@@ -253,7 +253,7 @@ const placements = reactive<Record<EngineKey, string>>({
 const engineRows = computed(() => [
   {
     key: 'runtime' as const,
-    label: t('projectManagement.runtimeEngine'),
+    label: t('projectManagement.baseEngine'),
     optional: false,
   },
   {
@@ -272,6 +272,13 @@ const engineRows = computed(() => [
     optional: true,
   },
 ])
+
+// 单一运行环境不是用户决策，隐藏选择器并直接使用它，避免两个部署入口语义不一致。
+const availableEnvironments = computed(() =>
+  environments.value.filter(
+    (item) => item.desiredStatus !== 'deleting' && item.status !== 'uninitialized',
+  ),
+)
 
 const dialogTitle = computed(() =>
   activeView.value === 'versions'
@@ -446,9 +453,7 @@ const loadPublishContext = async () => {
       (item) => item.mode !== 'DEV' && item.version !== '__DEV__',
     )
     const defaultEnvironment =
-      environments.value.find((item) => item.isDefault && item.status !== 'uninitialized') ||
-      environments.value.find((item) => item.status !== 'uninitialized') ||
-      environments.value[0]
+      availableEnvironments.value.find((item) => item.isDefault) || availableEnvironments.value[0]
     environmentId.value = defaultEnvironment?.id || ''
     await loadNodes(environmentId.value)
   } catch (error) {

@@ -138,7 +138,7 @@ describe('ops management console', () => {
     expect(source).toContain('.ops-deployment-field :deep(.el-select__wrapper.is-focused)')
     expect(source).toContain('.ops-deployment-port :deep(.el-input__wrapper.is-focus)')
     expect(source).toContain('grid-template-columns: minmax(100px, 0.78fr) minmax(0, 1.22fr)')
-    for (const engine of ['runtimeEngine', 'computeEngine', 'alarmEngine', 'collectionEngine']) {
+    for (const engine of ['baseEngine', 'computeEngine', 'alarmEngine', 'collectionEngine']) {
       expect(source).toContain(`t('opsConsole.deployments.${engine}')`)
     }
   })

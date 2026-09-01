@@ -1547,7 +1547,7 @@
           { 'ops-deployment-form--release': deployForm.mode === 'RELEASE' },
         ]"
       >
-        <div class="ops-deployment-field">
+        <div v-if="availableEnvironments.length > 1" class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.project') }}</label>
           <el-select
             v-model="deployForm.projectId"
@@ -2334,7 +2334,7 @@ const selectedVersion = computed(() =>
   versions.value.find((item) => item.id === deployForm.applicationVersionId),
 )
 const deploymentEngineRows = computed(() => [
-  { key: 'runtime' as const, label: t('opsConsole.deployments.runtimeEngine'), optional: false },
+  { key: 'runtime' as const, label: t('opsConsole.deployments.baseEngine'), optional: false },
   { key: 'compute' as const, label: t('opsConsole.deployments.computeEngine'), optional: false },
   { key: 'alarm' as const, label: t('opsConsole.deployments.alarmEngine'), optional: false },
   {
