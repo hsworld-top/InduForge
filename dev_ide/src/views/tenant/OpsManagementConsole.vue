@@ -4223,6 +4223,10 @@ onBeforeUnmount(() => {
 .ops-engine-placement :deep(.el-switch) {
   --el-switch-on-color: var(--ck-primary);
 }
+.ops-engine-placement :deep(.el-select) {
+  width: 100%;
+  min-width: 0;
+}
 .ops-deployment-footer {
   display: flex;
   align-items: center;
@@ -4322,7 +4326,7 @@ onBeforeUnmount(() => {
     display: none;
   }
   .ops-engine-placement__row {
-    grid-template-columns: minmax(112px, 0.78fr) minmax(145px, 1.22fr);
+    grid-template-columns: minmax(100px, 0.78fr) minmax(0, 1.22fr);
     column-gap: 8px;
     padding-inline: 10px;
   }
