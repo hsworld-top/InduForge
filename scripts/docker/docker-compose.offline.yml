@@ -6,6 +6,10 @@ services:
     image: induforge/edge:latest
     ports:
       - '${IF_EDGE_HOST_PORT:-18080}:80'
+    environment:
+      DEV_CORE_INTERNAL_PORT: ${DEV_CORE_INTERNAL_PORT:-18101}
+      DATA_SERVICE_INTERNAL_PORT: ${DATA_SERVICE_INTERNAL_PORT:-18102}
+      NGINX_ENVSUBST_FILTER: '^(DEV_CORE_INTERNAL_PORT|DATA_SERVICE_INTERNAL_PORT)$'
     depends_on:
       - control
       - data
@@ -19,14 +23,14 @@ services:
     env_file:
       - ../../.env
     environment:
-      DEV_CORE_ADDR: :18101
+      DEV_CORE_ADDR: :${DEV_CORE_INTERNAL_PORT:-18101}
       DB_AUTO_SCHEMA_SYNC: 'false'
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 18432
+      IF_META_STORE_PORT: ${IF_META_STORE_PORT:-18432}
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 18379
+      IF_CACHE_STORE_PORT: ${IF_CACHE_STORE_PORT:-18379}
       IF_OBJECT_STORE_ENDPOINT: object-store
-      IF_OBJECT_STORE_PORT: 18500
+      IF_OBJECT_STORE_PORT: ${IF_OBJECT_STORE_PORT:-18500}
       CODE_WORKSPACE_ROOT: /var/lib/induforge/workspaces
       CODE_WORKSPACE_VOLUME: ${CODE_WORKSPACE_VOLUME:-induforge-control-workspaces}
       CODE_SERVER_DOCKER_HOST: unix:///var/run/docker.sock
@@ -36,7 +40,7 @@ services:
       - induforge-control-workspaces:/var/lib/induforge/workspaces
       - /var/run/docker.sock:/var/run/docker.sock
     expose:
-      - '18101'
+      - '${DEV_CORE_INTERNAL_PORT:-18101}'
     depends_on:
       - meta-store
       - cache-store
@@ -53,13 +57,13 @@ services:
     environment:
       NODE_ENV: production
       DB_AUTO_SCHEMA_SYNC: 'false'
-      DATA_SERVICE_ADDR: :18102
+      DATA_SERVICE_ADDR: :${DATA_SERVICE_INTERNAL_PORT:-18102}
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 18432
+      IF_META_STORE_PORT: ${IF_META_STORE_PORT:-18432}
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 18379
+      IF_CACHE_STORE_PORT: ${IF_CACHE_STORE_PORT:-18379}
     expose:
-      - '18102'
+      - '${DATA_SERVICE_INTERNAL_PORT:-18102}'
     depends_on:
       - meta-store
       - cache-store
@@ -72,6 +76,7 @@ services:
     container_name: induforge-meta-store
     image: induforge/meta-store:latest
     environment:
+      IF_META_STORE_PORT: ${IF_META_STORE_PORT:-18432}
       POSTGRES_USER: ${IF_META_STORE_USER:-postgres}
       POSTGRES_PASSWORD: ${IF_META_STORE_PASSWORD:-postgres}
       POSTGRES_DB: ${IF_META_STORE_ADMIN_DATABASE:-postgres}
@@ -87,6 +92,7 @@ services:
     image: induforge/cache-store:latest
     environment:
       IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
+      IF_CACHE_STORE_PORT: ${IF_CACHE_STORE_PORT:-18379}
     volumes:
       - induforge-cache-store-data:/data
     networks:
@@ -99,9 +105,9 @@ services:
     environment:
       EMQX_NAME: induforge
       EMQX_HOST: message-hub
-      EMQX_LISTENERS__TCP__DEFAULT__BIND: '0.0.0.0:18883'
-      EMQX_LISTENERS__WS__DEFAULT__BIND: '0.0.0.0:18083'
-      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: '0.0.0.0:18084'
+      EMQX_LISTENERS__TCP__DEFAULT__BIND: '0.0.0.0:${IF_MESSAGE_HUB_MQTT_PORT:-18883}'
+      EMQX_LISTENERS__WS__DEFAULT__BIND: '0.0.0.0:${IF_MESSAGE_HUB_WS_PORT:-18083}'
+      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: '0.0.0.0:${IF_MESSAGE_HUB_DASHBOARD_PORT:-18084}'
     networks:
       - induforge-prod-net
     restart: unless-stopped
@@ -112,9 +118,10 @@ services:
     environment:
       IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
       IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}
-      IF_OBJECT_STORE_MASTER_PORT: 18333
-      IF_OBJECT_STORE_FILER_PORT: 18888
-      IF_OBJECT_STORE_VOLUME_PORT: 18081
+      IF_OBJECT_STORE_MASTER_PORT: ${IF_OBJECT_STORE_MASTER_PORT:-18333}
+      IF_OBJECT_STORE_FILER_PORT: ${IF_OBJECT_STORE_FILER_PORT:-18888}
+      IF_OBJECT_STORE_VOLUME_PORT: ${IF_OBJECT_STORE_VOLUME_PORT:-18081}
+      IF_OBJECT_STORE_PORT: ${IF_OBJECT_STORE_PORT:-18500}
     volumes:
       - induforge-object-store-master-data:/data
       - induforge-object-store-volume-data:/data/volume

@@ -10,11 +10,12 @@ import (
 func TestFilePackageStoreSharesBuildVersionAcrossPackages(t *testing.T) {
 	directory := t.TempDir()
 	writePackageVersion(t, directory, "1.2.3+build.20260831\n")
-	writePackage(t, directory, "induforge-node-agent-linux.tar.gz")
+	writePackage(t, directory, "induforge-node-agent-linux-amd64.tar.gz")
+	writePackage(t, directory, "induforge-node-agent-linux-arm64.tar.gz")
 	writePackage(t, directory, "induforge-node-agent-windows.zip")
 
 	items := NewFilePackageStore(directory).List()
-	if len(items) != 2 {
+	if len(items) != 3 {
 		t.Fatalf("items=%d", len(items))
 	}
 	for _, item := range items {
@@ -22,7 +23,7 @@ func TestFilePackageStoreSharesBuildVersionAcrossPackages(t *testing.T) {
 			t.Fatalf("package must use shared build version: %#v", item)
 		}
 	}
-	item, path, err := NewFilePackageStore(directory).Open(PlatformLinux)
+	item, path, err := NewFilePackageStore(directory).Open(PackageLinuxARM64)
 	if err != nil || item.Version != "1.2.3+build.20260831" || path != filepath.Join(directory, item.FileName) {
 		t.Fatalf("open package=%#v path=%q err=%v", item, path, err)
 	}
@@ -40,7 +41,8 @@ func TestFilePackageStoreFailsClosedWithoutValidVersionSidecar(t *testing.T) {
 			if name != "missing" {
 				writePackageVersion(t, directory, content)
 			}
-			writePackage(t, directory, "induforge-node-agent-linux.tar.gz")
+			writePackage(t, directory, "induforge-node-agent-linux-amd64.tar.gz")
+			writePackage(t, directory, "induforge-node-agent-linux-arm64.tar.gz")
 			writePackage(t, directory, "induforge-node-agent-windows.zip")
 
 			store := NewFilePackageStore(directory)
@@ -59,11 +61,11 @@ func TestFilePackageStoreFailsClosedWithoutValidVersionSidecar(t *testing.T) {
 func TestFilePackageStoreRequiresEachPackageFile(t *testing.T) {
 	directory := t.TempDir()
 	writePackageVersion(t, directory, "1.2.3\n")
-	writePackage(t, directory, "induforge-node-agent-linux.tar.gz")
+	writePackage(t, directory, "induforge-node-agent-linux-amd64.tar.gz")
 
 	store := NewFilePackageStore(directory)
 	items := store.List()
-	if !items[0].Available || items[1].Available || items[1].Version != "1.2.3" {
+	if !items[0].Available || items[1].Available || items[2].Available || items[1].Version != "1.2.3" {
 		t.Fatalf("unexpected package availability: %#v", items)
 	}
 	if _, _, err := store.Open(PlatformWindows); err == nil {
@@ -78,7 +80,7 @@ func TestFilePackageStoreRejectsSymlinkedPackage(t *testing.T) {
 	if err := os.WriteFile(target, []byte("package"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(directory, "induforge-node-agent-linux.tar.gz")
+	link := filepath.Join(directory, "induforge-node-agent-linux-amd64.tar.gz")
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("cannot create symbolic link: %v", err)
 	}
@@ -88,7 +90,7 @@ func TestFilePackageStoreRejectsSymlinkedPackage(t *testing.T) {
 	if items[0].Available {
 		t.Fatalf("symbolic link must not be listed as a package: %#v", items[0])
 	}
-	if _, _, err := store.Open(PlatformLinux); err == nil {
+	if _, _, err := store.Open(PackageLinuxAMD64); err == nil {
 		t.Fatal("symbolic link must not be downloadable")
 	}
 }

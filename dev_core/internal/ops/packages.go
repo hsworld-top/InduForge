@@ -9,6 +9,11 @@ import (
 
 const packageVersionFile = "node-agent-version.txt"
 
+const (
+	PackageLinuxAMD64 = "linux-amd64"
+	PackageLinuxARM64 = "linux-arm64"
+)
+
 // FilePackageStore 仅从配置目录中的固定文件名读取，禁止把请求路径拼接进文件系统路径。
 type FilePackageStore struct{ directory string }
 
@@ -17,7 +22,8 @@ func NewFilePackageStore(directory string) *FilePackageStore {
 }
 func (s *FilePackageStore) definitions() []NodePackage {
 	return []NodePackage{
-		{ID: PlatformLinux, Name: "Linux NodeAgent", Platform: PlatformLinux, Architecture: "multi", FileName: "induforge-node-agent-linux.tar.gz"},
+		{ID: PackageLinuxAMD64, Name: "Linux NodeAgent", Platform: PlatformLinux, Architecture: "amd64", FileName: "induforge-node-agent-linux-amd64.tar.gz"},
+		{ID: PackageLinuxARM64, Name: "Linux NodeAgent", Platform: PlatformLinux, Architecture: "arm64", FileName: "induforge-node-agent-linux-arm64.tar.gz"},
 		{ID: PlatformWindows, Name: "Windows NodeAgent", Platform: PlatformWindows, Architecture: "amd64", FileName: "induforge-node-agent-windows.zip"},
 	}
 }

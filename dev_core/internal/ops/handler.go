@@ -3,6 +3,7 @@ package ops
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/indu-forge/dev_core/internal/auth"
 	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
@@ -29,11 +30,27 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Post("/node-enrollments/{id}/reject", h.reject)
 		r.Get("/nodes", h.listNodes)
 		r.Get("/nodes/{id}", h.getNode)
+		r.Delete("/nodes/{id}", h.removeNode)
+		r.Get("/runtime-environments", h.listRuntimeEnvironments)
+		r.Post("/runtime-environments", h.createRuntimeEnvironment)
+		r.Get("/runtime-environments/{id}", h.getRuntimeEnvironment)
+		r.Patch("/runtime-environments/{id}", h.updateRuntimeEnvironment)
+		r.Delete("/runtime-environments/{id}", h.deleteRuntimeEnvironment)
+		r.Get("/runtime-environments/{id}/nodes", h.listRuntimeEnvironmentNodes)
+		r.Post("/runtime-environments/{id}/nodes", h.addRuntimeEnvironmentNodes)
+		r.Delete("/runtime-environments/{id}/nodes/{nodeId}", h.removeRuntimeEnvironmentNode)
+		r.Get("/runtime-environments/{id}/events", h.listRuntimeEnvironmentEvents)
+		r.Get("/runtime-environments/{id}/foundation-services", h.listRuntimeEnvironmentServices)
+		r.Post("/runtime-environments/{id}/foundation-services/deploy", h.deployRuntimeEnvironmentFoundation)
+		r.Post("/runtime-environments/{id}/foundation-services/migrate", h.migrateRuntimeEnvironmentFoundation)
 		r.Get("/node-packages", h.listPackages)
 		r.Get("/node-packages/{id}/download", h.download)
 		r.Get("/project-deployments", h.listDeployments)
 		r.Post("/project-deployments", h.createDeployment)
 		r.Get("/project-deployments/{id}", h.getDeployment)
+		r.Post("/project-deployments/{id}/start", h.operateDeployment("start"))
+		r.Post("/project-deployments/{id}/stop", h.operateDeployment("stop"))
+		r.Post("/project-deployments/{id}/restart", h.operateDeployment("restart"))
 		r.Post("/project-deployments/{id}/services/{service}/start", h.operate("start"))
 		r.Post("/project-deployments/{id}/services/{service}/stop", h.operate("stop"))
 		r.Post("/project-deployments/{id}/services/{service}/restart", h.operate("restart"))
@@ -42,6 +59,8 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Post("/agent/enrollments/claim", h.claim)
 		r.Post("/agent/nodes/{id}/heartbeat", h.heartbeat)
 		r.Get("/agent/nodes/{id}/commands", h.commands)
+		r.Get("/agent/nodes/{id}/deployments/{deployment}/binding", h.agentBinding)
+		r.Get("/agent/nodes/{id}/deployments/{deployment}/release", h.agentRelease)
 	})
 }
 func (h *Handler) actor(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
@@ -146,6 +165,15 @@ func (h *Handler) getNode(w http.ResponseWriter, r *http.Request) {
 		platformapi.WriteSuccess(w, r, nodePayload(x))
 	})
 }
+func (h *Handler) removeNode(w http.ResponseWriter, r *http.Request) {
+	h.user(w, r, func(u auth.User) {
+		if e := h.service.RemoveNode(r.Context(), u, chi.URLParam(r, "id")); e != nil {
+			h.err(w, r, e)
+			return
+		}
+		platformapi.WriteSuccess(w, r, map[string]any{"status": "removing"})
+	})
+}
 func (h *Handler) listDeployments(w http.ResponseWriter, r *http.Request) {
 	h.user(w, r, func(u auth.User) {
 		x, n, e := h.service.ListDeployments(r.Context(), u, page(r))
@@ -189,6 +217,18 @@ func (h *Handler) operate(op string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.user(w, r, func(u auth.User) {
 			d, run, e := h.service.OperateService(r.Context(), u, chi.URLParam(r, "id"), chi.URLParam(r, "service"), op)
+			if e != nil {
+				h.err(w, r, e)
+				return
+			}
+			platformapi.WriteSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
+		})
+	}
+}
+func (h *Handler) operateDeployment(op string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.user(w, r, func(u auth.User) {
+			d, run, e := h.service.OperateDeployment(r.Context(), u, chi.URLParam(r, "id"), op)
 			if e != nil {
 				h.err(w, r, e)
 				return
@@ -250,6 +290,7 @@ func (h *Handler) claim(w http.ResponseWriter, r *http.Request) {
 		Architecture       string   `json:"architecture"`
 		AgentVersion       string   `json:"agentVersion"`
 		MachineFingerprint string   `json:"machineFingerprint"`
+		IPAddress          string   `json:"ipAddress"`
 		Capabilities       []string `json:"capabilities"`
 	}
 	if !decode(r, &body) {
@@ -293,12 +334,71 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 	platformapi.WriteSuccess(w, r, map[string]any{"node": nodePayload(n), "services": s})
 }
 func (h *Handler) commands(w http.ResponseWriter, r *http.Request) {
-	x, e := h.service.AgentCommands(r.Context(), chi.URLParam(r, "id"), agentToken(r))
+	nodeID, token := chi.URLParam(r, "id"), agentToken(r)
+	x, e := h.service.AgentCommands(r.Context(), nodeID, token)
 	if e != nil {
 		h.err(w, r, e)
 		return
 	}
-	platformapi.WriteSuccess(w, r, map[string]any{"commands": x})
+	plan, e := h.service.AgentClusterPlan(r.Context(), nodeID, token)
+	if e != nil {
+		h.err(w, r, e)
+		return
+	}
+	uninstall, e := h.service.AgentClusterUninstall(r.Context(), nodeID, token)
+	if e != nil {
+		h.err(w, r, e)
+		return
+	}
+	foundationPlan, e := h.service.AgentFoundationPlan(r.Context(), nodeID, token)
+	if e != nil {
+		h.err(w, r, e)
+		return
+	}
+	foundationDelete, e := h.service.AgentFoundationDelete(r.Context(), nodeID, token)
+	if e != nil {
+		h.err(w, r, e)
+		return
+	}
+	timeSyncPlan, e := h.service.AgentTimeSyncPlan(r.Context(), nodeID, token)
+	if e != nil {
+		h.err(w, r, e)
+		return
+	}
+	// 删除优先于部署，避免同一轮命令先重建再删除环境隔离空间。
+	if foundationDelete != nil {
+		foundationPlan = nil
+	}
+	platformapi.WriteSuccess(w, r, map[string]any{"commands": x, "clusterPlan": plan, "clusterUninstall": uninstall, "foundationPlan": foundationPlan, "foundationDelete": foundationDelete, "timeSyncPlan": timeSyncPlan})
+}
+func (h *Handler) agentBinding(w http.ResponseWriter, r *http.Request) {
+	binding, err := h.service.AgentDeploymentBinding(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"))
+	if err != nil {
+		h.err(w, r, err)
+		return
+	}
+	var payload any
+	if err := json.Unmarshal(binding.Content, &payload); err != nil {
+		h.err(w, r, fmt.Errorf("%w: DeploymentBinding 内容无效", ErrReleaseNotDeployable))
+		return
+	}
+	platformapi.WriteSuccess(w, r, payload)
+}
+func (h *Handler) agentRelease(w http.ResponseWriter, r *http.Request) {
+	_, content, err := h.service.AgentRelease(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"))
+	if err != nil {
+		h.err(w, r, err)
+		return
+	}
+	defer content.Reader.Close()
+	// Release 下载端点只交付固定的 tar.zst 契约，不能透传对象存储中可变的
+	// Content-Type 元数据，避免错误或被污染的元数据影响 Agent 的下载边界。
+	w.Header().Set("Content-Type", "application/zstd")
+	w.Header().Set("Content-Length", strconv.FormatInt(content.Size, 10))
+	w.Header().Set("Content-Disposition", `attachment; filename="release.tar.zst"`)
+	if _, err := io.Copy(w, content.Reader); err != nil {
+		return
+	}
 }
 func agentToken(r *http.Request) string {
 	p := strings.Fields(r.Header.Get("Authorization"))
@@ -310,7 +410,7 @@ func agentToken(r *http.Request) string {
 func page(r *http.Request) PageFilter {
 	p, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	n, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	return PageFilter{Page: p, PageSize: n, Search: r.URL.Query().Get("search"), ProjectID: r.URL.Query().Get("projectId")}
+	return PageFilter{Page: p, PageSize: n, Search: r.URL.Query().Get("search"), ProjectID: r.URL.Query().Get("projectId"), Status: r.URL.Query().Get("status")}
 }
 func pageData(x any, n int64, f PageFilter) map[string]any {
 	if f.Page <= 0 {
@@ -340,9 +440,9 @@ func (h *Handler) err(w http.ResponseWriter, r *http.Request, e error) {
 		status, code = 200, platformapi.ErrorCodeNotFound
 	} else if errors.Is(e, ErrAgentUnauthorized) {
 		status, code = 401, platformapi.ErrorCodeTokenInvalid
-	} else if errors.Is(e, ErrDeploymentExists) || errors.Is(e, ErrNodeProjectConflict) {
+	} else if errors.Is(e, ErrDeploymentExists) || errors.Is(e, ErrNodePortConflict) || errors.Is(e, ErrEnvironmentExists) || errors.Is(e, ErrNodeEnvironmentConflict) || errors.Is(e, ErrNodeEnvironmentInUse) || errors.Is(e, ErrNodeDeploymentInUse) || errors.Is(e, ErrEnvironmentNodeServiceInUse) || errors.Is(e, ErrEnvironmentNodeDeploymentInUse) || errors.Is(e, ErrCoordinatorInUse) || errors.Is(e, ErrCenterNodeProtected) || errors.Is(e, ErrDefaultEnvironmentProtected) || errors.Is(e, ErrEnvironmentHasDeployment) || errors.Is(e, ErrEnvironmentDeleting) || errors.Is(e, ErrFoundationExists) {
 		status, code = 409, platformapi.ErrorCodeAlreadyExists
-	} else if errors.Is(e, ErrReleaseNotDeployable) {
+	} else if errors.Is(e, ErrReleaseNotDeployable) || errors.Is(e, ErrServiceLifecycleDisabled) || errors.Is(e, ErrNodeNotEligible) || errors.Is(e, ErrNodeOfflineForRemoval) || errors.Is(e, ErrFoundationNotReady) || errors.Is(e, ErrFoundationMoveUnsupported) {
 		status, code = 200, platformapi.ErrorCodeInvalidRequest
 	} else if errors.Is(e, ErrDeploymentBusy) || strings.Contains(e.Error(), "不支持") || strings.Contains(e.Error(), "无效") || strings.Contains(e.Error(), "不能为空") || strings.Contains(e.Error(), "不能") || strings.Contains(e.Error(), "能力") {
 		status, code = 200, platformapi.ErrorCodeInvalidRequest
@@ -379,27 +479,40 @@ func nodePayload(x Node) map[string]any {
 		status = "offline"
 	}
 	return map[string]any{
-		"id":                   x.ID,
-		"enrollmentId":         x.EnrollmentID,
-		"displayName":          x.DisplayName,
-		"name":                 x.DisplayName,
-		"hostname":             x.Hostname,
-		"platform":             x.Platform,
-		"architecture":         x.Architecture,
-		"capabilities":         x.Capabilities,
-		"agentVersion":         x.AgentVersion,
-		"machineFingerprint":   x.MachineFingerprint,
-		"ipAddress":            x.IPAddress,
-		"desiredStatus":        x.DesiredStatus,
-		"observedStatus":       status,
-		"resourceSummary":      x.ResourceSummary,
-		"lastHeartbeatAt":      x.LastHeartbeatAt,
-		"approvedAt":           x.ApprovedAt,
-		"assignedDeploymentId": x.AssignedDeploymentID,
-		"assignedProjectId":    x.AssignedProjectID,
-		"assignedProjectName":  x.AssignedProjectName,
-		"createdAt":            x.CreatedAt,
-		"updatedAt":            x.UpdatedAt,
+		"id":                        x.ID,
+		"enrollmentId":              x.EnrollmentID,
+		"displayName":               x.DisplayName,
+		"name":                      x.DisplayName,
+		"hostname":                  x.Hostname,
+		"platform":                  x.Platform,
+		"architecture":              x.Architecture,
+		"capabilities":              x.Capabilities,
+		"agentVersion":              x.AgentVersion,
+		"machineFingerprint":        x.MachineFingerprint,
+		"ipAddress":                 x.IPAddress,
+		"desiredStatus":             x.DesiredStatus,
+		"observedStatus":            status,
+		"resourceSummary":           x.ResourceSummary,
+		"lastHeartbeatAt":           x.LastHeartbeatAt,
+		"approvedAt":                x.ApprovedAt,
+		"assignedDeploymentId":      x.AssignedDeploymentID,
+		"assignedProjectId":         x.AssignedProjectID,
+		"assignedProjectName":       x.AssignedProjectName,
+		"environmentId":             x.EnvironmentID,
+		"environmentName":           x.EnvironmentName,
+		"environmentNames":          x.EnvironmentNames,
+		"environmentCount":          x.EnvironmentCount,
+		"nodeKind":                  x.NodeKind,
+		"clusterId":                 x.ClusterID,
+		"clusterRole":               x.ClusterRole,
+		"clusterStatus":             x.ClusterStatus,
+		"clusterMessage":            x.ClusterMessage,
+		"clusterDesiredAction":      x.ClusterDesiredAction,
+		"clusterDesiredGeneration":  x.ClusterDesiredGeneration,
+		"clusterObservedGeneration": x.ClusterObservedGeneration,
+		"clusterObservedAt":         x.ClusterObservedAt,
+		"createdAt":                 x.CreatedAt,
+		"updatedAt":                 x.UpdatedAt,
 	}
 }
 func deploymentPayload(x ProjectDeployment) map[string]any {
@@ -426,6 +539,7 @@ func deploymentPayload(x ProjectDeployment) map[string]any {
 		"applicationVersionId": x.ApplicationVersionID,
 		"version":              x.Version,
 		"latestRunId":          x.LatestRunID,
+		"accessPort":           x.AccessPort,
 		"desiredStatus":        x.DesiredStatus,
 		"observedStatus":       x.ObservedStatus,
 		"health":               x.Health,

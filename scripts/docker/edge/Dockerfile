@@ -20,7 +20,8 @@ RUN pnpm --filter designer build
 
 FROM nginx:1.27-alpine
 
-COPY scripts/docker/edge/nginx.conf /etc/nginx/nginx.conf
+RUN rm -f /etc/nginx/conf.d/default.conf
+COPY scripts/docker/edge/nginx.conf /etc/nginx/templates/nginx.conf.template
 COPY --from=frontend-build /repo/dev_ide/dist /usr/share/nginx/html
 COPY --from=frontend-build /repo/datacenter/dist /usr/share/nginx/html/datacenter
 COPY --from=frontend-build /repo/designer/dist /usr/share/nginx/html/designer

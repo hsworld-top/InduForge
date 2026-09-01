@@ -1,7 +1,6 @@
 package deployment_test
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -9,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,31 +32,28 @@ const (
 func TestDeploymentHTTPFlow(t *testing.T) {
 	handler, token, store := newDeploymentServer(t, "PROJECT_ADMIN")
 
-	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"version": "1.0.0", "name": "首个版本"}, token))
-	if len(store.content) == 0 {
-		t.Fatal("发布后未写入工件")
-	}
-	if _, err := zip.NewReader(bytes.NewReader(store.content), int64(len(store.content))); err != nil {
-		t.Fatalf("IFP 不是有效 ZIP: %v", err)
+	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"version": "1.0.0", "name": "首个版本"}, token))
+	if len(store.content) != 0 {
+		t.Fatal("停用的旧发布链路仍写入了源码工件")
 	}
 	assertOK(t, call(t, handler, http.MethodGet, "/api/v1/publish/"+testProjectID+"/versions?page=1&pageSize=20", nil, token))
 	assertOK(t, call(t, handler, http.MethodGet, "/api/v1/deployments/project/"+testProjectID+"/nodes", nil, token))
-	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}, "runtimeConfig": map[string]any{}}, token))
-	if store.presignCalls == 0 {
-		t.Fatal("创建部署时未生成短期签名 URL")
+	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}, "runtimeConfig": map[string]any{}}, token))
+	if store.presignCalls != 0 {
+		t.Fatal("停用的旧部署链路仍生成了对象存储签名 URL")
 	}
-	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/start", nil, token))
+	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/start", nil, token))
 	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/stop", nil, token))
-	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/restart", nil, token))
+	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/restart", nil, token))
 	assertOK(t, call(t, handler, http.MethodDelete, "/api/v1/deployments/node-deployment/"+testDeploymentID, nil, token))
-	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/deployments/project/"+testProjectID+"/deploy-dev", map[string]any{"nodeIds": []string{testNodeID}}, token))
-	assertOK(t, call(t, handler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/rollback", map[string]any{"nodeId": testNodeID}, token))
+	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/project/"+testProjectID+"/deploy-dev", map[string]any{"nodeIds": []string{testNodeID}}, token))
+	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/rollback", map[string]any{"nodeId": testNodeID}, token))
 	assertOK(t, call(t, handler, http.MethodDelete, "/api/v1/publish/deployment/"+testVersionID, nil, token))
 }
 
 func TestDeploymentPermissionBoundaries(t *testing.T) {
 	developerHandler, developerToken, _ := newDeploymentServer(t, "DEVELOPER")
-	assertOK(t, call(t, developerHandler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"version": "1.0.0"}, developerToken))
+	assertLegacyReleaseDisabled(t, call(t, developerHandler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{"version": "1.0.0"}, developerToken))
 	developerDeploy := call(t, developerHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, developerToken)
 	if developerDeploy.Code != platformapi.ErrorCodePermissionDenied {
 		t.Fatalf("DEVELOPER 不应执行部署，实际 code=%d msg=%s", developerDeploy.Code, developerDeploy.Msg)
@@ -67,11 +64,11 @@ func TestDeploymentPermissionBoundaries(t *testing.T) {
 	if operatorDeploy.Code != platformapi.ErrorCodePermissionDenied {
 		t.Fatalf("OPERATOR 不应创建部署，实际 code=%d msg=%s", operatorDeploy.Code, operatorDeploy.Msg)
 	}
-	assertOK(t, call(t, operatorHandler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/start", nil, operatorToken))
+	assertOK(t, call(t, operatorHandler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/stop", nil, operatorToken))
 
 	opsHandler, opsToken, _ := newDeploymentServer(t, "OPS_ADMIN")
-	assertOK(t, call(t, opsHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, opsToken))
-	assertOK(t, call(t, opsHandler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/restart", nil, opsToken))
+	assertLegacyReleaseDisabled(t, call(t, opsHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, opsToken))
+	assertLegacyReleaseDisabled(t, call(t, opsHandler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/restart", nil, opsToken))
 
 	userAdminHandler, userAdminToken, _ := newDeploymentServer(t, "USER_ADMIN")
 	listed := call(t, userAdminHandler, http.MethodGet, "/api/v1/publish/"+testProjectID+"/versions", nil, userAdminToken)
@@ -135,6 +132,13 @@ func assertOK(t *testing.T, response envelope) {
 	t.Helper()
 	if response.Code != 0 {
 		t.Fatalf("接口失败: %d %s", response.Code, response.Msg)
+	}
+}
+
+func assertLegacyReleaseDisabled(t *testing.T, response envelope) {
+	t.Helper()
+	if response.Code != platformapi.ErrorCodeInvalidRequest || !strings.Contains(response.Msg, "正式版本构建与交付尚未开放") {
+		t.Fatalf("旧发布旁路未失败关闭: code=%d msg=%s", response.Code, response.Msg)
 	}
 }
 

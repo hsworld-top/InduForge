@@ -9,6 +9,10 @@ services:
       dockerfile: scripts/docker/edge/Dockerfile
     ports:
       - '${IF_EDGE_HOST_PORT:-18080}:80'
+    environment:
+      DEV_CORE_INTERNAL_PORT: ${DEV_CORE_INTERNAL_PORT:-18101}
+      DATA_SERVICE_INTERNAL_PORT: ${DATA_SERVICE_INTERNAL_PORT:-18102}
+      NGINX_ENVSUBST_FILTER: '^(DEV_CORE_INTERNAL_PORT|DATA_SERVICE_INTERNAL_PORT)$'
     depends_on:
       - control
       - data
@@ -25,14 +29,14 @@ services:
     env_file:
       - ../../.env
     environment:
-      DEV_CORE_ADDR: :18101
+      DEV_CORE_ADDR: :${DEV_CORE_INTERNAL_PORT:-18101}
       DB_AUTO_SCHEMA_SYNC: 'false'
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 18432
+      IF_META_STORE_PORT: ${IF_META_STORE_PORT:-18432}
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 18379
+      IF_CACHE_STORE_PORT: ${IF_CACHE_STORE_PORT:-18379}
       IF_OBJECT_STORE_ENDPOINT: object-store
-      IF_OBJECT_STORE_PORT: 18500
+      IF_OBJECT_STORE_PORT: ${IF_OBJECT_STORE_PORT:-18500}
       CODE_WORKSPACE_ROOT: /var/lib/induforge/workspaces
       CODE_WORKSPACE_VOLUME: ${CODE_WORKSPACE_VOLUME:-induforge-control-workspaces}
       CODE_SERVER_DOCKER_HOST: unix:///var/run/docker.sock
@@ -42,7 +46,7 @@ services:
       - induforge-control-workspaces:/var/lib/induforge/workspaces
       - /var/run/docker.sock:/var/run/docker.sock
     expose:
-      - '18101'
+      - '${DEV_CORE_INTERNAL_PORT:-18101}'
     depends_on:
       - meta-store
       - cache-store
@@ -62,15 +66,15 @@ services:
     environment:
       NODE_ENV: production
       DB_AUTO_SCHEMA_SYNC: 'false'
-      DATA_SERVICE_ADDR: :18102
-      DATA_SERVICE_COMPUTE_SANDBOX_URL: http://compute-sandbox:18103
+      DATA_SERVICE_ADDR: :${DATA_SERVICE_INTERNAL_PORT:-18102}
+      DATA_SERVICE_COMPUTE_SANDBOX_URL: http://compute-sandbox:${COMPUTE_SANDBOX_INTERNAL_PORT:-18103}
       DATA_SERVICE_COMPUTE_SANDBOX_TOKEN: ${DATA_SERVICE_COMPUTE_SANDBOX_TOKEN}
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 18432
+      IF_META_STORE_PORT: ${IF_META_STORE_PORT:-18432}
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 18379
+      IF_CACHE_STORE_PORT: ${IF_CACHE_STORE_PORT:-18379}
     expose:
-      - '18102'
+      - '${DATA_SERVICE_INTERNAL_PORT:-18102}'
     depends_on:
       - meta-store
       - cache-store
@@ -88,10 +92,10 @@ services:
       context: ../../compute_sandbox
       dockerfile: Dockerfile
     environment:
-      COMPUTE_SANDBOX_ADDR: :18103
+      COMPUTE_SANDBOX_ADDR: :${COMPUTE_SANDBOX_INTERNAL_PORT:-18103}
       COMPUTE_SANDBOX_TOKEN: ${DATA_SERVICE_COMPUTE_SANDBOX_TOKEN}
     expose:
-      - '18103'
+      - '${COMPUTE_SANDBOX_INTERNAL_PORT:-18103}'
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -119,7 +123,7 @@ services:
   meta-store:
     container_name: induforge-meta-store
     image: timescale/timescaledb:2.26.4-pg16
-    command: ['-p', '18432', '-c', 'shared_preload_libraries=timescaledb']
+    command: ['-p', '${IF_META_STORE_PORT:-18432}', '-c', 'shared_preload_libraries=timescaledb']
     environment:
       POSTGRES_USER: ${IF_META_STORE_USER:-postgres}
       POSTGRES_PASSWORD: ${IF_META_STORE_PASSWORD:-postgres}
@@ -139,9 +143,9 @@ services:
       - -c
       - |
         if [ -n "$${IF_CACHE_STORE_PASSWORD}" ]; then
-          exec redis-server --port 18379 --appendonly yes --requirepass "$${IF_CACHE_STORE_PASSWORD}"
+          exec redis-server --port ${IF_CACHE_STORE_PORT:-18379} --appendonly yes --requirepass "$${IF_CACHE_STORE_PASSWORD}"
         fi
-        exec redis-server --port 18379 --appendonly yes
+        exec redis-server --port ${IF_CACHE_STORE_PORT:-18379} --appendonly yes
     environment:
       IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
     volumes:
@@ -156,9 +160,9 @@ services:
     environment:
       EMQX_NAME: induforge
       EMQX_HOST: message-hub
-      EMQX_LISTENERS__TCP__DEFAULT__BIND: '0.0.0.0:18883'
-      EMQX_LISTENERS__WS__DEFAULT__BIND: '0.0.0.0:18083'
-      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: '0.0.0.0:18084'
+      EMQX_LISTENERS__TCP__DEFAULT__BIND: '0.0.0.0:${IF_MESSAGE_HUB_MQTT_PORT:-18883}'
+      EMQX_LISTENERS__WS__DEFAULT__BIND: '0.0.0.0:${IF_MESSAGE_HUB_WS_PORT:-18083}'
+      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: '0.0.0.0:${IF_MESSAGE_HUB_DASHBOARD_PORT:-18084}'
     volumes:
       - induforge-message-hub-data:/opt/emqx/data
       - induforge-message-hub-log:/opt/emqx/log
@@ -175,7 +179,7 @@ services:
         cat > /tmp/induforge-s3.json <<EOF
         {"identities":[{"name":"induforge-admin","credentials":[{"accessKey":"$${IF_OBJECT_STORE_ACCESS_KEY}","secretKey":"$${IF_OBJECT_STORE_SECRET_KEY}"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
         EOF
-        exec weed server -ip=object-store -ip.bind=0.0.0.0 -master.port=18333 -master.volumeSizeLimitMB=1024 -volume.port=18081 -volume.max=0 -dir=/data/volume -filer -filer.port=18888 -s3 -s3.port=18500 -s3.config=/tmp/induforge-s3.json
+        exec weed server -ip=object-store -ip.bind=0.0.0.0 -master.port=${IF_OBJECT_STORE_MASTER_PORT:-18333} -master.volumeSizeLimitMB=1024 -volume.port=${IF_OBJECT_STORE_VOLUME_PORT:-18081} -volume.max=0 -dir=/data/volume -filer -filer.port=${IF_OBJECT_STORE_FILER_PORT:-18888} -s3 -s3.port=${IF_OBJECT_STORE_PORT:-18500} -s3.config=/tmp/induforge-s3.json
     environment:
       IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
       IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}

@@ -136,7 +136,17 @@ func main() {
 	nodeService := node.NewService(node.NewPostgreSQLRepository(pool), cacheStore)
 	nodeService.SetEvents(realtimeServer)
 	nodeHandler := node.NewHandler(nodeService, authService)
-	opsHandler := ops.NewHandler(ops.NewService(ops.NewPostgreSQLRepository(pool), ops.NewFilePackageStore(cfg.NodePackageDirectory)), authService)
+	opsRepository := ops.NewPostgreSQLRepository(pool)
+	opsRepository.SetK3sAPIPort(cfg.OpsK3sAPIPort)
+	if cfg.OpsCenterNodeID != "" {
+		if err := opsRepository.EnsureRuntimeCluster(ctx, cfg.OpsCenterNodeID); err != nil {
+			logger.Error("初始化中心运行集群失败", "nodeId", cfg.OpsCenterNodeID, "error", err)
+			os.Exit(1)
+		}
+	}
+	opsService := ops.NewService(opsRepository, ops.NewFilePackageStore(cfg.NodePackageDirectory), ifpObjects)
+	opsService.SetClusterTokenKey([]byte(cfg.JWTSecret))
+	opsHandler := ops.NewHandler(opsService, authService)
 	controlPlane.SetNodeHandler(nodeHandler)
 	deploymentService := deployment.NewService(
 		deployment.NewPostgreSQLRepository(pool), workspace, ifpObjects,
@@ -172,6 +182,7 @@ func main() {
 	defer stop()
 	go worker.New(worker.NewPostgreSQLRepository(pool), ifpObjects, logger, 10*time.Second).Run(signalCtx)
 	go runSceneObjectCleanup(signalCtx, sceneAssetService, logger)
+	go runOpsLivenessReconciler(signalCtx, opsRepository, logger)
 
 	go func() {
 		logger.Info("dev_core 已启动", "addr", cfg.Addr)
@@ -186,6 +197,21 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP 服务关闭失败", "error", err)
+	}
+}
+
+func runOpsLivenessReconciler(ctx context.Context, repository *ops.PostgreSQLRepository, logger *slog.Logger) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := repository.ReconcileNodeLiveness(ctx); err != nil {
+				logger.Warn("更新运维节点在线状态失败", "error", err)
+			}
+		}
 	}
 }
 

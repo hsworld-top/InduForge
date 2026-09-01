@@ -48,6 +48,8 @@ type Config struct {
 	CachePassword           string
 	CacheDB                 int
 	NodePackageDirectory    string
+	OpsCenterNodeID         string
+	OpsK3sAPIPort           int
 }
 
 func Load() (Config, error) {
@@ -81,6 +83,10 @@ func Load() (Config, error) {
 	if err != nil || cacheDB < 0 {
 		return Config{}, fmt.Errorf("IF_CACHE_STORE_CORE_DB 无效")
 	}
+	k3sAPIPort, err := strconv.Atoi(firstEnvWithDefault("IF_OPS_K3S_API_PORT", "6443"))
+	if err != nil || k3sAPIPort < 1 || k3sAPIPort > 65535 {
+		return Config{}, fmt.Errorf("IF_OPS_K3S_API_PORT 无效")
+	}
 
 	workspaceRoot := firstEnvWithDefault("CODE_WORKSPACE_ROOT", filepath.Join(".data", "workspaces"))
 	return Config{
@@ -113,6 +119,8 @@ func Load() (Config, error) {
 		CachePassword:           firstEnv("IF_CACHE_STORE_PASSWORD"),
 		CacheDB:                 cacheDB,
 		NodePackageDirectory:    firstEnvWithDefault("NODE_PACKAGE_DIRECTORY", defaultNodePackageDirectory()),
+		OpsCenterNodeID:         strings.TrimSpace(firstEnv("IF_OPS_CENTER_NODE_ID")),
+		OpsK3sAPIPort:           k3sAPIPort,
 	}, nil
 }
 

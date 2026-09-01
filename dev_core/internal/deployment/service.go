@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("发布或部署记录不存在")
-	ErrAlreadyExists  = errors.New("版本已存在")
-	ErrVersionInUse   = errors.New("版本正在使用，不能删除")
-	ErrScenesNotReady = errors.New("场景草稿未提交或运行工件校验失败")
+	ErrNotFound              = errors.New("发布或部署记录不存在")
+	ErrAlreadyExists         = errors.New("版本已存在")
+	ErrVersionInUse          = errors.New("版本正在使用，不能删除")
+	ErrScenesNotReady        = errors.New("场景草稿未提交或运行工件校验失败")
+	ErrLegacyReleaseDisabled = errors.New("正式版本构建与交付尚未开放，当前不能创建正式部署；已保存源码仍可用于开发预览")
 )
 
 type Project struct {
@@ -179,32 +180,9 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if err := requireProject(actor, project, auth.CapabilityReleasePublish); err != nil {
 		return Version{}, err
 	}
-	var sceneRuntime map[string]any
-	if s.releases != nil {
-		sceneRuntime, err = s.releases.ValidateRelease(ctx, actor, projectID)
-		if err != nil {
-			return Version{}, fmt.Errorf("%w: %v", ErrScenesNotReady, err)
-		}
-	}
-	manifest := map[string]any{
-		"projectId": project.ID, "tenantId": project.TenantID, "name": project.Name,
-		"code": project.Code, "version": input.Version, "schemaVersion": "2.0.0",
-		"buildTime": time.Now().UTC().Format(time.RFC3339), "source": "code-first",
-	}
-	manifest["sceneRuntime"] = sceneRuntime
-	artifact, err := s.buildAndUpload(ctx, project, input.Version, manifest)
-	if err != nil {
-		return Version{}, err
-	}
-	manifest["artifactBucket"] = artifact.Bucket
-	manifest["artifactKey"] = artifact.Key
-	manifest["artifactHash"] = artifact.ArtifactHash
-	manifest["artifactSize"] = artifact.Size
-	return s.repository.CreateVersion(ctx, CreateVersionInput{
-		Project: project, Version: input.Version, Name: input.Name, Description: input.Description,
-		SourceHash: artifact.SourceHash, ArtifactKey: artifact.Key, ArtifactHash: artifact.ArtifactHash,
-		ArtifactSize: artifact.Size, Manifest: manifest, CreatedBy: actor.ID, Bucket: artifact.Bucket,
-	})
+	// 旧实现会把 workspace 源码 ZIP 直接标记为 ready，与正式 Release 的构建、
+	// 摘要清单和签名契约完全不同。保留读取接口用于识别历史记录，但禁止再制造新旁路。
+	return Version{}, ErrLegacyReleaseDisabled
 }
 
 func (s *Service) DeleteVersion(ctx context.Context, actor auth.User, versionID string) error {
@@ -251,16 +229,7 @@ func (s *Service) DeployVersion(ctx context.Context, actor auth.User, versionID 
 	if err := requireProject(actor, project, auth.CapabilityDeploymentExecute); err != nil {
 		return nil, err
 	}
-	artifactURL, err := s.store.PresignGet(ctx, version.ArtifactKey, 30*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	items, err := s.repository.Deploy(ctx, actor.TenantID, DeployInput{
-		Project: project, Version: &version, NodeIDs: uniqueStrings(nodeIDs), Mode: "release",
-		RuntimeConfig: runtimeConfig, ArtifactURL: artifactURL, ArtifactKey: version.ArtifactKey, ArtifactHash: version.ArtifactHash, DeployedBy: actor.ID,
-	})
-	s.publishDeployments(actor.TenantID, items, err)
-	return items, err
+	return nil, ErrLegacyReleaseDisabled
 }
 
 func (s *Service) DeployDevelopment(ctx context.Context, actor auth.User, projectID string, nodeIDs []string, runtimeConfig map[string]any) ([]Deployment, error) {
@@ -274,26 +243,7 @@ func (s *Service) DeployDevelopment(ctx context.Context, actor auth.User, projec
 	if err := requireProject(actor, project, auth.CapabilityDeploymentExecute); err != nil {
 		return nil, err
 	}
-	version := "dev-" + time.Now().UTC().Format("20060102150405")
-	manifest := map[string]any{
-		"projectId": project.ID, "tenantId": project.TenantID, "name": project.Name,
-		"code": project.Code, "version": version, "schemaVersion": "2.0.0",
-		"buildTime": time.Now().UTC().Format(time.RFC3339), "source": "code-first-development",
-	}
-	artifact, err := s.buildAndUpload(ctx, project, version, manifest)
-	if err != nil {
-		return nil, err
-	}
-	artifactURL, err := s.store.PresignGet(ctx, artifact.Key, 30*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	items, err := s.repository.Deploy(ctx, actor.TenantID, DeployInput{
-		Project: project, NodeIDs: uniqueStrings(nodeIDs), Mode: "development", RuntimeConfig: runtimeConfig,
-		ArtifactURL: artifactURL, ArtifactKey: artifact.Key, ArtifactHash: artifact.ArtifactHash, DeployedBy: actor.ID,
-	})
-	s.publishDeployments(actor.TenantID, items, err)
-	return items, err
+	return nil, ErrLegacyReleaseDisabled
 }
 
 func (s *Service) Operate(ctx context.Context, actor auth.User, nodeDeploymentID, operation string) (Deployment, error) {
@@ -313,6 +263,10 @@ func (s *Service) Operate(ctx context.Context, actor auth.User, nodeDeploymentID
 	}
 	if err := requireProject(actor, project, auth.CapabilityDeploymentOperate); err != nil {
 		return Deployment{}, err
+	}
+	// stop/remove 仍保留用于收口历史节点部署；start/restart 不得重新拉起旧源码包。
+	if operation == "start" || operation == "restart" {
+		return Deployment{}, ErrLegacyReleaseDisabled
 	}
 	item, err := s.repository.Operate(ctx, actor.TenantID, nodeDeploymentID, operation)
 	if err == nil && s.events != nil {

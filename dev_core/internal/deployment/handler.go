@@ -217,6 +217,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
 	case errors.Is(err, ErrScenesNotReady):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
+	case errors.Is(err, ErrLegacyReleaseDisabled):
+		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
 	default:
 		if strings.Contains(err.Error(), "不能为空") || strings.Contains(err.Error(), "至少选择") || strings.Contains(err.Error(), "无效") || strings.Contains(err.Error(), "缺少") {
 			h.invalid(w, r, err)

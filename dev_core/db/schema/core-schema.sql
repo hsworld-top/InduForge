@@ -486,6 +486,9 @@ CREATE TABLE application_versions (
   artifact_hash text,
   artifact_size bigint,
   manifest jsonb NOT NULL DEFAULT '{}'::jsonb,
+  manifest_hash text,
+  checksums_hash text,
+  signing_key_id text,
   build_log text,
   error_message text,
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
@@ -608,7 +611,7 @@ CREATE TABLE host_nodes (
   desired_status text NOT NULL DEFAULT 'active' CHECK (desired_status IN ('active', 'maintenance', 'revoked')),
   observed_status text NOT NULL DEFAULT 'pending_approval' CHECK (observed_status IN ('pending_approval', 'offline', 'online', 'degraded', 'revoked')),
   resource_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
-  capabilities jsonb NOT NULL DEFAULT '{}'::jsonb,
+  capabilities jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(capabilities) = 'array'),
   last_heartbeat_at timestamptz,
   approved_at timestamptz,
   approved_by uuid REFERENCES users (id) ON DELETE SET NULL,
@@ -617,21 +620,148 @@ CREATE TABLE host_nodes (
 );
 CREATE INDEX host_nodes_tenant_idx ON host_nodes (tenant_id, observed_status, updated_at DESC);
 
+-- 每个中心只维护一套 K3s 集群。集群节点身份独立于运行环境：中心节点固定
+-- 承载 Server/embedded etcd，外部 Linux 节点固定作为工作节点。
+CREATE TABLE runtime_clusters (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL UNIQUE REFERENCES tenants (id) ON DELETE CASCADE,
+  name text NOT NULL DEFAULT '中心运行集群',
+  k3s_version text NOT NULL,
+  api_port integer NOT NULL CHECK (api_port BETWEEN 1 AND 65535),
+  desired_status text NOT NULL DEFAULT 'active' CHECK (desired_status IN ('active', 'maintenance')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE runtime_cluster_nodes (
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  cluster_id uuid NOT NULL REFERENCES runtime_clusters (id) ON DELETE CASCADE,
+  node_id uuid PRIMARY KEY REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  node_kind text NOT NULL CHECK (node_kind IN ('center', 'worker')),
+  desired_action text NOT NULL DEFAULT 'active' CHECK (desired_action IN ('active', 'removing')),
+  desired_generation bigint NOT NULL DEFAULT 1 CHECK (desired_generation > 0),
+  observed_generation bigint NOT NULL DEFAULT 0 CHECK (observed_generation >= 0),
+  cluster_status text NOT NULL DEFAULT 'pending' CHECK (cluster_status IN ('pending', 'starting', 'ready', 'failed', 'removing', 'not-installed')),
+  cluster_message text,
+  cluster_observed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX runtime_cluster_nodes_center_key ON runtime_cluster_nodes (cluster_id) WHERE node_kind='center';
+CREATE INDEX runtime_cluster_nodes_tenant_idx ON runtime_cluster_nodes (tenant_id, cluster_id, created_at DESC);
+
+CREATE TABLE runtime_cluster_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  cluster_id uuid NOT NULL REFERENCES runtime_clusters (id) ON DELETE CASCADE,
+  node_id uuid REFERENCES host_nodes (id) ON DELETE SET NULL,
+  event_type text NOT NULL,
+  name text NOT NULL,
+  target text NOT NULL DEFAULT '',
+  result text NOT NULL CHECK (result IN ('success', 'failed')),
+  message text,
+  created_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX runtime_cluster_events_tenant_created_idx ON runtime_cluster_events (tenant_id, created_at DESC, id DESC);
+
+CREATE TABLE runtime_environments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 80),
+  code text NOT NULL,
+  is_default boolean NOT NULL DEFAULT false,
+  desired_status text NOT NULL DEFAULT 'active' CHECK (desired_status IN ('active', 'maintenance', 'deleting')),
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
+  CONSTRAINT runtime_environments_tenant_code_key UNIQUE (tenant_id, code)
+);
+CREATE UNIQUE INDEX runtime_environments_tenant_name_key ON runtime_environments (tenant_id, lower(name)) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX runtime_environments_tenant_default_key ON runtime_environments (tenant_id) WHERE is_default AND deleted_at IS NULL;
+CREATE INDEX runtime_environments_tenant_updated_idx ON runtime_environments (tenant_id, updated_at DESC);
+
+CREATE TABLE runtime_environment_nodes (
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  environment_id uuid NOT NULL REFERENCES runtime_environments (id) ON DELETE CASCADE,
+  node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (environment_id, node_id)
+);
+CREATE INDEX runtime_environment_nodes_tenant_idx ON runtime_environment_nodes (tenant_id, environment_id, created_at DESC);
+
+CREATE TABLE runtime_environment_services (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  environment_id uuid NOT NULL REFERENCES runtime_environments (id) ON DELETE CASCADE,
+  node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  previous_node_id uuid REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  service_type text NOT NULL CHECK (service_type IN ('if_realtime', 'if_history', 'if_timeseries', 'if_message', 'if_object', 'nats_jetstream', 'nginx', 'traefik')),
+  deployment_mode text NOT NULL DEFAULT 'single' CHECK (deployment_mode IN ('single', 'primary', 'replica')),
+  desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
+  observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
+  desired_generation bigint NOT NULL DEFAULT 1 CHECK (desired_generation > 0),
+  observed_generation bigint NOT NULL DEFAULT 0 CHECK (observed_generation >= 0),
+  operation text NOT NULL DEFAULT 'apply' CHECK (operation IN ('apply', 'migrate')),
+  storage_claim text NOT NULL DEFAULT '',
+  previous_storage_claim text,
+  last_message text,
+  observed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT runtime_environment_services_type_key UNIQUE (environment_id, service_type)
+);
+CREATE INDEX runtime_environment_services_node_idx ON runtime_environment_services (node_id, observed_status, updated_at DESC);
+
+CREATE TABLE runtime_environment_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  environment_id uuid NOT NULL REFERENCES runtime_environments (id) ON DELETE CASCADE,
+  event_type text NOT NULL,
+  name text NOT NULL,
+  target text NOT NULL DEFAULT '',
+  result text NOT NULL CHECK (result IN ('success', 'failed')),
+  message text,
+  created_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX runtime_environment_events_environment_idx ON runtime_environment_events (environment_id, created_at DESC, id DESC);
+
 CREATE TABLE project_deployments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
   node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
   application_version_id uuid NOT NULL REFERENCES application_versions (id) ON DELETE RESTRICT,
+  access_port integer NOT NULL CHECK (access_port BETWEEN 1024 AND 65532),
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT project_deployments_tenant_project_key UNIQUE (tenant_id, project_id),
-  CONSTRAINT project_deployments_tenant_node_key UNIQUE (tenant_id, node_id)
+  CONSTRAINT project_deployments_tenant_node_access_port_key UNIQUE (tenant_id, node_id, access_port)
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
+
+-- DeploymentBinding 是 Release 之外唯一允许携带节点绑定信息的版本化快照。
+-- 当前基础实现只创建 revision=1。客户在部署阶段选择工程访问端口，控制面
+-- 为同一原生进程组保留连续四个端口；Secret 仍由节点本地装配。
+CREATE TABLE deployment_bindings (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  node_id uuid NOT NULL REFERENCES host_nodes (id) ON DELETE RESTRICT,
+  application_version_id uuid NOT NULL REFERENCES application_versions (id) ON DELETE RESTRICT,
+  revision integer NOT NULL CHECK (revision > 0),
+  binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (project_deployment_id, revision)
+);
+CREATE INDEX deployment_bindings_agent_lookup_idx ON deployment_bindings (node_id, project_deployment_id, revision DESC);
 
 CREATE TABLE deployment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

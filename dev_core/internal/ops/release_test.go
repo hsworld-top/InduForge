@@ -10,8 +10,12 @@ import (
 func TestValidateDeployableReleaseAcceptsFrozenManifest(t *testing.T) {
 	err := validateDeployableRelease(
 		testProjectID,
-		"versions/tenant/project/release.ifp",
+		testVersionID,
+		"versions/tenant/project/release.tar.zst",
 		strings.Repeat("a", 64),
+		strings.Repeat("e", 64),
+		strings.Repeat("f", 64),
+		"induforge-release-2026-01",
 		[]byte(validReleaseManifest(testProjectID)),
 	)
 	if err != nil {
@@ -28,11 +32,31 @@ func TestValidateDeployableReleaseAcceptsContractExtensionAndUppercaseDigest(t *
 	)
 	if err := validateDeployableRelease(
 		testProjectID,
-		"releases/tenant/project/release.ifp",
+		testVersionID,
+		"releases/tenant/project/release.tar.zst",
 		strings.Repeat("A", 64),
+		strings.Repeat("E", 64),
+		strings.Repeat("F", 64),
+		"induforge-release-2026-01",
 		[]byte(manifest),
 	); err != nil {
 		t.Fatalf("valid extended formal release rejected: %v", err)
+	}
+}
+
+func TestValidateDeployableReleaseAcceptsContractStableKeyID(t *testing.T) {
+	manifest := strings.Replace(validReleaseManifest(testProjectID), "induforge-release-2026-01", "urn:induforge:key:2026-01", 1)
+	if err := validateDeployableRelease(
+		testProjectID,
+		testVersionID,
+		"releases/tenant/project/release.tar.zst",
+		strings.Repeat("a", 64),
+		strings.Repeat("e", 64),
+		strings.Repeat("f", 64),
+		"urn:induforge:key:2026-01",
+		[]byte(manifest),
+	); err != nil {
+		t.Fatalf("valid stable signing key ID rejected: %v", err)
 	}
 }
 
@@ -52,8 +76,12 @@ func TestValidateDeployableReleaseRequiresCollectorWhenDeploymentEnablesIt(t *te
 	}
 	err = validateDeployableReleaseForDeployment(
 		testProjectID,
-		"releases/tenant/project/release.ifp",
+		testVersionID,
+		"releases/tenant/project/release.tar.zst",
 		strings.Repeat("a", 64),
+		strings.Repeat("e", 64),
+		strings.Repeat("f", 64),
+		"induforge-release-2026-01",
 		true,
 		manifestJSON,
 	)
@@ -71,16 +99,17 @@ func TestValidateDeployableReleaseRejectsSourceSnapshotAndMalformedMaterial(t *t
 		artifactHash string
 		manifest     string
 	}{
-		{name: "source snapshot", projectID: testProjectID, artifactKey: "versions/release.ifp", artifactHash: strings.Repeat("a", 64), manifest: `{"schemaVersion":"2.0.0","projectId":"` + testProjectID + `","source":"code-first"}`},
-		{name: "project mismatch", projectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", artifactKey: "versions/release.ifp", artifactHash: strings.Repeat("a", 64), manifest: valid},
+		{name: "source snapshot", projectID: testProjectID, artifactKey: "versions/release.tar.zst", artifactHash: strings.Repeat("a", 64), manifest: `{"schemaVersion":"2.0.0","projectId":"` + testProjectID + `","source":"code-first"}`},
+		{name: "project mismatch", projectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", artifactKey: "versions/release.tar.zst", artifactHash: strings.Repeat("a", 64), manifest: valid},
 		{name: "unsafe object key", projectID: testProjectID, artifactKey: "../release.ifp", artifactHash: strings.Repeat("a", 64), manifest: valid},
 		{name: "parent object key", projectID: testProjectID, artifactKey: "..", artifactHash: strings.Repeat("a", 64), manifest: valid},
-		{name: "archive digest", projectID: testProjectID, artifactKey: "versions/release.ifp", artifactHash: "sha256:short", manifest: valid},
-		{name: "client digest", projectID: testProjectID, artifactKey: "versions/release.ifp", artifactHash: strings.Repeat("a", 64), manifest: strings.Replace(valid, "sha256:"+strings.Repeat("b", 64), "sha256:short", 1)},
+		{name: "legacy non-bundle object", projectID: testProjectID, artifactKey: "versions/release.ifp", artifactHash: strings.Repeat("a", 64), manifest: valid},
+		{name: "archive digest", projectID: testProjectID, artifactKey: "versions/release.tar.zst", artifactHash: "sha256:short", manifest: valid},
+		{name: "client digest", projectID: testProjectID, artifactKey: "versions/release.tar.zst", artifactHash: strings.Repeat("a", 64), manifest: strings.Replace(valid, "sha256:"+strings.Repeat("b", 64), "sha256:short", 1)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := validateDeployableRelease(test.projectID, test.artifactKey, test.artifactHash, []byte(test.manifest))
+			err := validateDeployableRelease(test.projectID, testVersionID, test.artifactKey, test.artifactHash, strings.Repeat("e", 64), strings.Repeat("f", 64), "induforge-release-2026-01", []byte(test.manifest))
 			if !errors.Is(err, ErrReleaseNotDeployable) {
 				t.Fatalf("expected ErrReleaseNotDeployable, got %v", err)
 			}
@@ -93,7 +122,7 @@ func validReleaseManifest(projectID string) string {
   "schemaVersion":"2.0",
   "projectId":"` + projectID + `",
   "projectCode":"factory_dashboard",
-  "releaseId":"release-20260831-001",
+  "releaseId":"` + testVersionID + `",
   "version":"2026.08.31-001",
   "artifacts":{
     "client":{"file":"client-assets.tar.zst","checksum":"sha256:` + strings.Repeat("b", 64) + `"},
@@ -101,8 +130,8 @@ func validReleaseManifest(projectID string) string {
     "collector":{"file":"collector-artifact.tar.zst","checksum":"sha256:` + strings.Repeat("d", 64) + `"}
   },
   "capabilities":["runtime.auth","runtime.datapoint"],
-  "compatibility":{"minSiteControllerVersion":"1.0.0","minRuntimeVersion":"1.0.0","requiredSiteCapabilities":[]},
-  "supplyChain":{"sbomRef":"sbom.cdx.json","sourceRevision":"git:abc","builderId":"induforge-release-builder-v1","promotable":true},
+  "compatibility":{"minNodeAgentVersion":"1.0.0","minRuntimeVersion":"1.0.0","requiredNodeCapabilities":["project_entry","data_runtime"]},
+  "supplyChain":{"sbomRef":"sbom.cdx.json","sourceRevision":"git:abc","builderId":"induforge-release-builder-v1","signingKeyId":"induforge-release-2026-01","promotable":true},
   "preflight":{"resourceRecommendationRef":"resource-recommendation.json","healthContractRef":"health-contract.json","schemaPlanRef":"schema-plan.json"},
   "buildTime":"2026-08-31T00:00:00Z"
 }`

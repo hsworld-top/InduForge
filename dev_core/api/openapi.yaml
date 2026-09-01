@@ -25,11 +25,11 @@ paths:
         - in: query
           name: username
           required: true
-          schema: {type: string}
+          schema: { type: string }
         - in: query
           name: tenantCode
           required: false
-          schema: {type: string}
+          schema: { type: string }
       responses:
         '200':
           description: 成功
@@ -71,7 +71,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/LoginRequest'
+              $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
           description: 成功
@@ -95,7 +95,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/RefreshTokenRequest'
+              $ref: '#/components/schemas/RefreshTokenRequest'
       responses:
         '200':
           description: 成功
@@ -155,7 +155,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ChangePasswordRequest'
+              $ref: '#/components/schemas/ChangePasswordRequest'
       responses:
         '200':
           description: 成功
@@ -196,7 +196,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/TenantCreateRequest'
+              $ref: '#/components/schemas/TenantCreateRequest'
       responses:
         '200':
           description: 成功
@@ -249,7 +249,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/TenantUpdateRequest'
+              $ref: '#/components/schemas/TenantUpdateRequest'
       responses:
         '200':
           description: 成功
@@ -331,7 +331,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NoteRequest'
+              $ref: '#/components/schemas/NoteRequest'
       responses:
         '200':
           description: 成功
@@ -361,7 +361,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NoteRequest'
+              $ref: '#/components/schemas/NoteRequest'
       responses:
         '200':
           description: 成功
@@ -513,7 +513,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/UserCreateRequest'
+              $ref: '#/components/schemas/UserCreateRequest'
       responses:
         '200':
           description: 成功
@@ -543,7 +543,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/UserUpdateRequest'
+              $ref: '#/components/schemas/UserUpdateRequest'
       responses:
         '200':
           description: 成功
@@ -596,7 +596,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ChangePasswordRequest'
+              $ref: '#/components/schemas/ChangePasswordRequest'
       responses:
         '200':
           description: 成功
@@ -637,7 +637,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ProjectCreateRequest'
+              $ref: '#/components/schemas/ProjectCreateRequest'
       responses:
         '200':
           description: 成功
@@ -678,7 +678,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NamedResourceRequest'
+              $ref: '#/components/schemas/NamedResourceRequest'
       responses:
         '200':
           description: 成功
@@ -708,7 +708,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NamedResourceRequest'
+              $ref: '#/components/schemas/NamedResourceRequest'
       responses:
         '200':
           description: 成功
@@ -772,7 +772,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NamedResourceRequest'
+              $ref: '#/components/schemas/NamedResourceRequest'
       responses:
         '200':
           description: 成功
@@ -802,7 +802,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NamedResourceRequest'
+              $ref: '#/components/schemas/NamedResourceRequest'
       responses:
         '200':
           description: 成功
@@ -855,7 +855,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ReplaceIDsRequest'
+              $ref: '#/components/schemas/ReplaceIDsRequest'
       responses:
         '200':
           description: 成功
@@ -885,7 +885,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/SetProjectGroupRequest'
+              $ref: '#/components/schemas/SetProjectGroupRequest'
       responses:
         '200':
           description: 成功
@@ -915,7 +915,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ProjectUpdateRequest'
+              $ref: '#/components/schemas/ProjectUpdateRequest'
       responses:
         '200':
           description: 成功
@@ -944,7 +944,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ProjectDeleteRequest'
+              $ref: '#/components/schemas/ProjectDeleteRequest'
       responses:
         '200':
           description: 成功
@@ -1003,7 +1003,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ProjectOperationRequest'
+              $ref: '#/components/schemas/ProjectOperationRequest'
       responses:
         '200':
           description: 成功
@@ -1052,7 +1052,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ProjectImportRequest'
+              $ref: '#/components/schemas/ProjectImportRequest'
       responses:
         '200':
           description: 成功
@@ -1105,7 +1105,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/RuntimeUserCreateRequest'
+              $ref: '#/components/schemas/RuntimeUserCreateRequest'
       responses:
         '200':
           description: 成功
@@ -1140,7 +1140,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/RuntimeUserStatusRequest'
+              $ref: '#/components/schemas/RuntimeUserStatusRequest'
       responses:
         '200':
           description: 成功
@@ -1204,7 +1204,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ReplaceIDsRequest'
+              $ref: '#/components/schemas/ReplaceIDsRequest'
       responses:
         '200':
           description: 成功
@@ -1239,7 +1239,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/ResetPasswordRequest'
+              $ref: '#/components/schemas/ResetPasswordRequest'
       responses:
         '200':
           description: 成功
@@ -1292,7 +1292,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/RuntimeRoleCreateRequest'
+              $ref: '#/components/schemas/RuntimeRoleCreateRequest'
       responses:
         '200':
           description: 成功
@@ -1327,7 +1327,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/RuntimeRoleUpdateRequest'
+              $ref: '#/components/schemas/RuntimeRoleUpdateRequest'
       responses:
         '200':
           description: 成功
@@ -1404,7 +1404,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NodeApprovalRequest'
+              $ref: '#/components/schemas/NodeApprovalRequest'
       responses:
         '200':
           description: 成功
@@ -1435,7 +1435,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/NodeApprovalRequest'
+              $ref: '#/components/schemas/NodeApprovalRequest'
       responses:
         '200':
           description: 成功
@@ -1478,6 +1478,7 @@ paths:
     get:
       operationId: listProjectDeploymentNodes
       tags: [deployment]
+      x-client: legacy
       summary: listProjectDeploymentNodes
       parameters:
         - name: projectId
@@ -1562,7 +1563,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/PublishVersionRequest'
+              $ref: '#/components/schemas/PublishVersionRequest'
       responses:
         '200':
           description: 成功
@@ -1592,7 +1593,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/DeployRequest'
+              $ref: '#/components/schemas/DeployRequest'
       responses:
         '200':
           description: 成功
@@ -1622,7 +1623,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/DeployRequest'
+              $ref: '#/components/schemas/DeployRequest'
       responses:
         '200':
           description: 成功
@@ -1753,7 +1754,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: '#/components/schemas/RollbackRequest'
+              $ref: '#/components/schemas/RollbackRequest'
       responses:
         '200':
           description: 成功
@@ -1988,7 +1989,11 @@ paths:
       x-client: platform
       summary: 查询平台当前场景 Provider 及运行能力
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
     put:
       operationId: updateSceneProvider
       tags: [scene]
@@ -1996,24 +2001,33 @@ paths:
       summary: 切换平台场景 Provider（仅平台管理员且场景库为空）
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/SceneProviderRequest'}}}
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/SceneProviderRequest' } } }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scenes:
     parameters:
-      - {$ref: '#/components/parameters/ProjectId'}
+      - { $ref: '#/components/parameters/ProjectId' }
     get:
       operationId: listScenes
       tags: [scene]
       x-client: designer
       summary: 分页查询工程场景
       parameters:
-        - {name: kind, in: query, schema: {type: string, enum: ['2d', '3d']}}
-        - {name: keyword, in: query, schema: {type: string}}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { name: kind, in: query, schema: { type: string, enum: ['2d', '3d'] } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
     post:
       operationId: createScene
       tags: [scene]
@@ -2021,21 +2035,30 @@ paths:
       summary: 创建场景记录和初始入口草稿
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/SceneCreateRequest'}}}
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/SceneCreateRequest' } } }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scenes/{sceneId}:
     parameters:
-      - {$ref: '#/components/parameters/ProjectId'}
-      - {$ref: '#/components/parameters/SceneId'}
-      - {$ref: '#/components/parameters/SceneKind'}
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/SceneId' }
+      - { $ref: '#/components/parameters/SceneKind' }
     get:
       operationId: getScene
       tags: [scene]
       x-client: designer
       summary: 查询场景详情和公开契约
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
     put:
       operationId: updateScene
       tags: [scene]
@@ -2043,16 +2066,25 @@ paths:
       summary: 修改场景名称或公开契约
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/SceneUpdateRequest'}}}
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/SceneUpdateRequest' } } }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
     delete:
       operationId: deleteScene
       tags: [scene]
       x-client: designer
       summary: 墓碑删除场景
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scenes/{sceneId}/editor-session:
     post:
       operationId: createSceneEditorSession
@@ -2060,11 +2092,15 @@ paths:
       x-client: dev_ide
       summary: 创建绑定用户和场景的短期编辑会话
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/SceneId'}
-        - {$ref: '#/components/parameters/SceneKind'}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/SceneId' }
+        - { $ref: '#/components/parameters/SceneKind' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scenes/{sceneId}/viewer-session:
     post:
       operationId: createSceneViewerSession
@@ -2072,11 +2108,15 @@ paths:
       x-client: designer
       summary: 创建固定到当前已提交 revision 的只读 Viewer 会话
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/SceneId'}
-        - {$ref: '#/components/parameters/SceneKind'}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/SceneId' }
+        - { $ref: '#/components/parameters/SceneKind' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scenes/{sceneId}/commit:
     post:
       operationId: commitScene
@@ -2084,14 +2124,19 @@ paths:
       x-client: designer
       summary: 将指定草稿版本提交为不可变 revision
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/SceneId'}
-        - {$ref: '#/components/parameters/SceneKind'}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/SceneId' }
+        - { $ref: '#/components/parameters/SceneKind' }
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/SceneCommitRequest'}}}
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/SceneCommitRequest' } } }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/files:
     get:
       operationId: listSceneEditorFiles
@@ -2099,13 +2144,17 @@ paths:
       x-client: ht-editor
       summary: 按目录分页查询 Provider 草稿文件
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {name: directory, in: query, schema: {type: string}}
-        - {name: keyword, in: query, schema: {type: string}}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { name: directory, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-viewer-sessions/{sessionId}:
     get:
       operationId: getSceneViewerSession
@@ -2113,9 +2162,13 @@ paths:
       x-client: scene-viewer
       summary: 使用只读能力凭证读取 Viewer 启动信息
       security: []
-      parameters: [{$ref: '#/components/parameters/SessionId'}]
+      parameters: [{ $ref: '#/components/parameters/SessionId' }]
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-viewer-sessions/{sessionId}/heartbeat:
     post:
       operationId: heartbeatSceneViewerSession
@@ -2123,9 +2176,13 @@ paths:
       x-client: scene-viewer
       summary: 延长 Viewer 会话空闲有效期
       security: []
-      parameters: [{$ref: '#/components/parameters/SessionId'}]
+      parameters: [{ $ref: '#/components/parameters/SessionId' }]
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-viewer-sessions/{sessionId}/files/content:
     get:
       operationId: getSceneViewerFileContent
@@ -2134,33 +2191,50 @@ paths:
       summary: 读取会话固定 revision 的文件
       security: []
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {name: path, in: query, required: true, schema: {type: string}}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { name: path, in: query, required: true, schema: { type: string } }
       responses:
-        '200': {description: 文件流, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        '200':
+          {
+            description: 文件流,
+            content: { application/octet-stream: { schema: { type: string, format: binary } } },
+          }
   /scene-editor-sessions/{sessionId}/files/content:
     parameters:
-      - {$ref: '#/components/parameters/SessionId'}
-      - {name: path, in: query, required: true, schema: {type: string}}
+      - { $ref: '#/components/parameters/SessionId' }
+      - { name: path, in: query, required: true, schema: { type: string } }
     get:
       operationId: getSceneEditorFileContent
       tags: [scene]
       x-client: ht-editor
       summary: 受控流式读取草稿文件
       responses:
-        '200': {description: 文件流, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        '200':
+          {
+            description: 文件流,
+            content: { application/octet-stream: { schema: { type: string, format: binary } } },
+          }
     put:
       operationId: putSceneEditorFileContent
       tags: [scene]
       x-client: ht-editor
       summary: 以乐观锁写入草稿文件
       parameters:
-        - {name: baseDraftVersion, in: query, required: true, schema: {type: integer, format: int64}}
+        - {
+            name: baseDraftVersion,
+            in: query,
+            required: true,
+            schema: { type: integer, format: int64 },
+          }
       requestBody:
         required: true
-        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+        content: { application/octet-stream: { schema: { type: string, format: binary } } }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/import:
     post:
       operationId: importSceneEditorFiles
@@ -2168,11 +2242,24 @@ paths:
       x-client: ht-editor
       summary: 流式导入 ZIP
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {name: baseDraftVersion, in: query, required: true, schema: {type: integer, format: int64}}
-      requestBody: {required: true, content: {application/zip: {schema: {type: string, format: binary}}}}
+        - { $ref: '#/components/parameters/SessionId' }
+        - {
+            name: baseDraftVersion,
+            in: query,
+            required: true,
+            schema: { type: integer, format: int64 },
+          }
+      requestBody:
+        {
+          required: true,
+          content: { application/zip: { schema: { type: string, format: binary } } },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/export:
     post:
       operationId: exportSceneEditorFiles
@@ -2180,9 +2267,13 @@ paths:
       x-client: ht-editor
       summary: 流式导出 ZIP
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
+        - { $ref: '#/components/parameters/SessionId' }
       responses:
-        '200': {description: ZIP 文件, content: {application/zip: {schema: {type: string, format: binary}}}}
+        '200':
+          {
+            description: ZIP 文件,
+            content: { application/zip: { schema: { type: string, format: binary } } },
+          }
   /scene-editor-sessions/{sessionId}/commit:
     post:
       operationId: commitSceneEditorSession
@@ -2190,12 +2281,17 @@ paths:
       x-client: ht-editor
       summary: 通过绑定场景的编辑会话提交 revision
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
+        - { $ref: '#/components/parameters/SessionId' }
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/SceneCommitRequest'}}}
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/SceneCommitRequest' } } }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/datapoints:
     get:
       operationId: listSceneEditorDatapoints
@@ -2203,11 +2299,15 @@ paths:
       x-client: ht-editor
       summary: 通过控制面代理分页查询数据点
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets/from-selection:
     post:
       operationId: createSceneAssetFromSelection
@@ -2215,12 +2315,20 @@ paths:
       x-client: ht-editor
       summary: 将画布选中内容保存为图形模板或业务组件
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
+        - { $ref: '#/components/parameters/SessionId' }
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/SceneAssetFromSelectionRequest'}}}
+        content:
+          {
+            application/json:
+              { schema: { $ref: '#/components/schemas/SceneAssetFromSelectionRequest' } },
+          }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scene-assets:
     get:
       operationId: listSceneAssets
@@ -2228,17 +2336,25 @@ paths:
       x-client: ht-editor
       summary: 分页查询工程级场景资源
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/AssetType'}
-        - {name: kind, in: query, schema: {type: string, enum: ['2d', '3d']}}
-        - {name: keyword, in: query, schema: {type: string}}
-        - {name: sort, in: query, schema: {type: string, enum: [name, type, createdAt, updatedAt]}}
-        - {name: order, in: query, schema: {type: string, enum: [asc, desc]}}
-        - {name: archived, in: query, schema: {type: boolean, default: false}}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/AssetType' }
+        - { name: kind, in: query, schema: { type: string, enum: ['2d', '3d'] } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - {
+            name: sort,
+            in: query,
+            schema: { type: string, enum: [name, type, createdAt, updatedAt] },
+          }
+        - { name: order, in: query, schema: { type: string, enum: [asc, desc] } }
+        - { name: archived, in: query, schema: { type: boolean, default: false } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scene-assets/import:
     post:
       operationId: importSceneAsset
@@ -2246,39 +2362,76 @@ paths:
       x-client: ht-editor
       summary: 上传单文件或 ZIP 并创建资源首个内部代次
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {name: name, in: query, required: true, schema: {type: string, maxLength: 200}}
-        - {name: type, in: query, required: true, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
-        - {name: filename, in: query, required: true, schema: {type: string}}
-      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { name: name, in: query, required: true, schema: { type: string, maxLength: 200 } }
+        - {
+            name: type,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [image, font, model, material, symbol, component] },
+          }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/octet-stream: { schema: { type: string, format: binary } },
+              application/zip: { schema: { type: string, format: binary } },
+            },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scene-assets/{assetId}:
     parameters:
-      - {$ref: '#/components/parameters/ProjectId'}
-      - {$ref: '#/components/parameters/AssetId'}
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { $ref: '#/components/parameters/AssetId' }
     get:
       operationId: getSceneAsset
       tags: [scene]
       x-client: ht-editor
       summary: 查询资源详情
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
     put:
       operationId: updateSceneAsset
       tags: [scene]
       x-client: ht-editor
       summary: 重命名资源
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SceneAssetUpdateRequest'}}}}
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: '#/components/schemas/SceneAssetUpdateRequest' } },
+            },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
     delete:
       operationId: archiveSceneAsset
       tags: [scene]
       x-client: ht-editor
       summary: 归档资源并从新选择列表隐藏
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scene-assets/{assetId}/replace:
     post:
       operationId: replaceSceneAsset
@@ -2286,12 +2439,24 @@ paths:
       x-client: ht-editor
       summary: 上传替换内容并创建新的内部代次
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/AssetId'}
-        - {name: filename, in: query, required: true, schema: {type: string}}
-      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/AssetId' }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/octet-stream: { schema: { type: string, format: binary } },
+              application/zip: { schema: { type: string, format: binary } },
+            },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/scene-assets/{assetId}/thumbnail:
     get:
       operationId: getSceneAssetThumbnail
@@ -2299,10 +2464,19 @@ paths:
       x-client: ht-editor
       summary: 受控读取资源缩略图
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/AssetId'}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/AssetId' }
       responses:
-        '200': {description: 图片流, content: {image/png: {schema: {type: string, format: binary}}, image/jpeg: {schema: {type: string, format: binary}}, image/webp: {schema: {type: string, format: binary}}}}
+        '200':
+          {
+            description: 图片流,
+            content:
+              {
+                image/png: { schema: { type: string, format: binary } },
+                image/jpeg: { schema: { type: string, format: binary } },
+                image/webp: { schema: { type: string, format: binary } },
+              },
+          }
   /projects/{projectId}/scene-assets/{assetId}/editor-session:
     post:
       operationId: createSceneAssetEditorSession
@@ -2310,10 +2484,14 @@ paths:
       x-client: ht-editor
       summary: 为 Symbol 或 Component 创建短期编辑会话
       parameters:
-        - {$ref: '#/components/parameters/ProjectId'}
-        - {$ref: '#/components/parameters/AssetId'}
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/AssetId' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets:
     get:
       operationId: listSceneEditorAssets
@@ -2321,15 +2499,23 @@ paths:
       x-client: ht-editor
       summary: 分页查询与当前场景兼容的资源和绑定状态
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {$ref: '#/components/parameters/AssetType'}
-        - {name: keyword, in: query, schema: {type: string}}
-        - {name: sort, in: query, schema: {type: string, enum: [name, type, createdAt, updatedAt]}}
-        - {name: order, in: query, schema: {type: string, enum: [asc, desc]}}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { $ref: '#/components/parameters/AssetType' }
+        - { name: keyword, in: query, schema: { type: string } }
+        - {
+            name: sort,
+            in: query,
+            schema: { type: string, enum: [name, type, createdAt, updatedAt] },
+          }
+        - { name: order, in: query, schema: { type: string, enum: [asc, desc] } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets/import:
     post:
       operationId: importSceneEditorAsset
@@ -2337,13 +2523,30 @@ paths:
       x-client: ht-editor
       summary: 从场景编辑器上传工程资源
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {name: name, in: query, required: true, schema: {type: string, maxLength: 200}}
-        - {name: type, in: query, required: true, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
-        - {name: filename, in: query, required: true, schema: {type: string}}
-      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { name: name, in: query, required: true, schema: { type: string, maxLength: 200 } }
+        - {
+            name: type,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [image, font, model, material, symbol, component] },
+          }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/octet-stream: { schema: { type: string, format: binary } },
+              application/zip: { schema: { type: string, format: binary } },
+            },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets/actions:
     post:
       operationId: executeSceneAssetAction
@@ -2351,10 +2554,22 @@ paths:
       x-client: ht-editor
       summary: 挂载、更新或移除当前场景资源绑定
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SceneAssetActionRequest'}}}}
+        - { $ref: '#/components/parameters/SessionId' }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: '#/components/schemas/SceneAssetActionRequest' } },
+            },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets/{assetId}/replace:
     post:
       operationId: replaceSceneEditorAsset
@@ -2362,12 +2577,24 @@ paths:
       x-client: ht-editor
       summary: 从场景编辑器替换资源内容
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {$ref: '#/components/parameters/AssetId'}
-        - {name: filename, in: query, required: true, schema: {type: string}}
-      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { $ref: '#/components/parameters/AssetId' }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/octet-stream: { schema: { type: string, format: binary } },
+              application/zip: { schema: { type: string, format: binary } },
+            },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets/{assetId}:
     delete:
       operationId: archiveSceneEditorAsset
@@ -2375,10 +2602,14 @@ paths:
       x-client: ht-editor
       summary: 从场景编辑器归档资源
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {$ref: '#/components/parameters/AssetId'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { $ref: '#/components/parameters/AssetId' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/assets/{assetId}/editor-session:
     post:
       operationId: createSceneEditorAssetEditorSession
@@ -2386,10 +2617,14 @@ paths:
       x-client: ht-editor
       summary: 从场景编辑器打开 Symbol 或 Component 工作副本
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {$ref: '#/components/parameters/AssetId'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { $ref: '#/components/parameters/AssetId' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-editor-sessions/{sessionId}/dependencies:
     get:
       operationId: listSceneEditorDependencies
@@ -2397,13 +2632,17 @@ paths:
       x-client: ht-editor
       summary: 分页读取当前场景依赖诊断
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {name: directory, in: query, schema: {type: string}}
-        - {name: keyword, in: query, schema: {type: string}}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { name: directory, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-asset-editor-sessions/{sessionId}/files:
     get:
       operationId: listSceneAssetEditorFiles
@@ -2411,34 +2650,55 @@ paths:
       x-client: ht-editor
       summary: 分页读取资源编辑工作副本
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-        - {name: directory, in: query, schema: {type: string}}
-        - {name: keyword, in: query, schema: {type: string}}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/Limit'}
+        - { $ref: '#/components/parameters/SessionId' }
+        - { name: directory, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-asset-editor-sessions/{sessionId}/files/content:
     parameters:
-      - {$ref: '#/components/parameters/SessionId'}
-      - {name: path, in: query, required: true, schema: {type: string}}
+      - { $ref: '#/components/parameters/SessionId' }
+      - { name: path, in: query, required: true, schema: { type: string } }
     get:
       operationId: getSceneAssetEditorFileContent
       tags: [scene]
       x-client: ht-editor
       summary: 受控读取资源工作副本文件
       responses:
-        '200': {description: 文件流, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        '200':
+          {
+            description: 文件流,
+            content: { application/octet-stream: { schema: { type: string, format: binary } } },
+          }
     put:
       operationId: putSceneAssetEditorFileContent
       tags: [scene]
       x-client: ht-editor
       summary: 以乐观锁保存资源工作副本 JSON
       parameters:
-        - {name: baseDraftVersion, in: query, required: true, schema: {type: integer, format: int64}}
-      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        - {
+            name: baseDraftVersion,
+            in: query,
+            required: true,
+            schema: { type: integer, format: int64 },
+          }
+      requestBody:
+        {
+          required: true,
+          content: { application/octet-stream: { schema: { type: string, format: binary } } },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /scene-asset-editor-sessions/{sessionId}/commit:
     post:
       operationId: commitSceneAssetEditorSession
@@ -2446,10 +2706,19 @@ paths:
       x-client: ht-editor
       summary: 发布资源工作副本为新的内部代次
       parameters:
-        - {$ref: '#/components/parameters/SessionId'}
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SceneCommitRequest'}}}}
+        - { $ref: '#/components/parameters/SessionId' }
+      requestBody:
+        {
+          required: true,
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/SceneCommitRequest' } } },
+        }
       responses:
-        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '200':
+          {
+            description: 成功,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /projects/{projectId}/workspace-context/refresh:
     post:
       operationId: refreshWorkspaceContext
@@ -2480,161 +2749,800 @@ paths:
       operationId: listNodeEnrollments
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters:
+        [
+          { $ref: '#/components/parameters/OpsPage' },
+          { $ref: '#/components/parameters/OpsPageSize' },
+          { $ref: '#/components/parameters/OpsSearch' },
+          { $ref: '#/components/parameters/OpsKeyword' },
+        ]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
     post:
       operationId: createNodeEnrollment
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/NodeEnrollmentCreateRequest'}}}}
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: '#/components/schemas/NodeEnrollmentCreateRequest' } },
+            },
+        }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/node-enrollments/{id}:
     get:
       operationId: getNodeEnrollment
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/node-enrollments/{id}/approve:
     post:
       operationId: approveNodeEnrollment
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/node-enrollments/{id}/reject:
     post:
       operationId: rejectNodeEnrollment
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/nodes:
     get:
       operationId: listOpsNodes
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters:
+        [
+          { $ref: '#/components/parameters/OpsPage' },
+          { $ref: '#/components/parameters/OpsPageSize' },
+          { $ref: '#/components/parameters/OpsSearch' },
+          { $ref: '#/components/parameters/OpsKeyword' },
+        ]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/nodes/{id}:
     get:
       operationId: getOpsNode
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+    delete:
+      operationId: removeOpsNode
+      summary: 安全移除工作节点
+      description: 中心节点禁止移除；工作节点必须在线且不再被运行环境或工程使用，完成 K3s Agent 卸载后撤销凭据。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          {
+            description: 移除任务已创建,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+        '409':
+          {
+            description: 中心节点或节点仍被使用,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+  /ops/runtime-environments:
+    get:
+      operationId: listRuntimeEnvironments
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OpsPage' }
+        - { $ref: '#/components/parameters/OpsPageSize' }
+        - { $ref: '#/components/parameters/OpsSearch' }
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [available, attention, uninitialized, deleting] },
+          }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+    post:
+      operationId: createRuntimeEnvironment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+              additionalProperties: false
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/runtime-environments/{id}:
+    get:
+      operationId: getRuntimeEnvironment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+    patch:
+      operationId: updateRuntimeEnvironment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+    delete:
+      operationId: deleteRuntimeEnvironment
+      summary: 创建运行环境安全删除任务
+      description: 要求名称二次确认；存在工程部署时拒绝。异步清理该环境的基础服务与隔离空间，中心运行集群和物理节点保持运行。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmationName]
+              additionalProperties: false
+              properties:
+                confirmationName: { type: string, minLength: 1, maxLength: 80 }
+      responses:
+        '200':
+          {
+            description: 删除任务已创建或空环境已删除,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+        '409':
+          {
+            description: 存在工程、离线节点或删除任务已在执行,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+  /ops/runtime-environments/{id}/nodes:
+    get:
+      operationId: listRuntimeEnvironmentNodes
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/OpsPage' }
+        - { $ref: '#/components/parameters/OpsPageSize' }
+        - { $ref: '#/components/parameters/OpsSearch' }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+    post:
+      operationId: addRuntimeEnvironmentNodes
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeIds]
+              properties:
+                nodeIds:
+                  {
+                    type: array,
+                    minItems: 1,
+                    maxItems: 100,
+                    uniqueItems: true,
+                    items: { type: string, format: uuid },
+                  }
+              additionalProperties: false
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/runtime-environments/{id}/nodes/{nodeId}:
+    delete:
+      operationId: removeRuntimeEnvironmentNode
+      summary: 取消物理节点在运行环境中的分配
+      description: 仅移除环境调度范围，不卸载节点运行底座。节点仍承载基础服务或工程部署时返回 409。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: nodeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          {
+            description: 节点已从运行环境取消分配,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+        '409':
+          {
+            description: 节点仍承载基础服务或工程部署,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+  /ops/runtime-environments/{id}/events:
+    get:
+      operationId: listRuntimeEnvironmentEvents
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/OpsPage' }
+        - { $ref: '#/components/parameters/OpsPageSize' }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/runtime-environments/{id}/foundation-services:
+    get:
+      operationId: listRuntimeEnvironmentFoundationServices
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/runtime-environments/{id}/foundation-services/deploy:
+    post:
+      operationId: deployRuntimeEnvironmentFoundationServices
+      summary: 部署或修复运行环境基础服务
+      description: 首次调用按八项单实例分配创建基础服务；已有部署仅允许提交完全相同的服务与节点分配，并通过提升 generation 重新应用固定清单。节点变化必须使用调整分布接口。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignments]
+              additionalProperties: false
+              properties:
+                assignments:
+                  type: array
+                  minItems: 8
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [serviceType, nodeId]
+                    additionalProperties: false
+                    properties:
+                      serviceType:
+                        {
+                          type: string,
+                          enum:
+                            [
+                              if_realtime,
+                              if_history,
+                              if_timeseries,
+                              if_message,
+                              if_object,
+                              nats_jetstream,
+                              nginx,
+                              traefik,
+                            ],
+                        }
+                      nodeId: { type: string, format: uuid }
+      responses:
+        '200':
+          {
+            description: 部署或重新部署任务已创建,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+        '409':
+          {
+            description: 已部署服务的节点分配发生变化，当前版本拒绝迁移,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+  /ops/runtime-environments/{id}/foundation-services/migrate:
+    post:
+      operationId: migrateRuntimeEnvironmentFoundationServices
+      summary: 调整基础服务节点分布
+      description: 对发生节点变化的有状态服务先停止源实例、复制持久化数据并切换目标 PVC；无状态服务直接调整节点。IF 历史库和 IF 时序库作为同一个 PostgreSQL 工作负载原子迁移。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignments]
+              additionalProperties: false
+              properties:
+                assignments:
+                  type: array
+                  minItems: 8
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [serviceType, nodeId]
+                    additionalProperties: false
+                    properties:
+                      serviceType:
+                        {
+                          type: string,
+                          enum:
+                            [
+                              if_realtime,
+                              if_history,
+                              if_timeseries,
+                              if_message,
+                              if_object,
+                              nats_jetstream,
+                              nginx,
+                              traefik,
+                            ],
+                        }
+                      nodeId: { type: string, format: uuid }
+      responses:
+        '200':
+          {
+            description: 分布调整任务已创建,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
+        '409':
+          {
+            description: 环境存在进行中的操作或目标节点不可用,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
   /ops/node-packages:
     get:
       operationId: listNodePackages
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/node-packages/{id}/download:
     get:
       operationId: downloadNodePackage
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: package}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: package } }
   /ops/project-deployments:
     get:
       operationId: listProjectDeployments
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{$ref: '#/components/parameters/OpsPage'}, {$ref: '#/components/parameters/OpsPageSize'}, {$ref: '#/components/parameters/OpsSearch'}, {$ref: '#/components/parameters/OpsKeyword'}, {$ref: '#/components/parameters/OpsProjectId'}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters:
+        [
+          { $ref: '#/components/parameters/OpsPage' },
+          { $ref: '#/components/parameters/OpsPageSize' },
+          { $ref: '#/components/parameters/OpsSearch' },
+          { $ref: '#/components/parameters/OpsKeyword' },
+          { $ref: '#/components/parameters/OpsProjectId' },
+        ]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
     post:
       operationId: createProjectDeployment
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectDeploymentCreateRequest'}}}}
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: '#/components/schemas/ProjectDeploymentCreateRequest' } },
+            },
+        }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/project-deployments/{id}:
     get:
       operationId: getProjectDeployment
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/project-deployments/{id}/{action}:
+    post:
+      operationId: operateProjectDeployment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - {
+            name: action,
+            in: path,
+            required: true,
+            schema: { type: string, enum: [start, stop, restart] },
+          }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/project-deployments/{id}/services/{service}/{action}:
     post:
       operationId: operateProjectDeploymentWorkload
       tags: [ops]
-      x-client: dev_ide
-      security: [{bearerAuth: []}]
+      x-client: legacy
+      deprecated: true
+      description: 兼容路由，写操作固定失败；正式运维只允许工程部署整体启停。
+      security: [{ bearerAuth: [] }]
       parameters:
-        - {name: id, in: path, required: true, schema: {type: string}}
-        - {name: service, in: path, required: true, schema: {type: string, enum: [project_entry, data_runtime, collector]}}
-        - {name: action, in: path, required: true, schema: {type: string}}
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - {
+            name: service,
+            in: path,
+            required: true,
+            schema: { type: string, enum: [project_entry, data_runtime, collector] },
+          }
+        - {
+            name: action,
+            in: path,
+            required: true,
+            schema: { type: string, enum: [start, stop, restart] },
+          }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/deployment-runs/{id}:
     get:
       operationId: getDeploymentRun
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/deployment-runs/{id}/events:
     get:
       operationId: listDeploymentRunEvents
       tags: [ops]
       x-client: dev_ide
-      security: [{bearerAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/agent/enrollments/claim:
     post:
       operationId: claimNodeEnrollment
       tags: [opsAgent]
       x-client: node_agent
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentClaimRequest'}}}}
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: '#/components/schemas/AgentEnrollmentClaimRequest' } },
+            },
+        }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/agent/nodes/{id}/heartbeat:
     post:
       operationId: heartbeatOpsNode
       tags: [opsAgent]
       x-client: node_agent
-      security: [{agentTokenAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentHeartbeatRequest'}}}}
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ agentTokenAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json: { schema: { $ref: '#/components/schemas/AgentHeartbeatRequest' } },
+            },
+        }
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/agent/nodes/{id}/commands:
     get:
       operationId: listOpsNodeCommands
       tags: [opsAgent]
       x-client: node_agent
-      security: [{agentTokenAuth: []}]
-      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
-      responses: {'200': {description: success, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}}
+      security: [{ agentTokenAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/agent/nodes/{id}/deployments/{deployment}/binding:
+    get:
+      operationId: getOpsAgentDeploymentBinding
+      tags: [opsAgent]
+      x-client: node_agent
+      security: [{ agentTokenAuth: [] }]
+      parameters:
+        [
+          { name: id, in: path, required: true, schema: { type: string, format: uuid } },
+          { name: deployment, in: path, required: true, schema: { type: string, format: uuid } },
+        ]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/agent/nodes/{id}/deployments/{deployment}/release:
+    get:
+      operationId: downloadOpsAgentDeploymentRelease
+      tags: [opsAgent]
+      x-client: node_agent
+      security: [{ agentTokenAuth: [] }]
+      parameters:
+        [
+          { name: id, in: path, required: true, schema: { type: string, format: uuid } },
+          { name: deployment, in: path, required: true, schema: { type: string, format: uuid } },
+        ]
+      responses:
+        '200':
+          description: signed release bundle
+          content: { application/zstd: { schema: { type: string, format: binary } } }
+        default:
+          {
+            description: failure,
+            content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+          }
 
 components:
   parameters:
-    ProjectId: {name: projectId, in: path, required: true, schema: {type: string, format: uuid}}
-    SceneId: {name: sceneId, in: path, required: true, schema: {type: string}}
-    SceneKind: {name: kind, in: query, required: true, schema: {type: string, enum: ['2d', '3d']}}
-    SessionId: {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
-    AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
-    AssetType: {name: type, in: query, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
-    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
-    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
-    OpsPage: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
-    OpsPageSize: {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
-    OpsSearch: {name: search, in: query, schema: {type: string, maxLength: 200}}
-    OpsKeyword: {name: keyword, in: query, schema: {type: string, maxLength: 200}, description: search 的兼容别名；search 优先}
-    OpsProjectId: {name: projectId, in: query, schema: {type: string, format: uuid}, description: 精确筛选工程部署}
+    ProjectId: { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+    SceneId: { name: sceneId, in: path, required: true, schema: { type: string } }
+    SceneKind:
+      { name: kind, in: query, required: true, schema: { type: string, enum: ['2d', '3d'] } }
+    SessionId: { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    AssetId: { name: assetId, in: path, required: true, schema: { type: string, format: uuid } }
+    AssetType:
+      {
+        name: type,
+        in: query,
+        schema: { type: string, enum: [image, font, model, material, symbol, component] },
+      }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    Limit:
+      { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 20 } }
+    OpsPage: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    OpsPageSize:
+      {
+        name: pageSize,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 200, default: 20 },
+      }
+    OpsSearch: { name: search, in: query, schema: { type: string, maxLength: 200 } }
+    OpsKeyword:
+      {
+        name: keyword,
+        in: query,
+        schema: { type: string, maxLength: 200 },
+        description: search 的兼容别名；search 优先,
+      }
+    OpsProjectId:
+      {
+        name: projectId,
+        in: query,
+        schema: { type: string, format: uuid },
+        description: 精确筛选工程部署,
+      }
   securitySchemes:
     bearerAuth:
       type: http
@@ -2649,29 +3557,29 @@ components:
       type: object
       required: [username, password]
       properties:
-        username: {type: string}
-        password: {type: string, format: password}
-        tenantCode: {type: string}
-        sliderChallengeId: {type: string}
-        sliderOffset: {type: integer, minimum: 0}
+        username: { type: string }
+        password: { type: string, format: password }
+        tenantCode: { type: string }
+        sliderChallengeId: { type: string }
+        sliderOffset: { type: integer, minimum: 0 }
     RefreshTokenRequest:
       type: object
       required: [refreshToken]
       properties:
-        refreshToken: {type: string}
+        refreshToken: { type: string }
     ChangePasswordRequest:
       type: object
       properties:
-        oldPassword: {type: string, format: password}
-        newPassword: {type: string, format: password, minLength: 8}
+        oldPassword: { type: string, format: password }
+        newPassword: { type: string, format: password, minLength: 8 }
     TenantCreateRequest:
       type: object
       required: [name, code]
       properties:
-        name: {type: string}
-        code: {type: string}
-        description: {type: string}
-        status: {type: string}
+        name: { type: string }
+        code: { type: string }
+        description: { type: string }
+        status: { type: string }
     TenantUpdateRequest:
       allOf:
         - $ref: '#/components/schemas/TenantCreateRequest'
@@ -2679,236 +3587,265 @@ components:
       type: object
       required: [content]
       properties:
-        content: {type: string, maxLength: 2000}
+        content: { type: string, maxLength: 2000 }
     UserCreateRequest:
       type: object
       required: [username, password, role]
       properties:
-        username: {type: string}
-        password: {type: string, format: password, minLength: 8}
-        role: {type: string}
-        status: {type: string}
+        username: { type: string }
+        password: { type: string, format: password, minLength: 8 }
+        role: { type: string }
+        status: { type: string }
     UserUpdateRequest:
       type: object
       properties:
-        email: {type: string}
-        phone: {type: string}
-        fullName: {type: string}
-        role: {type: string}
-        status: {type: string}
+        email: { type: string }
+        phone: { type: string }
+        fullName: { type: string }
+        role: { type: string }
+        status: { type: string }
     ProjectCreateRequest:
       type: object
       required: [name]
       properties:
-        name: {type: string}
-        description: {type: string}
+        name: { type: string }
+        description: { type: string }
     ProjectUpdateRequest:
       type: object
       properties:
-        name: {type: string}
-        description: {type: string}
+        name: { type: string }
+        description: { type: string }
     ProjectDeleteRequest:
       type: object
       properties:
-        confirmation: {type: string}
+        confirmation: { type: string }
     ProjectOperationRequest:
       type: object
       properties:
-        operation: {type: string}
+        operation: { type: string }
     SceneProviderRequest:
       type: object
       required: [provider]
-      properties: {provider: {type: string, enum: [induforge]}}
+      properties: { provider: { type: string, enum: [induforge] } }
     SceneCreateRequest:
       type: object
       required: [kind, name]
       properties:
-        kind: {type: string, enum: ['2d', '3d']}
-        name: {type: string, minLength: 1, maxLength: 200}
-        publicContract: {$ref: '#/components/schemas/ScenePublicContract'}
+        kind: { type: string, enum: ['2d', '3d'] }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        publicContract: { $ref: '#/components/schemas/ScenePublicContract' }
     SceneUpdateRequest:
       type: object
       properties:
-        name: {type: string, maxLength: 200}
-        publicContract: {$ref: '#/components/schemas/ScenePublicContract'}
-        baseDraftVersion: {type: integer, format: int64, minimum: 0}
+        name: { type: string, maxLength: 200 }
+        publicContract: { $ref: '#/components/schemas/ScenePublicContract' }
+        baseDraftVersion: { type: integer, format: int64, minimum: 0 }
     ScenePublicContract:
       type: object
       additionalProperties: false
       required: [description, parameters, events, commands]
       properties:
-        description: {type: string, maxLength: 2000}
-        parameters: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SceneParameter'}}
-        events: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SceneContractMember'}}
-        commands: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SceneCommand'}}
+        description: { type: string, maxLength: 2000 }
+        parameters:
+          { type: array, maxItems: 100, items: { $ref: '#/components/schemas/SceneParameter' } }
+        events:
+          {
+            type: array,
+            maxItems: 100,
+            items: { $ref: '#/components/schemas/SceneContractMember' },
+          }
+        commands:
+          { type: array, maxItems: 100, items: { $ref: '#/components/schemas/SceneCommand' } }
     SceneContractMember:
       type: object
       additionalProperties: false
       required: [name, schema]
       properties:
-        name: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$'}
-        description: {type: string}
-        schema: {type: object, additionalProperties: true}
+        name: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$' }
+        description: { type: string }
+        schema: { type: object, additionalProperties: true }
     SceneParameter:
       type: object
       additionalProperties: false
       required: [name, required, schema]
       properties:
-        name: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$'}
-        description: {type: string}
-        required: {type: boolean}
-        schema: {type: object, additionalProperties: true}
+        name: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$' }
+        description: { type: string }
+        required: { type: boolean }
+        schema: { type: object, additionalProperties: true }
     SceneCommand:
       type: object
       additionalProperties: false
       required: [name, inputSchema, outputSchema]
       properties:
-        name: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$'}
-        description: {type: string}
-        inputSchema: {type: object, additionalProperties: true}
-        outputSchema: {type: object, additionalProperties: true}
+        name: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$' }
+        description: { type: string }
+        inputSchema: { type: object, additionalProperties: true }
+        outputSchema: { type: object, additionalProperties: true }
     SceneCommitRequest:
       type: object
       required: [baseDraftVersion]
-      properties: {baseDraftVersion: {type: integer, format: int64, minimum: 0}}
+      properties: { baseDraftVersion: { type: integer, format: int64, minimum: 0 } }
     SceneAssetUpdateRequest:
       type: object
       required: [name]
       properties:
-        name: {type: string, minLength: 1, maxLength: 200}
+        name: { type: string, minLength: 1, maxLength: 200 }
     SceneAssetActionRequest:
       type: object
       required: [action, assetId, baseDraftVersion]
       properties:
-        action: {type: string, enum: [attach, update, detach]}
-        assetId: {type: string, format: uuid}
-        baseDraftVersion: {type: integer, format: int64, minimum: 0}
+        action: { type: string, enum: [attach, update, detach] }
+        assetId: { type: string, format: uuid }
+        baseDraftVersion: { type: integer, format: int64, minimum: 0 }
 
     SceneAssetFromSelectionRequest:
       type: object
       additionalProperties: false
       required: [name, type, selection]
       properties:
-        name: {type: string, minLength: 1, maxLength: 200}
-        type: {type: string, enum: [symbol, component]}
-        selection: {type: object, additionalProperties: true}
+        name: { type: string, minLength: 1, maxLength: 200 }
+        type: { type: string, enum: [symbol, component] }
+        selection: { type: object, additionalProperties: true }
     ProjectImportRequest:
       type: object
       properties:
-        files: {type: object, additionalProperties: {type: string}}
+        files: { type: object, additionalProperties: { type: string } }
     NamedResourceRequest:
       type: object
       required: [name]
       properties:
-        name: {type: string}
-        description: {type: string}
+        name: { type: string }
+        description: { type: string }
     ReplaceIDsRequest:
       type: object
       properties:
-        ids: {type: array, items: {type: string, format: uuid}}
-        roleIds: {type: array, items: {type: string, format: uuid}}
-        tagIds: {type: array, items: {type: string, format: uuid}}
+        ids: { type: array, items: { type: string, format: uuid } }
+        roleIds: { type: array, items: { type: string, format: uuid } }
+        tagIds: { type: array, items: { type: string, format: uuid } }
     SetProjectGroupRequest:
       type: object
       properties:
-        groupId: {type: string, format: uuid, nullable: true}
+        groupId: { type: string, format: uuid, nullable: true }
     RuntimeUserCreateRequest:
       type: object
       required: [username, initialPassword]
       properties:
-        username: {type: string}
-        initialPassword: {type: string, format: password, minLength: 8}
-        roleIds: {type: array, items: {type: string, format: uuid}}
+        username: { type: string }
+        initialPassword: { type: string, format: password, minLength: 8 }
+        roleIds: { type: array, items: { type: string, format: uuid } }
     RuntimeUserStatusRequest:
       type: object
       required: [status]
       properties:
-        status: {type: string, enum: [active, disabled]}
+        status: { type: string, enum: [active, disabled] }
     ResetPasswordRequest:
       type: object
       required: [newPassword]
       properties:
-        newPassword: {type: string, format: password, minLength: 8}
+        newPassword: { type: string, format: password, minLength: 8 }
     RuntimeRoleCreateRequest:
       type: object
       required: [code, name]
       properties:
-        code: {type: string}
-        name: {type: string}
-        description: {type: string}
-        capabilities: {type: array, items: {type: string}}
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        capabilities: { type: array, items: { type: string } }
     RuntimeRoleUpdateRequest:
       allOf:
         - $ref: '#/components/schemas/RuntimeRoleCreateRequest'
     NodeApprovalRequest:
       type: object
       properties:
-        reason: {type: string}
+        reason: { type: string }
     PublishVersionRequest:
       type: object
       required: [version]
       properties:
-        version: {type: string}
-        name: {type: string}
-        description: {type: string}
+        version: { type: string }
+        name: { type: string }
+        description: { type: string }
     DeployRequest:
       type: object
       required: [nodeIds]
       properties:
-        nodeIds: {type: array, items: {type: string, format: uuid}}
-        runtimeConfig: {type: object, additionalProperties: true}
+        nodeIds: { type: array, items: { type: string, format: uuid } }
+        runtimeConfig: { type: object, additionalProperties: true }
     RollbackRequest:
       type: object
       required: [nodeId]
       properties:
-        nodeId: {type: string, format: uuid}
+        nodeId: { type: string, format: uuid }
     NodeEnrollmentCreateRequest:
       type: object
       required: [platform, capabilities]
       properties:
-        platform: {type: string, enum: [linux, windows]}
-        capabilities: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [project_entry, data_runtime, collector]}}
-        displayName: {type: string, maxLength: 120}
-        ttlMinutes: {type: integer, minimum: 1, maximum: 1440}
+        platform: { type: string, enum: [linux, windows] }
+        capabilities:
+          {
+            type: array,
+            minItems: 1,
+            uniqueItems: true,
+            items: { type: string, enum: [project_entry, data_runtime, collector] },
+          }
+        displayName: { type: string, maxLength: 120 }
+        ttlMinutes: { type: integer, minimum: 1, maximum: 1440 }
     ProjectDeploymentCreateRequest:
       type: object
-      required: [projectId, nodeId, applicationVersionId]
+      required: [projectId, nodeId, applicationVersionId, accessPort]
       properties:
-        projectId: {type: string, format: uuid}
-        nodeId: {type: string, format: uuid}
-        applicationVersionId: {type: string, format: uuid}
-        enableCollector: {type: boolean, default: false}
+        projectId: { type: string, format: uuid }
+        nodeId: { type: string, format: uuid }
+        applicationVersionId: { type: string, format: uuid }
+        accessPort:
+          type: integer
+          minimum: 1024
+          maximum: 65532
+          description: 客户选择的工程访问端口；平台同时保留其后续三个本机运行端口并检查冲突。
+        enableCollector: { type: boolean, default: false }
     AgentEnrollmentClaimRequest:
       type: object
       required: [code, hostname, platform, architecture, capabilities]
       properties:
-        code: {type: string, minLength: 1}
-        displayName: {type: string}
-        hostname: {type: string}
-        platform: {type: string, enum: [linux, windows]}
-        architecture: {type: string}
-        agentVersion: {type: string}
-        machineFingerprint: {type: string}
-        ipAddress: {type: string}
-        capabilities: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [project_entry, data_runtime, collector]}}
+        code: { type: string, minLength: 1 }
+        displayName: { type: string }
+        hostname: { type: string }
+        platform: { type: string, enum: [linux, windows] }
+        architecture: { type: string }
+        agentVersion: { type: string }
+        machineFingerprint: { type: string }
+        ipAddress: { type: string }
+        capabilities:
+          {
+            type: array,
+            minItems: 1,
+            uniqueItems: true,
+            items: { type: string, enum: [project_entry, data_runtime, collector] },
+          }
     AgentHeartbeatRequest:
       type: object
       required: [resourceSummary]
       properties:
-        resourceSummary: {type: object, additionalProperties: true}
-        agentVersion: {type: string}
+        resourceSummary: { type: object, additionalProperties: true }
+        agentVersion: { type: string }
         services:
           type: array
           items:
             type: object
             required: [serviceId, observedStatus, observedGeneration]
             properties:
-              serviceId: {type: string, format: uuid}
-              observedStatus: {type: string, enum: [running, stopped, failed]}
-              observedGeneration: {type: integer, format: int64, minimum: 1}
-              replicasObserved: {type: integer, minimum: 0}
-              message: {type: string}
-              endpoint: {type: string, format: uri, description: 仅 project_entry 可上报的本机配置 publicUrl；其他服务必须为空}
+              serviceId: { type: string, format: uuid }
+              observedStatus: { type: string, enum: [running, stopped, failed] }
+              observedGeneration: { type: integer, format: int64, minimum: 1 }
+              replicasObserved: { type: integer, minimum: 0 }
+              message: { type: string }
+              endpoint:
+                {
+                  type: string,
+                  format: uri,
+                  description: 仅 project_entry 可上报的本机配置 publicUrl；其他服务必须为空,
+                }
     ApiResponse:
       type: object
       required: [code, msg, data, reqId]

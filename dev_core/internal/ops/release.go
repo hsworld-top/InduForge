@@ -37,14 +37,15 @@ type deployableReleaseManifest struct {
 		Collector *releaseArtifactDescriptor `json:"collector,omitempty"`
 	} `json:"artifacts"`
 	Compatibility struct {
-		MinSiteControllerVersion string   `json:"minSiteControllerVersion"`
+		MinNodeAgentVersion      string   `json:"minNodeAgentVersion"`
 		MinRuntimeVersion        string   `json:"minRuntimeVersion"`
-		RequiredSiteCapabilities []string `json:"requiredSiteCapabilities"`
+		RequiredNodeCapabilities []string `json:"requiredNodeCapabilities"`
 	} `json:"compatibility"`
 	SupplyChain struct {
 		SBOMRef        string `json:"sbomRef"`
 		SourceRevision string `json:"sourceRevision"`
 		BuilderID      string `json:"builderId"`
+		SigningKeyID   string `json:"signingKeyId"`
 		Promotable     *bool  `json:"promotable"`
 	} `json:"supplyChain"`
 	Preflight struct {
@@ -56,18 +57,18 @@ type deployableReleaseManifest struct {
 
 // validateDeployableRelease 把“版本构建成功”和“可在物理节点部署”分开。
 // 旧 code-first IFP 只有源码快照，不能因为 status=ready 就进入正式运维链路。
-func validateDeployableRelease(projectID, artifactKey, artifactHash string, manifestJSON []byte) error {
-	return validateDeployableReleaseForDeployment(projectID, artifactKey, artifactHash, false, manifestJSON)
+func validateDeployableRelease(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID string, manifestJSON []byte) error {
+	return validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID, false, manifestJSON)
 }
 
 // validateDeployableReleaseForDeployment 仅校验正式 Release 的不可变元数据；
 // 不解析构建内容，也不信任 Manifest 之外的制品位置或摘要。
-func validateDeployableReleaseForDeployment(projectID, artifactKey, artifactHash string, requireCollector bool, manifestJSON []byte) error {
-	if strings.TrimSpace(artifactKey) == "" || !validObjectKey(artifactKey) {
+func validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID string, requireCollector bool, manifestJSON []byte) error {
+	if strings.TrimSpace(artifactKey) == "" || !validObjectKey(artifactKey) || !strings.HasSuffix(artifactKey, ".tar.zst") {
 		return fmt.Errorf("%w: Release 对象键缺失或无效", ErrReleaseNotDeployable)
 	}
-	if !validSHA256Hex(artifactHash) {
-		return fmt.Errorf("%w: Release 归档摘要缺失或无效", ErrReleaseNotDeployable)
+	if !validSHA256Hex(artifactHash) || !validSHA256Hex(manifestHash) || !validSHA256Hex(checksumsHash) || !validStableID(signingKeyID) {
+		return fmt.Errorf("%w: Release 归档、Manifest、摘要清单或签名密钥元数据缺失或无效", ErrReleaseNotDeployable)
 	}
 
 	var manifest deployableReleaseManifest
@@ -80,7 +81,7 @@ func validateDeployableReleaseForDeployment(projectID, artifactKey, artifactHash
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return fmt.Errorf("%w: Release Manifest 只能包含一个 JSON 对象", ErrReleaseNotDeployable)
 	}
-	if manifest.SchemaVersion != releaseManifestSchemaVersion || manifest.ProjectID != projectID || strings.TrimSpace(manifest.ProjectCode) == "" || strings.TrimSpace(manifest.ReleaseID) == "" || strings.TrimSpace(manifest.Version) == "" || strings.TrimSpace(manifest.BuildTime) == "" {
+	if manifest.SchemaVersion != releaseManifestSchemaVersion || (projectID != "" && manifest.ProjectID != projectID) || manifest.ReleaseID != releaseID || strings.TrimSpace(manifest.ProjectCode) == "" || strings.TrimSpace(manifest.Version) == "" || strings.TrimSpace(manifest.BuildTime) == "" {
 		return fmt.Errorf("%w: Release Manifest 身份或协议版本不匹配", ErrReleaseNotDeployable)
 	}
 	if _, err := time.Parse(time.RFC3339, manifest.BuildTime); err != nil {
@@ -99,16 +100,37 @@ func validateDeployableReleaseForDeployment(projectID, artifactKey, artifactHash
 	} else if requireCollector {
 		return fmt.Errorf("%w: 部署已启用采集服务，但 Release 未声明 %s", ErrReleaseNotDeployable, collectorArtifactFile)
 	}
-	if strings.TrimSpace(manifest.Compatibility.MinSiteControllerVersion) == "" || strings.TrimSpace(manifest.Compatibility.MinRuntimeVersion) == "" {
+	if strings.TrimSpace(manifest.Compatibility.MinNodeAgentVersion) == "" || strings.TrimSpace(manifest.Compatibility.MinRuntimeVersion) == "" {
 		return fmt.Errorf("%w: Release 缺少运行兼容性声明", ErrReleaseNotDeployable)
 	}
-	if strings.TrimSpace(manifest.SupplyChain.SBOMRef) == "" || strings.TrimSpace(manifest.SupplyChain.SourceRevision) == "" || strings.TrimSpace(manifest.SupplyChain.BuilderID) == "" || manifest.SupplyChain.Promotable == nil {
+	requiredNodeCapabilities := []string{CapabilityProjectEntry, CapabilityDataRuntime}
+	if requireCollector {
+		requiredNodeCapabilities = append(requiredNodeCapabilities, CapabilityCollector)
+	}
+	if !sameStrings(manifest.Compatibility.RequiredNodeCapabilities, requiredNodeCapabilities) {
+		return fmt.Errorf("%w: Release 节点能力声明与部署服务不匹配", ErrReleaseNotDeployable)
+	}
+	if strings.TrimSpace(manifest.SupplyChain.SBOMRef) == "" || strings.TrimSpace(manifest.SupplyChain.SourceRevision) == "" || strings.TrimSpace(manifest.SupplyChain.BuilderID) == "" || manifest.SupplyChain.Promotable == nil || !*manifest.SupplyChain.Promotable || manifest.SupplyChain.SigningKeyID != signingKeyID {
 		return fmt.Errorf("%w: Release 缺少供应链声明", ErrReleaseNotDeployable)
 	}
 	if strings.TrimSpace(manifest.Preflight.ResourceRecommendationRef) == "" || strings.TrimSpace(manifest.Preflight.HealthContractRef) == "" || strings.TrimSpace(manifest.Preflight.SchemaPlanRef) == "" {
 		return fmt.Errorf("%w: Release 缺少部署前检查声明", ErrReleaseNotDeployable)
 	}
 	return nil
+}
+
+func validStableID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for i := range value {
+		c := value[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (i > 0 && (c == '.' || c == '_' || c == '-' || c == ':')) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validateReleaseArtifact(artifact releaseArtifactDescriptor, expectedFile string) error {

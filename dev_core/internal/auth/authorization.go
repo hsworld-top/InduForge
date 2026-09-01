@@ -19,6 +19,8 @@ const (
 	CapabilityNodeRead            Capability = "node:read"
 	CapabilityNodeApprove         Capability = "node:approve"
 	CapabilityNodeDelete          Capability = "node:delete"
+	CapabilityEnvironmentRead     Capability = "environment:read"
+	CapabilityEnvironmentManage   Capability = "environment:manage"
 	CapabilityAuditLogRead        Capability = "audit-log:read"
 	CapabilityAuditLogDelete      Capability = "audit-log:delete"
 )
@@ -38,6 +40,8 @@ var allCapabilities = capabilitySet(
 	CapabilityNodeRead,
 	CapabilityNodeApprove,
 	CapabilityNodeDelete,
+	CapabilityEnvironmentRead,
+	CapabilityEnvironmentManage,
 	CapabilityAuditLogRead,
 	CapabilityAuditLogDelete,
 )
@@ -56,6 +60,7 @@ var roleCapabilities = map[string]map[Capability]struct{}{
 		CapabilityDeploymentExecute,
 		CapabilityDeploymentOperate,
 		CapabilityNodeRead,
+		CapabilityEnvironmentRead,
 		CapabilityAuditLogRead,
 	),
 	"OPS_ADMIN": capabilitySet(
@@ -65,6 +70,8 @@ var roleCapabilities = map[string]map[Capability]struct{}{
 		CapabilityNodeRead,
 		CapabilityNodeApprove,
 		CapabilityNodeDelete,
+		CapabilityEnvironmentRead,
+		CapabilityEnvironmentManage,
 		CapabilityAuditLogRead,
 	),
 	"USER_ADMIN": capabilitySet(
