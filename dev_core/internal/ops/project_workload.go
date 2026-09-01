@@ -83,21 +83,41 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		}
 		runtimeInit = fmt.Sprintf(`
       initContainers:
+        - name: runtime-provision-nats
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner"]
+          args: ["provision-nats", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/nats.json"]
+          resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: bootstrap-nats, mountPath: /var/run/induforge/bootstrap, readOnly: true}
+        - name: runtime-provision-state
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner"]
+          args: ["provision-state", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/postgres-bootstrap.json"]
+          resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: bootstrap-state, mountPath: /var/run/induforge/bootstrap, readOnly: true}
         - name: runtime-binding-prepare
           image: %s
           imagePullPolicy: IfNotPresent
-          command: ["if-runtime-provisioner", "prepare", "--input", "/etc/induforge/runtime-binding/input.json"]
+          command: ["if-runtime-provisioner"]
+          args: ["prepare", "--input", "/etc/induforge/runtime-binding/input.json"]
+          resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "768Mi"}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
-            - {name: work, mountPath: /work}
-            - {name: bootstrap-secrets, mountPath: /var/run/induforge/bootstrap, readOnly: true}`, runtimeEngineImage)
+            - {name: work, mountPath: /work}`, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage)
 		runtimeArgs = `
           command: ["runtime-engine"]
           args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/artifact", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
 		runtimeMounts = `
-            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
             - {name: runtime-secrets, mountPath: /work/bundle/secrets, readOnly: true}`
 		runtimeVolumes = fmt.Sprintf(`
         - name: runtime-binding
@@ -106,12 +126,16 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           secret:
             secretName: %s
             items:%s
-        - name: bootstrap-secrets
+        - name: bootstrap-nats
           secret:
             secretName: %s
             items:
               - {key: nats.json, path: nats.json}
-              - {key: postgres-bootstrap.json, path: postgres-bootstrap.json}`, bindingName, secretName, runtimeSecretItems, secretName)
+        - name: bootstrap-state
+          secret:
+            secretName: %s
+            items:
+              - {key: postgres-bootstrap.json, path: postgres-bootstrap.json}`, bindingName, secretName, runtimeSecretItems, secretName, secretName)
 		if workload.Engine == ServiceCompute {
 			runtimeVolumes += fmt.Sprintf(`
         - name: sandbox-secret
@@ -213,7 +237,7 @@ spec:
         - name: release
           hostPath: {path: %q, type: Directory}
         - name: work
-          emptyDir: {}
+          emptyDir: {sizeLimit: "768Mi"}
 %s
 ---
 apiVersion: v1

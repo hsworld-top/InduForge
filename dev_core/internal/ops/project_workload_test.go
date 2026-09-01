@@ -20,16 +20,32 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if err != nil || !strings.Contains(compute, "IF_ENGINE_ROLE") || !strings.Contains(compute, `"compute"`) || strings.Contains(compute, "hostPort:") {
 		t.Fatalf("compute role/port isolation failed: %v\n%s", err, compute)
 	}
-	for _, expected := range []string{"initContainers:", "name: runtime-binding-prepare", `command: ["if-runtime-provisioner", "prepare", "--input", "/etc/induforge/runtime-binding/input.json"]`, "args:", "name: runtime-secrets", "name: bootstrap-secrets", "postgres-bootstrap.json", "mountPath: /work/bundle/secrets", "name: runtime-binding", "induforge.io/runtime-binding-sha256"} {
+	for _, expected := range []string{"initContainers:", "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-binding-prepare", `args: ["provision-nats", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/nats.json"]`, `args: ["provision-state", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/postgres-bootstrap.json"]`, `args: ["prepare", "--input", "/etc/induforge/runtime-binding/input.json"]`, "name: runtime-secrets", "name: bootstrap-nats", "name: bootstrap-state", "postgres-bootstrap.json", "mountPath: /work/bundle/secrets", "name: runtime-binding", "emptyDir: {sizeLimit: \"768Mi\"}", "induforge.io/runtime-binding-sha256"} {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute binding manifest missing %q:\n%s", expected, compute)
 		}
+	}
+	if !(strings.Index(compute, "name: runtime-provision-nats") < strings.Index(compute, "name: runtime-provision-state") && strings.Index(compute, "name: runtime-provision-state") < strings.Index(compute, "name: runtime-binding-prepare")) {
+		t.Fatalf("init 顺序错误:\n%s", compute)
+	}
+	prepareStart := strings.Index(compute, "name: runtime-binding-prepare")
+	mainStart := strings.Index(compute, "containers:")
+	prepare := compute[prepareStart:mainStart]
+	if strings.Contains(prepare, "bootstrap-") || !strings.Contains(prepare, "mountPath: /opt/induforge/release") {
+		t.Fatalf("prepare 挂载权限错误:\n%s", prepare)
+	}
+	natsStart := strings.Index(compute, "name: runtime-provision-nats")
+	stateStart := strings.Index(compute, "name: runtime-provision-state")
+	nats := compute[natsStart:stateStart]
+	state := compute[stateStart:prepareStart]
+	if strings.Contains(nats, "postgres-bootstrap.json") || strings.Contains(nats, "runtime-secrets") || strings.Contains(state, "nats.json") || strings.Contains(state, "runtime-secrets") {
+		t.Fatalf("bootstrap Secret 未最小投影:\nnats=%s\nstate=%s", nats, state)
 	}
 	alarm, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, Generation: 2})
 	if err != nil || !strings.Contains(alarm, `"alarm"`) || strings.Contains(alarm, `"compute"`) {
 		t.Fatalf("alarm role isolation failed: %v\n%s", err, alarm)
 	}
-	if !strings.Contains(alarm, "runtime-binding-prepare") || strings.Contains(base, "runtime-binding-prepare") || strings.Contains(base, "deployment-secrets") {
+	if !strings.Contains(alarm, "runtime-binding-prepare") || strings.Contains(base, "runtime-binding-prepare") || strings.Contains(base, "runtime-provision-nats") || strings.Contains(base, "runtime-provision-state") || strings.Contains(base, "deployment-secrets") {
 		t.Fatalf("runtime binding/base isolation failed:\nbase=%s\nalarm=%s", base, alarm)
 	}
 	if strings.Contains(alarm, "sandbox.json") || strings.Contains(alarm, "sandbox-token") || strings.Contains(alarm, "sandbox-secret") {
