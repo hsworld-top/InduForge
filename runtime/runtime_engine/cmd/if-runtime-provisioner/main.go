@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats> --input FILE")
+		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats|provision-state> --input FILE")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -19,8 +19,10 @@ func main() {
 		runPrepare(os.Args[2:])
 	case "provision-nats":
 		runProvisionNATS(os.Args[2:])
+	case "provision-state":
+		runProvisionState(os.Args[2:])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats> --input FILE")
+		fmt.Fprintln(os.Stderr, "usage: if-runtime-provisioner <prepare|provision-nats|provision-state> --input FILE")
 		os.Exit(2)
 	}
 }
@@ -77,4 +79,34 @@ func runProvisionNATS(args []string) {
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stdout, "provision-nats: complete")
+}
+
+func runProvisionState(args []string) {
+	flags := flag.NewFlagSet("provision-state", flag.ContinueOnError)
+	inputPath := flags.String("input", "", "runtime-binding.input.v1 文件")
+	credentialsPath := flags.String("credentials", "", "PostgreSQL bootstrap 凭据文件")
+	if err := flags.Parse(args); err != nil || *inputPath == "" || *credentialsPath == "" {
+		fmt.Fprintln(os.Stderr, "provision-state: argument invalid")
+		os.Exit(2)
+	}
+	raw, err := os.ReadFile(*inputPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "provision-state: input read failed")
+		os.Exit(1)
+	}
+	in, err := provisioner.Decode(raw)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "provision-state: input invalid")
+		os.Exit(1)
+	}
+	credentials, err := os.ReadFile(*credentialsPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "provision-state: credentials read failed")
+		os.Exit(1)
+	}
+	if err := provisioner.ProvisionState(context.Background(), in, credentials); err != nil {
+		fmt.Fprintln(os.Stderr, "provision-state: failed")
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stdout, "provision-state: complete")
 }

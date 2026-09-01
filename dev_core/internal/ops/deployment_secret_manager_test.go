@@ -36,7 +36,7 @@ func (m *memorySecretClient) DeleteSecret(_ context.Context, ns, name string) er
 func TestDeploymentSecretManagerBuildsResolverFilesAndRefreshesSources(t *testing.T) {
 	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {"token": "source-token"}, "runtime/postgres": {"password": "source-password"}}}
 	manager := NewDeploymentSecretManager(client)
-	support := RuntimeSupportResources{StateStoreEndpoint: "postgres.runtime.svc:5432", StateStoreDatabase: "induforge_runtime", StateStoreAdminUser: "postgres", NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"password": "password"}}}
+	support := RuntimeSupportResources{StateStoreEndpoint: "postgres.runtime.svc:5432", StateStoreDatabase: "induforge_runtime", StateStoreSchema: "runtime", StateStoreAdminUser: "postgres", NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}, StateStoreCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "postgres", Keys: map[string]string{"password": "password"}}}
 	name, err := manager.Ensure(context.Background(), "project", "99999999-9999-4999-8999-999999999999", ServiceCompute, support)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestDeploymentSecretManagerBuildsResolverFilesAndRefreshesSources(t *testin
 			t.Fatalf("missing target key %q", key)
 		}
 	}
-	if !strings.Contains(data[resolverNATSFile], "source-token") || !strings.Contains(data[resolverPostgresFile], data["runtime-db-username"]) || strings.Contains(data[resolverPostgresFile], "source-password") || !strings.Contains(data[bootstrapPostgresFile], "source-password") {
+	if !strings.Contains(data[resolverNATSFile], "source-token") || !strings.Contains(data[resolverPostgresFile], data["runtime-db-username"]) || strings.Contains(data[resolverPostgresFile], "source-password") || !strings.Contains(data[bootstrapPostgresFile], "source-password") || !strings.Contains(data[bootstrapPostgresFile], `"maintenanceDsn"`) || !strings.Contains(data[bootstrapPostgresFile], "/postgres?") || !strings.Contains(data[bootstrapPostgresFile], `"schema":"runtime"`) {
 		t.Fatal("resolver files missing source values")
 	}
 	password, applies := data["runtime-db-password"], client.applies

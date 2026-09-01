@@ -61,7 +61,9 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 		data["runtime-db-password"] = value
 		changed = true
 	}
-	bootstrapDSN, err := runtimePostgresDSN(support, support.StateStoreAdminUser, postgresPassword)
+	// bootstrap 必须连 maintenance database；目标 runtime database 首次尚不存在，
+	// 不能把它伪装成可连接的 admin DSN。
+	bootstrapDSN, err := runtimePostgresDSNForDatabase(support, support.StateStoreAdminUser, postgresPassword, "postgres")
 	if err != nil {
 		return "", fmt.Errorf("构造 bootstrap 状态库连接失败")
 	}
@@ -73,7 +75,7 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	if err != nil {
 		return "", fmt.Errorf("构造 resolver 凭据失败")
 	}
-	bootstrap, err := postgresSecretFile(bootstrapDSN)
+	bootstrap, err := postgresBootstrapSecretFile(bootstrapDSN, support.StateStoreDatabase, support.StateStoreSchema, data["runtime-db-username"], data["runtime-db-password"])
 	if err != nil {
 		return "", fmt.Errorf("构造 bootstrap 凭据失败")
 	}
@@ -111,14 +113,18 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 }
 
 func runtimePostgresDSN(support RuntimeSupportResources, username, password string) (string, error) {
-	if support.StateStoreEndpoint == "" || support.StateStoreDatabase == "" || username == "" || password == "" {
+	return runtimePostgresDSNForDatabase(support, username, password, support.StateStoreDatabase)
+}
+
+func runtimePostgresDSNForDatabase(support RuntimeSupportResources, username, password, database string) (string, error) {
+	if support.StateStoreEndpoint == "" || database == "" || username == "" || password == "" {
 		return "", fmt.Errorf("状态库连接元数据缺失")
 	}
 	endpoint := strings.TrimPrefix(support.StateStoreEndpoint, "postgres://")
 	if strings.Contains(endpoint, "/") || strings.ContainsAny(endpoint, "?@") {
 		return "", fmt.Errorf("状态库 endpoint 非法")
 	}
-	return "postgres://" + url.QueryEscape(username) + ":" + url.QueryEscape(password) + "@" + endpoint + "/" + url.PathEscape(support.StateStoreDatabase) + "?sslmode=disable", nil
+	return "postgres://" + url.QueryEscape(username) + ":" + url.QueryEscape(password) + "@" + endpoint + "/" + url.PathEscape(database) + "?sslmode=disable", nil
 }
 
 func runtimeDatabaseUser(deploymentID string) string {
@@ -154,6 +160,14 @@ func BuildResolverSecretFiles(natsCredential, postgresDSN string) (map[string]st
 }
 func postgresSecretFile(dsn string) (string, error) {
 	raw, err := json.Marshal(map[string]string{"schemaVersion": "postgres-dsn.v1", "dsn": dsn})
+	return string(raw), err
+}
+
+func postgresBootstrapSecretFile(maintenanceDSN, database, schema, username, password string) (string, error) {
+	if maintenanceDSN == "" || database == "" || schema == "" || username == "" || password == "" {
+		return "", fmt.Errorf("bootstrap 状态库参数缺失")
+	}
+	raw, err := json.Marshal(map[string]string{"schemaVersion": "postgres-bootstrap.v1", "maintenanceDsn": maintenanceDSN, "database": database, "schema": schema, "username": username, "password": password})
 	return string(raw), err
 }
 func (m *DeploymentSecretManager) Delete(ctx context.Context, ns, deploymentID string) error {
