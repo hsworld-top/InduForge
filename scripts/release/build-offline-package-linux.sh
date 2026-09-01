@@ -156,7 +156,7 @@ build_business_images() {
     "$REPO_ROOT"
 
   echo "构建数据服务镜像..."
-  docker build -t induforge/data:latest -f "$REPO_ROOT/data_service/Dockerfile" "$REPO_ROOT/data_service"
+  docker build -t induforge/data:latest -f "$REPO_ROOT/data_service/Dockerfile" "$REPO_ROOT"
 
   echo "构建边缘入口镜像..."
   docker build -t induforge/edge:latest -f "$REPO_ROOT/scripts/docker/edge/Dockerfile" "$REPO_ROOT"

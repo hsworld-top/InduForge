@@ -4,12 +4,14 @@ ENV GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /src
 
-COPY go.mod go.sum ./
+WORKDIR /src/data_service
+
+COPY data_service/go.mod data_service/go.sum ./
 # go.mod 使用本地 socket.io replace，依赖下载前必须先提供该模块元数据。
-COPY third_party/socket.io-golang ./third_party/socket.io-golang
+COPY data_service/third_party/socket.io-golang ./third_party/socket.io-golang
 RUN go mod download
 
-COPY . .
+COPY data_service/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/data-service ./cmd
 
 FROM alpine:3.22
