@@ -4153,7 +4153,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 .ops-deployment-form--release {
-  height: 419px;
+  height: 428px;
 }
 .ops-deployment-field {
   display: grid;

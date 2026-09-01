@@ -128,7 +128,7 @@ describe('ops management console', () => {
     expect(source).toMatch(
       /\.ops-deployment-form \{[\s\S]*height: 390px;[\s\S]*max-height: calc\(100vh - 220px\);[\s\S]*overflow-y: auto;/,
     )
-    expect(source).toMatch(/\.ops-deployment-form--release \{[\s\S]*height: 419px;/)
+    expect(source).toMatch(/\.ops-deployment-form--release \{[\s\S]*height: 428px;/)
     expect(source).toMatch(
       /\.ops-engine-placement :deep\(\.el-select\) \{[\s\S]*width: 100%;[\s\S]*min-width: 0;/,
     )
