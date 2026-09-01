@@ -45,7 +45,7 @@ func main() {
 	}
 	defer p.Close()
 	h := &health.State{}
-	collector, err := engine.New(loaded, driver.NewRegistry(driver.NewModbusTCP(r)), p, h)
+	collector, err := engine.New(loaded, driver.NewRegistry(driver.NewModbusTCP(r), driver.NewOPCUA(r)), p, h)
 	if err != nil {
 		log.Print("collector 初始化失败")
 		os.Exit(1)

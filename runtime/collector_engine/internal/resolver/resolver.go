@@ -27,6 +27,7 @@ type ModbusEndpoint struct {
 	Host string
 	Port int
 }
+type OPCUAEndpoint struct{ URL string }
 
 func New(loaded *loader.Loaded) (*Resolver, error) {
 	if loaded == nil || !filepath.IsAbs(loaded.IndexDir) || filepath.Clean(loaded.IndexDir) != loaded.IndexDir {
@@ -82,6 +83,22 @@ func (r *Resolver) ResolveModbus(_ context.Context, ref string) (ModbusEndpoint,
 		return ModbusEndpoint{}, errors.New("Modbus resource 不可用")
 	}
 	return ModbusEndpoint{Host: v.Host, Port: v.Port}, nil
+}
+
+// ResolveOPCUA only accepts an opc.tcp endpoint from the trusted resource index.
+// V1 artifact fixes securityMode/securityPolicy to None and authenticationType to anonymous.
+func (r *Resolver) ResolveOPCUA(_ context.Context, ref string) (OPCUAEndpoint, error) {
+	var v struct {
+		URL string `json:"url"`
+	}
+	if !r.resource(ref, &v, "url") {
+		return OPCUAEndpoint{}, errors.New("OPC UA resource 不可用")
+	}
+	u, e := url.Parse(v.URL)
+	if e != nil || u.Scheme != "opc.tcp" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return OPCUAEndpoint{}, errors.New("OPC UA resource 不可用")
+	}
+	return OPCUAEndpoint{URL: v.URL}, nil
 }
 func (r *Resolver) resource(ref string, target any, keys ...string) bool {
 	raw, ok := r.index.Resources[ref]
