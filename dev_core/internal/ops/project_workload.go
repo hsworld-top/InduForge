@@ -253,7 +253,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: sandbox-secret, mountPath: /var/run/induforge/secrets, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.DeploymentID)
 	}
 	if workload.Engine == ServiceBase {
-		if workload.HostPort == nil || *workload.HostPort < 1024 || *workload.HostPort > 65535 {
+		if workload.HostPort == nil || *workload.HostPort < 1024 || *workload.HostPort > 65532 || isReservedDeploymentPort(*workload.HostPort) {
 			return "", fmt.Errorf("基础引擎 hostPort 无效")
 		}
 		hostPort = fmt.Sprintf("\n              hostPort: %d", *workload.HostPort)

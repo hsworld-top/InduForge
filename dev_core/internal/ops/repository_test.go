@@ -102,6 +102,23 @@ func TestMapDeploymentCreateErrorPreservesProjectAndPortIsolation(t *testing.T) 
 	}
 }
 
+func TestDeploymentAccessPortRulesAndIPv6URL(t *testing.T) {
+	for _, port := range []int{2379, 2380, 6443, 8472, 10250, 10257, 10259} {
+		if !isReservedDeploymentPort(port) {
+			t.Fatalf("reserved port %d accepted", port)
+		}
+	}
+	if isReservedDeploymentPort(17800) {
+		t.Fatal("ordinary user port was reserved")
+	}
+	if got := deploymentAccessURL("2001:db8::1", 17800); got != "http://[2001:db8::1]:17800" {
+		t.Fatalf("IPv6 URL=%s", got)
+	}
+	if got := deploymentAccessURL("192.0.2.10", 17800); got != "http://192.0.2.10:17800" {
+		t.Fatalf("IPv4 URL=%s", got)
+	}
+}
+
 func TestDeploymentCreationLocksTenantProjectAndPhysicalNode(t *testing.T) {
 	for name, query := range map[string]string{
 		"project": lockDeploymentProjectSQL,

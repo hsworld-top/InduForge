@@ -938,6 +938,12 @@ func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, te
 			return fmt.Errorf("%s 引擎节点当前不能调度", engine)
 		}
 	}
+	if in.AccessPort != 0 && isReservedDeploymentPort(in.AccessPort) {
+		return ErrNodePortConflict
+	}
+	if in.AccessPort == 0 {
+		return nil
+	}
 	var conflict string
 	err = r.pool.QueryRow(ctx, `SELECT s.project_deployment_id::text FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id WHERE d.tenant_id=$1 AND s.service_type='base' AND s.node_id=$2 AND s.public_port=$3 AND NOT (d.project_id=$4 AND d.environment_id=$5) LIMIT 1`, tenant, in.Placements[ServiceBase], in.AccessPort, in.ProjectID, in.EnvironmentID).Scan(&conflict)
 	if err == nil {
@@ -947,6 +953,51 @@ func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, te
 		return err
 	}
 	return nil
+}
+
+const (
+	autoDeploymentPortStart = 20000
+	autoDeploymentPortEnd   = 39999
+)
+
+var reservedDeploymentPorts = map[int]struct{}{
+	2379: {}, 2380: {}, 6443: {}, 8472: {}, 10250: {}, 10257: {}, 10259: {},
+}
+
+func isReservedDeploymentPort(port int) bool {
+	_, reserved := reservedDeploymentPorts[port]
+	return reserved
+}
+
+// allocateDeploymentAccessPort 只用于未指定端口的请求。事务已锁住同工程，最终
+// 仍由 deployment_services 的节点+端口唯一索引防止跨工程并发抢占。
+func allocateDeploymentAccessPort(ctx context.Context, tx pgx.Tx, nodeID string) (int, error) {
+	rows, err := tx.Query(ctx, `SELECT public_port FROM deployment_services WHERE node_id=$1 AND service_type='base' AND public_port IS NOT NULL`, nodeID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	used := make(map[int]struct{})
+	for rows.Next() {
+		var port int
+		if err := rows.Scan(&port); err != nil {
+			return 0, err
+		}
+		used[port] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for port := autoDeploymentPortStart; port <= autoDeploymentPortEnd; port++ {
+		if _, exists := used[port]; !exists && !isReservedDeploymentPort(port) {
+			return port, nil
+		}
+	}
+	return 0, ErrNodePortConflict
+}
+
+func deploymentAccessURL(nodeAddress string, port int) string {
+	return "http://" + net.JoinHostPort(nodeAddress, fmt.Sprintf("%d", port))
 }
 func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, user string, in CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error) {
 	tx, e := r.pool.Begin(ctx)
@@ -968,9 +1019,11 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	if err = validateEnginePlacements(required, in.Placements); err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
+	baseNodeAddress := ""
 	for _, engine := range required {
 		var ready bool
-		err = tx.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3 FOR UPDATE OF n`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
+		var address string
+		err = tx.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds',COALESCE(n.ip_address,'') FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3 FOR UPDATE OF n`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready, &address)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ProjectDeployment{}, DeploymentRun{}, ErrNotFound
 		}
@@ -980,7 +1033,22 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		if !ready {
 			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("%s 引擎节点当前不能调度", engine)
 		}
+		if engine == ServiceBase {
+			baseNodeAddress = address
+		}
 	}
+	if net.ParseIP(baseNodeAddress) == nil {
+		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("基础引擎节点缺少可访问管理地址")
+	}
+	if in.AccessPort == 0 {
+		in.AccessPort, err = allocateDeploymentAccessPort(ctx, tx, in.Placements[ServiceBase])
+		if err != nil {
+			return ProjectDeployment{}, DeploymentRun{}, err
+		}
+	} else if isReservedDeploymentPort(in.AccessPort) {
+		return ProjectDeployment{}, DeploymentRun{}, ErrNodePortConflict
+	}
+	accessEndpoint := deploymentAccessURL(baseNodeAddress, in.AccessPort)
 	descriptor, err := deploymentArtifactDescriptor(in)
 	if err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
@@ -1020,9 +1088,13 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 				return d, DeploymentRun{}, fmt.Errorf("%s 引擎节点迁移必须先停止旧工作负载", kind)
 			}
 			serviceID = old.id
-			e = tx.QueryRow(ctx, `UPDATE deployment_services SET public_port=$1,desired_status='running',observed_status='pending',desired_generation=desired_generation+1,last_operation='deploy',updated_at=now() WHERE id=$2 RETURNING id::text`, publicPort, serviceID).Scan(&serviceID)
+			e = tx.QueryRow(ctx, `UPDATE deployment_services SET public_port=$1,endpoint=CASE WHEN service_type='base' THEN $2 ELSE endpoint END,desired_status='running',observed_status='pending',desired_generation=desired_generation+1,last_operation='deploy',updated_at=now() WHERE id=$3 RETURNING id::text`, publicPort, accessEndpoint, serviceID).Scan(&serviceID)
 		} else {
-			e = tx.QueryRow(ctx, `INSERT INTO deployment_services(tenant_id,project_deployment_id,node_id,service_type,public_port) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, tenant, d.ID, in.Placements[kind], kind, publicPort).Scan(&serviceID)
+			endpoint := ""
+			if kind == ServiceBase {
+				endpoint = accessEndpoint
+			}
+			e = tx.QueryRow(ctx, `INSERT INTO deployment_services(tenant_id,project_deployment_id,node_id,service_type,public_port,endpoint) VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`, tenant, d.ID, in.Placements[kind], kind, publicPort, endpoint).Scan(&serviceID)
 		}
 		if e != nil {
 			return d, DeploymentRun{}, e

@@ -652,7 +652,9 @@ func validateDeployment(in CreateDeploymentInput) error {
 	if in.DevelopmentArtifact != nil {
 		return fmt.Errorf("开发制品只能由服务端生成")
 	}
-	if in.AccessPort < 1024 || in.AccessPort > 65532 {
+	// 0 表示由服务端在安全动态范围内分配；浏览器不得猜测端口。显式端口
+	// 继续禁止特权端口，并为节点原生运行时保留相邻内部端口空间。
+	if in.AccessPort != 0 && (in.AccessPort < 1024 || in.AccessPort > 65532) {
 		return fmt.Errorf("工程访问端口必须在 1024 到 65532 之间")
 	}
 	return validateEnginePlacements([]string{ServiceBase}, in.Placements)
