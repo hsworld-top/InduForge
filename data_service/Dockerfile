@@ -20,6 +20,8 @@ RUN sed -i 's#https://dl-cdn.alpinelinux.org/alpine#https://mirrors.aliyun.com/a
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /out/data-service ./data-service
+# 采集协议目录由运行时配置指定为 /contracts/collector-protocols，需随镜像发布。
+COPY contracts/collector-protocols /contracts/collector-protocols
 
 EXPOSE 18102
 
