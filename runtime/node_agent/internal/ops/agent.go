@@ -399,6 +399,19 @@ func (a *Agent) reconcile(ctx context.Context, command AgentCommand) error {
 		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
 		return err
 	}
+	if strings.EqualFold(strings.TrimSpace(command.Operation), "delete") {
+		if _, err := a.supervisor.Stop(command.ServiceID, command.Generation); err != nil {
+			a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+			return err
+		}
+		if group == ServiceCollector {
+			if err := removeCollectorWAL(a.cfg.DataDir, command.DeploymentID); err != nil {
+				a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+				return err
+			}
+		}
+		return a.saveApplied(command.ServiceID, command.Generation)
+	}
 	if !a.supervisor.HasService(group) {
 		err := fmt.Errorf("本节点的服务组 %s 仅已安装但尚未完成本地 Release 配置", group)
 		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)

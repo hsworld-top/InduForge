@@ -390,6 +390,39 @@ func TestFormalReleaseInstallsThenFailsClosedWithoutLauncher(t *testing.T) {
 	}
 }
 
+func TestDeleteDeploymentRemovesCollectorWALWhileStopKeepsIt(t *testing.T) {
+	dataDir := t.TempDir()
+	agent, err := NewAgent(Config{Enabled: true, ServerURL: testLoopbackServerURL, DataDir: dataDir}, configuredSupervisor(t, ServiceCollector))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.identity = Identity{NodeID: formalNodeID, AgentToken: "node-token"}
+	wal, err := collectorWALPath(dataDir, formalDeploymentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(wal, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stop := formalCommand()
+	stop.ServiceType, stop.Operation, stop.DesiredStatus = "collector", "stop", "stopped"
+	if err = agent.Reconcile(stop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(wal); err != nil {
+		t.Fatalf("stop must retain WAL: %v", err)
+	}
+	deleteCommand := formalCommand()
+	deleteCommand.ServiceType, deleteCommand.Operation, deleteCommand.DesiredStatus = "collector", "delete", "stopped"
+	deleteCommand.Generation = 2
+	if err = agent.Reconcile(deleteCommand); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(wal); !os.IsNotExist(err) {
+		t.Fatalf("delete must remove WAL: %v", err)
+	}
+}
+
 func TestFormalBindingRejectsUnknownOrMismatchedFields(t *testing.T) {
 	command := formalCommand()
 	for name, mutate := range map[string]func(map[string]any){

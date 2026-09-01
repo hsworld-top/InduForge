@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -365,7 +366,7 @@ metadata:
   labels: {induforge.io/project-workload: "true", induforge.io/service-id: %q}
 spec:
   replicas: 1
-  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 1, maxSurge: 0}}
   selector: {matchLabels: {app.kubernetes.io/name: %q}}
   template:
     metadata:
@@ -401,7 +402,7 @@ spec:
             - {name: collector-binding, mountPath: /etc/induforge/collector, readOnly: true}
             - {name: collector-secrets, mountPath: /etc/induforge/collector/secrets, readOnly: true}
             - {name: work, mountPath: /work, readOnly: true}
-            - {name: wal, mountPath: /var/lib/induforge/wal}
+            - {name: wal, mountPath: /var/lib/induforge/collector/wal}
       volumes:
         - name: release
           hostPath: {path: %q, type: Directory}
@@ -413,7 +414,7 @@ spec:
         - name: work
           emptyDir: {sizeLimit: "256Mi"}
         - name: wal
-          emptyDir: {sizeLimit: "1Gi"}
+          hostPath: {path: %q, type: Directory}
 ---
 apiVersion: v1
 kind: Service
@@ -423,5 +424,5 @@ metadata:
 spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, name, namespace, w.ServiceID, name, name, w.ReleaseID, w.CollectorBindingChecksum, w.ReleaseID, fmt.Sprint(w.Generation), w.NodeID, collectorEngineImage, w.CollectorArtifactPath, collectorEngineImage, artifactRoot, name, w.CollectorSecretName, name, namespace, name), nil
+`, name, namespace, name, namespace, w.ServiceID, name, name, w.ReleaseID, w.CollectorBindingChecksum, w.ReleaseID, fmt.Sprint(w.Generation), w.NodeID, collectorEngineImage, w.CollectorArtifactPath, collectorEngineImage, artifactRoot, name, w.CollectorSecretName, filepath.Join("/var/lib/induforge/node-agent/deployments", w.DeploymentID, "state", "collector-wal"), name, namespace, name), nil
 }
