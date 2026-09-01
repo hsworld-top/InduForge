@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/runtime-binding.input.v1.schema.json",
+  "title": "runtime-binding.input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "releaseId", "runtimeArtifactPath", "runtimeArtifactSha256", "artifactDir", "bundleDir", "binding"],
+  "properties": {
+    "schemaVersion": {"const": "runtime-binding.input.v1"},
+    "releaseId": {"type": "string", "minLength": 1},
+    "runtimeArtifactPath": {"type": "string", "pattern": "^/opt/induforge/release/"},
+    "runtimeArtifactSha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifactDir": {"type": "string", "pattern": "^/work/"},
+    "bundleDir": {"type": "string", "pattern": "^/work/"},
+    "binding": {"type": "object"}
+  }
+}

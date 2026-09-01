@@ -1,0 +1,140 @@
+// Package provisioner implements the local, secret-free RuntimeEngine bundle preparation boundary.
+package provisioner
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/indu-forge/runtime-engine/internal/binding"
+	"github.com/indu-forge/runtime-engine/internal/loader"
+	"github.com/indu-forge/runtime-engine/internal/provision"
+)
+
+const (
+	SchemaVersion = "runtime-binding.input.v1"
+	SecretRoot    = "/var/run/induforge/secrets"
+	WorkRoot      = "/work"
+)
+
+type Input struct {
+	SchemaVersion         string        `json:"schemaVersion"`
+	ReleaseID             string        `json:"releaseId"`
+	RuntimeArtifactPath   string        `json:"runtimeArtifactPath"`
+	RuntimeArtifactSHA256 string        `json:"runtimeArtifactSha256"`
+	ArtifactDir           string        `json:"artifactDir"`
+	BundleDir             string        `json:"bundleDir"`
+	Binding               binding.Input `json:"binding"`
+}
+
+func Decode(raw []byte) (Input, error) {
+	var in Input
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&in); err != nil || d.Decode(&struct{}{}) != io.EOF {
+		return Input{}, fmt.Errorf("输入格式非法")
+	}
+	if in.SchemaVersion != SchemaVersion {
+		return Input{}, fmt.Errorf("输入版本非法")
+	}
+	return in, nil
+}
+
+// Prepare verifies the release sub-artifact, materializes it under WorkRoot,
+// verifies it through the formal loader, then atomically writes the bundle.
+func Prepare(in Input) error {
+	if err := validateInput(in); err != nil {
+		return err
+	}
+	if in.Binding.ArtifactMountPath != in.ArtifactDir || in.Binding.ArtifactFile != "runtime-project-artifact.json" {
+		return fmt.Errorf("项目制品目标与配置不一致")
+	}
+	f, err := os.Open(in.RuntimeArtifactPath)
+	if err != nil {
+		return fmt.Errorf("读取运行制品失败")
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return fmt.Errorf("校验运行制品失败")
+	}
+	if "sha256:"+hex.EncodeToString(h.Sum(nil)) != in.RuntimeArtifactSHA256 {
+		return fmt.Errorf("运行制品摘要不匹配")
+	}
+	if _, err = f.Seek(0, 0); err != nil {
+		return fmt.Errorf("读取运行制品失败")
+	}
+	if err = provision.UnpackRuntimeArtifact(f, in.ArtifactDir, provision.Limits{MaxFiles: 128, MaxFileBytes: 128 << 20, MaxTotalBytes: 512 << 20}); err != nil {
+		return fmt.Errorf("安全解包失败")
+	}
+	artifactPath := filepath.Join(in.ArtifactDir, "runtime-project-artifact.json")
+	b, err := os.ReadFile(artifactPath)
+	if err != nil {
+		return fmt.Errorf("读取项目制品失败")
+	}
+	d := sha256.Sum256(b)
+	if in.Binding.ProjectArtifact.ArtifactDigest != "sha256:"+hex.EncodeToString(d[:]) {
+		return fmt.Errorf("项目制品摘要不匹配")
+	}
+	config, err := binding.BuildEngineConfig(in.Binding)
+	if err != nil {
+		return fmt.Errorf("配置构造失败: %w", err)
+	}
+	configRaw, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败")
+	}
+	check, err := os.CreateTemp(in.ArtifactDir, ".runtime-config-check-")
+	if err != nil {
+		return fmt.Errorf("创建配置校验文件失败")
+	}
+	checkPath := check.Name()
+	defer os.Remove(checkPath)
+	if err := check.Chmod(0o600); err != nil || func() error {
+		_, e := check.Write(configRaw)
+		if e != nil {
+			return e
+		}
+		return check.Close()
+	}() != nil {
+		check.Close()
+		return fmt.Errorf("写入配置校验文件失败")
+	}
+	readOnly := false
+	loaded, err := loader.Load(loader.Options{ConfigPath: checkPath, ConfigRoot: in.ArtifactDir, RequireReadOnlyMount: &readOnly})
+	if err != nil {
+		return fmt.Errorf("项目制品与角色分配不匹配")
+	}
+	if in.Binding.Role == "alarm" && len(loaded.Artifact.AlarmItems) == 0 {
+		return fmt.Errorf("报警角色缺少报警制品")
+	}
+	index, err := binding.BuildResolverIndex(in.Binding)
+	if err != nil {
+		return fmt.Errorf("索引构造失败: %w", err)
+	}
+	if err := binding.WriteBundle(config, index, in.BundleDir); err != nil {
+		return fmt.Errorf("写入 bundle 失败")
+	}
+	return nil
+}
+
+func validateInput(in Input) error {
+	if strings.TrimSpace(in.ReleaseID) == "" || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !strings.HasPrefix(in.RuntimeArtifactSHA256, "sha256:") {
+		return fmt.Errorf("输入路径或 Release 身份非法")
+	}
+	for _, p := range []string{in.Binding.JetStream.CredentialSecretFile, in.Binding.StateStore.CredentialSecretFile, in.Binding.ComputeSandboxSecretFile} {
+		if p != "" && (!strings.HasPrefix(p, "secrets/") || filepath.IsAbs(p) || filepath.Clean(p) != p || strings.Contains(p, "..")) {
+			return fmt.Errorf("secret 路径越界")
+		}
+	}
+	return nil
+}
+func under(path, root string) bool {
+	return filepath.IsAbs(path) && filepath.Clean(path) == path && (path == root || strings.HasPrefix(path, root+"/"))
+}

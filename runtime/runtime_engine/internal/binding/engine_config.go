@@ -19,45 +19,59 @@ const (
 // 当前冻结的 EngineConfig 只允许写入受控引用，不能把这些字段或任何 secret 值
 // 序列化进运行配置。保留它们可阻止调用方以不完整的运行支撑信息构造配置。
 type Input struct {
-	TenantID, SiteID, NodeID, ProjectID, DeploymentID, AccountID string
-	Role                                                         string
-	ProjectArtifact                                              model.ArtifactRef
-	ArtifactMountPath, ArtifactFile                              string
-	RoleOwnership                                                model.Ownership
-	ComputeProducers                                             []ComputeProducer
-	AlarmOwnership                                               model.Ownership
-	JetStream                                                    JetStreamInput
-	StateStore                                                   StateStoreInput
-	ComputeSandbox                                               *model.ComputeSandbox
+	TenantID          string                `json:"tenantId"`
+	SiteID            string                `json:"siteId"`
+	NodeID            string                `json:"nodeId"`
+	ProjectID         string                `json:"projectId"`
+	DeploymentID      string                `json:"deploymentId"`
+	AccountID         string                `json:"accountId"`
+	Role              string                `json:"role"`
+	ProjectArtifact   model.ArtifactRef     `json:"projectArtifact"`
+	ArtifactMountPath string                `json:"artifactMountPath"`
+	ArtifactFile      string                `json:"artifactFile"`
+	RoleOwnership     model.Ownership       `json:"roleOwnership"`
+	ComputeProducers  []ComputeProducer     `json:"computeProducers,omitempty"`
+	AlarmOwnership    model.Ownership       `json:"alarmOwnership,omitempty"`
+	JetStream         JetStreamInput        `json:"jetStream"`
+	StateStore        StateStoreInput       `json:"stateStore"`
+	ComputeSandbox    *model.ComputeSandbox `json:"computeSandbox,omitempty"`
 	// ComputeSandboxEndpoint 与 ComputeSandboxSecretFile 仅供 source index 使用；
 	// EngineConfig 本身只可保存 ComputeSandbox 中的两个受控引用。
-	ComputeSandboxEndpoint, ComputeSandboxSecretFile string
+	ComputeSandboxEndpoint   string `json:"computeSandboxEndpoint,omitempty"`
+	ComputeSandboxSecretFile string `json:"computeSandboxSecretFile,omitempty"`
 }
 
 // ComputeProducer 是 compute role 对一个计算单元的唯一 producer fencing 绑定。
 type ComputeProducer struct {
-	ComputeID string
-	Ownership model.Ownership
+	ComputeID string          `json:"computeId"`
+	Ownership model.Ownership `json:"ownership"`
 }
 
 // JetStreamInput 只保存 endpoint 与受控引用，不包含认证值。
 // Consumers 来自已准备完成的 JetStream 拓扑；BuildEngineConfig 会复制它们，
 // 避免调用方随后修改输入切片影响已构建配置。
 type JetStreamInput struct {
-	Endpoint, ServerResourceRef, CredentialSecretRef                string
-	DataRawStream, DataDerivedStream, EventStream, DeadLetterStream string
+	Endpoint            string `json:"endpoint"`
+	ServerResourceRef   string `json:"serverResourceRef"`
+	CredentialSecretRef string `json:"credentialSecretRef"`
+	DataRawStream       string `json:"dataRawStream"`
+	DataDerivedStream   string `json:"dataDerivedStream"`
+	EventStream         string `json:"eventStream"`
+	DeadLetterStream    string `json:"deadLetterStream"`
 	// CredentialSecretFile 是由受控挂载提供的相对文件路径；它只供
 	// resolver index 引用，绝不携带认证值。
-	CredentialSecretFile string
-	Consumers            []model.Consumer
+	CredentialSecretFile string           `json:"credentialSecretFile"`
+	Consumers            []model.Consumer `json:"consumers"`
 }
 
 // StateStoreInput 描述状态库的部署支撑。CredentialSecretRef 写入 v2 的
 // dsnSecretRef；resourceRef 与 schema 用于部署预检，v2 正式类型不承载它们。
 type StateStoreInput struct {
-	ResourceRef, CredentialSecretRef, Schema string
+	ResourceRef         string `json:"resourceRef"`
+	CredentialSecretRef string `json:"credentialSecretRef"`
+	Schema              string `json:"schema"`
 	// CredentialSecretFile 是由受控挂载提供的 PostgreSQL DSN secret 文件路径。
-	CredentialSecretFile string
+	CredentialSecretFile string `json:"credentialSecretFile"`
 }
 
 // BuildEngineConfig 构造仅运行 compute 或 alarm 的 runtime-engine.config.v2。
