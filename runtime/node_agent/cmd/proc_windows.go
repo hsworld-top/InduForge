@@ -108,3 +108,6 @@ func isProcessRunning(pid int) bool {
 
 	return exitCode == stillActive
 }
+
+// Windows 继续由进程句柄判活；安装路径身份校验后续使用 Win32 image path API 补充。
+func processMatchesCurrentExecutable(_ int) bool { return true }

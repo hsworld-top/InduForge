@@ -501,6 +501,10 @@ func (s *Supervisor) Status(workloadID string) (ProcessStatus, error) {
 
 func (s *Supervisor) HasService(group ServiceGroup) bool { return len(s.services[group]) > 0 }
 
+// HasInstalledService 用于 Release Binding 预检。installed 只是本机可承载能力，
+// 不能替代 enabled 的静态服务配置，更不能被中心命令扩大。
+func (s *Supervisor) HasInstalledService(group ServiceGroup) bool { return len(s.installed[group]) > 0 }
+
 // Capabilities 从本机已安装的 ServiceConfig 派生；未配置 release 的模板可以接入，
 // 但不能启动，避免把未部署工程伪报为 running。
 func (s *Supervisor) Capabilities() []string {

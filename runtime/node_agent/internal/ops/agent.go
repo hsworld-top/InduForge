@@ -3,7 +3,10 @@ package ops
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/indu-forge/node_agent/internal/hostd"
 	"github.com/indu-forge/node_agent/internal/pkg/utils"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -25,13 +29,26 @@ import (
 // Config 是 ops Agent 的最小持久配置。enrollmentCode 只在未领取身份时使用，
 // 成功后只保存 node id/token，不会把 enrollment code 长期写入磁盘。
 type Config struct {
-	Enabled             bool          `yaml:"enabled"`
-	ServerURL           string        `yaml:"serverUrl"`
-	EnrollmentCode      string        `yaml:"enrollmentCode"`
-	AgentVersion        string        `yaml:"agentVersion"`
-	HeartbeatEvery      time.Duration `yaml:"heartbeatEvery"`
-	DataDir             string        `yaml:"dataDir"`
-	ClearEnrollmentCode func() error  `yaml:"-"`
+	Enabled             bool                `yaml:"enabled"`
+	ServerURL           string              `yaml:"serverUrl"`
+	EnrollmentCode      string              `yaml:"enrollmentCode"`
+	AgentVersion        string              `yaml:"agentVersion"`
+	HeartbeatEvery      time.Duration       `yaml:"heartbeatEvery"`
+	DataDir             string              `yaml:"dataDir"`
+	HostdSocket         string              `yaml:"hostdSocket"`
+	HostDataDir         string              `yaml:"hostDataDir"`
+	NodeIP              string              `yaml:"nodeIp"`
+	TrustKeys           []TrustedSigningKey `yaml:"trustKeys"`
+	RuntimeVersion      string              `yaml:"runtimeVersion"`
+	ClearEnrollmentCode func() error        `yaml:"-"`
+	ReconcileError      func(error)         `yaml:"-"`
+}
+
+// TrustedSigningKey 是节点本地受信 Release 签名公钥。中心只能在 Binding 中引用
+// keyId，不能下发或替换这个公钥。
+type TrustedSigningKey struct {
+	KeyID     string `yaml:"keyId"`
+	PublicKey string `yaml:"publicKey"`
 }
 
 const maxCenterResponseBytes = 1 << 20
@@ -49,30 +66,42 @@ type HostInfo struct {
 	OS                 string `json:"os"`
 	Architecture       string `json:"architecture"`
 	MachineFingerprint string `json:"machineFingerprint"`
+	IPAddress          string `json:"ipAddress,omitempty"`
 }
 
 type AgentCommand struct {
 	NodeID          string `json:"nodeId"`
 	RunID           string `json:"runId"`
 	DeploymentID    string `json:"deploymentId"`
+	ReleaseID       string `json:"releaseId"`
 	ServiceID       string `json:"serviceId"`
 	ServiceType     string `json:"serviceType"`
 	Operation       string `json:"operation"`
 	DesiredStatus   string `json:"desiredStatus"`
 	Generation      int64  `json:"generation"`
 	Version         string `json:"version"`
+	ArchiveSHA256   string `json:"archiveSha256"`
+	ManifestSHA256  string `json:"manifestSha256"`
+	ChecksumsSHA256 string `json:"checksumsSha256"`
+	SigningKeyID    string `json:"signingKeyId"`
+	BindingRevision int    `json:"bindingRevision"`
 	ReplicasDesired int    `json:"replicasDesired"`
 }
 
 // Agent 将中心 desired 状态与本机 observed 状态分开处理。中心只能选择本机
 // 声明的服务组，不能传递命令、路径、参数或环境变量。
 type Agent struct {
-	cfg        Config
-	identity   Identity
-	supervisor *Supervisor
-	client     *http.Client
-	mu         sync.RWMutex
-	applied    map[string]int64
+	cfg                Config
+	identity           Identity
+	supervisor         *Supervisor
+	client             *http.Client
+	trustKeys          map[string]ed25519.PublicKey
+	mu                 sync.RWMutex
+	applied            map[string]int64
+	hostd              *hostd.Client
+	clusterFailure     *hostd.ClusterState
+	foundationFailure  *hostd.FoundationState
+	lastReconcileError string
 }
 
 func NewAgent(cfg Config, supervisor *Supervisor) (*Agent, error) {
@@ -93,7 +122,18 @@ func NewAgent(cfg Config, supervisor *Supervisor) (*Agent, error) {
 	if cfg.AgentVersion == "" {
 		cfg.AgentVersion = "unknown"
 	}
-	return &Agent{cfg: cfg, supervisor: supervisor, client: &http.Client{Timeout: 8 * time.Second}, applied: make(map[string]int64)}, nil
+	trustKeys, err := parseTrustedSigningKeys(cfg.TrustKeys)
+	if err != nil {
+		return nil, err
+	}
+	var hostClient *hostd.Client
+	if strings.TrimSpace(cfg.HostdSocket) != "" {
+		hostClient, err = hostd.NewUnixClient(strings.TrimSpace(cfg.HostdSocket))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Agent{cfg: cfg, supervisor: supervisor, client: newCenterHTTPClient(8 * time.Second), trustKeys: trustKeys, applied: make(map[string]int64), hostd: hostClient}, nil
 }
 
 func (a *Agent) identityPath() string { return filepath.Join(a.cfg.DataDir, "ops-agent-identity.json") }
@@ -208,6 +248,7 @@ func (a *Agent) claim(ctx context.Context) error {
 		"platform":           host.OS,
 		"architecture":       host.Architecture,
 		"machineFingerprint": host.MachineFingerprint,
+		"ipAddress":          host.IPAddress,
 		"agentVersion":       a.cfg.AgentVersion,
 		"capabilities":       a.supervisor.Capabilities(),
 	}
@@ -235,7 +276,7 @@ func (a *Agent) claim(ctx context.Context) error {
 
 func (a *Agent) hostInfo() HostInfo {
 	hostname, _ := os.Hostname()
-	return HostInfo{Hostname: hostname, OS: runtime.GOOS, Architecture: runtime.GOARCH, MachineFingerprint: utils.GetMachineID()}
+	return HostInfo{Hostname: hostname, OS: runtime.GOOS, Architecture: runtime.GOARCH, MachineFingerprint: utils.GetMachineID(), IPAddress: a.nodeIP()}
 }
 
 // Run 首先加载或领取身份；之后立即心跳并按固定周期拉取 desired workload。任何单次网络
@@ -269,30 +310,68 @@ func (a *Agent) Run(ctx context.Context) error {
 func (a *Agent) reconcileOnce(ctx context.Context) {
 	if a.currentIdentity().NodeID == "" {
 		// 控制面可能比 Agent 晚就绪；领取失败留待下一周期重试，不影响本机已运行进程。
-		_ = a.claim(ctx)
+		if err := a.claim(ctx); err != nil {
+			a.reportReconcileError(err)
+		} else {
+			a.clearReconcileError()
+		}
 		return
 	}
 	// 身份已经落盘但上一次清除引导码失败时，每轮继续重试；在明文接入码
 	// 清理成功前不进入日常心跳，避免一次瞬时文件错误把敏感码永久遗留。
 	if strings.TrimSpace(a.cfg.EnrollmentCode) != "" && a.cfg.ClearEnrollmentCode != nil {
 		if err := a.cfg.ClearEnrollmentCode(); err != nil {
+			a.reportReconcileError(fmt.Errorf("清除一次性接入码失败: %w", err))
 			return
 		}
 		a.cfg.EnrollmentCode = ""
 	}
 	if err := a.Heartbeat(ctx); err != nil {
+		a.reportReconcileError(fmt.Errorf("上报节点心跳失败: %w", err))
 		return
 	}
 	commands, err := a.Commands(ctx)
 	if err != nil {
+		a.reportReconcileError(fmt.Errorf("同步节点期望状态失败: %w", err))
 		return
 	}
 	for _, command := range commands {
-		_ = a.Reconcile(command)
+		if err := a.reconcile(ctx, command); err != nil {
+			a.reportReconcileError(fmt.Errorf("执行节点服务计划失败: %w", err))
+			return
+		}
 	}
+	a.clearReconcileError()
+}
+
+// reportReconcileError 只在错误内容发生变化时记录，避免网络持续中断期间每个
+// 心跳周期重复刷屏；恢复成功后会清空，以便同类错误再次出现时仍可记录。
+func (a *Agent) reportReconcileError(err error) {
+	if err == nil || a.cfg.ReconcileError == nil {
+		return
+	}
+	message := truncateAgentMessage(err.Error())
+	a.mu.Lock()
+	if message == a.lastReconcileError {
+		a.mu.Unlock()
+		return
+	}
+	a.lastReconcileError = message
+	a.mu.Unlock()
+	a.cfg.ReconcileError(errors.New(message))
+}
+
+func (a *Agent) clearReconcileError() {
+	a.mu.Lock()
+	a.lastReconcileError = ""
+	a.mu.Unlock()
 }
 
 func (a *Agent) Reconcile(command AgentCommand) error {
+	return a.reconcile(context.Background(), command)
+}
+
+func (a *Agent) reconcile(ctx context.Context, command AgentCommand) error {
 	if command.ServiceID == "" {
 		return fmt.Errorf("serviceId 不能为空")
 	}
@@ -303,6 +382,22 @@ func (a *Agent) Reconcile(command AgentCommand) error {
 	group := ServiceGroup(command.ServiceType)
 	if !validServiceGroup(group) {
 		return fmt.Errorf("不支持的服务类型: %s", command.ServiceType)
+	}
+	formal, err := commandUsesFormalRelease(command)
+	if err != nil {
+		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+		return err
+	}
+	if formal && commandRequiresRunningRelease(command) {
+		if err := a.installBoundRelease(ctx, command, group); err != nil {
+			a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+			return err
+		}
+		// Release 已验证不等于能够安全运行。Foundation、Secret 与固定计划的执行
+		// 门禁未满足时绝不能回退到旧静态 Supervisor。
+		err := a.formalLaunchGateError(command.DeploymentID)
+		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+		return err
 	}
 	if !a.supervisor.HasService(group) {
 		err := fmt.Errorf("本节点的服务组 %s 仅已安装但尚未完成本地 Release 配置", group)
@@ -320,25 +415,25 @@ func (a *Agent) Reconcile(command AgentCommand) error {
 			return nil
 		}
 	}
-	var err error
+	var reconcileErr error
 	switch strings.ToLower(strings.TrimSpace(command.Operation)) {
 	case "restart":
-		_, err = a.supervisor.Restart(command.ServiceID, group, command.Generation)
+		_, reconcileErr = a.supervisor.Restart(command.ServiceID, group, command.Generation)
 	case "", "deploy", "start", "stop":
 		switch strings.ToLower(strings.TrimSpace(command.DesiredStatus)) {
 		case "running":
-			_, err = a.supervisor.Start(command.ServiceID, group, command.Generation)
+			_, reconcileErr = a.supervisor.Start(command.ServiceID, group, command.Generation)
 		case "stopped":
-			_, err = a.supervisor.Stop(command.ServiceID, command.Generation)
+			_, reconcileErr = a.supervisor.Stop(command.ServiceID, command.Generation)
 		default:
-			err = fmt.Errorf("不支持的 desiredStatus: %s", command.DesiredStatus)
+			reconcileErr = fmt.Errorf("不支持的 desiredStatus: %s", command.DesiredStatus)
 		}
 	default:
-		err = fmt.Errorf("不支持的 operation: %s", command.Operation)
+		reconcileErr = fmt.Errorf("不支持的 operation: %s", command.Operation)
 	}
-	if err != nil {
-		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
-		return err
+	if reconcileErr != nil {
+		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, reconcileErr)
+		return reconcileErr
 	}
 	return a.saveApplied(command.ServiceID, command.Generation)
 }
@@ -376,8 +471,54 @@ func (a *Agent) Heartbeat(ctx context.Context) error {
 			"endpoint":           a.supervisor.PublicURL(status.Role),
 		})
 	}
-	payload := map[string]any{"agentVersion": a.cfg.AgentVersion, "resourceSummary": resourceSummary(), "services": services}
-	return a.request(ctx, http.MethodPost, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/heartbeat", identity.AgentToken, payload, nil)
+	payload := map[string]any{"agentVersion": a.cfg.AgentVersion, "ipAddress": a.nodeIP(), "resourceSummary": resourceSummary(), "services": services}
+	if a.hostd != nil {
+		if state, err := a.hostd.TimeSyncStatus(ctx); err == nil {
+			payload["resourceSummary"].(map[string]any)["timeSync"] = state
+		}
+		if state, err := a.hostd.Status(ctx); err == nil {
+			a.mu.RLock()
+			if a.clusterFailure != nil && state.ObservedState == "not-installed" {
+				state = *a.clusterFailure
+			}
+			a.mu.RUnlock()
+			// Hostd 状态还含数据目录和 systemd 单元名；这些属于本机实现细节，
+			// 不进入中心的严格 Agent 协议。
+			payload["clusterState"] = clusterStatePayload(state)
+		}
+		if states, err := a.hostd.FoundationStatuses(ctx); err == nil {
+			a.mu.RLock()
+			if a.foundationFailure != nil {
+				states = append(states, *a.foundationFailure)
+			}
+			a.mu.RUnlock()
+			payload["foundationStates"] = states
+		}
+	}
+	if err := a.request(ctx, http.MethodPost, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/heartbeat", identity.AgentToken, payload, nil); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	if a.foundationFailure != nil && a.foundationFailure.ObservedState == "not-installed" {
+		a.foundationFailure = nil
+	}
+	a.mu.Unlock()
+	return nil
+}
+
+func clusterStatePayload(state hostd.ClusterState) map[string]any {
+	return map[string]any{
+		"schemaVersion": state.SchemaVersion,
+		"generation":    state.Generation,
+		"clusterId":     state.ClusterID,
+		"nodeId":        state.NodeID,
+		"operation":     state.Operation,
+		"k3sVersion":    state.K3sVersion,
+		"nodeName":      state.NodeName,
+		"nodeIp":        state.NodeIP,
+		"observedState": state.ObservedState,
+		"message":       state.Message,
+	}
 }
 
 // heartbeatStatus 把本机过渡态收敛到中心的三种观测状态，避免把 Supervisor
@@ -398,13 +539,143 @@ func (a *Agent) Commands(ctx context.Context) ([]AgentCommand, error) {
 	if identity.NodeID == "" {
 		return nil, fmt.Errorf("节点尚未领取身份")
 	}
-	var response struct {
-		Commands []AgentCommand `json:"commands"`
-	}
-	if err := a.request(ctx, http.MethodGet, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/commands", identity.AgentToken, nil, &response); err != nil {
+	var raw json.RawMessage
+	if err := a.request(ctx, http.MethodGet, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/commands", identity.AgentToken, nil, &raw); err != nil {
 		return nil, err
 	}
+	var response struct {
+		Commands         []AgentCommand                 `json:"commands"`
+		ClusterPlan      *hostd.ClusterPlan             `json:"clusterPlan"`
+		ClusterUninstall *hostd.UninstallRequest        `json:"clusterUninstall"`
+		FoundationPlan   *hostd.FoundationPlan          `json:"foundationPlan"`
+		FoundationDelete *hostd.FoundationDeleteRequest `json:"foundationDelete"`
+		TimeSyncPlan     *hostd.TimeSyncPlan            `json:"timeSyncPlan"`
+	}
+	if err := strictDecodeJSON(raw, &response); err != nil {
+		return nil, fmt.Errorf("中心命令响应无效: %w", err)
+	}
+	if response.ClusterUninstall != nil {
+		if a.hostd == nil {
+			return nil, fmt.Errorf("中心下发了集群卸载计划，但本节点未配置 hostd")
+		}
+		request := *response.ClusterUninstall
+		state, err := a.hostd.Uninstall(ctx, request)
+		if state.SchemaVersion == "" {
+			state.SchemaVersion = "induforge.cluster-state.v1"
+		}
+		if state.ClusterID == "" {
+			state.ClusterID = request.ClusterID
+		}
+		if state.NodeID == "" {
+			state.NodeID = request.NodeID
+		}
+		a.mu.Lock()
+		a.clusterFailure = &state
+		a.mu.Unlock()
+		if err != nil {
+			state.ObservedState = "failed"
+			state.Message = truncateAgentMessage(err.Error())
+			a.mu.Lock()
+			a.clusterFailure = &state
+			a.mu.Unlock()
+			return nil, fmt.Errorf("卸载 K3s 运行底座失败: %w", err)
+		}
+	}
+	if response.ClusterPlan != nil {
+		if a.hostd == nil {
+			return nil, fmt.Errorf("中心下发了集群计划，但本节点未配置 hostd")
+		}
+		plan := *response.ClusterPlan
+		plan.DataDir = filepath.Clean(strings.TrimSpace(a.cfg.HostDataDir))
+		if _, err := a.hostd.Apply(ctx, plan); err != nil {
+			a.mu.Lock()
+			a.clusterFailure = &hostd.ClusterState{SchemaVersion: "induforge.cluster-state.v1", Generation: plan.Generation, ClusterID: plan.ClusterID, NodeID: plan.NodeID, Operation: plan.Operation, K3sVersion: plan.K3sVersion, NodeIP: plan.NodeIP, ObservedState: "failed", Message: truncateAgentMessage(err.Error())}
+			a.mu.Unlock()
+			return nil, fmt.Errorf("应用 K3s 集群计划失败: %w", err)
+		}
+		a.mu.Lock()
+		a.clusterFailure = nil
+		a.mu.Unlock()
+	}
+	if response.TimeSyncPlan != nil {
+		if a.hostd == nil {
+			return nil, fmt.Errorf("中心下发了时间同步计划，但本节点未配置 hostd")
+		}
+		// 时间同步异常由心跳状态上报并在运维页告警，不能阻断 K3s、基础服务
+		// 或工程命令的正常收敛，否则 Chrony 故障会放大为节点完全失管。
+		_, _ = a.hostd.ApplyTimeSync(ctx, *response.TimeSyncPlan)
+	}
+	if response.FoundationPlan != nil {
+		if a.hostd == nil {
+			return nil, fmt.Errorf("中心下发了基础服务计划，但本节点未配置 hostd")
+		}
+		if _, err := a.hostd.ApplyFoundation(ctx, *response.FoundationPlan); err != nil {
+			plan := response.FoundationPlan
+			a.mu.Lock()
+			a.foundationFailure = &hostd.FoundationState{SchemaVersion: "induforge.foundation-state.v1", Generation: plan.Generation, EnvironmentID: plan.EnvironmentID, NodeID: plan.NodeID, ObservedState: "failed", Message: truncateAgentMessage(err.Error())}
+			a.mu.Unlock()
+			return nil, fmt.Errorf("应用基础服务计划失败: %w", err)
+		}
+		a.mu.Lock()
+		a.foundationFailure = nil
+		a.mu.Unlock()
+	}
+	if response.FoundationDelete != nil {
+		if a.hostd == nil {
+			return nil, fmt.Errorf("中心下发了环境清理计划，但本节点未配置 hostd")
+		}
+		state, err := a.hostd.DeleteFoundation(ctx, *response.FoundationDelete)
+		a.mu.Lock()
+		a.foundationFailure = &state
+		a.mu.Unlock()
+		if err != nil {
+			state.ObservedState = "failed"
+			state.Message = truncateAgentMessage(err.Error())
+			a.mu.Lock()
+			a.foundationFailure = &state
+			a.mu.Unlock()
+			return nil, fmt.Errorf("删除运行环境资源失败: %w", err)
+		}
+	}
 	return response.Commands, nil
+}
+
+func truncateAgentMessage(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 1024 {
+		return value[:1024]
+	}
+	return value
+}
+
+// discoverNodeIP 通过到中心地址的 UDP 路由选择获得节点对外地址；不发送数据，
+// 避免把 SSH 隧道或反向代理的 RemoteAddr 错当成节点间通信地址。
+func discoverNodeIP(serverURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(serverURL))
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	port := parsed.Port()
+	if port == "" {
+		port = "443"
+	}
+	connection, err := net.DialTimeout("udp", net.JoinHostPort(parsed.Hostname(), port), 2*time.Second)
+	if err != nil {
+		return ""
+	}
+	defer connection.Close()
+	address, ok := connection.LocalAddr().(*net.UDPAddr)
+	if !ok || address.IP == nil || address.IP.IsLoopback() || address.IP.IsUnspecified() {
+		return ""
+	}
+	return address.IP.String()
+}
+
+func (a *Agent) nodeIP() string {
+	if ip := net.ParseIP(strings.TrimSpace(a.cfg.NodeIP)); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() && !ip.IsMulticast() {
+		return ip.String()
+	}
+	return discoverNodeIP(a.cfg.ServerURL)
 }
 
 func (a *Agent) request(ctx context.Context, method, path, token string, payload any, destination any) error {
@@ -434,6 +705,9 @@ func (a *Agent) request(ctx context.Context, method, path, token string, payload
 		return err
 	}
 	defer response.Body.Close()
+	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
+		return fmt.Errorf("中心请求不允许重定向: status=%d", response.StatusCode)
+	}
 	var envelope struct {
 		Code int             `json:"code"`
 		Msg  string          `json:"msg"`
@@ -465,6 +739,35 @@ func (a *Agent) request(ctx context.Context, method, path, token string, payload
 		}
 	}
 	return nil
+}
+
+func newCenterHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		// Agent token 只可发给配置的 Center。即使是同主机 redirect 也不自动跟随，
+		// 避免以后引入相对/跨主机 Location 时泄露凭据。
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+func parseTrustedSigningKeys(entries []TrustedSigningKey) (map[string]ed25519.PublicKey, error) {
+	keys := make(map[string]ed25519.PublicKey, len(entries))
+	for _, entry := range entries {
+		keyID := strings.TrimSpace(entry.KeyID)
+		if !validStableID(keyID) {
+			return nil, fmt.Errorf("本地 trust keyId 非法: %q", entry.KeyID)
+		}
+		if _, exists := keys[keyID]; exists {
+			return nil, fmt.Errorf("本地 trust keyId 重复: %s", keyID)
+		}
+		encoded := strings.TrimSpace(entry.PublicKey)
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil || len(decoded) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("本地 trust key %s 不是 base64 Ed25519 公钥", keyID)
+		}
+		keys[keyID] = ed25519.PublicKey(append([]byte(nil), decoded...))
+	}
+	return keys, nil
 }
 
 // validateServerURL 避免 enrollment code 和 Agent token 经远端明文 HTTP 外泄。

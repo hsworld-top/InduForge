@@ -47,6 +47,30 @@
       "valid": ["runtime-engine-config-v2.valid.json"],
       "invalid": ["runtime-engine-config-v2.invalid-writable.json"]
     },
+    "release-manifest-v2": {
+      "valid": ["release-manifest-v2.valid.json"],
+      "invalid": [
+        "release-manifest-v2.invalid-secret.json",
+        "release-manifest-v2.invalid-compatibility-semver.json"
+      ]
+    },
+    "release-checksums-v1": {
+      "valid": ["release-checksums-v1.valid.json"],
+      "invalid": ["release-checksums-v1.invalid-signature-entry.json"]
+    },
+    "deployment-binding-v1": {
+      "valid": ["deployment-binding-v1.valid.json"],
+      "invalid": ["deployment-binding-v1.invalid-command.json"]
+    },
+    "runtime-activation-v1": {
+      "valid": ["runtime-activation-v1.valid.json"],
+      "invalid": [
+        "runtime-activation-v1.invalid-command.json",
+        "runtime-activation-v1.invalid-missing-secret.json",
+        "runtime-activation-v1.invalid-writable-mount.json",
+        "runtime-activation-v1.invalid-collector-port-without-service.json"
+      ]
+    },
     "runtime-project-artifact": {
       "valid": [
         "runtime-project-artifact.valid.json",

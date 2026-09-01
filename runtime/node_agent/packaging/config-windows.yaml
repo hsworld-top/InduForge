@@ -9,6 +9,10 @@ agent:
     agentVersion: '__BUILD_VERSION__'
     heartbeatEvery: 10s
     dataDir: ./data
+    # Release 公钥只来自节点本地配置；中心 Binding 只能引用 keyId。
+    trustKeys: []
+    # 未接入可验证的 Runtime 版本发现前保持为空，正式 Release 安装会 fail-closed。
+    runtimeVersion: ''
     # Windows 包安装 collector。只有补齐本机 release 配置后才能启用子进程；
     # installed 能力仍可先完成节点领取，中心不能下发执行路径或环境变量。
     services:

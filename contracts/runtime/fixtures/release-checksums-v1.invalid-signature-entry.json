@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "release-checksums.v1",
+  "files": [
+    { "path": "client-assets.tar.zst", "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1024 },
+    { "path": "health-contract.json", "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 128 },
+    { "path": "release-manifest.json", "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "size": 2048 },
+    { "path": "resource-recommendation.json", "sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "size": 128 },
+    { "path": "runtime-artifact.tar.zst", "sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "size": 4096 },
+    { "path": "sbom.cdx.json", "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "size": 256 },
+    { "path": "signature.sig", "sha256": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "size": 64 }
+  ]
+}

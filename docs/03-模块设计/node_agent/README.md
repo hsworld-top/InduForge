@@ -1,80 +1,85 @@
-# NodeAgent 后端概览
+# NodeAgent 模块概览
 
-## 模块定位
+## 定位
 
-`runtime/node_agent` 是**每台宿主机一个**的产品级管理代理，负责主机身份、中心绑定、宿主机观测、
-本机 K3s 生命周期、原生进程托管以及宿主机失联恢复。它运行在 K3s 外部，K3s 控制面或
-site-controller 故障时仍必须能够诊断和修复本机。
+`runtime/node_agent` 是安装在一台**物理节点**上的独立节点代理。它与 Center 即使部署在同一
+主机，也必须使用独立服务账户、安装目录、数据目录、进程、端口和网络连接；Agent 只主动访问
+Center，Center 不反向连接或嵌入 Agent。
 
-上段描述的是已冻结的产品边界，不是当前代码完成度。当前代码仅实现一次性接入码 claim、审批后
-心跳/命令轮询及本机 Demo 进程调和；K3s、真实 Collector、断线队列和恢复能力尚未实现。安装包、
-已实现范围与验收方式见[运维体系实现与验收](../../06-运维与安全/运维体系实现与验收.md)。
+当前控制面用户模型包含物理节点、运行环境、基础服务和工程部署。运行环境可以包含一台或多台
+Linux 标准运行节点；单节点只是一个成员的特例。用户只管理物理节点和服务分配，不接触底层实现：
 
-站点级工程编排由 K3s 内的 `site-controller` 负责。两者不得合并成一个同时拥有宿主机 root
-权限与整个集群管理权限的“Site NodeAgent”。
+- `project_entry`：Project Gateway 与 Runtime API；静态 `client/` 是 Gateway 托管的文件，
+  不是服务。
+- `data_runtime`：RuntimeEngine。
+- `collector`：可选 Industrial Collector。
 
-## 部署形态
+Linux 包内的 root Hostd 以 K3s `v1.36.4+k3s1` 作为固定运行底座：中心内置节点初始化唯一
+Server，其他 Linux 节点作为工作节点加入，并由中心节点应用各运行环境的八项固定基础服务清单。
+运行环境不拥有独立 K3s；它只是命名空间、服务和调度边界，同一节点可供多个环境使用。K3s、Pod
+和命名空间属于内部实现，不是用户概念。基础数据库当前仍是单实例；主备、集群和自动故障转移尚未交付。
 
-- Linux 服务节点：每台主机一个 systemd 服务，运行在 K3s 外部。
-- Linux 采集节点：systemd 服务，托管 Collector 子进程。
-- Windows 采集节点：Windows Service，托管 Collector 和可选 OPC DA Worker。
+## 已交付能力
 
-## 核心能力
+- 一次性接入码领取、审批后心跳和 Agent 主动命令轮询；中心命令只含服务期望状态/代次，不含
+  shell、路径、参数、环境变量、下载 URL 或 Secret。
+- 固定 schema 的运行底座与基础服务计划、离线资产双重摘要校验、真实工作负载观测、故障回传、
+  同分配重新部署 / 修复，以及受边界约束的完整卸载清理。
+- 本机声明式服务组 allowlist、进程 PID 持久化、回环 HTTP 健康探测和 SIGTERM drain。
+- `ReleaseStore` 安装原语：输入不可信的 tar.zst 流、预期 outer SHA-256、受信 Ed25519 公钥和
+  key ID；它限额落盘到 `incoming/*.partial`，安全解包，验证签名/摘要，内容寻址保存并原子写入
+  `current.json`。
 
-- 节点初始化、设备身份和中心绑定。
-- CPU、内存、磁盘、网络、时钟、进程和本机故障观测。
-- 本机 K3s server/agent 的安装、启停、版本、健康与恢复。
-- `native-processes.json` 生成和原生进程生命周期管理。
-- Collector 能力包、工程采集配置、密钥和 WAL 目录管理。
-- NodeAgent 自身和原生进程的升级、回滚与故障恢复。
-- 有界持久的心跳、资源摘要、操作结果和事件回传。
-- 默认仅监听回环地址的本地诊断接口。
+`ReleaseStore` 不会发起网络请求、加载信任根、读取 DeploymentBinding/Secret、创建只读挂载、
+启动进程或回滚进程。它是正式物料链的基础原语，**不是**完成的工程部署或端到端发布。
 
-## 正式边界
+## Release 文件和签名
 
-NodeAgent 负责执行宿主机作用域的：
+输入 tar.zst 的根目录直接放标准 Release 文件，例如：
 
-- `HostNodeDesiredState`、`InfrastructureHostDesiredState` 和 `NativeCollectorAssignmentDesiredState`。
-- 将本机期望状态转换为系统服务、K3s 节点动作或原生进程计划。
-- 回传 `HostNodeObservedState`、`NodeResourceSnapshot`、原生进程健康和操作结果。
+```text
+release-manifest.json
+client-assets.tar.zst
+runtime-artifact.tar.zst
+health-contract.json
+resource-recommendation.json
+schema-plan.json
+sbom.cdx.json
+collector-artifact.tar.zst       # 可选
+checksums.json
+signature.sig
+```
 
-NodeAgent 不负责：
+`release-manifest.json` 的 `supplyChain.signingKeyId` 必须与安装输入的本地受信 key ID 相同。
+`checksums.json` 的冻结格式为：
 
-- 工程 Namespace、Deployment、Job、Service、Ingress、Secret/PVC 的编排；这些属于 `site-controller`。
-- 站点级 ProjectDeployment 状态机、Release 切换和分区所有权协调。
-- 页面 Schema、查询、计算和报警语义。
-- HSL、OPC UA、OPC DA 等工业协议执行。
-- 处理工程 JetStream 业务消息。
-- 解析和管理工程页面资源内容。
+```json
+{
+  "schemaVersion": "release-checksums.v1",
+  "files": [{ "path": "release-manifest.json", "sha256": "sha256:<64 lowercase hex>", "size": 123 }]
+}
+```
 
-## 关键对象
+`files` 必须按 `path` 严格升序，覆盖以上所有标准 Release 文件（可选 Collector 仅在 Manifest
+声明时出现），且不得列出 `checksums.json` 或 `signature.sig`。`signature.sig` 是对**精确原始**
+`checksums.json` 字节签名的 64 字节 Ed25519 原始签名。安装器只接受这些根目录普通文件，拒绝
+目录、绝对路径、`..`、反斜杠、符号/硬链接、设备、FIFO、重复项和超限解压。
 
-- `HostNodeDesiredState`
-- `InfrastructureHostDesiredState`
-- `NativeCollectorAssignmentDesiredState`
-- `HostNodeObservedState`
-- `NodeResourceSnapshot`
-- `NativeProcessHealth`
-- `NodeOperationResult`
-- `native-processes.json`
+成功安装的内容目录为 `releases/sha256-<outer-digest>`；`current.json` 使用
+`release-pointer.v1`，含 `releaseDigest`、相对 `releaseDir` 和 `activatedAt`。失败绝不切换
+current，也不应据此报告服务运行。
 
-## 质量关注点
+## 明确未交付项
 
-- K3s 异常时 NodeAgent 仍必须可运行和诊断。
-- 中心断开时不影响已运行工程，遥测队列必须同时受时间和容量上限约束。
-- 原生采集升级失败必须恢复旧配置和进程。
-- 状态回传必须区分期望状态、观察状态、健康状态和数据新鲜度。
-- NodeAgent 不保存中心用户密码，浏览器不保存长期节点凭据或私钥。
-- WAL、密钥和版本目录必须按 `deploymentId` 隔离。
+- 工程 Release 已能按节点主动下载 Binding 和同源流并完成本地信任校验，但 Secret 装配与正式
+  launcher 尚未交付，因此还不能形成端到端工程运行。
+- 每 deployment 的端口、Secret、资源与进程隔离。
+- Linux RuntimeEngine 所需的真实只读 mount，以及启动失败后的服务级回滚编排。
+- Windows 的 Gateway/Runtime API/RuntimeEngine。当前 Windows 包只声明 Collector，其他服务组
+  必须 fail-closed。
 
 ## 关联文档
 
-- [平台系统架构](../../01-产品与架构/平台系统架构.md)
-- [节点管理与交付架构](../../02-系统设计/节点管理与交付架构.md)
-- [运维与节点运行态总体架构](../../02-系统设计/运维与节点运行态总体架构.md)
-- [平台运维体系设计](../../06-运维与安全/平台运维体系设计.md)
-- [运维体系实现与验收](../../06-运维与安全/运维体系实现与验收.md)
-- [工业采集架构](../../02-系统设计/工业采集架构.md)
 - [NodeAgent 与运行系统协议](../../04-契约与规范/跨模块契约/node-agent-runtime-protocol.md)
 - [Runtime 健康状态协议](../../04-契约与规范/跨模块契约/runtime-health-status-contract.md)
-- [初始化流程](./初始化流程.md)
+- [运维体系实现与验收](../../06-运维与安全/运维体系实现与验收.md)

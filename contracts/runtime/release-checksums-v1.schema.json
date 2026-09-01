@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/release-checksums-v1.schema.json",
+  "title": "release-checksums.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "files"],
+  "properties": {
+    "schemaVersion": { "const": "release-checksums.v1" },
+    "files": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 9,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "enum": [
+              "release-manifest.json",
+              "client-assets.tar.zst",
+              "runtime-artifact.tar.zst",
+              "collector-artifact.tar.zst",
+              "sbom.cdx.json",
+              "resource-recommendation.json",
+              "health-contract.json",
+              "schema-plan.json"
+            ]
+          },
+          "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+          "size": { "type": "integer", "minimum": 0, "maximum": 2147483648 }
+        }
+      }
+    }
+  }
+}

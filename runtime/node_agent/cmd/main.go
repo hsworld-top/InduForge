@@ -40,13 +40,18 @@ type AgentConfig struct {
 
 // OpsConfig 是运维控制面连接配置；包安装器会写入 serverUrl/code，身份凭据单独持久化。
 type OpsConfig struct {
-	Enabled        bool                `mapstructure:"enabled"`
-	ServerURL      string              `mapstructure:"serverUrl"`
-	EnrollmentCode string              `mapstructure:"enrollmentCode"`
-	AgentVersion   string              `mapstructure:"agentVersion"`
-	HeartbeatEvery string              `mapstructure:"heartbeatEvery"`
-	DataDir        string              `mapstructure:"dataDir"`
-	Services       []ops.ServiceConfig `mapstructure:"services"`
+	Enabled        bool                    `mapstructure:"enabled"`
+	ServerURL      string                  `mapstructure:"serverUrl"`
+	EnrollmentCode string                  `mapstructure:"enrollmentCode"`
+	AgentVersion   string                  `mapstructure:"agentVersion"`
+	HeartbeatEvery string                  `mapstructure:"heartbeatEvery"`
+	DataDir        string                  `mapstructure:"dataDir"`
+	HostdSocket    string                  `mapstructure:"hostdSocket"`
+	HostDataDir    string                  `mapstructure:"hostDataDir"`
+	NodeIP         string                  `mapstructure:"nodeIp"`
+	TrustKeys      []ops.TrustedSigningKey `mapstructure:"trustKeys"`
+	RuntimeVersion string                  `mapstructure:"runtimeVersion"`
+	Services       []ops.ServiceConfig     `mapstructure:"services"`
 }
 
 type ListenConfig struct {
@@ -219,7 +224,7 @@ func checkSingleInstance(daemonMode bool) bool {
 					_ = os.Remove(lockFile)
 				} else {
 					// 检查进程是否存在
-					if isProcessRunning(pid) {
+					if isProcessRunning(pid) && processMatchesCurrentExecutable(pid) {
 						// 进程还在运行
 						return false
 					}
@@ -463,7 +468,7 @@ func newOpsAgent(config Config, supervisor *ops.Supervisor, defaultDataDir strin
 	if err != nil {
 		return nil, fmt.Errorf("ops heartbeatEvery 无效: %w", err)
 	}
-	return ops.NewAgent(ops.Config{Enabled: true, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, AgentVersion: config.Agent.Ops.AgentVersion, HeartbeatEvery: interval, DataDir: defaultDataDir, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }}, supervisor)
+	return ops.NewAgent(ops.Config{Enabled: true, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, AgentVersion: config.Agent.Ops.AgentVersion, HeartbeatEvery: interval, DataDir: defaultDataDir, HostdSocket: config.Agent.Ops.HostdSocket, HostDataDir: config.Agent.Ops.HostDataDir, NodeIP: config.Agent.Ops.NodeIP, TrustKeys: config.Agent.Ops.TrustKeys, RuntimeVersion: config.Agent.Ops.RuntimeVersion, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }, ReconcileError: func(err error) { fileLogger.Warn("节点协调失败: " + err.Error()) }}, supervisor)
 }
 
 // notifyCenterOffline 在 Agent 正常退出时主动通知运维中心离线。
@@ -579,8 +584,11 @@ func applyRootEnvOverrides(config *Config) {
 		return
 	}
 
-	// 未配置环境变量时使用默认端口，不再依赖 config.yaml 端口。
-	config.Agent.Listen.Port = defaultNodeAgentPort
+	// 安装包以 config.yaml 作为节点侧正式配置；环境变量只用于显式覆盖。
+	// 配置缺失或越界时才回退默认值，避免用户修改文件后实际监听端口不变。
+	if config.Agent.Listen.Port < 1 || config.Agent.Listen.Port > 65535 {
+		config.Agent.Listen.Port = defaultNodeAgentPort
+	}
 }
 
 // getNodeAgentPortFromEnv 获取 NodeAgent 监听端口。

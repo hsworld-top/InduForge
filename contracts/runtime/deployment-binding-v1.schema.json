@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/deployment-binding-v1.schema.json",
+  "title": "deployment-binding.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "bindingId",
+    "revision",
+    "nodeId",
+    "deploymentId",
+    "projectId",
+    "release",
+    "enabledServices",
+    "ports",
+    "secrets",
+    "issuedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "deployment-binding.v1" },
+    "bindingId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "nodeId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "deploymentId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "projectId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "archiveSha256", "manifestSha256", "checksumsSha256", "signingKeyId"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "archiveSha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "manifestSha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "checksumsSha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "signingKeyId": { "$ref": "common.schema.json#/$defs/stableId" }
+      }
+    },
+    "enabledServices": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "const": "project_entry" } },
+        { "contains": { "const": "data_runtime" } }
+      ],
+      "items": {
+        "type": "string",
+        "enum": ["project_entry", "data_runtime", "collector"]
+      }
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gatewayPublic", "runtimeApiLoopback", "engineLoopback"],
+      "properties": {
+        "gatewayPublic": { "type": "integer", "minimum": 1024, "maximum": 65532 },
+        "runtimeApiLoopback": { "type": "integer", "minimum": 1025, "maximum": 65533 },
+        "engineLoopback": { "type": "integer", "minimum": 1026, "maximum": 65534 },
+        "collectorHealthLoopback": { "type": "integer", "minimum": 1027, "maximum": 65535 }
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "maxItems": 0,
+      "description": "v1 尚未交付 Secret 实体化，必须为空；支持后通过新契约版本演进。"
+    },
+    "issuedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" },
+    "expiresAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "enabledServices": { "contains": { "const": "collector" } }
+        },
+        "required": ["enabledServices"]
+      },
+      "then": {
+        "properties": {
+          "ports": { "required": ["collectorHealthLoopback"] }
+        }
+      },
+      "else": {
+        "properties": {
+          "ports": { "not": { "required": ["collectorHealthLoopback"] } }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "2.0",
+  "projectId": "11111111-1111-4111-8111-111111111111",
+  "projectCode": "factory_dashboard",
+  "releaseId": "22222222-2222-4222-8222-222222222222",
+  "version": "2026.08.31-001",
+  "artifacts": {
+    "client": {
+      "file": "client-assets.tar.zst",
+      "checksum": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "runtime": {
+      "file": "runtime-artifact.tar.zst",
+      "checksum": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "capabilities": ["runtime.auth", "runtime.datapoint", "runtime.scene"],
+  "compatibility": {
+    "minNodeAgentVersion": "1.0.0+build.7",
+    "minRuntimeVersion": "1.0.0",
+    "requiredNodeCapabilities": ["project_entry", "data_runtime"]
+  },
+  "supplyChain": {
+    "sbomRef": "sbom.cdx.json",
+    "sourceRevision": "git:0123456789abcdef0123456789abcdef01234567",
+    "builderId": "induforge-release-builder-v1",
+    "signingKeyId": "induforge-release-2026-01",
+    "promotable": true
+  },
+  "preflight": {
+    "resourceRecommendationRef": "resource-recommendation.json",
+    "healthContractRef": "health-contract.json",
+    "schemaPlanRef": "schema-plan.json"
+  },
+  "buildTime": "2026-08-31T10:00:00Z"
+}

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 默认保留 config/data/log，避免误删节点身份和诊断证据；--purge 才会清除。
+# K3s、容器、网络和本地 PVC 始终清理；默认只保留 NodeAgent 身份与日志，
+# --purge 再清除这些诊断和重新接入所需的数据。
 set -euo pipefail
 PREFIX="${PREFIX:-/opt/induforge/node-agent}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/induforge/node-agent}"
@@ -11,12 +12,16 @@ safe_purge_path() {
 }
 if command -v systemctl >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
   systemctl disable --now induforge-node-agent.service >/dev/null 2>&1 || true
-  rm -f /etc/systemd/system/induforge-node-agent.service
+	if [ -x "$PREFIX/bin/node-hostctl" ] && systemctl is-active --quiet induforge-node-hostd.service; then
+		if [ "$PURGE" = true ]; then "$PREFIX/bin/node-hostctl" uninstall-current --purge-data; else "$PREFIX/bin/node-hostctl" uninstall-current; fi
+	fi
+	systemctl disable --now induforge-node-hostd.service >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/induforge-node-agent.service /etc/systemd/system/induforge-node-hostd.service
   systemctl daemon-reload
 fi
-rm -f "$PREFIX/bin/node-agent"
+rm -f "$PREFIX/bin/node-agent" "$PREFIX/bin/node-hostd" "$PREFIX/bin/node-hostctl"
 if [ "$PURGE" = true ]; then
   safe_purge_path "$PREFIX" && safe_purge_path "$CONFIG_DIR" || { echo "refusing unsafe purge target" >&2; exit 1; }
   rm -rf "$PREFIX" "$CONFIG_DIR"
 fi
-echo "NodeAgent binary removed. Use --purge to remove retained config and state."
+echo "NodeAgent and managed K3s runtime removed. Use --purge to also remove retained node identity and logs."

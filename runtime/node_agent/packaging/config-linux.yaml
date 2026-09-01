@@ -9,6 +9,14 @@ agent:
     agentVersion: '__BUILD_VERSION__'
     heartbeatEvery: 10s
     dataDir: ./data
+    # Hostd 是唯一 root 特权边界；NodeAgent 只通过本机 Unix socket 提交固定 K3s 计划。
+    hostdSocket: /run/induforge/hostd.sock
+    hostDataDir: '__HOST_DATA_DIR__'
+    nodeIp: '__NODE_IP__'
+    # Release 公钥只来自节点本地配置；中心 Binding 只能引用 keyId。
+    trustKeys: []
+    # 未接入可验证的 Runtime 版本发现前保持为空，正式 Release 安装会 fail-closed。
+    runtimeVersion: ''
     # installed 表示本机已安装的能力，可用于领取节点身份；enabled 只有在
     # releaseRoot/releaseDigest/executable/healthUrl 全部由本机运维配置后才可设为 true。
     # 中心不能下发命令、路径、环境变量或 release 物料。

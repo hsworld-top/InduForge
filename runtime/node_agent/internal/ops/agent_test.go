@@ -2,18 +2,36 @@ package ops
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/indu-forge/node_agent/internal/hostd"
 	pkgConfig "github.com/indu-forge/node_agent/internal/pkg/config"
 )
 
 const testLoopbackServerURL = "http://127.0.0.1"
+
+func TestClusterStatePayloadDoesNotExposeHostPaths(t *testing.T) {
+	payload := clusterStatePayload(hostd.ClusterState{SchemaVersion: "induforge.cluster-state.v1", DataDir: "/secret/host/path", ServiceName: "internal.service", ObservedState: "ready"})
+	if _, exists := payload["dataDir"]; exists {
+		t.Fatal("center payload exposed host dataDir")
+	}
+	if _, exists := payload["serviceName"]; exists {
+		t.Fatal("center payload exposed host serviceName")
+	}
+	if payload["observedState"] != "ready" {
+		t.Fatalf("observedState=%v", payload["observedState"])
+	}
+}
 
 func TestNewAgentValidatesCenterServerURL(t *testing.T) {
 	valid := []string{
@@ -321,5 +339,179 @@ func TestControlPlaneContractRoundTrip(t *testing.T) {
 	}
 	if len(commands) != 1 || commands[0].NodeID != "node-a" || commands[0].ServiceID != "service-a" || commands[0].ServiceType != "collector" {
 		t.Fatalf("commands=%+v", commands)
+	}
+}
+
+const (
+	formalNodeID       = "44444444-4444-4444-8444-444444444444"
+	formalDeploymentID = "55555555-5555-4555-8555-555555555555"
+	formalServiceID    = "66666666-6666-4666-8666-666666666666"
+)
+
+func TestFormalReleaseInstallsThenFailsClosedWithoutLauncher(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := signedReleaseArchive(t, privateKey, "release-key-a", nil, nil)
+	dataDir := t.TempDir()
+	releaseRoot := filepath.Join(dataDir, "deployments", formalDeploymentID, "release")
+	t.Cleanup(func() { unsealReleaseTree(releaseRoot) })
+	command := formalCommand()
+	command.ArchiveSHA256 = sha256Digest(fixture.archive)
+	command.ManifestSHA256 = fixture.manifestDigest
+	command.ChecksumsSHA256 = fixture.checksumsDigest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer node-token" {
+			t.Fatalf("agent token missing from %s", r.URL.Path)
+		}
+		switch r.URL.Path {
+		case "/api/v1/ops/agent/nodes/" + formalNodeID + "/deployments/" + formalDeploymentID + "/binding":
+			writeSuccess(t, w, formalBinding(command))
+		case "/api/v1/ops/agent/nodes/" + formalNodeID + "/deployments/" + formalDeploymentID + "/release":
+			w.Header().Set("Content-Type", "application/zstd")
+			_, _ = w.Write(fixture.archive)
+		default:
+			t.Fatalf("unexpected request: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	agent := formalAgent(t, server.URL, dataDir, publicKey)
+	err = agent.reconcile(context.Background(), command)
+	if err == nil || !strings.Contains(err.Error(), "Runtime Foundation 尚未 provisioned/healthy") {
+		t.Fatalf("formal release must fail closed without launcher, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(releaseRoot, "current.json")); err != nil {
+		t.Fatalf("verified Release was not installed: %v", err)
+	}
+	status, err := agent.supervisor.Status(formalServiceID)
+	if err != nil || status.State != "failed" || status.PID != 0 || !strings.Contains(status.LastError, "Runtime Foundation 尚未 provisioned/healthy") {
+		t.Fatalf("formal command must not start static supervisor: status=%+v err=%v", status, err)
+	}
+}
+
+func TestFormalBindingRejectsUnknownOrMismatchedFields(t *testing.T) {
+	command := formalCommand()
+	for name, mutate := range map[string]func(map[string]any){
+		"unknown object key": func(binding map[string]any) { binding["objectKey"] = "private/release.tar.zst" },
+		"wrong node":         func(binding map[string]any) { binding["nodeId"] = testReleaseProjectID },
+		"wrong revision":     func(binding map[string]any) { binding["revision"] = 2 },
+		"wrong port": func(binding map[string]any) {
+			binding["ports"].(map[string]any)["gatewayPublic"] = 18000
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				binding := formalBinding(command)
+				mutate(binding)
+				writeSuccess(t, w, binding)
+			}))
+			defer server.Close()
+			agent := formalAgent(t, server.URL, t.TempDir(), make(ed25519.PublicKey, ed25519.PublicKeySize))
+			if _, err := agent.fetchDeploymentBinding(context.Background(), command); err == nil {
+				t.Fatal("invalid binding was accepted")
+			}
+		})
+	}
+}
+
+func TestFormalReleaseRejectsRedirectAndNeverContactsRedirectTarget(t *testing.T) {
+	redirected := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirected = true
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer target.Close()
+	command := formalCommand()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/binding"):
+			writeSuccess(t, w, formalBinding(command))
+		case strings.HasSuffix(r.URL.Path, "/release"):
+			http.Redirect(w, r, target.URL+"/bundle", http.StatusFound)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	agent := formalAgent(t, server.URL, t.TempDir(), make(ed25519.PublicKey, ed25519.PublicKeySize))
+	agent.trustKeys[command.SigningKeyID] = make(ed25519.PublicKey, ed25519.PublicKeySize)
+	if err := agent.installBoundRelease(context.Background(), command, ServiceProjectEntry); err == nil || !strings.Contains(err.Error(), "不允许重定向") {
+		t.Fatalf("redirected bundle was accepted: %v", err)
+	}
+	if redirected {
+		t.Fatal("agent followed Release redirect")
+	}
+}
+
+func TestCommandsRejectUnknownFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"commands":[],"downloadUrl":"https://outside.invalid/bundle"}}`))
+	}))
+	defer server.Close()
+	agent, err := NewAgent(Config{Enabled: true, ServerURL: server.URL, DataDir: t.TempDir()}, testSupervisor(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.identity = Identity{NodeID: formalNodeID, AgentToken: "node-token"}
+	if _, err := agent.Commands(context.Background()); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("commands with external URL field were accepted: %v", err)
+	}
+}
+
+func formalAgent(t *testing.T, serverURL, dataDir string, publicKey ed25519.PublicKey) *Agent {
+	t.Helper()
+	supervisor, err := NewSupervisorWithConfig(SupervisorConfig{StateDir: t.TempDir(), LogDir: t.TempDir(), Services: []ServiceConfig{
+		{Group: ServiceProjectEntry, Component: "project-gateway", Installed: true},
+		{Group: ServiceProjectEntry, Component: "runtime-api", Installed: true},
+		{Group: ServiceDataRuntime, Component: "runtime-engine", Installed: true},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := NewAgent(Config{
+		Enabled:        true,
+		ServerURL:      serverURL,
+		DataDir:        dataDir,
+		AgentVersion:   "1.0.0",
+		RuntimeVersion: "1.0.0",
+		TrustKeys: []TrustedSigningKey{{
+			KeyID:     "release-key-a",
+			PublicKey: base64.StdEncoding.EncodeToString(publicKey),
+		}},
+	}, supervisor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.identity = Identity{NodeID: formalNodeID, AgentToken: "node-token"}
+	return agent
+}
+
+func formalCommand() AgentCommand {
+	return AgentCommand{
+		NodeID: formalNodeID, DeploymentID: formalDeploymentID, ReleaseID: testReleaseID, ServiceID: formalServiceID,
+		ServiceType: "project_entry", DesiredStatus: "running", Operation: "deploy", Generation: 1,
+		Version: "2026.08.31-001", ArchiveSHA256: "sha256:" + strings.Repeat("a", 64),
+		ManifestSHA256: "sha256:" + strings.Repeat("b", 64), ChecksumsSHA256: "sha256:" + strings.Repeat("c", 64),
+		SigningKeyID: "release-key-a", BindingRevision: 1, ReplicasDesired: 1,
+	}
+}
+
+func formalBinding(command AgentCommand) map[string]any {
+	return map[string]any{
+		"schemaVersion": deploymentBindingSchema, "bindingId": "33333333-3333-4333-8333-333333333333",
+		"revision": command.BindingRevision, "nodeId": command.NodeID, "deploymentId": command.DeploymentID,
+		"projectId":       testReleaseProjectID,
+		"release":         map[string]any{"id": command.ReleaseID, "archiveSha256": command.ArchiveSHA256, "manifestSha256": command.ManifestSHA256, "checksumsSha256": command.ChecksumsSHA256, "signingKeyId": command.SigningKeyID},
+		"enabledServices": []string{"project_entry", "data_runtime"},
+		"ports":           map[string]any{"gatewayPublic": gatewayPublicPort, "runtimeApiLoopback": runtimeAPILoopbackPort, "engineLoopback": engineLoopbackPort},
+		"secrets":         []any{}, "issuedAt": "2026-08-31T10:00:00Z",
+	}
+}
+
+func writeSuccess(t *testing.T, writer http.ResponseWriter, data any) {
+	t.Helper()
+	if err := json.NewEncoder(writer).Encode(map[string]any{"code": 0, "msg": "ok", "data": data}); err != nil {
+		t.Fatal(err)
 	}
 }

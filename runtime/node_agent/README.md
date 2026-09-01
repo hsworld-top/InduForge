@@ -1,258 +1,78 @@
-# NodeAgent
+# InduForge NodeAgent
 
-NodeAgent 是用于在节点上部署和运行 RuntimeEngine 的 Go 语言实现。它提供本地 Web 运维接口，支持多种执行方式（进程、Docker、systemd）。
+NodeAgent 是物理节点上的独立 Go 服务。它通过主动 HTTPS 轮询接入 Center；同机安装时，Center
+和 NodeAgent 仍必须使用独立身份、目录、端口、进程和网络边界。
 
-## 功能特性
+当前正式服务组为工程入口（Gateway + Runtime API）、数据运行（RuntimeEngine）和可选采集
+（Collector）。静态前端文件由 Gateway 托管，不是 NodeAgent 可独立启动的服务。
 
-- ✅ 部署和管理 RuntimeEngine
-- ✅ 支持多种执行方式：进程（默认）、Docker、systemd
-- ✅ 健康检查和自动恢复
-- ✅ 心跳上报
-- ✅ RESTful API 接口
-- ✅ 版本管理和原子切换
-- ✅ 连接配置管理
+Linux 标准节点还包含独立的 root Hostd。NodeAgent 只通过权限受限的 Unix socket 提交固定
+`induforge.cluster-plan.v1` 和 `induforge.foundation-plan.v1` 声明；Hostd 负责校验离线资产、
+安装或加入 K3s、应用固定基础服务清单并回传真实工作负载状态。Center 和普通 Agent 命令均不能
+向 Hostd 注入 shell、宿主路径或任意镜像。
 
-## 快速开始
-
-### 1. 安装依赖
+## 构建和验证
 
 ```bash
-# 安装 Go 1.24+
-# 安装 Docker (可选)
-```
-
-### 2. 构建
-
-```bash
-# 从仓库根目录进入模块
 cd runtime/node_agent
-
-# 下载依赖
-go mod tidy
-
-# 构建
-go build -o node_agent ./cmd/main.go
+make test
+make vet
 ```
 
-### 3. 配置
+不应为验证而自行启动 NodeAgent 或任何 Runtime 子进程。
 
-配置文件 `config.yaml` 在首次运行时会自动生成在当前目录。如需自定义，可以编辑该文件：
+## 现行控制面边界
 
-监听端口优先读取进程环境变量或仓库根目录 `.env` 中的 `NODE_AGENT_PORT`。当前统一默认端口是 `18103`。
+Agent 领取身份后主动请求 Center 心跳和命令。非本机 Center 只允许 HTTPS；中心命令只能调和
+本节点已声明服务组的期望状态/代次，不能提供 shell、可执行文件、路径、参数、环境变量、下载
+URL 或 Secret。默认配置的组件均为 `enabled: false`，安装能力不等于已部署或运行。
 
-```yaml
-agent:
-  id: 'node-001'
-  executor:
-    type: 'process' # process | docker | systemd
-    process:
-      workDir: '/var/lib/node_agent/runtime'
-      logDir: '/var/log/node_agent/runtime'
-      binary: 'runtime_engine'
-```
+## 运行环境基础设施
 
-### 4. 运行
+当前节点包固定携带 K3s `v1.36.4+k3s1` 及 amd64 / arm64 对应的 airgap 镜像，并携带
+TimescaleDB、Redis、EMQX、NATS JetStream、SeaweedFS、Nginx 基础镜像。中心安装流程指定的内置
+节点初始化唯一 K3s Server，其他已审批 Linux 节点固定作为工作节点加入；运行环境只是在该集群上
+划分命名空间和节点调度范围，这些底层实现不出现在最终用户界面。
 
-```bash
-# 直接运行（配置文件将自动生成）
-./node_agent
+基础服务只接受完整八项单实例分配；IF 历史库与 IF 时序库共享一个 TimescaleDB 工作负载，必须
+位于同一节点。重复计划是幂等的，提升 generation 且保持原分配可用于重新部署 / 修复；当前拒绝
+通过修复入口迁移有状态服务。SeaweedFS S3 和 EMQX MQTT 均默认拒绝匿名访问。
 
-# 或者后台运行
-./node_agent --hidden
-```
+物理移除工作节点时清理已记录数据目录下的 K3s Agent 状态与本地 PVC，并清理 shim、挂载点、CNI 接口和规则；取消环境节点分配不会卸载 K3s。
+默认保留 NodeAgent 身份、配置和日志以便重装；`--purge` 才额外清除这些内容。数据目录来自已校验
+的本地集群状态，卸载器不会接受任意递归删除目标。
 
-首次运行时，程序会：
+Linux 包同时携带 Ubuntu 24.04 的 Chrony `4.5-1ubuntu4.2` 及离线安装依赖。中心节点只发布自身
+系统时间，并以 `-x` 禁止 Chrony 修改中心时钟；工作节点唯一时间源为中心节点。Agent 在心跳中
+上报当前偏差和同步状态，时间同步故障会产生运维事件，但不会阻断 K3s、基础服务或工程命令。
 
-1. 自动生成默认配置文件（如果不存在）
-2. 引导您完成交互式配置（开机自启动、端口设置等）
-3. 启动后台服务进程
-4. 显示服务信息（PID、端口、访问地址等）
-5. 等待您按键后关闭交互窗口（后台服务继续运行）
+## ReleaseStore 基础原语
 
-## API 接口
+正式 Release 命令已接入本流程：Agent 先以自身 token 从 Center 取得节点专属
+`DeploymentBinding`，再从同源 Release 端点取得 `application/zstd` 流。Center 不会返回对象存储键、
+外部下载 URL、路径、命令或 Secret；Agent 不跟随重定向，签名公钥只来自 `config.yaml` 的本地 trust
+store。`internal/ops` 的 `ReleaseStore`/`ReleaseInstaller` 会：
 
-### 节点信息
+1. 限额流式写入私有 `incoming/*.partial` 并核对 outer SHA-256；
+2. 只安全解包根目录的标准普通文件，拒绝目录、路径逃逸、链接、设备、FIFO、重复项和解压炸弹；
+3. 用 `signature.sig` 验证原始 `checksums.json`，并核对 Manifest 与每一个列出的文件；
+4. 将成功内容写到 `releases/sha256-<digest>`，封存为不可写，并以原子 `current.json` 选择版本。
 
-- `GET /api/v1/node/info` - 获取节点信息
-- `GET /api/v1/node/status` - 获取节点状态
+Release 根目录只允许 `release-manifest.json`、`client-assets.tar.zst`、`runtime-artifact.tar.zst`、
+`health-contract.json`、`resource-recommendation.json`、`schema-plan.json`、`sbom.cdx.json`、可选
+`collector-artifact.tar.zst`、`checksums.json` 和 `signature.sig`。文件格式为
+`release-checksums.v1`：`files` 以路径严格升序列出 `{path,sha256,size}`，且不得包含
+`checksums.json` 或 `signature.sig`；
+`signature.sig` 是精确 checksums 原始字节的 64-byte Ed25519 签名；Manifest 必须声明
+`supplyChain.signingKeyId`。详情见
+[NodeAgent 与运行系统协议](../../docs/04-契约与规范/跨模块契约/node-agent-runtime-protocol.md)。
 
-### 项目管理
+这不代表已实现完整工程运行：Secret 安装、内层工件物化、真实只读 mount、Runtime Foundation、组件
+启动、升级或回滚尚未交付。当前正式 Release 通过全部校验后会因正式 launcher 尚未交付而记录失败，
+绝不回退到旧静态 Supervisor。尤其 RuntimeEngine native v2 仍需要真实只读挂载，普通不可写目录不能替代。
 
-- `GET /api/v1/projects` - 列出所有项目
-- `GET /api/v1/projects/{id}` - 获取项目详情
-- `POST /api/v1/projects/{id}/deploy` - 部署项目
-- `POST /api/v1/projects/{id}/start` - 启动项目
-- `POST /api/v1/projects/{id}/stop` - 停止项目
-- `POST /api/v1/projects/{id}/restart` - 重启项目
-- `POST /api/v1/projects/{id}/rollback?version={version}` - 回滚项目
+## 平台范围
 
-### 连接配置
-
-- `GET /api/v1/profile?projectId={id}` - 获取连接配置
-- `POST /api/v1/profile?projectId={id}` - 保存连接配置
-
-### 日志和健康检查
-
-- `GET /api/v1/projects/{id}/logs` - 获取项目日志
-- `GET /health` - 健康检查
-- `GET /status` - 状态检查
-
-## Web 管理界面
-
-NodeAgent 提供了完整的 Web 管理界面，基于 Vue 3 开发，位于独立项目：
-
-**前端项目**: `runtime/node_agent_front`
-
-### 前端功能
-
-- ✅ 节点状态总览
-- ✅ 项目列表和管理
-- ✅ 部署/启动/停止/重启项目
-- ✅ 版本回滚
-- ✅ 连接配置管理
-- ✅ 日志查看和下载
-
-### 启动前端
-
-请在仓库根目录执行：
-
-```bash
-pnpm install
-pnpm dev:node-agent-front
-```
-
-前端默认在 `http://localhost:18604` 启动，并通过根目录 `.env` 的 `NODE_AGENT_PORT` 代理访问 NodeAgent API，默认后端地址是 `http://localhost:18103`。
-
-## 使用示例
-
-### 部署项目
-
-```bash
-curl -X POST http://127.0.0.1:18103/api/v1/projects/demo/deploy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "version": "1.0.0",
-    "ifpPackage": "/path/to/demo.ifp",
-    "connectionProfile": {
-      "name": "demo-profile",
-      "endpoint": "http://localhost:18103",
-      "authType": "token",
-      "authData": {"token": "xxx"}
-    },
-    "autoStart": true
-  }'
-```
-
-### 启动项目
-
-```bash
-curl -X POST http://127.0.0.1:18103/api/v1/projects/demo/start
-```
-
-## 目录结构
-
-```
-/var/lib/node_agent/
-├── data/                  # 数据存储
-│   └── projects/          # 项目配置
-│       └── {projectID}/
-│           ├── project.json
-│           ├── profile.json
-│           └── versions/
-│               ├── v1.0.0/
-│               └── current -> versions/v1.0.0
-└── runtime/               # 运行时文件
-    └── {projectID}/       # 项目目录
-
-/var/log/node_agent/
-└── runtime/               # 日志文件
-    └── {projectID}.log
-```
-
-## 执行方式
-
-### 进程模式（默认）
-
-最简单的方式，直接启动进程。
-
-```yaml
-executor:
-  type: 'process'
-  process:
-    workDir: '/var/lib/node_agent/runtime'
-    logDir: '/var/log/node_agent/runtime'
-    binary: 'runtime_engine'
-```
-
-### Docker 模式
-
-使用 Docker 容器运行。
-
-```yaml
-executor:
-  type: 'docker'
-  docker:
-    enabled: true
-    socket: '/var/run/docker.sock'
-    network: 'node_agent'
-```
-
-### Systemd 模式（Linux）
-
-使用 systemd 管理服务。
-
-```yaml
-executor:
-  type: 'systemd'
-  systemd:
-    enabled: true
-    unitTemplate: '/etc/systemd/system/node_agent_{project}.service'
-```
-
-## 故障排查
-
-### 查看日志
-
-```bash
-# NodeAgent 日志
-tail -f /var/log/node_agent/agent.log
-
-# 项目日志
-tail -f /var/log/node_agent/runtime/{projectID}.log
-```
-
-### 检查健康状态
-
-```bash
-curl http://127.0.0.1:18103/health
-```
-
-### 检查节点状态
-
-```bash
-curl http://127.0.0.1:18103/api/v1/node/status
-```
-
-## 开发指南
-
-### 添加新的执行器
-
-1. 实现 `Executor` 接口
-2. 在 `executor_factory.go` 中注册
-3. 更新配置文件
-
-### Web 界面开发
-
-静态文件位于 `internal/web/static/dist/`。
-
-使用以下命令构建：
-
-```bash
-pnpm build:node-agent-front
-```
-
-构建产物位于 `runtime/node_agent_front/dist/`；节点打包脚本会将其复制到 NodeAgent 静态资源目录。
-
-## 许可证
-
-MIT License
+- Linux 包含 Gateway、Runtime API、RuntimeEngine 能力模板和可选 Collector，但默认不会启动。
+- Windows 当前仅包含并声明 Collector；若收到 Gateway、Runtime API 或 RuntimeEngine 部署，必须
+  fail-closed。Windows 正式安装/停止/重装验收仍待真实主机完成。

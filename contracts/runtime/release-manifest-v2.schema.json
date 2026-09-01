@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/release-manifest-v2.schema.json",
+  "title": "induforge-release.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "projectCode",
+    "releaseId",
+    "version",
+    "artifacts",
+    "compatibility",
+    "supplyChain",
+    "preflight",
+    "buildTime"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "projectId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "projectCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "releaseId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "runtime"],
+      "properties": {
+        "client": { "$ref": "#/$defs/clientArtifact" },
+        "runtime": { "$ref": "#/$defs/runtimeArtifact" },
+        "collector": { "$ref": "#/$defs/collectorArtifact" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/stableId" }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minNodeAgentVersion", "minRuntimeVersion", "requiredNodeCapabilities"],
+      "properties": {
+        "minNodeAgentVersion": { "$ref": "#/$defs/versionValue" },
+        "minRuntimeVersion": { "$ref": "#/$defs/versionValue" },
+        "requiredNodeCapabilities": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["project_entry", "data_runtime", "collector"]
+          }
+        }
+      }
+    },
+    "supplyChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sbomRef", "sourceRevision", "builderId", "signingKeyId", "promotable"],
+      "properties": {
+        "sbomRef": { "const": "sbom.cdx.json" },
+        "sourceRevision": {
+          "type": "string",
+          "pattern": "^git:[a-f0-9]{40,64}$"
+        },
+        "builderId": { "$ref": "common.schema.json#/$defs/stableId" },
+        "signingKeyId": { "$ref": "common.schema.json#/$defs/stableId" },
+        "promotable": { "type": "boolean" }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resourceRecommendationRef", "healthContractRef", "schemaPlanRef"],
+      "properties": {
+        "resourceRecommendationRef": { "const": "resource-recommendation.json" },
+        "healthContractRef": { "const": "health-contract.json" },
+        "schemaPlanRef": { "const": "schema-plan.json" }
+      }
+    },
+    "buildTime": { "$ref": "common.schema.json#/$defs/utcRfc3339" }
+  },
+  "$defs": {
+    "versionValue": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "SemVer 2.0.0（不带 v 前缀）；允许 build metadata，版本比较时忽略 metadata。",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "checksum"],
+      "properties": {
+        "file": { "type": "string" },
+        "checksum": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "clientArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "properties": { "file": { "const": "client-assets.tar.zst" } } }
+      ]
+    },
+    "runtimeArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "properties": { "file": { "const": "runtime-artifact.tar.zst" } } }
+      ]
+    },
+    "collectorArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "properties": { "file": { "const": "collector-artifact.tar.zst" } } }
+      ]
+    }
+  }
+}

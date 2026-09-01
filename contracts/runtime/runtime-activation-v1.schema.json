@@ -1,0 +1,416 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/runtime-activation-v1.schema.json",
+  "title": "runtime-activation.v1",
+  "description": "NodeAgent 从已验证 DeploymentBinding、Release 与本地 Foundation 分配派生的内部运行激活快照；它不属于用户可见的节点或工程部署模型。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "activationId",
+    "revision",
+    "nodeId",
+    "deploymentId",
+    "projectId",
+    "releaseId",
+    "siteId",
+    "accountId",
+    "binding",
+    "ports",
+    "foundation",
+    "secrets",
+    "artifacts",
+    "components",
+    "issuedAt",
+    "expiresAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "runtime-activation.v1" },
+    "activationId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "nodeId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "deploymentId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "projectId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "releaseId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "siteId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "accountId": { "$ref": "common.schema.json#/$defs/uuid" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bindingId", "revision", "bindingSha256"],
+      "properties": {
+        "bindingId": { "$ref": "common.schema.json#/$defs/uuid" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "bindingSha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gatewayPublic", "runtimeApiLoopback", "engineLoopback"],
+      "properties": {
+        "gatewayPublic": { "type": "integer", "minimum": 1024, "maximum": 65532 },
+        "runtimeApiLoopback": { "type": "integer", "minimum": 1025, "maximum": 65533 },
+        "engineLoopback": { "type": "integer", "minimum": 1026, "maximum": 65534 },
+        "collectorHealthLoopback": { "type": "integer", "minimum": 1027, "maximum": 65535 }
+      }
+    },
+    "foundation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postgres", "natsJetStream"],
+      "properties": {
+        "postgres": { "$ref": "#/$defs/postgresAllocation" },
+        "natsJetStream": { "$ref": "#/$defs/natsJetStreamAllocation" }
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 7,
+      "items": { "$ref": "#/$defs/secret" },
+      "allOf": [
+        { "$ref": "#/$defs/exactlyOneRuntimeAPIPostgresSecret" },
+        { "$ref": "#/$defs/exactlyOneRuntimeAPITokenSecret" },
+        { "$ref": "#/$defs/exactlyOneRuntimeAPINATSSecret" },
+        { "$ref": "#/$defs/exactlyOneRuntimeEnginePostgresSecret" },
+        { "$ref": "#/$defs/exactlyOneRuntimeEngineNATSSecret" },
+        { "$ref": "#/$defs/atMostOneCollectorNATSSecret" },
+        { "$ref": "#/$defs/atMostOneComputeSandboxSecret" }
+      ]
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "runtime"],
+      "properties": {
+        "client": { "$ref": "#/$defs/clientArtifact" },
+        "runtime": { "$ref": "#/$defs/runtimeArtifact" },
+        "collector": { "$ref": "#/$defs/collectorArtifact" }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/component" },
+      "allOf": [
+        { "$ref": "#/$defs/exactlyOneGateway" },
+        { "$ref": "#/$defs/exactlyOneRuntimeAPI" },
+        { "$ref": "#/$defs/exactlyOneRuntimeEngine" },
+        { "$ref": "#/$defs/atMostOneCollector" }
+      ]
+    },
+    "issuedAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" },
+    "expiresAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "components": {
+            "contains": {
+              "type": "object",
+              "required": ["name", "enabled"],
+              "properties": {
+                "name": { "const": "collector" },
+                "enabled": { "const": true }
+              }
+            }
+          }
+        },
+        "required": ["components"]
+      },
+      "then": {
+        "properties": {
+          "ports": { "required": ["collectorHealthLoopback"] },
+          "secrets": { "$ref": "#/$defs/exactlyOneCollectorNATSSecret" },
+          "artifacts": { "required": ["collector"] }
+        }
+      },
+      "else": {
+        "properties": {
+          "ports": { "not": { "required": ["collectorHealthLoopback"] } },
+          "secrets": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "collector-nats" } }
+              }
+            }
+          },
+          "artifacts": { "not": { "required": ["collector"] } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "postgresAllocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allocationId", "revision", "allocationDigest", "schemaPlanDigest", "state"],
+      "properties": {
+        "allocationId": { "$ref": "common.schema.json#/$defs/uuid" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "allocationDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "schemaPlanDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "state": { "const": "ready" }
+      }
+    },
+    "natsJetStreamAllocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allocationId", "revision", "allocationDigest", "streamPlanDigest", "state"],
+      "properties": {
+        "allocationId": { "$ref": "common.schema.json#/$defs/uuid" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "allocationDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "streamPlanDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "state": { "const": "ready" }
+      }
+    },
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ref", "schemaVersion", "sha256", "revision", "expiresAt"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "runtime-api-postgres",
+            "runtime-api-tokens",
+            "runtime-api-nats",
+            "runtime-engine-postgres",
+            "runtime-engine-nats",
+            "collector-nats",
+            "compute-sandbox"
+          ]
+        },
+        "ref": { "$ref": "common.schema.json#/$defs/stableId" },
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/stableId" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/utcRfc3339" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["releaseFile", "digest", "materializedLayout", "readOnlyMount"],
+      "properties": {
+        "releaseFile": { "type": "string" },
+        "digest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "materializedLayout": { "type": "string" },
+        "readOnlyMount": { "const": true }
+      }
+    },
+    "clientArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        {
+          "properties": {
+            "releaseFile": { "const": "client-assets.tar.zst" },
+            "materializedLayout": { "const": "client" }
+          }
+        }
+      ]
+    },
+    "runtimeArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        {
+          "properties": {
+            "releaseFile": { "const": "runtime-artifact.tar.zst" },
+            "materializedLayout": { "const": "runtime" }
+          }
+        }
+      ]
+    },
+    "collectorArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        {
+          "properties": {
+            "releaseFile": { "const": "collector-artifact.tar.zst" },
+            "materializedLayout": { "const": "collector" }
+          }
+        }
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "serviceGroup", "enabled", "dependsOn"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": ["project-gateway", "runtime-api", "runtime-engine", "collector"]
+        },
+        "serviceGroup": {
+          "type": "string",
+          "enum": ["project_entry", "data_runtime", "collector"]
+        },
+        "enabled": { "type": "boolean" },
+        "dependsOn": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["project-gateway", "runtime-api", "runtime-engine", "collector"]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "name": { "const": "project-gateway" } }, "required": ["name"] },
+          "then": {
+            "properties": {
+              "serviceGroup": { "const": "project_entry" },
+              "enabled": { "const": true },
+              "dependsOn": { "const": ["runtime-api"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "name": { "const": "runtime-api" } }, "required": ["name"] },
+          "then": {
+            "properties": {
+              "serviceGroup": { "const": "project_entry" },
+              "enabled": { "const": true },
+              "dependsOn": { "const": [] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "name": { "const": "runtime-engine" } }, "required": ["name"] },
+          "then": {
+            "properties": {
+              "serviceGroup": { "const": "data_runtime" },
+              "enabled": { "const": true },
+              "dependsOn": { "const": [] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "name": { "const": "collector" } }, "required": ["name"] },
+          "then": {
+            "properties": {
+              "serviceGroup": { "const": "collector" },
+              "enabled": { "const": true }
+            }
+          }
+        }
+      ]
+    },
+    "exactlyOneGateway": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "project-gateway" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeAPI": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-api" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeEngine": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-engine" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "atMostOneCollector": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "collector" } }
+      },
+      "minContains": 0,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeAPIPostgresSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-api-postgres" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeAPITokenSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-api-tokens" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeAPINATSSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-api-nats" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeEnginePostgresSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-engine-postgres" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneRuntimeEngineNATSSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "runtime-engine-nats" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "exactlyOneCollectorNATSSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "collector-nats" } }
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "atMostOneCollectorNATSSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "collector-nats" } }
+      },
+      "minContains": 0,
+      "maxContains": 1
+    },
+    "atMostOneComputeSandboxSecret": {
+      "contains": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "const": "compute-sandbox" } }
+      },
+      "minContains": 0,
+      "maxContains": 1
+    }
+  }
+}
