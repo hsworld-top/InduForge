@@ -10,7 +10,7 @@ COPY designer/code-workspace/prepare-runtime-templates.mjs ./designer/code-works
 RUN mkdir -p /tmp/induforge-runtime-sdk /opt/induforge/pnpm-store \
     && pnpm --dir runtime/web-sdk pack --pack-destination /tmp/induforge-runtime-sdk \
     && node designer/code-workspace/prepare-runtime-templates.mjs /source/contracts/project-templates /tmp/induforge-runtime-sdk/induforge-runtime-sdk-0.2.0.tgz /opt/induforge/pnpm-store \
-    && for template in /source/contracts/project-templates/vite-*; do pnpm --dir "$template" fetch --prefer-offline --ignore-workspace --store-dir /opt/induforge/pnpm-store; done \
+    && for template in /source/contracts/project-templates/vite-*; do pnpm --dir "$template" install --frozen-lockfile --ignore-workspace --config.trust-lockfile=true --ignore-scripts --store-dir /opt/induforge/pnpm-store; done \
     && sha256sum /source/contracts/project-templates/vite-*/pnpm-lock.yaml > /opt/induforge/pnpm-store.version
 
 FROM node:24.19.0-bookworm-slim
