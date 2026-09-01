@@ -1006,7 +1006,7 @@ export const messages = {
         nodeUnavailable: '当前不可用',
         nodesFailed: '运行环境节点加载失败',
         accessPort: '工程访问端口',
-        accessPortHint: '由客户指定；平台会检测该端口及后续三个本机运行端口是否冲突。',
+        accessPortHint: '平台将自动检测端口冲突。',
         runtimeServices: '运行服务',
         enableCollection: '启用 Linux 采集',
         createDeployment: '创建部署',
@@ -2435,8 +2435,7 @@ export const messages = {
         nodeUnavailable: 'Unavailable',
         nodesFailed: 'Failed to load runtime environment nodes',
         accessPort: 'Project access port',
-        accessPortHint:
-          'Chosen by the customer. The platform checks this port and the next three local runtime ports for conflicts.',
+        accessPortHint: 'The platform automatically checks for port conflicts.',
         runtimeServices: 'Runtime Services',
         enableCollection: 'Enable Linux collection',
         createDeployment: 'Create Deployment',

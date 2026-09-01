@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 const source = readFileSync('src/views/tenant/OpsManagementConsole.vue', 'utf8')
 const switcherSource = readFileSync('src/views/tenant/components/OpsSectionSwitcher.vue', 'utf8')
 const dashboardSource = readFileSync('src/views/Dashboard.vue', 'utf8')
+const langSource = readFileSync('src/lang/index.ts', 'utf8')
 
 describe('ops management console', () => {
   it('使用工具栏下拉切换运行环境、物理节点、工程部署和运维任务', () => {
@@ -113,6 +114,13 @@ describe('ops management console', () => {
     expect(source).toContain("node.clusterStatus === 'ready'")
     expect(source).toContain("key: 'alarm' as const")
     expect(source).toContain("key: 'collection' as const")
+  })
+
+  it('工程访问端口使用适合双列布局的简短提示', () => {
+    expect(langSource).toContain("accessPortHint: '平台将自动检测端口冲突。'")
+    expect(langSource).toContain(
+      "accessPortHint: 'The platform automatically checks for port conflicts.'",
+    )
   })
 
   it('工程部署列表以紧凑标签展示四类运行引擎并保持固定分页', () => {
