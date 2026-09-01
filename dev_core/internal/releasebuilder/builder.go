@@ -57,6 +57,7 @@ type Input struct {
 	SBOM, ResourceRecommendation               []byte
 	HealthContract, SchemaPlan                 []byte
 	Capabilities                               []string
+	ProjectDocument                            map[string]any
 	MinNodeAgentVersion, MinRuntimeVersion     string
 	RequiredNodeCapabilities                   []string
 	SourceRevision, BuilderID                  string
@@ -273,9 +274,13 @@ func buildManifest(input Input, files []bundleFile) ([]byte, error) {
 	for _, file := range files {
 		fileDigests[file.name] = digest(file.data)
 	}
+	capabilities := input.Capabilities
+	if input.ProjectDocument != nil {
+		capabilities = DeriveEngineRequirements(input.ProjectDocument)
+	}
 	m := manifest{
 		SchemaVersion: "2.0", ProjectID: input.ProjectID, ProjectCode: input.ProjectCode,
-		ReleaseID: input.ReleaseID, Version: input.Version, Capabilities: sortedCopy(input.Capabilities),
+		ReleaseID: input.ReleaseID, Version: input.Version, Capabilities: sortedCopy(capabilities),
 		BuildTime: input.BuildTime.UTC().Format(time.RFC3339),
 	}
 	m.Artifacts.Client = artifact{File: clientArtifactFile, Checksum: "sha256:" + fileDigests[clientArtifactFile]}
