@@ -8,6 +8,7 @@ import (
 	"github.com/indu-forge/collector-engine/internal/health"
 	"github.com/indu-forge/collector-engine/internal/loader"
 	"github.com/indu-forge/collector-engine/internal/publisher"
+	"github.com/indu-forge/collector-engine/internal/resolver"
 	"log"
 	"net/http"
 	"os"
@@ -20,7 +21,6 @@ func main() {
 	artifact := flag.String("artifact", "", "artifact 绝对路径")
 	binding := flag.String("binding", "", "binding 绝对路径")
 	index := flag.String("index", "", "resolver index 绝对路径")
-	natsURL := flag.String("nats-url", "", "由安全 resolver 注入的 NATS URL")
 	listen := flag.String("listen", "127.0.0.1:18082", "健康检查地址")
 	flag.Parse()
 	loaded, err := loader.Load(*artifact, *binding, *index)
@@ -28,14 +28,24 @@ func main() {
 		log.Print("collector 配置无效")
 		os.Exit(1)
 	}
-	p, err := publisher.Connect(*natsURL, nil)
+	r, err := resolver.New(loaded)
+	if err != nil {
+		log.Print("collector resolver 无效")
+		os.Exit(1)
+	}
+	natsConfig, err := r.ResolveNATS(context.Background(), loaded.Binding.NATS.ServerResourceRef, loaded.Binding.NATS.CredentialSecretRef, loaded.Binding.AccountID)
+	if err != nil {
+		log.Print("collector NATS credential 不可用")
+		os.Exit(1)
+	}
+	p, err := publisher.Connect(natsConfig.URL, natsConfig.Options)
 	if err != nil {
 		log.Print("collector NATS 未连接")
 		os.Exit(1)
 	}
 	defer p.Close()
 	h := &health.State{}
-	collector, err := engine.New(loaded, driver.NewRegistry(), p, h)
+	collector, err := engine.New(loaded, driver.NewRegistry(driver.NewModbusTCP(r)), p, h)
 	if err != nil {
 		log.Print("collector 初始化失败")
 		os.Exit(1)

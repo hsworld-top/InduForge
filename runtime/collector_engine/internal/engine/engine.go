@@ -91,8 +91,12 @@ func (e *Engine) readLoop(ctx context.Context, interval time.Duration, mappings 
 }
 func (e *Engine) readBatch(ctx context.Context, mappings []loader.Mapping) {
 	conns := map[string]loader.Connection{}
+	bindings := map[string]loader.BindingConnection{}
 	for _, c := range e.loaded.Artifact.Connections {
 		conns[c.ConnectionID] = c
+	}
+	for _, binding := range e.loaded.Binding.Connections {
+		bindings[binding.ConnectionID] = binding
 	}
 	for _, m := range mappings {
 		d, err := e.drivers.Get(conns[m.ConnectionID].DriverID)
@@ -100,11 +104,18 @@ func (e *Engine) readBatch(ctx context.Context, mappings []loader.Mapping) {
 			e.health.SetReady(false)
 			return
 		}
-		r, err := d.Read(ctx, conns[m.ConnectionID], m)
+		var r driver.Result
+		if bound, ok := d.(interface {
+			ReadWithBinding(context.Context, loader.Connection, loader.BindingConnection, loader.Mapping) (driver.Result, error)
+		}); ok {
+			r, err = bound.ReadWithBinding(ctx, conns[m.ConnectionID], bindings[m.ConnectionID], m)
+		} else {
+			r, err = d.Read(ctx, conns[m.ConnectionID], m)
+		}
 		if err != nil {
-			r.Quality = "bad"
-			r.Value = []byte("null")
-			r.SourceTimestamp = time.Now().UTC()
+			// 断线、超时或协议异常没有可验证的样本，不能伪造 null 或旧值发布。
+			e.health.SetReady(false)
+			continue
 		}
 		if r.Quality == "" {
 			r.Quality = "unknown"

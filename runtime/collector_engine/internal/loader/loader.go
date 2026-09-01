@@ -104,6 +104,7 @@ type Loaded struct {
 	Artifact Artifact
 	Binding  Binding
 	Index    Index
+	IndexDir string
 }
 
 func Load(artifactPath, bindingPath, indexPath string) (*Loaded, error) {
@@ -142,6 +143,7 @@ func Load(artifactPath, bindingPath, indexPath string) (*Loaded, error) {
 	if err = validateCross(&out, artifactRaw); err != nil {
 		return nil, err
 	}
+	out.IndexDir = filepath.Dir(indexPath)
 	return &out, nil
 }
 
