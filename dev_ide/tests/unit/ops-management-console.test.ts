@@ -108,6 +108,12 @@ describe('ops management console', () => {
     expect(source).toContain("deployForm.mode === 'DEV'")
     expect(source).toContain("deployForm.mode === 'RELEASE'")
     expect(source).toContain("<label>{{ $t('opsConsole.deployments.targetEnvironment') }}</label>")
+    expect(source).toMatch(
+      /<div class="ops-deployment-field">\s*<label>\{\{ \$t\('opsConsole\.deployments\.project'\) \}\}<\/label>/,
+    )
+    expect(source).toMatch(
+      /<div v-if="availableEnvironments\.length > 1" class="ops-deployment-field">\s*<label>\{\{ \$t\('opsConsole\.deployments\.targetEnvironment'\) \}\}<\/label>/,
+    )
     expect(source).toContain('opsAPI.listRuntimeEnvironmentNodes(environmentId')
     expect(source).toContain("node.platform === 'linux'")
     expect(source).toContain("node.observedStatus === 'online'")

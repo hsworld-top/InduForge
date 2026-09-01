@@ -1547,7 +1547,7 @@
           { 'ops-deployment-form--release': deployForm.mode === 'RELEASE' },
         ]"
       >
-        <div v-if="availableEnvironments.length > 1" class="ops-deployment-field">
+        <div class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.project') }}</label>
           <el-select
             v-model="deployForm.projectId"
@@ -1579,7 +1579,7 @@
               :value="version.id"
           /></el-select>
         </div>
-        <div class="ops-deployment-field">
+        <div v-if="availableEnvironments.length > 1" class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.targetEnvironment') }}</label>
           <el-select
             v-model="deployForm.environmentId"
