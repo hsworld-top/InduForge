@@ -99,7 +99,7 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "image", Volume: "volume", WorkspaceSubpath: "p/workspace", CacheSubpath: "p/cache", OutputSubpath: "p/release-builds/r", MemoryBytes: 123, NanoCPUs: 456, Command: []string{"/bin/sh"}})
+	err = c.Run(context.Background(), dockerFrontendSpec{Name: "build", Image: "image", Volume: "volume", WorkspaceSubpath: "p/workspace", CacheSubpath: "p/cache", OutputSubpath: "p/release-builds/r", MemoryBytes: 123, NanoCPUs: 456, Command: []string{"corepack pnpm install --frozen-lockfile --offline"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,9 +111,42 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 	if len(ms) != 3 || ms[0].(map[string]any)["Type"] != "volume" || ms[0].(map[string]any)["ReadOnly"] != true || ms[0].(map[string]any)["Target"] != "/source" {
 		t.Fatalf("volume 挂载错误: %#v", ms)
 	}
+	if got := create["Entrypoint"].([]any); len(got) != 2 || got[0] != "/bin/sh" || got[1] != "-ec" {
+		t.Fatalf("必须覆盖 IDE 镜像 entrypoint: %#v", got)
+	}
+	if command := create["Cmd"].([]any); len(command) != 1 || !strings.Contains(command[0].(string), "pnpm install --frozen-lockfile --offline") {
+		t.Fatalf("构建命令不安全或不完整: %#v", command)
+	}
+	env := strings.Join(anyStrings(create["Env"].([]any)), " ")
+	for _, expected := range []string{"PNPM_CONFIG_STORE_DIR=/cache/pnpm-store", "XDG_CACHE_HOME=/cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"} {
+		if !strings.Contains(env, expected) {
+			t.Fatalf("缺少固定构建环境 %s: %s", expected, env)
+		}
+	}
+	if strings.Contains(strings.ToLower(string(mustJSON(t, create))), "secret") || strings.Contains(strings.ToLower(string(mustJSON(t, create))), "token") {
+		t.Fatal("Docker 构建 payload 不得携带密钥或 token")
+	}
 	if !removed {
 		t.Fatal("一次性容器未清理")
 	}
+}
+
+func anyStrings(values []any) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if text, ok := value.(string); ok {
+			result = append(result, text)
+		}
+	}
+	return result
+}
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func TestDockerFrontendClientTruncatesFailureLogsAndCleansContainer(t *testing.T) {

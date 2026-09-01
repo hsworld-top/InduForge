@@ -96,7 +96,7 @@ func (r *DockerFrontendBuildRunner) BuildProjectFrontend(ctx context.Context, pr
 	buildCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	buildID := uuid.NewString()
-	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), CacheSubpath: path.Join(project.ID, "cache"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"/bin/sh", "-ec", "mkdir -p /build/src /build/dist; cp -a /source/. /build/src/; cd /build/src; corepack pnpm install --frozen-lockfile --offline; corepack pnpm run build -- --outDir /build/dist"}}
+	spec := dockerFrontendSpec{Name: "induforge-release-build-" + project.ID + "-" + buildID, Image: r.image, Volume: r.volume, WorkspaceSubpath: path.Join(project.ID, "workspace"), CacheSubpath: path.Join(project.ID, "cache"), OutputSubpath: path.Join(project.ID, "release-builds", version.ID), MemoryBytes: r.memoryBytes, NanoCPUs: r.nanoCPUs, Command: []string{"mkdir -p /tmp/home /tmp/corepack /build/src /build/dist; cp -a /source/. /build/src/; cd /build/src; corepack pnpm install --frozen-lockfile --offline; corepack pnpm run build -- --outDir /build/dist"}}
 	if err := r.engine.Run(buildCtx, spec); err != nil {
 		_ = os.RemoveAll(outputRoot)
 		return FrontendBuildOutput{}, fmt.Errorf("受控前端构建失败: %w", err)
@@ -166,11 +166,12 @@ func (c *dockerFrontendClient) Run(ctx context.Context, s dockerFrontendSpec) er
 	}
 	body := struct {
 		Image            string
-		Cmd              []string
+		Entrypoint, Cmd  []string
+		Env              []string
 		User, WorkingDir string
 		Labels           map[string]string
 		HostConfig       host
-	}{Image: s.Image, Cmd: s.Command, User: "1000:1000", WorkingDir: "/build/src", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}, Mounts: []mount{{Type: "volume", Source: s.Volume, Target: "/source", ReadOnly: true, VolumeOptions: volOpt{Subpath: s.WorkspaceSubpath}}, {Type: "volume", Source: s.Volume, Target: "/cache", VolumeOptions: volOpt{Subpath: s.CacheSubpath}}, {Type: "volume", Source: s.Volume, Target: "/build", VolumeOptions: volOpt{Subpath: s.OutputSubpath}}}}}
+	}{Image: s.Image, Entrypoint: []string{"/bin/sh", "-ec"}, Cmd: s.Command, Env: []string{"PNPM_CONFIG_STORE_DIR=/cache/pnpm-store", "XDG_CACHE_HOME=/cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"}, User: "1000:1000", WorkingDir: "/build/src", Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.role": "release-frontend-build"}, HostConfig: host{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, PidsLimit: 256, Memory: s.MemoryBytes, NanoCPUs: s.NanoCPUs, Tmpfs: map[string]string{"/tmp": "rw,noexec,nosuid,size=64m"}, Mounts: []mount{{Type: "volume", Source: s.Volume, Target: "/source", ReadOnly: true, VolumeOptions: volOpt{Subpath: s.WorkspaceSubpath}}, {Type: "volume", Source: s.Volume, Target: "/cache", VolumeOptions: volOpt{Subpath: s.CacheSubpath}}, {Type: "volume", Source: s.Volume, Target: "/build", VolumeOptions: volOpt{Subpath: s.OutputSubpath}}}}}
 	var created struct {
 		ID string `json:"Id"`
 	}
