@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -123,10 +124,20 @@ type Workspace interface {
 	Import(projectID string, files map[string]string) (string, error)
 }
 
+// TenantBindingEnsurer 将控制面已持久化的项目归属同步到数据域。
+type TenantBindingEnsurer interface {
+	EnsureProjectTenantBinding(context.Context, string, string) error
+}
+
 type Service struct {
 	repository             Repository
 	workspace              Workspace
 	defaultRuntimePassword string
+	tenantBindingEnsurer   TenantBindingEnsurer
+}
+
+func (s *Service) SetTenantBindingEnsurer(ensurer TenantBindingEnsurer) {
+	s.tenantBindingEnsurer = ensurer
 }
 
 func NewService(repository Repository, workspace Workspace, defaultRuntimePassword string) *Service {
@@ -184,6 +195,14 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInpu
 	if err != nil {
 		_ = s.workspace.Remove(workspacePath)
 		return Project{}, err
+	}
+	if s.tenantBindingEnsurer == nil {
+		slog.Default().Error("运维事件: 项目租户绑定同步失败", "projectId", created.ID, "reason", "数据服务内部客户端未配置")
+		return Project{}, fmt.Errorf("工程已创建，但项目租户绑定同步失败，可稍后重试")
+	}
+	if err := s.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, created.ID, created.TenantID); err != nil {
+		slog.Default().Error("运维事件: 项目租户绑定同步失败", "projectId", created.ID, "error", err)
+		return Project{}, fmt.Errorf("工程已创建，但项目租户绑定同步失败，可稍后重试: %w", err)
 	}
 	return created, nil
 }

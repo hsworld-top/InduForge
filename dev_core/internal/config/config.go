@@ -18,48 +18,49 @@ const defaultAddr = ":18101"
 var strictSemVerPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 type Config struct {
-	Addr                    string
-	DatabaseURL             string
-	DBAutoSchemaSync        bool
-	JWTSecret               string
-	JWTIssuer               string
-	JWTAudience             string
-	AccessTokenTTL          time.Duration
-	RefreshTokenTTL         time.Duration
-	AppName                 string
-	DefaultAdminUsername    string
-	DefaultAdminPassword    string
-	ObjectStoreEndpoint     string
-	ObjectStoreAccessKey    string
-	ObjectStoreSecretKey    string
-	ObjectStoreDesignBucket string
-	ObjectStoreIFPBucket    string
-	ObjectStoreRegion       string
-	ObjectStoreUseSSL       bool
-	DefaultTenantID         string
-	DefaultTenantCode       string
-	SuperAdminUserID        string
-	SuperAdminUsername      string
-	SuperAdminPassword      string
-	WorkspaceRoot           string
-	CodeWorkspaceVolume     string
-	CodeServerDockerHost    string
-	CodeServerImage         string
-	CodeServerBindHost      string
-	DataServiceURL          string
-	CacheAddress            string
-	CachePassword           string
-	CacheDB                 int
-	NodePackageDirectory    string
-	OpsCenterNodeID         string
-	OpsK3sAPIPort           int
-	ReleaseBuilderEnabled   bool
-	ReleaseBuilderImage     string
-	ReleaseBuilderID        string
-	ReleaseSigningKeyFile   string
-	ReleaseSigningKeyID     string
-	MinNodeAgentVersion     string
-	MinRuntimeVersion       string
+	Addr                     string
+	DatabaseURL              string
+	DBAutoSchemaSync         bool
+	JWTSecret                string
+	JWTIssuer                string
+	JWTAudience              string
+	AccessTokenTTL           time.Duration
+	RefreshTokenTTL          time.Duration
+	AppName                  string
+	DefaultAdminUsername     string
+	DefaultAdminPassword     string
+	ObjectStoreEndpoint      string
+	ObjectStoreAccessKey     string
+	ObjectStoreSecretKey     string
+	ObjectStoreDesignBucket  string
+	ObjectStoreIFPBucket     string
+	ObjectStoreRegion        string
+	ObjectStoreUseSSL        bool
+	DefaultTenantID          string
+	DefaultTenantCode        string
+	SuperAdminUserID         string
+	SuperAdminUsername       string
+	SuperAdminPassword       string
+	WorkspaceRoot            string
+	CodeWorkspaceVolume      string
+	CodeServerDockerHost     string
+	CodeServerImage          string
+	CodeServerBindHost       string
+	DataServiceURL           string
+	DataServiceInternalToken string
+	CacheAddress             string
+	CachePassword            string
+	CacheDB                  int
+	NodePackageDirectory     string
+	OpsCenterNodeID          string
+	OpsK3sAPIPort            int
+	ReleaseBuilderEnabled    bool
+	ReleaseBuilderImage      string
+	ReleaseBuilderID         string
+	ReleaseSigningKeyFile    string
+	ReleaseSigningKeyID      string
+	MinNodeAgentVersion      string
+	MinRuntimeVersion        string
 }
 
 func Load() (Config, error) {
@@ -84,6 +85,10 @@ func Load() (Config, error) {
 	databaseURL := buildDatabaseURL()
 	if databaseURL == "" {
 		return Config{}, fmt.Errorf("缺少 IF_META_STORE_* 或 DEV_CORE_DATABASE_URL 配置")
+	}
+	dataServiceInternalToken := strings.TrimSpace(firstEnv("DATA_SERVICE_INTERNAL_TOKEN"))
+	if dataServiceInternalToken == "" {
+		return Config{}, fmt.Errorf("DATA_SERVICE_INTERNAL_TOKEN 不能为空")
 	}
 	autoSchema, err := strconv.ParseBool(firstEnvWithDefault("DB_AUTO_SCHEMA_SYNC", "false"))
 	if err != nil {
@@ -114,34 +119,35 @@ func Load() (Config, error) {
 		JWTSecret: jwtSecret, JWTIssuer: firstEnvWithDefault("JWT_ISSUER", "induforge"),
 		JWTAudience:    firstEnvWithDefault("JWT_AUDIENCE", "induforge-api"),
 		AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL,
-		AppName:                 firstEnvWithDefault("DEFAULT_TENANT_NAME", "InduForge"),
-		DefaultAdminUsername:    firstEnvWithDefault("TENANT_DEFAULT_ADMIN_USERNAME", "admin"),
-		DefaultAdminPassword:    firstEnvWithDefault("TENANT_DEFAULT_ADMIN_PASSWORD", "admin123"),
-		ObjectStoreEndpoint:     net.JoinHostPort(firstEnvWithDefault("IF_OBJECT_STORE_ENDPOINT", "127.0.0.1"), firstEnvWithDefault("IF_OBJECT_STORE_PORT", "18500")),
-		ObjectStoreAccessKey:    firstEnv("IF_OBJECT_STORE_ACCESS_KEY"),
-		ObjectStoreSecretKey:    firstEnv("IF_OBJECT_STORE_SECRET_KEY"),
-		ObjectStoreDesignBucket: firstEnvWithDefault("IF_OBJECT_STORE_BUCKET_DESIGN", "design-assets"),
-		ObjectStoreIFPBucket:    firstEnvWithDefault("IF_OBJECT_STORE_BUCKET_IFP", "ifp-artifacts"),
-		ObjectStoreRegion:       firstEnvWithDefault("IF_OBJECT_STORE_REGION", "us-east-1"),
-		ObjectStoreUseSSL:       strings.EqualFold(firstEnv("IF_OBJECT_STORE_USE_SSL"), "true"),
-		DefaultTenantID:         firstEnvWithDefault("DEFAULT_TENANT_ID", "550e8400-e29b-41d4-a716-446655440000"),
-		DefaultTenantCode:       firstEnvWithDefault("DEFAULT_TENANT_CODE", "default"),
-		SuperAdminUserID:        firstEnvWithDefault("SUPER_ADMIN_USER_ID", "550e8400-e29b-41d4-a716-446655440001"),
-		SuperAdminUsername:      firstEnvWithDefault("SUPER_ADMIN_USERNAME", "superadmin"),
-		SuperAdminPassword:      firstEnvWithDefault("SUPER_ADMIN_PASSWORD", "admin123"),
-		WorkspaceRoot:           workspaceRoot,
-		CodeWorkspaceVolume:     firstEnvWithDefault("CODE_WORKSPACE_VOLUME", "induforge-control-workspaces"),
-		CodeServerDockerHost:    firstEnvWithDefault("CODE_SERVER_DOCKER_HOST", "unix:///var/run/docker.sock"),
-		CodeServerImage:         firstEnvWithDefault("CODE_SERVER_IMAGE", "induforge/designer-code-server:workspace-templates-source"),
-		CodeServerBindHost:      firstEnvWithDefault("CODE_SERVER_BIND_HOST", "127.0.0.1"),
-		DataServiceURL:          strings.TrimRight(firstEnv("DATA_SERVICE_URL"), "/"),
-		CacheAddress:            net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),
-		CachePassword:           firstEnv("IF_CACHE_STORE_PASSWORD"),
-		CacheDB:                 cacheDB,
-		NodePackageDirectory:    firstEnvWithDefault("NODE_PACKAGE_DIRECTORY", defaultNodePackageDirectory()),
-		OpsCenterNodeID:         strings.TrimSpace(firstEnv("IF_OPS_CENTER_NODE_ID")),
-		OpsK3sAPIPort:           k3sAPIPort,
-		ReleaseBuilderEnabled:   releaseEnabled, ReleaseBuilderImage: releaseImage, ReleaseBuilderID: releaseBuilderID,
+		AppName:                  firstEnvWithDefault("DEFAULT_TENANT_NAME", "InduForge"),
+		DefaultAdminUsername:     firstEnvWithDefault("TENANT_DEFAULT_ADMIN_USERNAME", "admin"),
+		DefaultAdminPassword:     firstEnvWithDefault("TENANT_DEFAULT_ADMIN_PASSWORD", "admin123"),
+		ObjectStoreEndpoint:      net.JoinHostPort(firstEnvWithDefault("IF_OBJECT_STORE_ENDPOINT", "127.0.0.1"), firstEnvWithDefault("IF_OBJECT_STORE_PORT", "18500")),
+		ObjectStoreAccessKey:     firstEnv("IF_OBJECT_STORE_ACCESS_KEY"),
+		ObjectStoreSecretKey:     firstEnv("IF_OBJECT_STORE_SECRET_KEY"),
+		ObjectStoreDesignBucket:  firstEnvWithDefault("IF_OBJECT_STORE_BUCKET_DESIGN", "design-assets"),
+		ObjectStoreIFPBucket:     firstEnvWithDefault("IF_OBJECT_STORE_BUCKET_IFP", "ifp-artifacts"),
+		ObjectStoreRegion:        firstEnvWithDefault("IF_OBJECT_STORE_REGION", "us-east-1"),
+		ObjectStoreUseSSL:        strings.EqualFold(firstEnv("IF_OBJECT_STORE_USE_SSL"), "true"),
+		DefaultTenantID:          firstEnvWithDefault("DEFAULT_TENANT_ID", "550e8400-e29b-41d4-a716-446655440000"),
+		DefaultTenantCode:        firstEnvWithDefault("DEFAULT_TENANT_CODE", "default"),
+		SuperAdminUserID:         firstEnvWithDefault("SUPER_ADMIN_USER_ID", "550e8400-e29b-41d4-a716-446655440001"),
+		SuperAdminUsername:       firstEnvWithDefault("SUPER_ADMIN_USERNAME", "superadmin"),
+		SuperAdminPassword:       firstEnvWithDefault("SUPER_ADMIN_PASSWORD", "admin123"),
+		WorkspaceRoot:            workspaceRoot,
+		CodeWorkspaceVolume:      firstEnvWithDefault("CODE_WORKSPACE_VOLUME", "induforge-control-workspaces"),
+		CodeServerDockerHost:     firstEnvWithDefault("CODE_SERVER_DOCKER_HOST", "unix:///var/run/docker.sock"),
+		CodeServerImage:          firstEnvWithDefault("CODE_SERVER_IMAGE", "induforge/designer-code-server:workspace-templates-source"),
+		CodeServerBindHost:       firstEnvWithDefault("CODE_SERVER_BIND_HOST", "127.0.0.1"),
+		DataServiceURL:           strings.TrimRight(firstEnv("DATA_SERVICE_URL"), "/"),
+		DataServiceInternalToken: dataServiceInternalToken,
+		CacheAddress:             net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),
+		CachePassword:            firstEnv("IF_CACHE_STORE_PASSWORD"),
+		CacheDB:                  cacheDB,
+		NodePackageDirectory:     firstEnvWithDefault("NODE_PACKAGE_DIRECTORY", defaultNodePackageDirectory()),
+		OpsCenterNodeID:          strings.TrimSpace(firstEnv("IF_OPS_CENTER_NODE_ID")),
+		OpsK3sAPIPort:            k3sAPIPort,
+		ReleaseBuilderEnabled:    releaseEnabled, ReleaseBuilderImage: releaseImage, ReleaseBuilderID: releaseBuilderID,
 		ReleaseSigningKeyFile: releaseKeyFile, ReleaseSigningKeyID: releaseKeyID, MinNodeAgentVersion: minAgent, MinRuntimeVersion: minRuntime,
 	}, nil
 }

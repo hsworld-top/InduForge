@@ -173,6 +173,24 @@ ensure_release_signing_key() {
   RELEASE_KEY_FILE=$key_file
 }
 
+ensure_data_service_internal_token() {
+  env_path=$1
+  if grep -Eq '^DATA_SERVICE_INTERNAL_TOKEN=.+$' "$env_path"; then
+    return
+  fi
+  # 既有 Secret 优先保留，升级时只补缺失键；新安装使用系统加密随机源生成。
+  existing=$(kubectl_cmd -n "$NAMESPACE" get secret center-env -o jsonpath='{.data.DATA_SERVICE_INTERNAL_TOKEN}' 2>/dev/null || true)
+  if [ -n "$existing" ]; then
+    token=$(printf '%s' "$existing" | base64 -d 2>/dev/null || true)
+  else
+    token=
+  fi
+  if [ -z "$token" ]; then
+    token=$(openssl rand -hex 32)
+  fi
+  printf '\nDATA_SERVICE_INTERNAL_TOKEN=%s\n' "$token" >> "$env_path"
+}
+
 render_manifest() {
   validate_settings
   sed \
@@ -216,6 +234,7 @@ apply_center() {
   temp_dir=$(mktemp -d)
   trap 'rm -rf "$temp_dir"' EXIT INT TERM
   tr -d '\r' < "$env_file" > "$temp_dir/center.env"
+  ensure_data_service_internal_token "$temp_dir/center.env"
   render_manifest > "$temp_dir/center-system.yaml"
 
   kubectl_cmd apply -f "$SCRIPT_DIR/namespace.yaml"

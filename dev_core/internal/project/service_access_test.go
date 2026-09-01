@@ -18,6 +18,7 @@ func TestServiceFiltersPrivateAndSharedProjects(t *testing.T) {
 		},
 	}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
+	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
 	actor := auth.User{ID: "developer-1", TenantID: "tenant-1", Role: "DEVELOPER"}
 
 	items, total, err := service.List(context.Background(), actor, project.ListFilter{Page: 1, Limit: 20})
@@ -34,6 +35,7 @@ func TestServiceRejectsPrivateProjectForOtherDeveloper(t *testing.T) {
 		"private-project": {ID: "private-project", TenantID: "tenant-1", CreatedBy: "owner-1", Visibility: "private"},
 	}}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
+	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
 	actor := auth.User{ID: "developer-2", TenantID: "tenant-1", Role: "DEVELOPER"}
 
 	_, err := service.Get(context.Background(), actor, "private-project")
@@ -47,6 +49,7 @@ func TestServiceSharedProjectWriteAndOwnerOnlyDelete(t *testing.T) {
 		"shared-project": {ID: "shared-project", TenantID: "tenant-1", CreatedBy: "owner-1", Visibility: "internal", Name: "原名称"},
 	}}
 	service := project.NewService(repository, &fakeWorkspace{files: map[string]map[string]string{"shared-project": {}}}, "admin123")
+	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
 	developer := auth.User{ID: "developer-2", TenantID: "tenant-1", Role: "DEVELOPER"}
 	newName := "更新名称"
 
@@ -62,6 +65,7 @@ func TestServiceSharedProjectWriteAndOwnerOnlyDelete(t *testing.T) {
 func TestServiceCreateAlwaysStartsPrivate(t *testing.T) {
 	repository := &fakeRepository{projects: map[string]project.Project{}}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
+	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
 	actor := auth.User{ID: "developer-1", TenantID: "tenant-1", Username: "开发人员", Role: "DEVELOPER"}
 	name := "新工程"
 	requestedVisibility := "internal"

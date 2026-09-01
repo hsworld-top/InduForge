@@ -44,17 +44,23 @@ type ProjectReleaseSourceBuilderConfig struct {
 	BuilderID            string
 	MaxResponseBytes     int64
 	MaxArchiveInputBytes int64
+	TenantBindingEnsurer interface {
+		EnsureProjectTenantBinding(context.Context, string, string) error
+	}
 }
 
 // ProjectReleaseSourceBuilder 汇聚数据域的正式运行工件、受控前端构建结果与运行资源。
 // 它不保存 Authorization，且所有归档都按固定顺序和固定 tar 元数据生成。
 type ProjectReleaseSourceBuilder struct {
-	dataServiceURL string
-	builderID      string
-	responseLimit  int64
-	archiveLimit   int64
-	httpClient     *http.Client
-	frontend       ProjectFrontendBuildRunner
+	dataServiceURL       string
+	builderID            string
+	responseLimit        int64
+	archiveLimit         int64
+	httpClient           *http.Client
+	frontend             ProjectFrontendBuildRunner
+	tenantBindingEnsurer interface {
+		EnsureProjectTenantBinding(context.Context, string, string) error
+	}
 }
 
 func NewProjectReleaseSourceBuilder(config ProjectReleaseSourceBuilderConfig, frontend ProjectFrontendBuildRunner) (*ProjectReleaseSourceBuilder, error) {
@@ -75,6 +81,7 @@ func NewProjectReleaseSourceBuilder(config ProjectReleaseSourceBuilderConfig, fr
 	return &ProjectReleaseSourceBuilder{
 		dataServiceURL: endpoint, builderID: config.BuilderID, responseLimit: config.MaxResponseBytes,
 		archiveLimit: config.MaxArchiveInputBytes, httpClient: &http.Client{Timeout: 20 * time.Second}, frontend: frontend,
+		tenantBindingEnsurer: config.TenantBindingEnsurer,
 	}, nil
 }
 
@@ -87,6 +94,12 @@ func (b *ProjectReleaseSourceBuilder) SetHTTPClient(client *http.Client) {
 func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, project Project, version Version, authorization string) (ReleaseSource, error) {
 	if b == nil || b.frontend == nil || b.httpClient == nil {
 		return ReleaseSource{}, fmt.Errorf("正式 ReleaseSource 构建器未初始化")
+	}
+	if b.tenantBindingEnsurer == nil {
+		return ReleaseSource{}, fmt.Errorf("数据服务项目租户绑定客户端未配置")
+	}
+	if err := b.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, project.ID, project.TenantID); err != nil {
+		return ReleaseSource{}, fmt.Errorf("同步数据服务项目租户绑定失败: %w", err)
 	}
 	artifact, runtimeJSON, err := b.fetchRuntimeArtifact(ctx, project.ID, authorization)
 	if err != nil {

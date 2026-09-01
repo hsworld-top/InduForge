@@ -37,6 +37,7 @@ for expected in \
   'image: induforge/edge:1.0.0' \
   'name: center-data' \
   'value: http://center-data:18102' \
+	'DATA_SERVICE_INTERNAL_TOKEN' \
   'value: /contracts/collector-protocols' \
   'hostPort: 18080' \
   'supplementalGroups: [998]' \

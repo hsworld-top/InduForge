@@ -71,6 +71,7 @@ func newProjectServer(t *testing.T) (http.Handler, string) {
 	authService, token, _ := testsupport.NewAuth(t, "SYSTEM_ADMIN")
 	repository := &fakeRepository{projects: map[string]project.Project{}, tags: map[string]project.Tag{}, groups: map[string]project.Group{}}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
+	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
 	root := controlplane.NewHandler(auth.NewHandler(authService))
 	root.SetProjectHandler(project.NewHandler(service, authService))
 	application := app.New(app.Options{RequestID: func() string { return "project-test" }, Mount: func(router chi.Router) { platformapi.HandlerFromMuxWithBaseURL(root, router, "/api/v1") }})
@@ -159,6 +160,12 @@ type fakeRepository struct {
 	projects map[string]project.Project
 	tags     map[string]project.Tag
 	groups   map[string]project.Group
+}
+
+type noopTenantBindingEnsurer struct{}
+
+func (noopTenantBindingEnsurer) EnsureProjectTenantBinding(context.Context, string, string) error {
+	return nil
 }
 
 func (r *fakeRepository) List(_ context.Context, tenantID string, filter project.ListFilter) ([]project.Project, int64, error) {

@@ -324,6 +324,11 @@ spec:
               value: "false"
             - name: DATA_SERVICE_ADDR
               value: :18102
+            - name: DATA_SERVICE_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: DATA_SERVICE_INTERNAL_TOKEN
             - name: DATA_SERVICE_COLLECTOR_PROTOCOL_CATALOG_PATH
               value: /contracts/collector-protocols
             - name: IF_META_STORE_HOST
@@ -437,6 +442,11 @@ spec:
               value: "18500"
             - name: DATA_SERVICE_URL
               value: http://center-data:18102
+            - name: DATA_SERVICE_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: DATA_SERVICE_INTERNAL_TOKEN
             - name: CODE_WORKSPACE_ROOT
               value: /var/lib/induforge/workspaces
             - name: CODE_SERVER_DOCKER_HOST

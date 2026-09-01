@@ -187,11 +187,17 @@ func TestProjectReleaseSourceBuilderRejectsUnsafeFrontendDirectory(t *testing.T)
 
 func releaseSourceBuilder(t *testing.T, dataURL string, runner ProjectFrontendBuildRunner) *ProjectReleaseSourceBuilder {
 	t.Helper()
-	builder, err := NewProjectReleaseSourceBuilder(ProjectReleaseSourceBuilderConfig{DataServiceURL: dataURL, BuilderID: "release-source-builder-v1"}, runner)
+	builder, err := NewProjectReleaseSourceBuilder(ProjectReleaseSourceBuilderConfig{DataServiceURL: dataURL, BuilderID: "release-source-builder-v1", TenantBindingEnsurer: noopTenantBindingEnsurer{}}, runner)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return builder
+}
+
+type noopTenantBindingEnsurer struct{}
+
+func (noopTenantBindingEnsurer) EnsureProjectTenantBinding(context.Context, string, string) error {
+	return nil
 }
 
 func releaseSourceDirectories(t *testing.T) (string, string) {

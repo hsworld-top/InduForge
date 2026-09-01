@@ -21,6 +21,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/config"
 	"github.com/indu-forge/dev_core/internal/contextpack"
 	"github.com/indu-forge/dev_core/internal/controlplane"
+	"github.com/indu-forge/dev_core/internal/dataservice"
 	"github.com/indu-forge/dev_core/internal/deployment"
 	"github.com/indu-forge/dev_core/internal/node"
 	"github.com/indu-forge/dev_core/internal/objectstore"
@@ -45,6 +46,11 @@ func main() {
 		logger.Error("加载配置失败", "error", err)
 		os.Exit(1)
 	}
+	dataServiceClient, err := dataservice.NewInternalClient(cfg.DataServiceURL, cfg.DataServiceInternalToken)
+	if err != nil {
+		logger.Error("初始化数据服务内部客户端失败", "error", err)
+		os.Exit(1)
+	}
 
 	ctx := context.Background()
 	pool, err := platformdb.NewPool(ctx, cfg.DatabaseURL)
@@ -58,14 +64,14 @@ func main() {
 			logger.Error("不支持的启动参数", "argument", os.Args[1])
 			os.Exit(1)
 		}
-		if err := initializeDatabase(ctx, pool, cfg, true); err != nil {
+		if err := initializeDatabase(ctx, pool, cfg, true, dataServiceClient); err != nil {
 			logger.Error("初始化控制面数据库失败", "error", err)
 			os.Exit(1)
 		}
 		logger.Info("控制面数据库初始化完成")
 		return
 	}
-	if err := initializeDatabase(ctx, pool, cfg, cfg.DBAutoSchemaSync); err != nil {
+	if err := initializeDatabase(ctx, pool, cfg, cfg.DBAutoSchemaSync, dataServiceClient); err != nil {
 		logger.Error("校验控制面数据库失败", "error", err)
 		os.Exit(1)
 	}
@@ -107,7 +113,9 @@ func main() {
 		os.Exit(1)
 	}
 	projectRepository := project.NewPostgreSQLRepository(pool)
-	controlPlane.SetProjectHandler(project.NewHandler(project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword), authService))
+	projectService := project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword)
+	projectService.SetTenantBindingEnsurer(dataServiceClient)
+	controlPlane.SetProjectHandler(project.NewHandler(projectService, authService))
 	dockerClient, err := codeworkspace.NewDockerClient(cfg.CodeServerDockerHost)
 	if err != nil {
 		logger.Error("初始化 Docker Engine 客户端失败", "error", err)
@@ -154,7 +162,7 @@ func main() {
 		deployment.NewPostgreSQLRepository(pool), workspace, ifpObjects,
 		deployment.ServiceConfig{ArtifactBucket: cfg.ObjectStoreIFPBucket, MinNodeAgentVersion: cfg.MinNodeAgentVersion, MinRuntimeVersion: cfg.MinRuntimeVersion},
 	)
-	if err := configureReleasePublishing(deploymentService, cfg); err != nil {
+	if err := configureReleasePublishing(deploymentService, cfg, dataServiceClient); err != nil {
 		logger.Error("初始化正式 Release 发布失败", "error", err)
 		os.Exit(1)
 	}
@@ -225,7 +233,7 @@ func main() {
 }
 
 // configureReleasePublishing 默认不注入构建器，使未启用环境的 Publish 保持失败关闭。
-func configureReleasePublishing(service *deployment.Service, cfg config.Config) error {
+func configureReleasePublishing(service *deployment.Service, cfg config.Config, dataServiceClient *dataservice.InternalClient) error {
 	if !cfg.ReleaseBuilderEnabled {
 		return nil
 	}
@@ -237,7 +245,7 @@ func configureReleasePublishing(service *deployment.Service, cfg config.Config) 
 	if err != nil {
 		return err
 	}
-	builder, err := deployment.NewProjectReleaseSourceBuilder(deployment.ProjectReleaseSourceBuilderConfig{DataServiceURL: cfg.DataServiceURL, BuilderID: cfg.ReleaseBuilderID}, runner)
+	builder, err := deployment.NewProjectReleaseSourceBuilder(deployment.ProjectReleaseSourceBuilderConfig{DataServiceURL: cfg.DataServiceURL, BuilderID: cfg.ReleaseBuilderID, TenantBindingEnsurer: dataServiceClient}, runner)
 	if err != nil {
 		return err
 	}
@@ -292,7 +300,7 @@ func runSceneObjectCleanup(ctx context.Context, service *sceneasset.Service, log
 }
 
 // initializeDatabase 只允许空库创建最终基线；已有业务表时仅校验，不执行迁移或修补。
-func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, allowCreate bool) error {
+func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, allowCreate bool, dataServiceClient *dataservice.InternalClient) error {
 	if err := platformdb.EnsureSchema(ctx, pool, allowCreate); err != nil {
 		return err
 	}
@@ -322,6 +330,12 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 		DefaultAdminPasswordHash: defaultAdminPasswordHash, DemoWorkspacePath: demoWorkspacePath,
 	}); err != nil {
 		return err
+	}
+	if dataServiceClient == nil {
+		return fmt.Errorf("数据服务项目租户绑定客户端未配置")
+	}
+	if err := dataServiceClient.EnsureProjectTenantBinding(ctx, platformdb.BuiltinDemoProjectID, cfg.DefaultTenantID); err != nil {
+		return fmt.Errorf("同步内置教程工程项目租户绑定失败，可稍后重试: %w", err)
 	}
 	var demoProjectActive bool
 	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND status='active')`, platformdb.BuiltinDemoProjectID).Scan(&demoProjectActive); err != nil {
