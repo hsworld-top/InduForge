@@ -8,6 +8,7 @@ import (
 const (
 	projectGatewayImage = "induforge/project-gateway:1.0.0"
 	runtimeEngineImage  = "induforge/runtime-engine:1.0.0"
+	computeSandboxImage = "induforge/compute-sandbox:1.0.0"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
@@ -37,6 +38,14 @@ func projectWorkloadName(deploymentID, engine string) (string, error) {
 	return "if-project-" + value[:12] + "-" + engine, nil
 }
 
+func computeSandboxSecretName(deploymentID string) (string, error) {
+	name, err := projectWorkloadName(deploymentID, ServiceCompute)
+	if err != nil {
+		return "", err
+	}
+	return name + "-sandbox", nil
+}
+
 // RenderProjectWorkloadManifest 生成稳定资源名。base 暴露 hostPort；compute/alarm
 // 使用同一 runtime 镜像但强制不同 IF_ENGINE_ROLE，避免一个 Pod 同时执行两类任务。
 func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
@@ -58,6 +67,33 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		image, role, container = projectGatewayImage, "base", "project-gateway"
 	}
 	hostPort := ""
+	sandbox := ""
+	if workload.Engine == ServiceCompute {
+		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
+		if nameErr != nil {
+			return "", nameErr
+		}
+		sandbox = fmt.Sprintf(`
+        - name: compute-sandbox
+          image: %s
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: COMPUTE_SANDBOX_TOKEN, valueFrom: {secretKeyRef: {name: %s, key: token}}}
+            - {name: COMPUTE_SANDBOX_SITE_ID, value: %q}
+            - {name: COMPUTE_SANDBOX_NODE_ID, value: %q}
+            - {name: COMPUTE_SANDBOX_EXECUTION_FORM, value: "native-linux"}
+            - {name: COMPUTE_SANDBOX_DEPLOYMENT_ID, value: %q}
+            - {name: COMPUTE_SANDBOX_PROJECT_ID, value: %q}
+            - {name: COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/opt/induforge/release/current"}
+            - {name: COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-artifact.tar.zst"}
+          ports: [{name: sandbox, containerPort: 18103}]
+          readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 15, periodSeconds: 10}
+          resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.DeploymentID)
+	}
 	if workload.Engine == ServiceBase {
 		if workload.HostPort == nil || *workload.HostPort < 1024 || *workload.HostPort > 65535 {
 			return "", fmt.Errorf("基础引擎 hostPort 无效")
@@ -113,6 +149,7 @@ spec:
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: work, mountPath: /work}
+%s
       volumes:
         - name: release
           hostPath: {path: %q, type: Directory}
@@ -128,5 +165,5 @@ metadata:
 spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, artifactRoot, name, namespace, workload.ServiceID, name), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.NodeID, container, image, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, sandbox, artifactRoot, name, namespace, workload.ServiceID, name), nil
 }
