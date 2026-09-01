@@ -213,7 +213,11 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 		return Version{}, err
 	}
 	fail := func(cause error) (Version, error) {
-		_, _ = s.repository.MarkVersionFailed(ctx, actor.TenantID, version.ID, cause.Error())
+		// HTTP 客户端取消或上游超时不能让版本永久停在 building。使用短后台上下文
+		// 尝试完成终态回写；若数据库暂不可用，下次发布的超时调和仍会兜底。
+		markCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = s.repository.MarkVersionFailed(markCtx, actor.TenantID, version.ID, cause.Error())
 		return Version{}, cause
 	}
 	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {

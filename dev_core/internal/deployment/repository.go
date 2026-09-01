@@ -20,6 +20,8 @@ type PostgreSQLRepository struct {
 	queries *dbsqlc.Queries
 }
 
+const staleProductionBuildTimeout = 15 * time.Minute
+
 func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
 	return &PostgreSQLRepository{pool: pool, queries: dbsqlc.New(pool)}
 }
@@ -114,6 +116,16 @@ func (r *PostgreSQLRepository) BeginProductionBuild(ctx context.Context, project
 	var locked string
 	if err = tx.QueryRow(ctx, `SELECT id::text FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, tenant, projectID).Scan(&locked); err != nil {
 		return Version{}, mapNotFound(err)
+	}
+	// 发布请求中断时无法保证失败回写可达。只收口超过最大受控构建窗口的旧记录，
+	// 不影响仍在执行的 Release Builder；版本号继续单调递增且不可复用。
+	if _, err = tx.Exec(ctx, `
+		UPDATE application_versions
+		SET status='failed', error_message='正式 Release 构建超时，已由下次发布恢复', completed_at=now(), updated_at=now()
+		WHERE tenant_id=$1 AND project_id=$2 AND status='building'
+		  AND created_at < now() - $3::interval
+	`, tenant, projectID, fmt.Sprintf("%d seconds", int(staleProductionBuildTimeout.Seconds()))); err != nil {
+		return Version{}, err
 	}
 	var patch int
 	// 软删除版本仍受 (project_id, version) 唯一约束保护，正式版本号必须保持单调且不可复用。
