@@ -2,6 +2,10 @@ package dataservice
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +36,50 @@ func TestInternalClientEnsureProjectTenantBindingUsesInternalToken(t *testing.T)
 	if err := client.EnsureProjectTenantBinding(context.Background(), projectID, tenantID); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestInternalClientBuildCollectorBindingBundleValidatesHashesAndSecretName(t *testing.T) {
+	projectID, connectionID := uuid.NewString(), uuid.NewString()
+	binding, index := []byte(`{"schemaVersion":"collector-runtime-binding.v1"}`), []byte(`{"schemaVersion":"collector-runtime-index.v1","resources":{},"secrets":{}}`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("X-InduForge-Internal-Token") != "internal-token" {
+			t.Fatal("internal collector request invalid")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "reqId": "request-a", "data": map[string]any{"schemaVersion": "collector-binding-bundle.v1", "binding": json.RawMessage(binding), "bindingSha256": digestForTest(binding), "bindingSize": len(binding), "index": json.RawMessage(index), "indexSha256": digestForTest(index), "indexSize": len(index), "secretFiles": map[string]string{"connection-" + connectionID + ".json": base64.StdEncoding.EncodeToString([]byte(`{"password":"x"}`))}}})
+	}))
+	defer server.Close()
+	client, _ := NewInternalClient(server.URL, "internal-token")
+	bundle, err := client.BuildCollectorBindingBundle(context.Background(), bundleRequestForTest(projectID))
+	if err != nil || string(bundle.SecretFiles["connection-"+connectionID+".json"]) != `{"password":"x"}` {
+		t.Fatalf("bundle=%+v err=%v", bundle, err)
+	}
+}
+
+func TestInternalClientBuildCollectorBindingBundleRejectsBadHashAndFileName(t *testing.T) {
+	projectID := uuid.NewString()
+	for _, data := range []map[string]any{{"bindingSha256": "sha256:" + strings.Repeat("0", 64), "secretFiles": map[string]string{}}, {"secretFiles": map[string]string{"../bad.json": base64.StdEncoding.EncodeToString([]byte("x"))}}} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			binding, index := []byte(`{}`), []byte(`{}`)
+			result := map[string]any{"schemaVersion": "collector-binding-bundle.v1", "binding": json.RawMessage(binding), "bindingSha256": digestForTest(binding), "bindingSize": len(binding), "index": json.RawMessage(index), "indexSha256": digestForTest(index), "indexSize": len(index), "secretFiles": map[string]string{}}
+			for k, v := range data {
+				result[k] = v
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "reqId": "request-a", "data": result})
+		}))
+		client, _ := NewInternalClient(server.URL, "token")
+		if _, err := client.BuildCollectorBindingBundle(context.Background(), bundleRequestForTest(projectID)); err == nil {
+			t.Fatal("invalid bundle must fail")
+		}
+		server.Close()
+	}
+}
+
+func bundleRequestForTest(projectID string) CollectorBindingBundleRequest {
+	return CollectorBindingBundleRequest{TenantID: "tenant-a", ProjectID: projectID, DeploymentID: "deployment-a", EnvironmentID: "environment-a", NodeID: "node-a", ReleaseID: "release-a", AccountID: "account-a", Revision: 1, NATSEndpoint: "nats://nats:4222", NATSResourceRef: "site-resource://env/nats", NATSCredentialSecretRef: "secret://env/nats", SourceSnapshot: json.RawMessage(`{"schemaVersion":"collector-runtime-artifact.v1"}`)}
+}
+func digestForTest(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func TestInternalClientDoesNotLeakTokenOnFailure(t *testing.T) {
