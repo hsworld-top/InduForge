@@ -28,6 +28,15 @@ func TestProjectReleaseDigestUsesCanonicalSHA256(t *testing.T) {
 	}
 }
 
+func TestKubernetesApplyPathUsesCoreGroupForService(t *testing.T) {
+	if got := kubernetesApplyPath("Service", "project", "services", "entry"); got != "/api/v1/namespaces/project/services/entry" {
+		t.Fatalf("Service apply path=%q", got)
+	}
+	if got := kubernetesApplyPath("Deployment", "project", "deployments", "entry"); got != "/apis/apps/v1/namespaces/project/deployments/entry" {
+		t.Fatalf("Deployment apply path=%q", got)
+	}
+}
+
 func TestKubernetesProjectReconcilerLabelsHistoricalK3sNodeByInternalIP(t *testing.T) {
 	patches := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -464,10 +464,7 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if meta.Kind == "Service" {
 			resource = "services"
 		}
-		path := "/apis/apps/v1/namespaces/" + namespace + "/" + resource + "/" + meta.Metadata.Name
-		if meta.Kind == "ConfigMap" {
-			path = "/api/v1/namespaces/" + namespace + "/" + resource + "/" + meta.Metadata.Name
-		}
+		path := kubernetesApplyPath(meta.Kind, namespace, resource, meta.Metadata.Name)
 		request, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.endpoint+path+"?fieldManager=induforge-center&force=true", strings.NewReader(document))
 		if err != nil {
 			return err
@@ -484,6 +481,14 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		}
 	}
 	return nil
+}
+
+func kubernetesApplyPath(kind, namespace, resource, name string) string {
+	prefix := "/apis/apps/v1"
+	if kind == "ConfigMap" || kind == "Service" {
+		prefix = "/api/v1"
+	}
+	return prefix + "/namespaces/" + namespace + "/" + resource + "/" + name
 }
 
 func collectorArtifactPath(raw []byte) (string, error) {
