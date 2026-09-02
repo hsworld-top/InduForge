@@ -30,3 +30,5 @@ scripts/seaweedfs/*.conf
 !designer/pi-web/public/**/*.png
 !contracts/project-templates/**/*.png
 .cache
+.data
+collector
