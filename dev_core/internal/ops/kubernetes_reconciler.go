@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -304,18 +305,9 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 			Replicas int `json:"replicas"`
 		}
 		Status struct {
-			ObservedGeneration    int64                                            `json:"observedGeneration"`
-			AvailableReplicas     int                                              `json:"availableReplicas"`
-			Conditions            []struct{ Type, Status, Reason, Message string } `json:"conditions"`
-			InitContainerStatuses []struct {
-				Name  string `json:"name"`
-				State struct {
-					Terminated struct {
-						Reason, Message string
-						ExitCode        int `json:"exitCode"`
-					} `json:"terminated"`
-				} `json:"state"`
-			} `json:"initContainerStatuses"`
+			ObservedGeneration int64                                            `json:"observedGeneration"`
+			AvailableReplicas  int                                              `json:"availableReplicas"`
+			Conditions         []struct{ Type, Status, Reason, Message string } `json:"conditions"`
 		} `json:"status"`
 	}
 	if err = json.NewDecoder(resp.Body).Decode(&value); err != nil {
@@ -326,15 +318,64 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 			return ProjectWorkloadStatus{Failed: true, Message: condition.Message}, nil
 		}
 	}
-	for _, init := range value.Status.InitContainerStatuses {
-		if init.State.Terminated.ExitCode != 0 {
-			return ProjectWorkloadStatus{Failed: true, Message: "初始化阶段 " + init.Name + " 失败"}, nil
-		}
-	}
 	if value.Status.ObservedGeneration >= value.Metadata.Generation && value.Status.AvailableReplicas >= value.Spec.Replicas {
 		return ProjectWorkloadStatus{Ready: true, Message: "Kubernetes rollout 已就绪"}, nil
 	}
+	podStatus, err := r.projectPodFailure(ctx, namespace, name)
+	if err != nil || podStatus.Failed {
+		return podStatus, err
+	}
 	return ProjectWorkloadStatus{Message: "等待 Kubernetes rollout readiness"}, nil
+}
+
+func (r *KubernetesProjectReconciler) projectPodFailure(ctx context.Context, namespace, name string) (ProjectWorkloadStatus, error) {
+	endpoint := r.endpoint + "/api/v1/namespaces/" + namespace + "/pods?labelSelector=" + url.QueryEscape("app.kubernetes.io/name="+name)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return ProjectWorkloadStatus{}, fmt.Errorf("读取 Kubernetes Pod 状态失败: HTTP %d", resp.StatusCode)
+	}
+	type containerStatus struct {
+		Name  string `json:"name"`
+		State struct {
+			Waiting    struct{ Reason string } `json:"waiting"`
+			Terminated struct {
+				ExitCode int `json:"exitCode"`
+			} `json:"terminated"`
+		} `json:"state"`
+	}
+	var pods struct {
+		Items []struct {
+			Status struct {
+				InitContainerStatuses []containerStatus `json:"initContainerStatuses"`
+				ContainerStatuses     []containerStatus `json:"containerStatuses"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&pods); err != nil {
+		return ProjectWorkloadStatus{}, err
+	}
+	for _, pod := range pods.Items {
+		for _, status := range pod.Status.InitContainerStatuses {
+			if status.State.Terminated.ExitCode != 0 {
+				return ProjectWorkloadStatus{Failed: true, Message: "初始化阶段 " + status.Name + " 失败"}, nil
+			}
+		}
+		for _, status := range pod.Status.ContainerStatuses {
+			if status.State.Waiting.Reason == "CrashLoopBackOff" {
+				return ProjectWorkloadStatus{Failed: true, Message: "运行容器 " + status.Name + " 反复崩溃"}, nil
+			}
+		}
+	}
+	return ProjectWorkloadStatus{}, nil
 }
 
 func workloadFailureStage(message string) string {

@@ -221,12 +221,32 @@ func TestKubernetesProjectReconcilerStatusRequiresObservedReady(t *testing.T) {
 
 func TestKubernetesProjectReconcilerStatusReportsInitPhase(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":0,"initContainerStatuses":[{"name":"runtime-provision-state","state":{"terminated":{"exitCode":1,"reason":"Error"}}}]}}`))
+		if strings.Contains(request.URL.Path, "/pods") {
+			_, _ = w.Write([]byte(`{"items":[{"status":{"initContainerStatuses":[{"name":"runtime-provision-state","state":{"terminated":{"exitCode":1,"reason":"Error"}}}]}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":0}}`))
 	}))
 	defer server.Close()
 	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
 	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceCompute})
 	if err != nil || !status.Failed || !strings.Contains(status.Message, "runtime-provision-state") || workloadFailureStage(status.Message) != "provision-state" {
 		t.Fatalf("init failure status=%+v err=%v", status, err)
+	}
+}
+
+func TestKubernetesProjectReconcilerStatusReportsCrashLoop(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/pods") {
+			_, _ = w.Write([]byte(`{"items":[{"status":{"containerStatuses":[{"name":"runtime-api","state":{"waiting":{"reason":"CrashLoopBackOff"}}}]}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":0}}`))
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase})
+	if err != nil || !status.Failed || !strings.Contains(status.Message, "runtime-api") {
+		t.Fatalf("crash loop status=%+v err=%v", status, err)
 	}
 }
