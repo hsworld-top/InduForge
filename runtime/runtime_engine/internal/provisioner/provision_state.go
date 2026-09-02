@@ -10,6 +10,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +18,8 @@ import (
 
 var safePGIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
 var runtimeDatabaseIdentifier = regexp.MustCompile(`^ifrt_[0-9a-f]{16}$`)
+
+const stateProvisionTimeout = 2 * time.Minute
 
 // PostgresBootstrapCredentials 仅供 initContainer 读取。maintenanceDsn 允许创建
 // 尚不存在的目标库，运行容器不会挂载此文件。
@@ -164,7 +167,8 @@ func ProvisionState(ctx context.Context, input Input, raw []byte) error {
 	if err != nil {
 		return err
 	}
-	timeout, cancel := context.WithTimeout(ctx, provisionTimeout)
+	// 首次执行从零基线和 TimescaleDB 初始化明显重于 NATS 拓扑创建。
+	timeout, cancel := context.WithTimeout(ctx, stateProvisionTimeout)
 	defer cancel()
 	admin, err := openDBAdmin(timeout, credentials)
 	if err != nil {
