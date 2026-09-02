@@ -225,6 +225,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 		if err = rows.Scan(&serviceID, &deploymentID, &environmentID, &nodeID, &engine, &releaseID, &releaseDigest, &generation, &port); err != nil {
 			return count, err
 		}
+		releaseDigest = projectReleaseDigest(releaseDigest)
 		workload := ProjectWorkload{EnvironmentID: environmentID, DeploymentID: deploymentID, ServiceID: serviceID, NodeID: nodeID, Engine: engine, ReleaseID: releaseID, ReleaseDigest: releaseDigest, Generation: generation, HostPort: port}
 		if applyErr := applier.Reconcile(ctx, workload); applyErr != nil {
 			message := applyErr.Error()
@@ -263,6 +264,14 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 		count++
 	}
 	return count, rows.Err()
+}
+
+func projectReleaseDigest(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(value), "sha256:") {
+		return "sha256:" + strings.ToLower(strings.TrimSpace(value[len("sha256:"):]))
+	}
+	return sha256Value(value)
 }
 
 func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload ProjectWorkload) (ProjectWorkloadStatus, error) {

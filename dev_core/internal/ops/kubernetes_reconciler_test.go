@@ -19,6 +19,15 @@ func (f hostNodeAddressLoaderFunc) LoadHostNodeAddresses(ctx context.Context, id
 	return f(ctx, ids)
 }
 
+func TestProjectReleaseDigestUsesCanonicalSHA256(t *testing.T) {
+	hex := strings.Repeat("a", 64)
+	for _, input := range []string{hex, "sha256:" + hex, " SHA256:" + strings.ToUpper(hex) + " "} {
+		if got := projectReleaseDigest(input); got != "sha256:"+hex {
+			t.Fatalf("projectReleaseDigest(%q)=%q", input, got)
+		}
+	}
+}
+
 func TestKubernetesProjectReconcilerLabelsHistoricalK3sNodeByInternalIP(t *testing.T) {
 	patches := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
