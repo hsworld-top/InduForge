@@ -59,8 +59,11 @@ grep -Fq 'enrollmentCode: "one-time-code"' "$CONFIG_DIR/config.yaml"
 grep -Fq "hostDataDir: '$TEMP_DIR/node-data/k3s'" "$CONFIG_DIR/config.yaml"
 grep -Fq "keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml"
 grep -Fq "publicKey: '$PUBLIC_KEY'" "$CONFIG_DIR/config.yaml"
+test "$(grep -Fc "keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml")" -eq 1
 grep -Fq 'Environment=NODE_AGENT_DATA_DIR=$RUNTIME_DATA_DIR' "$PACKAGE_DIR/install.sh"
 awk '/group: collector/,/enabled: false/' "$CONFIG_DIR/config.yaml" | grep -Fq 'installed: true'
+mkdir -p "$PREFIX/data"
+printf '{"nodeId":"existing-node"}\n' > "$PREFIX/data/ops-agent-identity.json"
 
 # 覆盖真实旧版本升级路径：旧配置由 YAML 序列化器输出为 8 空格层级。安装器
 # 必须沿用原缩进插入 Hostd 字段，且不能破坏已领取的节点配置。
@@ -82,6 +85,13 @@ agent:
         agentVersion: "old"
         heartbeatEvery: 10s
         dataDir: ./data
+        trustKeys:
+          - keyId: 'release-signing-key-v1'
+            publicKey: 'old-release-key-value'
+          - keyId: 'other-release-key'
+            publicKey: 'other-release-key-value'
+          - keyId: 'release-signing-key-v1'
+            publicKey: 'duplicate-release-key-value'
         services: []
 logging:
     file: ./logs/agent.log
@@ -95,6 +105,15 @@ grep -Fq "        hostDataDir: '$TEMP_DIR/node-data/k3s'" "$CONFIG_DIR/config.ya
 grep -Fq "        nodeIp: '10.20.30.40'" "$CONFIG_DIR/config.yaml"
 grep -Fq "        trustKeys:" "$CONFIG_DIR/config.yaml"
 grep -Fq "          - keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml"
+grep -Fq "            publicKey: '$PUBLIC_KEY'" "$CONFIG_DIR/config.yaml"
+grep -Fq "          - keyId: 'other-release-key'" "$CONFIG_DIR/config.yaml"
+grep -Fq "            publicKey: 'other-release-key-value'" "$CONFIG_DIR/config.yaml"
+test "$(grep -Fc "keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml")" -eq 1
+grep -Fq '{"nodeId":"existing-node"}' "$PREFIX/data/ops-agent-identity.json"
+# 第二次相同升级必须保持单条同 ID key，而不是再次追加旧列表项。
+PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --node-data-dir "$TEMP_DIR/node-data/k3s" --release-signing-key-id release-signing-key-v1 --release-signing-public-key "$PUBLIC_KEY"
+test "$(grep -Fc "keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml")" -eq 1
+grep -Fq "          - keyId: 'other-release-key'" "$CONFIG_DIR/config.yaml"
 if PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --node-data-dir "/var/lib/induforge/bad'path" --release-signing-key-id release-signing-key-v1 --release-signing-public-key "$PUBLIC_KEY" >/dev/null 2>&1; then
   echo 'unsafe node data path unexpectedly accepted' >&2
   exit 1

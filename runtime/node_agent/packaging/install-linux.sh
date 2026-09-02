@@ -112,6 +112,80 @@ insert_after_yaml_key() {
   fi
   mv "$temporary" "$CONFIG_DIR/config.yaml"
 }
+# 发行信任根允许运维人员保留多个 key。升级本包时只替换本包 keyId 的全部
+# 旧条目；不能用 sed 只重写 trustKeys 行，否则遗留列表项会造成重复 keyId，
+# 使 Agent 在加载配置时 fail-closed，进而停止心跳。
+upsert_release_signing_key() {
+  local temporary
+  if ! grep -q '^[[:space:]]*trustKeys:' "$CONFIG_DIR/config.yaml"; then
+    insert_after_yaml_key dataDir "trustKeys:" "  - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'" "    publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'"
+    return
+  fi
+  temporary="$(mktemp "$CONFIG_DIR/config.yaml.XXXXXX")"
+  if ! awk -v target_key_id="$RELEASE_SIGNING_KEY_ID" -v target_public_key="$RELEASE_SIGNING_PUBLIC_KEY" '
+    function clear_entry(  entry_index) {
+      entry_started=0; entry_key=""
+      for (entry_index in entry_lines) delete entry_lines[entry_index]
+      entry_count=0
+    }
+    function flush_entry(  entry_index) {
+      if (entry_started && entry_key != target_key_id) {
+        for (entry_index=1; entry_index<=entry_count; entry_index++) print entry_lines[entry_index]
+      }
+      clear_entry()
+    }
+    function print_target() {
+      print trust_indent "  - keyId: '\''" target_key_id "'\''"
+      print trust_indent "    publicKey: '\''" target_public_key "'\''"
+    }
+    {
+      if (!inside) {
+        if ($0 ~ /^[[:space:]]*trustKeys:[[:space:]]*(\[\])?[[:space:]]*$/ && !found) {
+          match($0, /^[[:space:]]*/); trust_indent=substr($0, RSTART, RLENGTH)
+          print trust_indent "trustKeys:"
+          print_target()
+          inside=1; found=1
+          next
+        }
+        print
+        next
+      }
+
+      if ($0 !~ /^[[:space:]]*$/) {
+        match($0, /^[[:space:]]*/); current_indent=substr($0, RSTART, RLENGTH)
+        if (length(current_indent) <= length(trust_indent)) {
+          flush_entry(); inside=0
+          print
+          next
+        }
+      }
+      if ($0 ~ /^[[:space:]]*-[[:space:]]+keyId:[[:space:]]*/) {
+        flush_entry()
+        entry_started=1; entry_count=1; entry_lines[entry_count]=$0
+        entry_key=$0
+        sub(/^[[:space:]]*-[[:space:]]+keyId:[[:space:]]*/, "", entry_key)
+        sub(/[[:space:]]+#.*$/, "", entry_key)
+        sub(/^['\'']/, "", entry_key); sub(/['\'']$/, "", entry_key)
+        sub(/^\"/, "", entry_key); sub(/\"$/, "", entry_key)
+        next
+      }
+      if (entry_started) {
+        entry_count++; entry_lines[entry_count]=$0
+      } else {
+        print
+      }
+    }
+    END {
+      if (inside) flush_entry()
+      if (!found) exit 42
+    }
+  ' "$CONFIG_DIR/config.yaml" > "$temporary"; then
+    rm -f "$temporary"
+    echo "cannot update release signing key in existing config" >&2
+    exit 1
+  fi
+  mv "$temporary" "$CONFIG_DIR/config.yaml"
+}
 # 老版本配置升级时原地补齐 Hostd 边界，保留已领取的节点身份与用户数据。
 if ! grep -q '^[[:space:]]*hostdSocket:' "$CONFIG_DIR/config.yaml"; then
   insert_after_yaml_key dataDir "hostdSocket: /run/induforge/hostd.sock" "hostDataDir: '$SAFE_HOST_DATA_DIR'"
@@ -129,11 +203,7 @@ if [ -n "$SERVER_URL" ]; then SAFE_SERVER_URL="$(escape_sed_replacement "$SERVER
 if [ -n "$ENROLLMENT_CODE" ]; then SAFE_ENROLLMENT_CODE="$(escape_sed_replacement "$ENROLLMENT_CODE")"; sed -i.bak "s|enrollmentCode:.*|enrollmentCode: \"$SAFE_ENROLLMENT_CODE\"|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"; fi
 SAFE_RELEASE_SIGNING_KEY_ID="$(escape_sed_replacement "$RELEASE_SIGNING_KEY_ID")"
 SAFE_RELEASE_SIGNING_PUBLIC_KEY="$(escape_sed_replacement "$RELEASE_SIGNING_PUBLIC_KEY")"
-if grep -q '^[[:space:]]*trustKeys:' "$CONFIG_DIR/config.yaml"; then
-  sed -E -i.bak "s|^([[:space:]]*)trustKeys:.*|\1trustKeys:\n\1  - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'\n\1    publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
-else
-  insert_after_yaml_key dataDir "trustKeys:" "  - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'" "    publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'"
-fi
+upsert_release_signing_key
 if [ "$ENABLE_COLLECTOR" = true ]; then
   sed -i.bak '/group: collector/,/enabled: false/ s/installed: false/installed: true/' "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
 fi
