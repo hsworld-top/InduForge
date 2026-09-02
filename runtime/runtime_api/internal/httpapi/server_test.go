@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,12 @@ type fakeStore struct {
 	current runtimeview.PointCurrent
 	history []runtimeview.PointSample
 	alarms  []runtimeview.AlarmState
+	ack     runtimeview.AlarmAcknowledgement
+	ackErr  error
+	ackCall struct {
+		deploymentID, itemID, subjectID, comment string
+		expectedVersion                          int64
+	}
 }
 
 func (f *fakeStore) ReserveManualSequence(context.Context, string, int64) (int64, error) {
@@ -52,6 +59,12 @@ func (f *fakeStore) AlarmStates(context.Context, string, int) ([]runtimeview.Ala
 	return f.alarms, nil
 }
 
+func (f *fakeStore) AcknowledgeAlarm(_ context.Context, deploymentID, itemID string, expectedVersion int64, subjectID, comment string, _ time.Time) (runtimeview.AlarmAcknowledgement, error) {
+	f.ackCall.deploymentID, f.ackCall.itemID, f.ackCall.expectedVersion = deploymentID, itemID, expectedVersion
+	f.ackCall.subjectID, f.ackCall.comment = subjectID, comment
+	return f.ack, f.ackErr
+}
+
 func TestRuntimeAPISessionAndCurrentPointUseGatewayIdentity(t *testing.T) {
 	server, _, token := newTestRuntimeAPI(t, &fakeStore{current: testCurrent()})
 	login := authenticatedRequest(http.MethodPost, "/api/v1/runtime/session", token, nil)
@@ -74,6 +87,41 @@ func TestRuntimeAPISessionAndCurrentPointUseGatewayIdentity(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("cross deployment request must fail: %d", response.Code)
+	}
+}
+
+func TestRuntimeAPIAcknowledgesActiveAlarmForOperator(t *testing.T) {
+	store := &fakeStore{ack: runtimeview.AlarmAcknowledgement{Version: 8, AcknowledgedAt: time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)}}
+	server, token := newTestRuntimeAPIWithRoles(t, store, []string{"operator"})
+	request := authenticatedRequest(http.MethodPost, "/api/v1/runtime/alarms/33333333-3333-4333-8333-333333333333/acknowledge", token, nil)
+	request.Body = io.NopCloser(strings.NewReader(`{"expectedVersion":7,"comment":"现场已确认"}`))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"version":8`) {
+		t.Fatalf("ack status=%d body=%s", response.Code, response.Body.String())
+	}
+	if store.ackCall.deploymentID != "deployment-1" || store.ackCall.itemID != "33333333-3333-4333-8333-333333333333" || store.ackCall.expectedVersion != 7 || store.ackCall.subjectID != "user-1" || store.ackCall.comment != "现场已确认" {
+		t.Fatalf("unexpected acknowledgement: %#v", store.ackCall)
+	}
+}
+
+func TestRuntimeAPIRejectsAlarmAcknowledgementWithoutRoleOrFreshVersion(t *testing.T) {
+	server, _, token := newTestRuntimeAPI(t, &fakeStore{})
+	request := authenticatedRequest(http.MethodPost, "/api/v1/runtime/alarms/33333333-3333-4333-8333-333333333333/acknowledge", token, nil)
+	request.Body = io.NopCloser(strings.NewReader(`{"expectedVersion":1,"comment":""}`))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"code":40301`) {
+		t.Fatalf("viewer acknowledgement=%d %s", response.Code, response.Body.String())
+	}
+
+	server, token = newTestRuntimeAPIWithRoles(t, &fakeStore{ackErr: runtimeview.ErrAlarmVersionConflict}, []string{"admin"})
+	request = authenticatedRequest(http.MethodPost, "/api/v1/runtime/alarms/33333333-3333-4333-8333-333333333333/acknowledge", token, nil)
+	request.Body = io.NopCloser(strings.NewReader(`{"expectedVersion":1,"comment":""}`))
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "报警状态已变更") {
+		t.Fatalf("stale acknowledgement=%d %s", response.Code, response.Body.String())
 	}
 }
 
@@ -194,6 +242,16 @@ func TestRuntimeAPIWebSocketStreamsValidatedPointEvents(t *testing.T) {
 const testProjectID = "11111111-1111-4111-8111-111111111111"
 
 func newTestRuntimeAPI(t *testing.T, store *fakeStore) (*Server, *realtime.Hub, string) {
+	server, hub, token := newTestRuntimeAPIWithRolesAndHub(t, store, []string{"viewer"})
+	return server, hub, token
+}
+
+func newTestRuntimeAPIWithRoles(t *testing.T, store *fakeStore, roles []string) (*Server, string) {
+	server, _, token := newTestRuntimeAPIWithRolesAndHub(t, store, roles)
+	return server, token
+}
+
+func newTestRuntimeAPIWithRolesAndHub(t *testing.T, store *fakeStore, roles []string) (*Server, *realtime.Hub, string) {
 	t.Helper()
 	catalogPath := filepath.Join(t.TempDir(), "artifact.json")
 	catalogPayload := `{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","dataPoints":[{"id":"22222222-2222-4222-8222-222222222222","path":"line.temperature","name":"温度","dataType":"float64","sourceType":"collector.point","sourceId":"33333333-3333-4333-8333-333333333333","runtimePermissions":{"write":{"allowRoles":[],"denyRoles":[],"inherit":true}},"refreshMode":"subscription","status":"active","unit":"C","precisionNum":1,"defaultValue":null,"tags":[],"attributeDefaults":{}}],"computeUnits":[],"alarmItems":[]}`
@@ -206,7 +264,11 @@ func newTestRuntimeAPI(t *testing.T, store *fakeStore) (*Server, *realtime.Hub, 
 	}
 	token := "test-runtime-token"
 	authPath := filepath.Join(t.TempDir(), "tokens.json")
-	authPayload := fmt.Sprintf(`{"schemaVersion":"runtime-api-tokens.v1","tokens":[{"tokenSha256":"%s","subjectId":"user-1","roles":["viewer"]}]}`, runtimeauth.DigestToken(token))
+	rolesPayload, err := json.Marshal(roles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authPayload := fmt.Sprintf(`{"schemaVersion":"runtime-api-tokens.v1","tokens":[{"tokenSha256":"%s","subjectId":"user-1","roles":%s}]}`, runtimeauth.DigestToken(token), rolesPayload)
 	if err := os.WriteFile(authPath, []byte(authPayload), 0o600); err != nil {
 		t.Fatal(err)
 	}

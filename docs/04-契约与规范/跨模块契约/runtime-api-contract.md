@@ -32,7 +32,9 @@ Runtime API 是发布工程的动态 HTTP/WebSocket 接口，必须只监听同�
 
 `POST /api/v1/runtime/points/{path}/write` 仅适用于 `manual.input` 且当前会话角色通过 Artifact `runtimePermissions.write` 的数据点。Runtime API 在 PostgreSQL 中以 deployment binding 下发的 `manualOwner/manualEpoch` 复核 `runtime-api` producer fence 并原子分配 sequence，再只向本 deployment Account 的 `data.raw.<pointId>` 发布冻结的 `data.raw.v1` 事件；它不直接篡改 `point_current`。Engine 的 writer、compute 与 alarm 消费同一事件，浏览器只能以其后续投影/WS 观察结果。
 
-`POST /api/v1/runtime/computes/{id}/run` 仍返回 `501 / code=50031`；报警确认、设备写入、发布及其他动作在其各自受控命令/审计契约冻结前不得由 SDK 或 Gateway 伪造成功。
+`POST /api/v1/runtime/alarms/{id}/acknowledge` 仅允许 `admin` 或 `operator` 会话角色，body 必须含 `expectedVersion`（大于 0）和不超过 2048 字符的可选 `comment`。Runtime API 在同一 PostgreSQL 事务中以 `(deployment_id, alarm_item_id)` 锁定状态、复核版本与活动实例，更新活动实例的 `ackedAt`/`acknowledgedBy` 与状态版本，并插入不可变的 `alarm_ack_audit`。版本过期或报警已清除返回 HTTP `409 / code=40001`；该接口只作用于 Gateway 已绑定的 deployment。
+
+`POST /api/v1/runtime/computes/{id}/run` 仍返回 `501 / code=50031`；设备写入、发布及其他动作在其各自受控命令/审计契约冻结前不得由 SDK 或 Gateway 伪造成功。
 
 ## 4. 运行依赖和安全文件
 

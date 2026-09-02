@@ -81,6 +81,18 @@ export interface AlarmAdapter {
   getHistory?(id: string): unknown
 }
 
+export interface AlarmAcknowledgementInput {
+  expectedVersion: number
+  comment?: string
+  /** 仅 HTTP Runtime 使用，用于传入 signal、headers、credentials 或 timeoutMs。 */
+  requestOptions?: HttpRequestOptions
+}
+
+export interface AlarmAcknowledgement {
+  version: number
+  acknowledgedAt: string
+}
+
 export interface ComputeAdapter {
   run?(ref: string, input?: unknown): unknown
   describe?(ref: string): unknown
@@ -241,7 +253,7 @@ export interface AlarmSDK {
     subscribe(handler: (event: unknown) => void, options?: unknown): Promise<SDKResult<unknown>>
   }
   actions: {
-    acknowledge(id: string, input?: unknown): Promise<SDKResult<unknown>>
+    acknowledge(id: string, input: AlarmAcknowledgementInput): Promise<SDKResult<AlarmAcknowledgement>>
     unacknowledge(id: string, input?: unknown): Promise<SDKResult<unknown>>
     forceClear(id: string, input?: unknown): Promise<SDKResult<unknown>>
     shelve(id: string, input?: unknown): Promise<SDKResult<unknown>>

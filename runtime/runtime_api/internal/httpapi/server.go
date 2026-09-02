@@ -11,9 +11,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/indu-forge/runtime-api/internal/artifact"
 	runtimeauth "github.com/indu-forge/runtime-api/internal/auth"
@@ -60,6 +62,8 @@ type envelope struct {
 
 type principalContextKey struct{}
 
+var canonicalUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
 func New(config Config) (*Server, error) {
 	if strings.TrimSpace(config.DeploymentID) == "" || strings.TrimSpace(config.ProjectID) == "" || strings.TrimSpace(config.AccountID) == "" {
 		return nil, errors.New("deploymentId、projectId、accountId 不能为空")
@@ -98,6 +102,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/runtime/points/{path}/history", s.requirePrincipal(http.HandlerFunc(s.pointHistory)))
 	mux.Handle("POST /api/v1/runtime/points/{path}/write", s.requirePrincipal(http.HandlerFunc(s.writePoint)))
 	mux.Handle("GET /api/v1/runtime/alarms/current", s.requirePrincipal(http.HandlerFunc(s.currentAlarms)))
+	mux.Handle("POST /api/v1/runtime/alarms/{id}/acknowledge", s.requirePrincipal(http.HandlerFunc(s.acknowledgeAlarm)))
 	mux.Handle("GET /api/v1/runtime/computes", s.requirePrincipal(http.HandlerFunc(s.computes)))
 	mux.Handle("POST /api/v1/runtime/computes/{id}/run", s.requirePrincipal(http.HandlerFunc(s.unsupportedAction)))
 	mux.Handle("GET /ws/v1/points", s.requirePrincipal(http.HandlerFunc(s.pointSocket)))
@@ -345,6 +350,47 @@ func (s *Server) currentAlarms(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	writeOK(writer, request, map[string]any{"items": items, "total": len(items)})
+}
+
+// acknowledgeAlarm 只允许操作员确认当前 deployment 的活动报警，并将确认和审计写入同一事务。
+func (s *Server) acknowledgeAlarm(writer http.ResponseWriter, request *http.Request) {
+	principal := principalFrom(request.Context())
+	if !hasAlarmAcknowledgeRole(principal.Roles) {
+		writeError(writer, request, http.StatusForbidden, 40301, "当前身份无权确认报警")
+		return
+	}
+	var body struct {
+		ExpectedVersion int64  `json:"expectedVersion"`
+		Comment         string `json:"comment"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || decoder.Decode(&struct{}{}) != io.EOF || !canonicalUUID.MatchString(request.PathValue("id")) || body.ExpectedVersion < 1 || utf8.RuneCountInString(body.Comment) > 2048 {
+		writeError(writer, request, http.StatusBadRequest, 40001, "expectedVersion 或 comment 非法")
+		return
+	}
+	acknowledgement, err := s.config.Store.AcknowledgeAlarm(request.Context(), s.config.DeploymentID, request.PathValue("id"), body.ExpectedVersion, principal.SubjectID, body.Comment, s.config.Now())
+	switch {
+	case errors.Is(err, runtimeview.ErrNotFound):
+		writeError(writer, request, http.StatusNotFound, 40401, "报警不存在")
+	case errors.Is(err, runtimeview.ErrAlarmVersionConflict):
+		writeError(writer, request, http.StatusConflict, 40001, "报警状态已变更，请刷新后重试")
+	case errors.Is(err, runtimeview.ErrAlarmNotActive):
+		writeError(writer, request, http.StatusConflict, 40001, "报警不存在活动实例")
+	case err != nil:
+		writeError(writer, request, http.StatusServiceUnavailable, 50031, "报警确认失败")
+	default:
+		writeOK(writer, request, acknowledgement)
+	}
+}
+
+func hasAlarmAcknowledgeRole(roles []string) bool {
+	for _, role := range roles {
+		if role == "admin" || role == "operator" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) computes(writer http.ResponseWriter, request *http.Request) {

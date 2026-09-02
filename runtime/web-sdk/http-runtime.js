@@ -402,7 +402,18 @@ export function createHttpRuntime(options = {}) {
       getSettings: () => unsupported('alarms.settings.get'),
       updateSettings: () => unsupported('alarms.settings.update'),
       subscribeChanges: () => unsupported('alarms.changes.subscribe'),
-      acknowledge: () => unsupported('alarms.actions.acknowledge'),
+      acknowledge: (id, input = {}) => {
+        if (typeof id !== 'string' || !id.trim())
+          throw new TypeError('alarms.actions.acknowledge(id, input) 的 id 必须是非空字符串')
+        if (!input || typeof input !== 'object' || Array.isArray(input))
+          throw new TypeError('alarms.actions.acknowledge(id, input) 的 input 必须是对象')
+        const { requestOptions, ...body } = input
+        return request(`alarms/${encodeURIComponent(id)}/acknowledge`, {
+          ...(requestOptions ?? {}),
+          method: 'POST',
+          json: body,
+        })
+      },
       unacknowledge: () => unsupported('alarms.actions.unacknowledge'),
       forceClear: () => unsupported('alarms.actions.forceClear'),
       shelve: () => unsupported('alarms.actions.shelve'),

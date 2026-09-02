@@ -15,6 +15,78 @@ import (
 
 type Store struct{ pool *pgxpool.Pool }
 
+func (s *Store) AcknowledgeAlarm(ctx context.Context, deploymentID, itemID string, expectedVersion int64, subjectID, comment string, now time.Time) (runtimeview.AlarmAcknowledgement, error) {
+	if expectedVersion < 1 || strings.TrimSpace(subjectID) == "" || len(comment) > 2048 {
+		return runtimeview.AlarmAcknowledgement{}, errors.New("报警确认参数非法")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return runtimeview.AlarmAcknowledgement{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var raw []byte
+	var version int64
+	err = tx.QueryRow(ctx, `SELECT state, version FROM runtime_engine.alarm_item_state
+		WHERE deployment_id = $1 AND alarm_item_id = $2::uuid FOR UPDATE`, deploymentID, itemID).Scan(&raw, &version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return runtimeview.AlarmAcknowledgement{}, runtimeview.ErrNotFound
+	}
+	if err != nil {
+		return runtimeview.AlarmAcknowledgement{}, err
+	}
+	if version != expectedVersion {
+		return runtimeview.AlarmAcknowledgement{}, runtimeview.ErrAlarmVersionConflict
+	}
+
+	var state map[string]any
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return runtimeview.AlarmAcknowledgement{}, runtimeview.ErrAlarmNotActive
+	}
+	items, ok := state["items"].(map[string]any)
+	if !ok || len(items) == 0 {
+		return runtimeview.AlarmAcknowledgement{}, runtimeview.ErrAlarmNotActive
+	}
+	acknowledgedAt := now.UTC()
+	active := false
+	for _, rawItem := range items {
+		item, ok := rawItem.(map[string]any)
+		if !ok {
+			continue
+		}
+		conditionID, _ := item["activeConditionId"].(string)
+		if conditionID == "" {
+			continue
+		}
+		item["ackedAt"] = acknowledgedAt.Format(time.RFC3339Nano)
+		item["acknowledgedBy"] = subjectID
+		active = true
+	}
+	if !active {
+		return runtimeview.AlarmAcknowledgement{}, runtimeview.ErrAlarmNotActive
+	}
+	next, err := json.Marshal(state)
+	if err != nil {
+		return runtimeview.AlarmAcknowledgement{}, err
+	}
+	var nextVersion int64
+	err = tx.QueryRow(ctx, `UPDATE runtime_engine.alarm_item_state
+		SET state = $3::jsonb, version = version + 1, updated_at = now()
+		WHERE deployment_id = $1 AND alarm_item_id = $2::uuid AND version = $4 RETURNING version`, deploymentID, itemID, next, expectedVersion).Scan(&nextVersion)
+	if err != nil {
+		return runtimeview.AlarmAcknowledgement{}, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO runtime_engine.alarm_ack_audit
+		(deployment_id, alarm_item_id, subject_id, comment, acknowledged_at, state_version)
+		VALUES ($1, $2::uuid, $3, $4, $5, $6)`, deploymentID, itemID, subjectID, comment, acknowledgedAt, nextVersion); err != nil {
+		return runtimeview.AlarmAcknowledgement{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return runtimeview.AlarmAcknowledgement{}, err
+	}
+	return runtimeview.AlarmAcknowledgement{Version: nextVersion, AcknowledgedAt: acknowledgedAt}, nil
+}
+
 func Open(ctx context.Context, dsn string) (*Store, error) {
 	if strings.TrimSpace(dsn) == "" {
 		return nil, errors.New("PostgreSQL DSN 不能为空")

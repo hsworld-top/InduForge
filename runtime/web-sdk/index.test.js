@@ -409,6 +409,27 @@ test('HTTP Runtime 适配器将取消和非标准响应归一为 SDKResult', asy
   assert.match(result.msg, /取消/)
 })
 
+test('HTTP Runtime 适配器通过正式接口确认报警', async () => {
+  let request
+  const runtime = createHttpRuntime({
+    baseUrl: 'https://gateway.test/api/v1/runtime',
+    fetch: async (url, init) => {
+      request = { url: String(url), init }
+      return runtimeResponse({ version: 8, acknowledgedAt: '2026-08-31T10:00:00Z' })
+    },
+  })
+
+  const result = await runtime.alarmAdapter.acknowledge('alarm-1', {
+    expectedVersion: 7,
+    comment: '现场已确认',
+  })
+  assert.equal(result.code, 0)
+  assert.equal(result.data.version, 8)
+  assert.equal(request.url, 'https://gateway.test/api/v1/runtime/alarms/alarm-1/acknowledge')
+  assert.equal(request.init.method, 'POST')
+  assert.equal(request.init.body, '{"expectedVersion":7,"comment":"现场已确认"}')
+})
+
 test('HTTP Runtime WebSocket 订阅交付实时点位并传播关闭和错误', async () => {
   let socket
   class FakeWebSocket {

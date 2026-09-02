@@ -7,7 +7,11 @@ import (
 	"time"
 )
 
-var ErrNotFound = errors.New("runtime value not found")
+var (
+	ErrNotFound             = errors.New("runtime value not found")
+	ErrAlarmNotActive       = errors.New("alarm has no active instance")
+	ErrAlarmVersionConflict = errors.New("alarm state version conflict")
+)
 
 type PointCurrent struct {
 	PointID         string          `json:"pointId"`
@@ -39,6 +43,11 @@ type AlarmState struct {
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 
+type AlarmAcknowledgement struct {
+	Version        int64     `json:"version"`
+	AcknowledgedAt time.Time `json:"acknowledgedAt"`
+}
+
 type HistoryQuery struct {
 	From  *time.Time
 	To    *time.Time
@@ -50,4 +59,5 @@ type Store interface {
 	Current(context.Context, string, string) (PointCurrent, error)
 	History(context.Context, string, string, HistoryQuery) ([]PointSample, error)
 	AlarmStates(context.Context, string, int) ([]AlarmState, error)
+	AcknowledgeAlarm(context.Context, string, string, int64, string, string, time.Time) (AlarmAcknowledgement, error)
 }
