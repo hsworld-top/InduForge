@@ -209,9 +209,11 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: work, mountPath: /work}`, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage)
+		// Bundle 配置在 EmptyDir，项目制品由 config 内 artifactMount 指向 release。
+		// config-root 只约束配置和 index，不能误用为项目制品挂载根。
 		runtimeArgs = `
           command: ["runtime-engine"]
-          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/opt/induforge/release/runtime-artifact", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
+          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/bundle", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
 		runtimeMounts = `
             - {name: runtime-secrets, mountPath: /work/bundle/secrets, readOnly: true}`
 		runtimeVolumes = fmt.Sprintf(`
