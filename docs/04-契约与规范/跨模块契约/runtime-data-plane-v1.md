@@ -252,6 +252,9 @@ consumer owner/epoch 只用于自己的 CAS fencing，两者是独立 token，�
 
 启动时可用受信 assignment 显式调用独立 CAS 激活 owner；`Store.Open` 不得自动写库或激活任何 producer/consumer token。
 roleAssignment 与 producerAssignment 的 ownership.epoch 均为至少 1 的独立 fencing token；只允许在各自侧做 CAS，
+在当前单节点 V1 中，owner 是由 `deploymentId + role` 确定的稳定逻辑身份；epoch 是控制面为该角色服务冻结的
+单调 `desiredGeneration`。Pod/实例诊断 ID、Artifact revision、AlarmItem revision 与 ComputeUnit revision 均不得充当
+owner 或 epoch：同 generation 重试必须幂等，generation 提升必须以更高 epoch 隔离旧实例。
 不得以两者是否相等作为启动或事件验收条件。
 
 除 Schema 可直接验证的字段外，配置装载器必须拒绝：roles 与 roleAssignments 的集合不相等、重复 role、重复

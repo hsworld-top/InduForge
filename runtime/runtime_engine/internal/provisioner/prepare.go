@@ -140,13 +140,15 @@ func loaderErrorClass(err error) string {
 }
 
 // deriveBuildInput 只以已安全解包的 Artifact 原始 bytes 决定 Artifact ref 与
-// producer fencing；部署输入不能覆盖 compute/alarm 的 ID、revision 或 ownership。
+// producer fencing；部署输入不能覆盖 compute/alarm 的 ID 或 owner。owner
+// 由 deployment+role 固定推导，epoch 只接受控制面冻结的服务 generation。
 func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, error) {
 	var artifact model.ProjectArtifact
 	if err := json.Unmarshal(raw, &artifact); err != nil {
 		return binding.BuildInput{}, fmt.Errorf("项目制品 JSON 非法")
 	}
 	digest := sha256.Sum256(raw)
+	ownership := model.Ownership{OwnerID: stableRoleOwner(input.DeploymentID, input.Role), Epoch: input.FencingEpoch}
 	build := binding.BuildInput{
 		Input: input,
 		ProjectArtifact: model.ArtifactRef{
@@ -154,7 +156,7 @@ func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, erro
 			ArtifactRevision: artifactRevision(artifact.ProjectArtifactVersion),
 			ArtifactDigest:   "sha256:" + hex.EncodeToString(digest[:]),
 		},
-		RoleOwnership:   model.Ownership{OwnerID: input.InstanceID, Epoch: 1},
+		RoleOwnership:   ownership,
 		ManualOwnership: model.Ownership{OwnerID: input.ManualOwner, Epoch: input.ManualEpoch},
 	}
 	if build.ProjectArtifact.ArtifactRevision < 1 {
@@ -173,26 +175,31 @@ func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, erro
 			if unit.Revision < 1 {
 				return binding.BuildInput{}, fmt.Errorf("compute %q revision 非法", unit.ID)
 			}
-			build.ComputeProducers = append(build.ComputeProducers, binding.ComputeProducer{ComputeID: unit.ID, Ownership: model.Ownership{OwnerID: input.InstanceID, Epoch: unit.Revision}})
+			build.ComputeProducers = append(build.ComputeProducers, binding.ComputeProducer{ComputeID: unit.ID, Ownership: ownership})
 		}
 		if len(build.ComputeProducers) == 0 {
 			return binding.BuildInput{}, fmt.Errorf("compute 角色缺少可用 producer")
 		}
 	case "alarm":
-		var epoch int64
+		enabled := false
 		for _, item := range artifact.AlarmItems {
-			if item.Enabled && item.Revision > epoch {
-				epoch = item.Revision
+			if item.Enabled {
+				enabled = true
 			}
 		}
-		if epoch < 1 {
+		if !enabled {
 			return binding.BuildInput{}, fmt.Errorf("alarm 角色缺少可用 producer")
 		}
-		build.AlarmOwnership = model.Ownership{OwnerID: input.InstanceID, Epoch: epoch}
+		build.AlarmOwnership = ownership
 	default:
 		return binding.BuildInput{}, fmt.Errorf("RuntimeEngine role 必须为 compute 或 alarm")
 	}
 	return build, nil
+}
+
+func stableRoleOwner(deploymentID, role string) string {
+	sum := sha256.Sum256([]byte(deploymentID + "\x00" + role))
+	return "if-" + role + "-" + hex.EncodeToString(sum[:])[:16]
 }
 
 func artifactRevision(version string) int64 {
@@ -203,7 +210,7 @@ func artifactRevision(version string) int64 {
 }
 
 func validateInput(in Input) error {
-	if strings.TrimSpace(in.ReleaseID) == "" || strings.TrimSpace(in.Binding.InstanceID) == "" || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !strings.HasPrefix(in.RuntimeArtifactSHA256, "sha256:") {
+	if strings.TrimSpace(in.ReleaseID) == "" || strings.TrimSpace(in.Binding.InstanceID) == "" || in.Binding.FencingEpoch < 1 || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !strings.HasPrefix(in.RuntimeArtifactSHA256, "sha256:") {
 		return fmt.Errorf("输入路径或 Release 身份非法")
 	}
 	for _, p := range []string{in.Binding.JetStream.CredentialSecretFile, in.Binding.StateStore.CredentialSecretFile, in.Binding.ComputeSandboxSecretFile} {

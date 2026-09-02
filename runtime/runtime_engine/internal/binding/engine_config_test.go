@@ -106,6 +106,7 @@ func validInput(role string) Input {
 		SiteID:            "site-a",
 		NodeID:            "node-a",
 		InstanceID:        "runtime-engine-" + role + "-0",
+		FencingEpoch:      1,
 		ProjectID:         "11111111-1111-4111-8111-111111111111",
 		DeploymentID:      "deployment-a",
 		AccountID:         "account-a",

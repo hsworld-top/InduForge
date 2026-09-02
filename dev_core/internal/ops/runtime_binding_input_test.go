@@ -72,6 +72,31 @@ func TestBuildRuntimeBindingInputRejectsMissingArtifactOrSupport(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeBindingInputFreezesServiceGenerationAsFencingEpoch(t *testing.T) {
+	context := validRuntimeContext()
+	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, Generation: 3}
+	first, err := BuildRuntimeBindingInput(workload, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workload.Generation = 4
+	next, err := BuildRuntimeBindingInput(workload, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstDoc, nextDoc map[string]any
+	if json.Unmarshal(first, &firstDoc) != nil || json.Unmarshal(next, &nextDoc) != nil {
+		t.Fatal("运行绑定输入不是 JSON")
+	}
+	firstBinding, nextBinding := firstDoc["binding"].(map[string]any), nextDoc["binding"].(map[string]any)
+	if firstBinding["fencingEpoch"] != float64(3) || nextBinding["fencingEpoch"] != float64(4) {
+		t.Fatalf("fencingEpoch=%v/%v", firstBinding["fencingEpoch"], nextBinding["fencingEpoch"])
+	}
+	if firstBinding["instanceId"] == nextBinding["instanceId"] {
+		t.Fatal("instanceId 必须保留 generation 诊断区分")
+	}
+}
+
 func TestRuntimeStateSlotUsesFixedSchemaAndStableDatabaseName(t *testing.T) {
 	context := validRuntimeContext()
 	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 1}

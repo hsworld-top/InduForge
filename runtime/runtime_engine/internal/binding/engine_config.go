@@ -19,10 +19,13 @@ const (
 // 当前冻结的 EngineConfig 只允许写入受控引用，不能把这些字段或任何 secret 值
 // 序列化进运行配置。保留它们可阻止调用方以不完整的运行支撑信息构造配置。
 type Input struct {
-	TenantID     string `json:"tenantId"`
-	SiteID       string `json:"siteId"`
-	NodeID       string `json:"nodeId"`
-	InstanceID   string `json:"instanceId"`
+	TenantID   string `json:"tenantId"`
+	SiteID     string `json:"siteId"`
+	NodeID     string `json:"nodeId"`
+	InstanceID string `json:"instanceId"`
+	// FencingEpoch 是控制面为该服务 generation 冻结的单调代次。instanceId
+	// 仅用于诊断，不能参与 owner 生成，否则重试/滚动会同 epoch 换 owner。
+	FencingEpoch int64  `json:"fencingEpoch"`
 	ProjectID    string `json:"projectId"`
 	DeploymentID string `json:"deploymentId"`
 	AccountID    string `json:"accountId"`
@@ -206,6 +209,9 @@ func validateInput(input BuildInput) error {
 	}
 	if input.RoleOwnership.Epoch < 1 {
 		return fmt.Errorf("构造 RuntimeEngine 配置 roleOwnership.epoch 必须至少为 1")
+	}
+	if input.FencingEpoch < 1 {
+		return fmt.Errorf("构造 RuntimeEngine 配置 fencingEpoch 必须至少为 1")
 	}
 	if input.ManualOwnership.OwnerID != "runtime-api" || input.ManualOwnership.Epoch < 1 {
 		return fmt.Errorf("构造 RuntimeEngine 配置 manual producer ownership 非法")

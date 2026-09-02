@@ -15,12 +15,13 @@
     "binding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tenantId", "siteId", "nodeId", "instanceId", "projectId", "deploymentId", "accountId", "role", "artifactMountPath", "artifactFile", "jetStream", "stateStore"],
+      "required": ["tenantId", "siteId", "nodeId", "instanceId", "fencingEpoch", "projectId", "deploymentId", "accountId", "role", "artifactMountPath", "artifactFile", "jetStream", "stateStore"],
       "properties": {
         "tenantId": {"type": "string", "minLength": 1},
         "siteId": {"type": "string", "minLength": 1},
         "nodeId": {"type": "string", "minLength": 1},
         "instanceId": {"type": "string", "minLength": 1},
+        "fencingEpoch": {"type": "integer", "minimum": 1},
         "projectId": {"type": "string", "minLength": 1},
         "deploymentId": {"type": "string", "minLength": 1},
         "accountId": {"type": "string", "minLength": 1},

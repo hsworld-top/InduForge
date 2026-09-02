@@ -47,7 +47,7 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			// RuntimeEngine 会自行从 deployment+role 推导稳定 owner，不能把 Pod
 			// instanceId（会随 generation 改变）混入 owner。
 			"fencingEpoch": workload.Generation,
-			"projectId":  context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
+			"projectId":    context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
 			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/opt/induforge/release/runtime-artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, context.RuntimeEngines, key, context.Support),
 			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
