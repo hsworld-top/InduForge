@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,6 +39,23 @@ import (
 	"github.com/indu-forge/dev_core/internal/worker"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// newCodeWorkspaceEngine 在 K3s 控制面中使用 Kubernetes API 创建工作区 Pod。
+// 非 Kubernetes 环境保持原 Docker 路径，避免影响 Mac 本地开发。
+func newCodeWorkspaceEngine(cfg config.Config) (codeworkspace.Engine, error) {
+	engine := strings.ToLower(strings.TrimSpace(cfg.CodeWorkspaceEngine))
+	if engine == "" && strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != "" {
+		engine = "kubernetes"
+	}
+	switch engine {
+	case "", "docker":
+		return codeworkspace.NewDockerClient(cfg.CodeServerDockerHost)
+	case "kubernetes", "k3s":
+		return codeworkspace.NewKubernetesEngine(codeworkspace.KubernetesConfig{Namespace: cfg.CodeWorkspaceNamespace, WorkspaceRoot: cfg.WorkspaceRoot})
+	default:
+		return nil, fmt.Errorf("不支持的代码工作区引擎: %s", engine)
+	}
+}
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -116,12 +134,12 @@ func main() {
 	projectService := project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword)
 	projectService.SetTenantBindingEnsurer(dataServiceClient)
 	controlPlane.SetProjectHandler(project.NewHandler(projectService, authService))
-	dockerClient, err := codeworkspace.NewDockerClient(cfg.CodeServerDockerHost)
+	workspaceEngine, err := newCodeWorkspaceEngine(cfg)
 	if err != nil {
-		logger.Error("初始化 Docker Engine 客户端失败", "error", err)
+		logger.Error("初始化代码工作区引擎失败", "error", err)
 		os.Exit(1)
 	}
-	codeWorkspaceService, err := codeworkspace.NewService(projectRepository, dockerClient, codeworkspace.Config{
+	codeWorkspaceService, err := codeworkspace.NewService(projectRepository, workspaceEngine, codeworkspace.Config{
 		Image: cfg.CodeServerImage, BindHost: cfg.CodeServerBindHost, VolumeName: cfg.CodeWorkspaceVolume,
 		DefaultTemplateProjectID: platformdb.BuiltinDemoProjectID, DefaultTemplateID: "vite-vue-js",
 	})
@@ -178,6 +196,9 @@ func main() {
 			return ops.DevelopmentArtifact{}, err
 		}
 		return ops.DevelopmentArtifact{ReleaseID: artifact.ReleaseID, Version: artifact.Version, Bucket: artifact.Bucket, ArtifactKey: artifact.ArtifactKey, ArtifactHash: artifact.ArtifactHash, ArtifactSize: artifact.ArtifactSize, Manifest: manifest, ManifestHash: artifact.ManifestHash, ChecksumsHash: artifact.ChecksumsHash, SigningKeyID: artifact.SigningKeyID}, nil
+	})
+	opsService.SetDevelopmentRequirementsBuilder(func(buildCtx context.Context, actor auth.User, projectID, authorization string) ([]string, error) {
+		return deploymentService.DevelopmentEngineRequirements(buildCtx, actor, projectID, authorization)
 	})
 	controlPlane.SetDeploymentHandler(deployment.NewHandler(deploymentService, authService))
 	auditLogRepository := auditlog.NewPostgreSQLRepository(pool)

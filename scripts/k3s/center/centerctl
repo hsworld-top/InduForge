@@ -52,6 +52,7 @@ require_center_images() {
   available=$(containerd_images)
   for image in \
     "$CONTROL_IMAGE" "$DATA_IMAGE" "$EDGE_IMAGE" \
+    induforge/designer-code-server:4.131.0-node22-pnpm10.19.0 \
     docker.io/timescale/timescaledb:2.26.4-pg16 \
     docker.io/library/redis:7.2-alpine \
     docker.io/chrislusf/seaweedfs:3.85 \

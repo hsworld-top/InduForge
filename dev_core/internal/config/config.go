@@ -46,6 +46,8 @@ type Config struct {
 	CodeServerDockerHost     string
 	CodeServerImage          string
 	CodeServerBindHost       string
+	CodeWorkspaceEngine      string
+	CodeWorkspaceNamespace   string
 	DataServiceURL           string
 	DataServiceInternalToken string
 	CacheAddress             string
@@ -139,6 +141,8 @@ func Load() (Config, error) {
 		CodeServerDockerHost:     firstEnvWithDefault("CODE_SERVER_DOCKER_HOST", "unix:///var/run/docker.sock"),
 		CodeServerImage:          firstEnvWithDefault("CODE_SERVER_IMAGE", "induforge/designer-code-server:workspace-templates-source"),
 		CodeServerBindHost:       firstEnvWithDefault("CODE_SERVER_BIND_HOST", "127.0.0.1"),
+		CodeWorkspaceEngine:      strings.TrimSpace(firstEnv("CODE_WORKSPACE_ENGINE")),
+		CodeWorkspaceNamespace:   firstEnvWithDefault("POD_NAMESPACE", "induforge-system"),
 		DataServiceURL:           strings.TrimRight(firstEnv("DATA_SERVICE_URL"), "/"),
 		DataServiceInternalToken: dataServiceInternalToken,
 		CacheAddress:             net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),

@@ -266,6 +266,30 @@ metadata:
 automountServiceAccountToken: true
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: induforge-center-control-code-workspaces
+  namespace: induforge-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: induforge-center-control-code-workspaces
+  namespace: induforge-system
+subjects:
+  - kind: ServiceAccount
+    name: center-control
+    namespace: induforge-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: induforge-center-control-code-workspaces
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: induforge-center-control-node-labeler
@@ -471,8 +495,17 @@ spec:
                   key: DATA_SERVICE_INTERNAL_TOKEN
             - name: CODE_WORKSPACE_ROOT
               value: /var/lib/induforge/workspaces
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: CODE_SERVER_DOCKER_HOST
               value: unix:///var/run/docker.sock
+            # K3s 工作区镜像由离线安装包导入 containerd；不能沿用本地 Docker 的开发标签。
+            - name: CODE_SERVER_IMAGE
+              value: induforge/designer-code-server:4.131.0-node22-pnpm10.19.0
+            - name: CODE_WORKSPACE_ENGINE
+              value: kubernetes
             - name: CODE_WORKSPACE_VOLUME
               value: __RELEASE_WORKSPACE_VOLUME__
             - name: RELEASE_BUILDER_ENABLED
