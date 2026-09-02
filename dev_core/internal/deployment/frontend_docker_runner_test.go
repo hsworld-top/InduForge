@@ -139,7 +139,7 @@ func TestDockerFrontendClientUsesLockedDownVolumeContainer(t *testing.T) {
 		t.Fatalf("构建命令不安全或不完整: %#v", command)
 	}
 	env := strings.Join(anyStrings(create["Env"].([]any)), " ")
-	for _, expected := range []string{"PNPM_CONFIG_STORE_DIR=/tmp/pnpm-store", "XDG_CACHE_HOME=/tmp/pnpm-cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"} {
+	for _, expected := range []string{"CI=true", "PNPM_CONFIG_STORE_DIR=/tmp/pnpm-store", "XDG_CACHE_HOME=/tmp/pnpm-cache", "HOME=/tmp/home", "COREPACK_HOME=/tmp/corepack"} {
 		if !strings.Contains(env, expected) {
 			t.Fatalf("缺少固定构建环境 %s: %s", expected, env)
 		}
