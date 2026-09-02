@@ -98,7 +98,8 @@ func runProvisionNATS(args []string) {
 		os.Exit(1)
 	}
 	if err := provisioner.ProvisionNATS(context.Background(), in, credentials); err != nil {
-		fmt.Fprintln(os.Stderr, "provision-nats: failed")
+		// provisioner 只返回受控阶段与资源名，不包含 token、endpoint 或 broker 原始错误。
+		fmt.Fprintf(os.Stderr, "provision-nats: failed: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stdout, "provision-nats: complete")

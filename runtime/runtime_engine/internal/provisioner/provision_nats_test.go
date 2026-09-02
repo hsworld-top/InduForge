@@ -81,6 +81,28 @@ func TestProvisionNATSCreateAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestProvisionNATSUsesOneGiBProjectQuotaAndShrinksExistingStreams(t *testing.T) {
+	in := provisionInput()
+	streams, _ := natsTopology(in.Binding.JetStream)
+	var total int64
+	for _, stream := range streams {
+		total += stream.MaxBytes
+	}
+	if len(streams) != 4 || total != 1<<30 {
+		t.Fatalf("stream count=%d total quota=%d", len(streams), total)
+	}
+	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{
+		"RAW":     {Config: nats.StreamConfig{Name: "RAW", Subjects: []string{"data.raw.>"}, Retention: nats.LimitsPolicy, Storage: nats.FileStorage, Discard: nats.DiscardOld, MaxAge: streamMaxAge, MaxBytes: 1 << 30, MaxMsgSize: int32(1 << 20)}},
+		"DERIVED": {Config: nats.StreamConfig{Name: "DERIVED", Subjects: []string{"data.computed.>"}, Retention: nats.LimitsPolicy, Storage: nats.FileStorage, Discard: nats.DiscardOld, MaxAge: streamMaxAge, MaxBytes: 1 << 30, MaxMsgSize: int32(1 << 20)}},
+	}, consumers: map[string]*nats.ConsumerInfo{}}
+	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
+		t.Fatal(err)
+	}
+	if fake.updated != 2 || fake.streams["RAW"].Config.MaxBytes != streamMaxBytes || fake.streams["DERIVED"].Config.MaxBytes != streamMaxBytes {
+		t.Fatalf("existing stream quota was not shrunk: updated=%d raw=%d derived=%d", fake.updated, fake.streams["RAW"].Config.MaxBytes, fake.streams["DERIVED"].Config.MaxBytes)
+	}
+}
+
 func TestProvisionNATSRejectsForeignSubject(t *testing.T) {
 	in := provisionInput()
 	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{"RAW": {Config: nats.StreamConfig{Name: "RAW", Subjects: []string{"other.project.>"}}}}, consumers: map[string]*nats.ConsumerInfo{}}

@@ -20,7 +20,9 @@ import (
 const (
 	provisionTimeout = 15 * time.Second
 	streamMaxAge     = 7 * 24 * time.Hour
-	streamMaxBytes   = int64(1 << 30)
+	// 单项目固定四条 stream，每条 256MiB；总上限 1GiB，确保默认 2GiB
+	// JetStream 基础服务仍保留一半空间给元数据、重放和运维余量。
+	streamMaxBytes = int64(256 << 20)
 )
 
 // NATSCredentials 是 bootstrap 挂载中的最小 NATS 凭据。它从不实现 String，且
