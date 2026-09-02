@@ -34,7 +34,7 @@ type releaseMetadata struct {
 }
 
 // pendingServicesSQL 只由服务自身的 node_id 调度。一个工程部署可将不同引擎放在不同节点。
-const pendingServicesSQL = `SELECT s.id,s.tenant_id,s.project_deployment_id,s.node_id,COALESCE(n.display_name,n.name,n.hostname,''),s.service_type,s.public_port,s.desired_status,s.observed_status,COALESCE(s.last_message,''),COALESCE(s.endpoint,''),s.replicas_desired,s.replicas_observed,s.desired_generation,s.observed_generation,s.last_operation,s.observed_at,s.created_at,s.updated_at FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id AND n.tenant_id=s.tenant_id WHERE s.node_id=$1 AND (s.desired_generation<>s.observed_generation OR s.desired_status<>s.observed_status) ORDER BY s.updated_at`
+const pendingServicesSQL = `SELECT s.id,s.tenant_id,s.project_deployment_id,s.node_id,COALESCE(n.display_name,n.hostname,''),s.service_type,s.public_port,s.desired_status,s.observed_status,COALESCE(s.last_message,''),COALESCE(s.endpoint,''),s.replicas_desired,s.replicas_observed,s.desired_generation,s.observed_generation,s.last_operation,s.observed_at,s.created_at,s.updated_at FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id AND n.tenant_id=s.tenant_id WHERE s.node_id=$1 AND (s.desired_generation<>s.observed_generation OR s.desired_status<>s.observed_status) ORDER BY s.updated_at`
 
 const (
 	lockDeploymentProjectSQL = `SELECT id FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE`
@@ -1325,7 +1325,7 @@ func (r *PostgreSQLRepository) pendingServices(ctx context.Context, nodeID strin
 	return out, rows.Err()
 }
 func (r *PostgreSQLRepository) listServices(ctx context.Context, did string) ([]DeploymentService, error) {
-	rows, e := r.pool.Query(ctx, `SELECT s.id,s.tenant_id,s.project_deployment_id,s.node_id,COALESCE(n.display_name,n.name,n.hostname,''),s.service_type,s.public_port,s.desired_status,s.observed_status,COALESCE(s.last_message,''),COALESCE(s.endpoint,''),s.replicas_desired,s.replicas_observed,s.desired_generation,s.observed_generation,s.last_operation,s.observed_at,s.created_at,s.updated_at FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id AND n.tenant_id=s.tenant_id WHERE s.project_deployment_id=$1 ORDER BY s.service_type`, did)
+	rows, e := r.pool.Query(ctx, `SELECT s.id,s.tenant_id,s.project_deployment_id,s.node_id,COALESCE(n.display_name,n.hostname,''),s.service_type,s.public_port,s.desired_status,s.observed_status,COALESCE(s.last_message,''),COALESCE(s.endpoint,''),s.replicas_desired,s.replicas_observed,s.desired_generation,s.observed_generation,s.last_operation,s.observed_at,s.created_at,s.updated_at FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id AND n.tenant_id=s.tenant_id WHERE s.project_deployment_id=$1 ORDER BY s.service_type`, did)
 	if e != nil {
 		return nil, e
 	}
