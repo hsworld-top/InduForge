@@ -88,7 +88,7 @@ func (a *pgxAdmin) EnsureRole(ctx context.Context, role, password string) error 
 	// CREATE/ALTER ROLE 属 utility statement，PostgreSQL 不接受其中的绑定参数。
 	// 先由服务端 format(%I/%L) 参数化生成完整语句，再执行该受信结果。
 	var statement string
-	if err := a.maintenance.QueryRow(ctx, "SELECT format('"+operation+" %I LOGIN PASSWORD %L', $1, $2)", role, password).Scan(&statement); err != nil {
+	if err := a.maintenance.QueryRow(ctx, "SELECT format('"+operation+" %I LOGIN PASSWORD %L', $1::text, $2::text)", role, password).Scan(&statement); err != nil {
 		return err
 	}
 	_, err := a.maintenance.Exec(ctx, statement)
