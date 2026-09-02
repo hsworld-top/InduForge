@@ -43,6 +43,10 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 		"binding": map[string]any{
 			"tenantId": context.TenantID, "siteId": context.EnvironmentID, "nodeId": workload.NodeID,
 			"instanceId": "if-" + role + "-" + stableRuntimeKey(context.DeploymentID, fmt.Sprint(workload.Generation)),
+			// generation 是本角色受控滚动的单调代次。它只作为 fencing epoch；
+			// RuntimeEngine 会自行从 deployment+role 推导稳定 owner，不能把 Pod
+			// instanceId（会随 generation 改变）混入 owner。
+			"fencingEpoch": workload.Generation,
 			"projectId":  context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
 			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/opt/induforge/release/runtime-artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, context.RuntimeEngines, key, context.Support),
@@ -51,7 +55,9 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 	}
 	if role == ServiceCompute {
 		input["binding"].(map[string]any)["computeSandbox"] = map[string]any{"serverResourceRef": "site-resource://" + context.EnvironmentID + "/compute-sandbox", "credentialSecretRef": "secret://deployment/" + context.DeploymentID + "/compute-sandbox"}
-		input["binding"].(map[string]any)["computeSandboxEndpoint"] = "http://compute-sandbox:18103"
+		// 计算沙箱是 compute 工作负载的同 Pod sidecar，必须使用 loopback，避免
+		// 将不存在的 Kubernetes Service 名称写入受信运行时索引。
+		input["binding"].(map[string]any)["computeSandboxEndpoint"] = "http://127.0.0.1:18103"
 		input["binding"].(map[string]any)["computeSandboxSecretFile"] = "secrets/sandbox.json"
 	}
 	return json.Marshal(input)

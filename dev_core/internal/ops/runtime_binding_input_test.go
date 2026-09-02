@@ -29,12 +29,20 @@ func TestBuildRuntimeBindingInputIsDeterministicAndRoleScoped(t *testing.T) {
 			t.Fatalf("%s runtime artifact path = %v", role, value["runtimeArtifactPath"])
 		}
 		binding := value["binding"].(map[string]any)
-		if binding["role"] != role || !strings.HasPrefix(binding["accountId"].(string), "if-") || strings.Contains(string(first), "producerAssignments") || strings.Contains(string(first), "computeProducers") {
+		if binding["role"] != role || binding["fencingEpoch"] != float64(3) || !strings.HasPrefix(binding["accountId"].(string), "if-") || strings.Contains(string(first), "producerAssignments") || strings.Contains(string(first), "computeProducers") {
 			t.Fatalf("%s input leaks derived fields: %s", role, first)
 		}
 		_, sandbox := binding["computeSandbox"]
 		if sandbox != (role == ServiceCompute) {
 			t.Fatalf("%s sandbox role rule invalid: %s", role, first)
+		}
+		endpoint, hasEndpoint := binding["computeSandboxEndpoint"]
+		if role == ServiceCompute {
+			if !hasEndpoint || endpoint != "http://127.0.0.1:18103" || strings.Contains(endpoint.(string), "compute-sandbox") {
+				t.Fatalf("compute sandbox must use same-Pod loopback endpoint: %s", first)
+			}
+		} else if hasEndpoint {
+			t.Fatalf("%s must not receive compute sandbox endpoint: %s", role, first)
 		}
 		jetStream := binding["jetStream"].(map[string]any)
 		if got := len(jetStream["topologyConsumers"].([]any)); got != 5 {
