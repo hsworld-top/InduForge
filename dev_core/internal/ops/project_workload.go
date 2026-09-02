@@ -144,6 +144,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
         - name: runtime-api-secrets
           secret:
             secretName: %s
+            defaultMode: 0400
             items:
               - {key: runtime-api-nats.json, path: nats.json}
               - {key: runtime-api-postgres.json, path: postgres.json}
