@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -81,6 +82,8 @@ func (h *ProjectSnapshotHandler) GetArtifact(w http.ResponseWriter, r *http.Requ
 
 	result, err := h.service.GetArtifact(r.Context(), r.PathValue("projectId"), claims.TenantID)
 	if err != nil {
+		// 响应对外保持统一内部错误，日志保留受控构建失败原因供运维排障。
+		log.Printf("runtime artifact build failed projectId=%s: %v", r.PathValue("projectId"), err)
 		return normalizeRepresentativeHandlerError(err)
 	}
 
