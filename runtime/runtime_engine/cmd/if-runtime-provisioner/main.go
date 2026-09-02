@@ -129,7 +129,8 @@ func runProvisionState(args []string) {
 		os.Exit(1)
 	}
 	if err := provisioner.ProvisionState(context.Background(), in, credentials); err != nil {
-		fmt.Fprintln(os.Stderr, "provision-state: failed")
+		// provisioner 只返回受控阶段与资源名，不包含 DSN、密码或数据库原始错误。
+		fmt.Fprintf(os.Stderr, "provision-state: failed: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stdout, "provision-state: complete")
