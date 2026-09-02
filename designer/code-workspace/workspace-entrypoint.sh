@@ -1,20 +1,21 @@
 #!/bin/sh
 set -eu
 
-# 保留 code-server 基础镜像的动态 UID 修正与启动初始化钩子。
-eval "$(fixuid -q)"
-
-# Docker named volume 可能由 root 预创建；统一修正所有可写挂载点，避免首次启动时
-# code-server、Pi 会话或工作区无法创建配置和缓存文件。
-for writable_dir in \
-  /workspace \
-  /cache \
-  /home/coder/.pi/agent \
-  /home/coder/.local/share/code-server \
-  /home/coder/.config/code-server; do
-  sudo mkdir -p "$writable_dir"
-  sudo chown "$(id -u):$(id -g)" "$writable_dir"
-done
+# Docker named volume 可能由 root 预创建，保留基础镜像的动态 UID 修正。
+# K3s 则由受限 initContainer 预先初始化工程目录；主容器不再需要 fixuid/sudo，
+# 因而可以维持 no-new-privileges 和最小能力集。
+if [ "${INDUFORGE_KUBERNETES_WORKSPACE:-}" != "true" ]; then
+  eval "$(fixuid -q)"
+  for writable_dir in \
+    /workspace \
+    /cache \
+    /home/coder/.pi/agent \
+    /home/coder/.local/share/code-server \
+    /home/coder/.config/code-server; do
+    sudo mkdir -p "$writable_dir"
+    sudo chown "$(id -u):$(id -g)" "$writable_dir"
+  done
+fi
 
 # 初始化产品默认设置；用户后续产生的设置文件不在启动时覆盖。
 user_settings_dir=/home/coder/.local/share/code-server/User

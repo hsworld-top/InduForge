@@ -118,11 +118,51 @@ func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error
 		return err
 	}
 	mounts := make([]any, 0, len(spec.Mounts))
-	for i, m := range spec.Mounts {
+	for _, m := range spec.Mounts {
 		mounts = append(mounts, map[string]any{"name": "workspaces", "mountPath": m.Target, "subPath": m.Subpath, "readOnly": m.ReadOnly})
-		_ = i
 	}
-	pod := map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"nodeSelector": map[string]string{"induforge.io/center-node": "true"}, "securityContext": map[string]any{"fsGroup": 1000}, "containers": []any{map[string]any{"name": "code-workspace", "image": spec.Image, "imagePullPolicy": "Never", "args": spec.Command, "workingDir": spec.WorkingDir, "env": envValues(spec.Environment), "ports": []any{map[string]any{"containerPort": 3000}, map[string]any{"containerPort": 30141}, map[string]any{"containerPort": 5173}, map[string]any{"containerPort": 5174}}, "securityContext": map[string]any{"runAsUser": 1000, "runAsGroup": 1000, "allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}}, "volumeMounts": mounts}}, "volumes": []any{map[string]any{"name": "workspaces", "hostPath": map[string]any{"path": k.workspaceRoot, "type": "Directory"}}}}}
+	projectRoot := ""
+	if len(spec.Mounts) > 0 {
+		projectRoot = path.Dir(spec.Mounts[0].Subpath)
+	}
+	if projectRoot == "." || projectRoot == "" {
+		return fmt.Errorf("代码工作区挂载路径不完整")
+	}
+	// 主容器作为非特权 coder 用户运行。持久化目录的创建和属主修正由仅挂载
+	// 当前工程目录的 initContainer 完成，避免主容器为了 fixuid/sudo 关闭
+	// no-new-privileges。initContainer 仅加回 chown 所需的最小能力。
+	initContainer := map[string]any{
+		"name":            "workspace-permissions",
+		"image":           spec.Image,
+		"imagePullPolicy": "Never",
+		"command": []string{"/bin/sh", "-ec", `
+mkdir -p /project/workspace /project/code-server-data /project/code-server-config /project/cache
+chown -R 1000:1000 /project/workspace /project/code-server-data /project/code-server-config /project/cache
+`},
+		"securityContext": map[string]any{
+			"runAsUser":                0,
+			"runAsGroup":               0,
+			"allowPrivilegeEscalation": false,
+			"capabilities":             map[string]any{"drop": []string{"ALL"}, "add": []string{"CHOWN"}},
+		},
+		"volumeMounts": []any{map[string]any{"name": "workspaces", "mountPath": "/project", "subPath": projectRoot}},
+	}
+	mainEnvironment := append(append([]string{}, spec.Environment...), "INDUFORGE_KUBERNETES_WORKSPACE=true")
+	pod := map[string]any{
+		"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": spec.Name, "labels": labels},
+		"spec": map[string]any{
+			"nodeSelector":    map[string]string{"induforge.io/center-node": "true"},
+			"securityContext": map[string]any{"fsGroup": 1000},
+			"initContainers":  []any{initContainer},
+			"containers": []any{map[string]any{
+				"name": "code-workspace", "image": spec.Image, "imagePullPolicy": "Never", "args": spec.Command, "workingDir": spec.WorkingDir,
+				"env": envValues(mainEnvironment), "ports": []any{map[string]any{"containerPort": 3000}, map[string]any{"containerPort": 30141}, map[string]any{"containerPort": 5173}, map[string]any{"containerPort": 5174}},
+				"securityContext": map[string]any{"runAsUser": 1000, "runAsGroup": 1000, "allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}},
+				"volumeMounts":    mounts,
+			}},
+			"volumes": []any{map[string]any{"name": "workspaces", "hostPath": map[string]any{"path": k.workspaceRoot, "type": "Directory"}}},
+		},
+	}
 	if err := k.request(ctx, http.MethodPost, "/api/v1/namespaces/"+k.namespace+"/pods", pod, nil); err != nil {
 		return err
 	}
