@@ -319,9 +319,16 @@ type AgentRelease struct {
 // DevelopmentArtifact 是服务端构建的内部 __DEV__ 制品描述。它不属于版本管理，
 // 但必须与正式 Release 使用同一下载、摘要和签名校验链路。
 type DevelopmentArtifact struct {
-	ReleaseID, Version, Bucket, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
-	ArtifactSize                                                                                     int64
-	Manifest                                                                                         []byte
+	ReleaseID     string `json:"releaseId"`
+	Version       string `json:"version"`
+	Bucket        string `json:"bucket"`
+	ArtifactKey   string `json:"artifactKey"`
+	ArtifactHash  string `json:"artifactHash"`
+	ManifestHash  string `json:"manifestHash"`
+	ChecksumsHash string `json:"checksumsHash"`
+	SigningKeyID  string `json:"signingKeyId"`
+	ArtifactSize  int64  `json:"artifactSize"`
+	Manifest      []byte `json:"manifest"`
 }
 type CreateDeploymentInput struct {
 	ProjectID            string            `json:"projectId"`
