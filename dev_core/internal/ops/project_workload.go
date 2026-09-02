@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -153,7 +154,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
         - name: runtime-api
           image: %s
           imagePullPolicy: IfNotPresent
-          args: ["--listen", "127.0.0.1:18081", "--artifact", "/work/runtime-api-artifact/runtime-project-artifact.json", "--postgres-secret", "/var/run/induforge/runtime-api/postgres.json", "--token-secret", "/var/run/induforge/runtime-api/tokens.json", "--nats-credentials", "/var/run/induforge/runtime-api/nats.json", "--deployment-id", %q, "--project-id", %q, "--account-id", %q, "--site-id", %q, "--node-id", %q, "--version", %q, "--execution-form", "k3s-workload"]
+          args: ["--listen", "127.0.0.1:18081", "--artifact", "/work/runtime-api-artifact/runtime-project-artifact.json", "--postgres-secret", "/var/run/induforge/runtime-api/postgres.json", "--token-secret", "/var/run/induforge/runtime-api/tokens.json", "--nats-credentials", "/var/run/induforge/runtime-api/nats.json", "--deployment-id", %q, "--project-id", %q, "--account-id", %q, "--site-id", %q, "--node-id", %q, "--version", %q, "--manual-owner", "runtime-api", "--manual-epoch", %q, "--execution-form", "k3s-workload"]
           env: [{name: IF_RUNTIME_NATS_URL, value: %q}]
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
           readinessProbe: {exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}, initialDelaySeconds: 3, periodSeconds: 3}
@@ -161,7 +162,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: work, mountPath: /work, readOnly: true}
-            - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.ProjectID, "if-"+stableRuntimeKey(workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, workload.RuntimeNATSEndpoint)
+            - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.ProjectID, "if-"+stableRuntimeKey(workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, strconv.Itoa(max(1, workload.BindingRevision)), workload.RuntimeNATSEndpoint)
 	}
 	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)

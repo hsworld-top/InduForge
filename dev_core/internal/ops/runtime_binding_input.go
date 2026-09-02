@@ -28,6 +28,10 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 		return nil, fmt.Errorf("运行支撑引用缺失")
 	}
 	role := workload.Engine
+	manualEpoch := workload.BindingRevision
+	if manualEpoch < 1 {
+		manualEpoch = 1
+	}
 	key := stableRuntimeKey(context.ProjectID, context.DeploymentID)
 	input := map[string]any{
 		"schemaVersion":         runtimeBindingInputVersion,
@@ -39,7 +43,7 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			"tenantId": context.TenantID, "siteId": context.EnvironmentID, "nodeId": workload.NodeID,
 			"instanceId": "if-" + role + "-" + stableRuntimeKey(context.DeploymentID, fmt.Sprint(workload.Generation)),
 			"projectId":  context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
-			"role": role, "artifactMountPath": "/work/artifact", "artifactFile": "runtime-project-artifact.json",
+			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/work/artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, key, context.Support),
 			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
 		},
