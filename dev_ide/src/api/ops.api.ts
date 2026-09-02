@@ -129,6 +129,7 @@ export interface NodeEnrollment {
 }
 export interface DeploymentService {
   id?: OpsId
+  nodeName?: string
   serviceType: OpsServiceType
   desiredStatus?: string
   observedStatus?: string
@@ -158,6 +159,8 @@ export interface ProjectDeployment {
   progress?: number
   entryStatus?: string
   accessUrl?: string | null
+  /** 运维单槽摘要返回的显示节点名，不包含集群实现细节。 */
+  nodeNames?: string[]
   services?: DeploymentService[]
   latestRunId?: OpsId
   updatedAt?: string

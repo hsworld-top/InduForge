@@ -11,6 +11,7 @@ import (
 	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -302,9 +303,9 @@ func TestAgentReleaseStreamsOnlyBundle(t *testing.T) {
 
 func TestDeploymentPayloadOnlyUsesProjectEntryEndpoint(t *testing.T) {
 	deployment := ProjectDeployment{Services: []DeploymentService{
-		{ServiceType: ServiceCollector, Endpoint: "https://collector.example.invalid"},
-		{ServiceType: ServiceCompute, Endpoint: "https://runtime.example.invalid"},
-		{ServiceType: ServiceBase, Endpoint: "https://gateway.example.com/engineering", DesiredStatus: "running", ObservedStatus: "running"},
+		{ServiceType: ServiceCollector, NodeName: "采集节点", Endpoint: "https://collector.example.invalid"},
+		{ServiceType: ServiceCompute, NodeName: "计算节点", Endpoint: "https://runtime.example.invalid"},
+		{ServiceType: ServiceBase, NodeName: "采集节点", Endpoint: "https://gateway.example.com/engineering", DesiredStatus: "running", ObservedStatus: "running"},
 	}}
 	payload := deploymentPayload(deployment)
 	if payload["accessUrl"] != "https://gateway.example.com/engineering" {
@@ -312,6 +313,9 @@ func TestDeploymentPayloadOnlyUsesProjectEntryEndpoint(t *testing.T) {
 	}
 	if payload["accessAvailable"] != true {
 		t.Fatalf("running entry must be available: %v", payload["accessAvailable"])
+	}
+	if got := payload["nodeNames"]; !reflect.DeepEqual(got, []string{"采集节点", "计算节点"}) {
+		t.Fatalf("nodeNames=%#v", got)
 	}
 	deployment.Services[2].ObservedStatus = "pending"
 	if payload := deploymentPayload(deployment); payload["accessUrl"] == "" || payload["accessAvailable"] != false {

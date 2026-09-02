@@ -5,6 +5,7 @@ import {
   resolveProjectStatusMetric,
 } from '@/views/tenant/project-management/project-group-utils'
 import {
+	applyOpsDeploymentRuntimeSummaries,
   buildProjectPaginationSummary,
   useProjectOverviewState,
 } from '@/views/tenant/project-management/use-project-overview'
@@ -30,6 +31,37 @@ const createRuntimeSummary = (): ProjectOverviewRuntimeSummary => ({
 })
 
 describe('project-overview-state', () => {
+	test('ops 单槽摘要回填卡片运行状态和显示节点，不依赖集群实现细节', () => {
+		const projects = applyOpsDeploymentRuntimeSummaries(
+			[
+				{
+					id: 'project-1',
+					name: 'Demo',
+					tags: [],
+					group: null,
+					runtimeSummary: createRuntimeSummary(),
+				},
+			],
+			[
+				{
+					projectId: 'project-1',
+					observedStatus: 'running',
+					mode: 'production',
+					nodeNames: ['运行节点 A', '运行节点 A'],
+					updatedAt: '2026-09-02T10:00:00Z',
+				},
+			],
+		)
+
+		expect(projects[0].runtimeSummary).toMatchObject({
+			runtimeStatus: 'running',
+			runtimeMode: 'RELEASE',
+			deploymentCount: 1,
+			runningCount: 1,
+			nodes: [{ id: '运行节点 A', name: '运行节点 A' }],
+		})
+	})
+
   test('buildProjectGroupCardItems 会合并接口分组和当前工程列表中的工程名预览', () => {
     const groupItems = buildProjectGroupCardItems(
       [

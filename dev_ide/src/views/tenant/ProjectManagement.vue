@@ -493,7 +493,10 @@ import ProjectGroupManageDialog from './project-management/ProjectGroupManageDia
 import ProjectGroupProjectPickerDialog from './project-management/ProjectGroupProjectPickerDialog.vue'
 import { buildProjectGroupCardItems } from './project-management/project-group-utils'
 import { buildProjectOverviewQueryParams } from './project-management/use-project-filters'
-import { useProjectOverviewState } from './project-management/use-project-overview'
+import {
+  applyOpsDeploymentRuntimeSummaries,
+  useProjectOverviewState,
+} from './project-management/use-project-overview'
 
 const PROJECT_TAG_LIMIT = 10
 
@@ -863,6 +866,16 @@ export default {
     const fetchProjects = async () => {
       try {
         await fetchProjectOverview()
+        // 卡片的部署态只接受 ops 单槽摘要，不从工程资料或 K3s 细节推断。
+        const deploymentResults = await Promise.all(
+          projectList.value.map((project) =>
+            opsAPI.listProjectDeployments({ page: 1, pageSize: 1, projectId: String(project.id) }),
+          ),
+        )
+        projectList.value = applyOpsDeploymentRuntimeSummaries(
+          projectList.value,
+          deploymentResults.flatMap((result) => result.items),
+        )
         syncSelectionWithProjectList()
       } catch (error) {
         ElMessage.error(

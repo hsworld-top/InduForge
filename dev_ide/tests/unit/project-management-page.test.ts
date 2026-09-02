@@ -1017,7 +1017,10 @@ describe('project-management-page', () => {
       'publish:示例工程',
     )
     expect(mockMessageInfo).not.toHaveBeenCalled()
-    expect(mockRequestGet).not.toHaveBeenCalled()
+    expect(mockRequestGet).toHaveBeenCalledWith('/ops/project-deployments', {
+      params: { page: 1, pageSize: 1, projectId: 'project-1' },
+      skipErrorToast: true,
+    })
   })
 
   test('批量删除会复用删除影响评估与强制删除保护路径', async () => {

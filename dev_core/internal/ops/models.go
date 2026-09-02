@@ -133,6 +133,7 @@ type DeploymentRun struct {
 
 type DeploymentService struct {
 	ID, TenantID, ProjectDeploymentID, NodeID string     `json:"-"`
+	NodeName                                  string     `json:"nodeName"`
 	ServiceType                               string     `json:"serviceType"`
 	PublicPort                                *int       `json:"publicPort,omitempty"`
 	DesiredStatus                             string     `json:"desiredStatus"`

@@ -24,6 +24,14 @@ type FetchProjectsApi = (query: ProjectOverviewQueryParams) => Promise<unknown>
 
 type PaginationSummaryFormatter = (input: { start: number; end: number; total: number }) => string
 
+export type OpsDeploymentRuntimeSummary = {
+  projectId: string | number
+  observedStatus?: string
+  mode?: string
+  nodeNames?: string[]
+  updatedAt?: string
+}
+
 type UseProjectOverviewOptions = {
   fetchProjectsApi?: FetchProjectsApi
   initialFilters?: Partial<ProjectOverviewFiltersState>
@@ -190,6 +198,58 @@ const normalizeRuntimeSummary = (value: unknown): ProjectOverviewRuntimeSummary 
     },
     lastDeployedAt: normalizeTextValue(record.lastDeployedAt) || null,
   }
+}
+
+const normalizeOpsRuntimeStatus = (value: unknown): string => {
+  const normalized = normalizeTextValue(value).toLowerCase()
+  return normalized === 'failed' ? 'error' : normalized || 'UNKNOWN'
+}
+
+/**
+ * 工程列表不自行推测运行态；已存在的 ops 单槽部署摘要才是卡片状态和节点的权威来源。
+ */
+export const applyOpsDeploymentRuntimeSummaries = (
+  projects: ProjectOverviewItem[],
+  deployments: OpsDeploymentRuntimeSummary[],
+): ProjectOverviewItem[] => {
+  const byProject = new Map<string, OpsDeploymentRuntimeSummary>()
+  deployments.forEach((deployment) => {
+    const projectId = normalizeIdValue(deployment.projectId)
+    if (!projectId) return
+    const current = byProject.get(projectId)
+    if (!current || String(deployment.updatedAt || '') > String(current.updatedAt || '')) {
+      byProject.set(projectId, deployment)
+    }
+  })
+  return projects.map((project) => {
+    const deployment = byProject.get(project.id)
+    if (!deployment) return project
+    const nodeNames = Array.from(
+      new Set((deployment.nodeNames || []).map(normalizeTextValue).filter(Boolean)),
+    )
+    const runtimeStatus = normalizeOpsRuntimeStatus(deployment.observedStatus)
+    const runtimeMode = normalizeRuntimeModeValue(deployment.mode) || project.runtimeSummary.runtimeMode
+    return {
+      ...project,
+      runtimeSummary: {
+        ...project.runtimeSummary,
+        runtimeStatus,
+        runtimeMode,
+        deploymentCount: 1,
+        runningCount: runtimeStatus === 'running' ? 1 : 0,
+        statusCounts: {
+          ...EMPTY_STATUS_COUNTS,
+          [runtimeStatus]: 1,
+        },
+        modeCounts: {
+          ...EMPTY_MODE_COUNTS,
+          ...(runtimeMode ? { [runtimeMode]: 1 } : {}),
+        },
+        nodes: nodeNames.map((name) => ({ id: name, name })),
+        lastDeployedAt: deployment.updatedAt || project.runtimeSummary.lastDeployedAt,
+      },
+    }
+  })
 }
 
 const normalizeProjectOverviewItem = (value: unknown): ProjectOverviewItem => {

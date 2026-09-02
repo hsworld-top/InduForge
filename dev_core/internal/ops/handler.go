@@ -538,7 +538,15 @@ func deploymentPayload(x ProjectDeployment) map[string]any {
 	accessURL := ""
 	accessAvailable := false
 	updating := x.LastReadyAt == nil
+	nodeNames := make([]string, 0, len(x.Services))
+	seenNodes := make(map[string]struct{}, len(x.Services))
 	for _, service := range x.Services {
+		if name := strings.TrimSpace(service.NodeName); name != "" {
+			if _, seen := seenNodes[name]; !seen {
+				seenNodes[name] = struct{}{}
+				nodeNames = append(nodeNames, name)
+			}
+		}
 		if service.ServiceType == ServiceBase {
 			accessURL = service.Endpoint
 			accessAvailable = service.ObservedStatus == "running" && service.DesiredStatus == "running"
@@ -567,6 +575,7 @@ func deploymentPayload(x ProjectDeployment) map[string]any {
 		"health":               x.Health,
 		"progress":             x.Progress,
 		"services":             x.Services,
+		"nodeNames":            nodeNames,
 		"entryStatus":          entryStatus,
 		"accessUrl":            accessURL,
 		"accessAvailable":      accessAvailable,
