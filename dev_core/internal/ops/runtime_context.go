@@ -12,6 +12,10 @@ type ProjectRuntimeContext struct {
 	Release                                                releaseMetadata
 	BindingRevision                                        int
 	Support                                                RuntimeSupportResources
+	// RuntimeEngines 是本 deployment 当前期望运行的共享 JetStream 消费角色。
+	// 它来自 deployment_services，而不是发布制品能力，避免未被部署的角色
+	// 进入拓扑声明。
+	RuntimeEngines []string
 	// CollectorSourceSnapshot 是 Release 冻结的 collector artifact 完整性快照；
 	// 它由发布编排注入，调和器不得以当前开发态配置替代。
 	CollectorSourceSnapshot json.RawMessage
@@ -88,6 +92,21 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 	}
 	out.Support, e = ResolveRuntimeSupportResources(refs)
 	if e != nil {
+		return ProjectRuntimeContext{}, e
+	}
+	engineRows, e := r.pool.Query(ctx, `SELECT service_type FROM deployment_services WHERE project_deployment_id=$1 AND desired_status='running' AND service_type IN ('compute','alarm') ORDER BY service_type`, deploymentID)
+	if e != nil {
+		return ProjectRuntimeContext{}, e
+	}
+	defer engineRows.Close()
+	for engineRows.Next() {
+		var engine string
+		if e = engineRows.Scan(&engine); e != nil {
+			return ProjectRuntimeContext{}, e
+		}
+		out.RuntimeEngines = append(out.RuntimeEngines, engine)
+	}
+	if e = engineRows.Err(); e != nil {
 		return ProjectRuntimeContext{}, e
 	}
 	return out, nil

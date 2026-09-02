@@ -1,1 +1,173 @@
-{"schemaVersion":"runtime-binding.input.v1","releaseId":"77777777-7777-4777-8777-777777777777","runtimeArtifactPath":"/opt/induforge/release/current/runtime-artifact.tar.zst","runtimeArtifactSha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","artifactDir":"/work/artifact","bundleDir":"/work/bundle","binding":{"tenantId":"tenant-a","siteId":"66666666-6666-4666-8666-666666666666","nodeId":"88888888-8888-4888-8888-888888888888","instanceId":"if-compute-1234567890abcdef","projectId":"55555555-5555-4555-8555-555555555555","deploymentId":"99999999-9999-4999-8999-9999-999999999999","accountId":"if-1234567890abcdef","role":"compute","artifactMountPath":"/work/artifact","artifactFile":"runtime-project-artifact.json","jetStream":{"endpoint":"nats://nats:4222","serverResourceRef":"site-resource://env/nats","credentialSecretRef":"secret://env/nats","credentialSecretFile":"secrets/nats.json","dataRawStream":"IF_123_RAW","dataDerivedStream":"IF_123_DERIVED","eventStream":"IF_123_EVENT","commandStream":"IF_123_COMMAND","deadLetterStream":"IF_123_DLQ","consumers":[{"role":"compute","consumerKey":"compute-raw-v1","stream":"IF_123_RAW","durableName":"compute-raw-v1","filterSubject":"data.raw.>","ackPolicy":"explicit","ackWaitMs":30000,"maxDeliver":5,"backoffMs":[1000,5000,30000],"maxAckPending":32,"maxWaiting":32,"maxRequestBatch":32,"maxRequestExpiresMs":5000,"maxRequestMaxBytes":1048576,"deadLetterSubject":"dlq.compute-raw"},{"role":"compute","consumerKey":"compute-derived-v1","stream":"IF_123_DERIVED","durableName":"compute-derived-v1","filterSubject":"data.computed.>","ackPolicy":"explicit","ackWaitMs":30000,"maxDeliver":5,"backoffMs":[1000,5000,30000],"maxAckPending":32,"maxWaiting":32,"maxRequestBatch":32,"maxRequestExpiresMs":5000,"maxRequestMaxBytes":1048576,"deadLetterSubject":"dlq.compute-derived"},{"role":"compute","consumerKey":"compute-command-v1","stream":"IF_123_COMMAND","durableName":"compute-command-v1","filterSubject":"compute.command.>","ackPolicy":"explicit","ackWaitMs":30000,"maxDeliver":5,"backoffMs":[1000,5000,30000],"maxAckPending":32,"maxWaiting":32,"maxRequestBatch":32,"maxRequestExpiresMs":5000,"maxRequestMaxBytes":1048576,"deadLetterSubject":"dlq.compute-command"}]},"stateStore":{"resourceRef":"site-resource://env/postgres","credentialSecretRef":"secret://env/postgres","credentialSecretFile":"secrets/postgres.json","schema":"runtime_1234567890abcdef"},"computeSandbox":{"serverResourceRef":"site-resource://env/compute-sandbox","credentialSecretRef":"secret://deployment/99999999-9999-4999-8999-999999999999/compute-sandbox"},"computeSandboxEndpoint":"http://compute-sandbox:18103","computeSandboxSecretFile":"secrets/sandbox.json"}}
+{
+  "schemaVersion": "runtime-binding.input.v1",
+  "releaseId": "77777777-7777-4777-8777-777777777777",
+  "runtimeArtifactPath": "/opt/induforge/release/current/runtime-artifact.tar.zst",
+  "runtimeArtifactSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifactDir": "/work/artifact",
+  "bundleDir": "/work/bundle",
+  "binding": {
+    "tenantId": "tenant-a",
+    "siteId": "66666666-6666-4666-8666-666666666666",
+    "nodeId": "88888888-8888-4888-8888-888888888888",
+    "instanceId": "if-compute-1234567890abcdef",
+    "projectId": "55555555-5555-4555-8555-555555555555",
+    "deploymentId": "99999999-9999-4999-8999-9999-999999999999",
+    "accountId": "if-1234567890abcdef",
+    "role": "compute",
+    "artifactMountPath": "/work/artifact",
+    "artifactFile": "runtime-project-artifact.json",
+    "jetStream": {
+      "endpoint": "nats://nats:4222",
+      "serverResourceRef": "site-resource://env/nats",
+      "credentialSecretRef": "secret://env/nats",
+      "credentialSecretFile": "secrets/nats.json",
+      "dataRawStream": "IF_123_RAW",
+      "dataDerivedStream": "IF_123_DERIVED",
+      "eventStream": "IF_123_EVENT",
+      "commandStream": "IF_123_COMMAND",
+      "deadLetterStream": "IF_123_DLQ",
+      "consumers": [
+        {
+          "role": "compute",
+          "consumerKey": "compute-raw-v1",
+          "stream": "IF_123_RAW",
+          "durableName": "compute-raw-v1",
+          "filterSubject": "data.raw.>",
+          "ackPolicy": "explicit",
+          "ackWaitMs": 30000,
+          "maxDeliver": 5,
+          "backoffMs": [
+            1000,
+            5000,
+            30000
+          ],
+          "maxAckPending": 32,
+          "maxWaiting": 32,
+          "maxRequestBatch": 32,
+          "maxRequestExpiresMs": 5000,
+          "maxRequestMaxBytes": 1048576,
+          "deadLetterSubject": "dlq.compute-raw"
+        },
+        {
+          "role": "compute",
+          "consumerKey": "compute-derived-v1",
+          "stream": "IF_123_DERIVED",
+          "durableName": "compute-derived-v1",
+          "filterSubject": "data.computed.>",
+          "ackPolicy": "explicit",
+          "ackWaitMs": 30000,
+          "maxDeliver": 5,
+          "backoffMs": [
+            1000,
+            5000,
+            30000
+          ],
+          "maxAckPending": 32,
+          "maxWaiting": 32,
+          "maxRequestBatch": 32,
+          "maxRequestExpiresMs": 5000,
+          "maxRequestMaxBytes": 1048576,
+          "deadLetterSubject": "dlq.compute-derived"
+        },
+        {
+          "role": "compute",
+          "consumerKey": "compute-command-v1",
+          "stream": "IF_123_COMMAND",
+          "durableName": "compute-command-v1",
+          "filterSubject": "compute.command.>",
+          "ackPolicy": "explicit",
+          "ackWaitMs": 30000,
+          "maxDeliver": 5,
+          "backoffMs": [
+            1000,
+            5000,
+            30000
+          ],
+          "maxAckPending": 32,
+          "maxWaiting": 32,
+          "maxRequestBatch": 32,
+          "maxRequestExpiresMs": 5000,
+          "maxRequestMaxBytes": 1048576,
+          "deadLetterSubject": "dlq.compute-command"
+        }
+      ],
+      "topologyConsumers": [
+        {
+          "role": "compute",
+          "consumerKey": "compute-raw-v1",
+          "stream": "IF_123_RAW",
+          "durableName": "compute-raw-v1",
+          "filterSubject": "data.raw.>",
+          "ackPolicy": "explicit",
+          "ackWaitMs": 30000,
+          "maxDeliver": 5,
+          "backoffMs": [
+            1000,
+            5000,
+            30000
+          ],
+          "maxAckPending": 32,
+          "maxWaiting": 32,
+          "maxRequestBatch": 32,
+          "maxRequestExpiresMs": 5000,
+          "maxRequestMaxBytes": 1048576,
+          "deadLetterSubject": "dlq.compute-raw"
+        },
+        {
+          "role": "compute",
+          "consumerKey": "compute-derived-v1",
+          "stream": "IF_123_DERIVED",
+          "durableName": "compute-derived-v1",
+          "filterSubject": "data.computed.>",
+          "ackPolicy": "explicit",
+          "ackWaitMs": 30000,
+          "maxDeliver": 5,
+          "backoffMs": [
+            1000,
+            5000,
+            30000
+          ],
+          "maxAckPending": 32,
+          "maxWaiting": 32,
+          "maxRequestBatch": 32,
+          "maxRequestExpiresMs": 5000,
+          "maxRequestMaxBytes": 1048576,
+          "deadLetterSubject": "dlq.compute-derived"
+        },
+        {
+          "role": "compute",
+          "consumerKey": "compute-command-v1",
+          "stream": "IF_123_COMMAND",
+          "durableName": "compute-command-v1",
+          "filterSubject": "compute.command.>",
+          "ackPolicy": "explicit",
+          "ackWaitMs": 30000,
+          "maxDeliver": 5,
+          "backoffMs": [
+            1000,
+            5000,
+            30000
+          ],
+          "maxAckPending": 32,
+          "maxWaiting": 32,
+          "maxRequestBatch": 32,
+          "maxRequestExpiresMs": 5000,
+          "maxRequestMaxBytes": 1048576,
+          "deadLetterSubject": "dlq.compute-command"
+        }
+      ]
+    },
+    "stateStore": {
+      "resourceRef": "site-resource://env/postgres",
+      "credentialSecretRef": "secret://env/postgres",
+      "credentialSecretFile": "secrets/postgres.json",
+      "schema": "runtime_1234567890abcdef"
+    },
+    "computeSandbox": {
+      "serverResourceRef": "site-resource://env/compute-sandbox",
+      "credentialSecretRef": "secret://deployment/99999999-9999-4999-8999-999999999999/compute-sandbox"
+    },
+    "computeSandboxEndpoint": "http://compute-sandbox:18103",
+    "computeSandboxSecretFile": "secrets/sandbox.json"
+  }
+}

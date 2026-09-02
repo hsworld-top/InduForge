@@ -191,7 +191,8 @@
         "eventStream",
         "commandStream",
         "deadLetterStream",
-        "consumers"
+        "consumers",
+        "topologyConsumers"
       ],
       "properties": {
         "serverResourceRef": {
@@ -288,6 +289,9 @@
               }
             }
           }
+        },
+        "topologyConsumers": {
+          "$ref": "#/properties/jetStream/properties/consumers"
         }
       }
     },

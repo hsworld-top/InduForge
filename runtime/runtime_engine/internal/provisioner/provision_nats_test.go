@@ -60,6 +60,11 @@ func (f *fakeAdmin) UpdateConsumer(_ context.Context, stream string, c *nats.Con
 	f.updated++
 	return nil
 }
+func (f *fakeAdmin) DeleteConsumer(_ context.Context, stream, durable string) error {
+	delete(f.consumers, stream+"/"+durable)
+	f.updated++
+	return nil
+}
 func (f *fakeAdmin) Close() {}
 
 func TestProvisionNATSCreateAndIdempotent(t *testing.T) {
@@ -104,11 +109,12 @@ func TestProvisionNATSUsesOneGiBProjectQuotaAndShrinksExistingStreams(t *testing
 	}
 }
 
-func TestProvisionNATSMergesSameDeploymentDLQSubjects(t *testing.T) {
+func TestProvisionNATSReconcilesDLQSubjectsAfterRoleRemoved(t *testing.T) {
 	in := provisionInput()
-	// compute 已先创建 DLQ；alarm 的同 deployment 初始化只携带自己的 DLQ
-	// subject，必须合并而不是把已有同名 stream 误判为冲突。
+	// 旧 deployment 曾启用 alarm；当前完整 topology 只剩 compute，必须删除
+	// alarm 的 DLQ subject，而不是把已停止角色留下的 subject 合并保留。
 	in.Binding.JetStream.Consumers = in.Binding.JetStream.Consumers[:1]
+	in.Binding.JetStream.TopologyConsumers = in.Binding.JetStream.Consumers
 	streams, _ := natsTopology(in.Binding.JetStream)
 	var dlq *nats.StreamConfig
 	for _, stream := range streams {
@@ -121,9 +127,9 @@ func TestProvisionNATSMergesSameDeploymentDLQSubjects(t *testing.T) {
 	}
 	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{dlq.Name: {Config: nats.StreamConfig{Name: dlq.Name, Subjects: []string{"dlq.alarm"}, Retention: nats.LimitsPolicy, Storage: nats.FileStorage, Discard: nats.DiscardOld, MaxAge: streamMaxAge, MaxBytes: streamMaxBytes, MaxMsgSize: int32(transportlimits.MaxDLQPayloadBytes)}}}, consumers: map[string]*nats.ConsumerInfo{}}
 	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
-		t.Fatalf("同一部署 DLQ 分片不应冲突: %v", err)
+		t.Fatalf("角色删减后的 DLQ 调和失败: %v", err)
 	}
-	if got := fake.streams[dlq.Name].Config.Subjects; !sameSubjects(got, []string{"dlq.alarm", dlq.Subjects[0]}) {
+	if got := fake.streams[dlq.Name].Config.Subjects; !sameSubjects(got, dlq.Subjects) {
 		t.Fatalf("DLQ subjects=%v", got)
 	}
 }
@@ -147,6 +153,33 @@ func TestProvisionNATSRejectsConsumerSubjectConflict(t *testing.T) {
 	err := ProvisionNATSWithAdmin(context.Background(), in, fake)
 	if err == nil || !strings.Contains(err.Error(), "COMPUTE") || !strings.Contains(err.Error(), "冲突") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRemoveDisabledRoleConsumersKeepsExpectedAndRejectsUnknownAtRuntime(t *testing.T) {
+	topology := binding.JetStreamInput{DataRawStream: "RAW", DataDerivedStream: "DERIVED", CommandStream: "COMMAND"}
+	fake := &fakeAdmin{consumers: map[string]*nats.ConsumerInfo{
+		"RAW/compute-raw-v1":       {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "compute-raw-v1"}},
+		"RAW/alarm-raw-v1":         {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "alarm-raw-v1"}},
+		"DERIVED/alarm-derived-v1": {Stream: "DERIVED", Config: nats.ConsumerConfig{Durable: "alarm-derived-v1"}},
+		// 陌生 durable 不在删除白名单内，预检的精确集合会负责拒绝它。
+		"RAW/foreign-v1": {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "foreign-v1"}},
+	}}
+	expected := []expectedConsumer{{stream: "RAW", config: &nats.ConsumerConfig{Durable: "compute-raw-v1"}}}
+	if err := removeDisabledRoleConsumers(context.Background(), fake, topology, expected); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := fake.consumers["RAW/alarm-raw-v1"]; exists {
+		t.Fatal("已停用 alarm durable 未删除")
+	}
+	if _, exists := fake.consumers["DERIVED/alarm-derived-v1"]; exists {
+		t.Fatal("已停用 alarm derived durable 未删除")
+	}
+	if _, exists := fake.consumers["RAW/compute-raw-v1"]; !exists {
+		t.Fatal("当前 compute durable 被误删")
+	}
+	if _, exists := fake.consumers["RAW/foreign-v1"]; !exists {
+		t.Fatal("陌生 durable 不应在 provision 阶段静默删除")
 	}
 }
 
@@ -175,5 +208,6 @@ func TestDecodeNATSCredentialsStrict(t *testing.T) {
 }
 
 func provisionInput() Input {
-	return Input{Binding: binding.Input{AccountID: "if-project", JetStream: binding.JetStreamInput{Endpoint: "nats://nats.default.svc:4222", DataRawStream: "RAW", DataDerivedStream: "DERIVED", EventStream: "EVENT", CommandStream: "COMMAND", DeadLetterStream: "DLQ", Consumers: []model.Consumer{{Stream: "RAW", DurableName: "COMPUTE", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.compute"}, {Stream: "DERIVED", DurableName: "ALARM", FilterSubject: "data.computed.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.alarm"}, {Stream: "COMMAND", DurableName: "COMMAND", FilterSubject: "compute.command.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.command"}}}}}
+	consumers := []model.Consumer{{Stream: "RAW", DurableName: "COMPUTE", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.compute"}, {Stream: "DERIVED", DurableName: "ALARM", FilterSubject: "data.computed.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.alarm"}, {Stream: "COMMAND", DurableName: "COMMAND", FilterSubject: "compute.command.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.command"}}
+	return Input{Binding: binding.Input{AccountID: "if-project", JetStream: binding.JetStreamInput{Endpoint: "nats://nats.default.svc:4222", DataRawStream: "RAW", DataDerivedStream: "DERIVED", EventStream: "EVENT", CommandStream: "COMMAND", DeadLetterStream: "DLQ", Consumers: consumers, TopologyConsumers: consumers}}}
 }

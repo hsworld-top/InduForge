@@ -44,6 +44,7 @@ type JetStreamAdmin interface {
 	Consumer(ctx context.Context, stream, durable string) (*nats.ConsumerInfo, bool, error)
 	CreateConsumer(ctx context.Context, stream string, config *nats.ConsumerConfig) error
 	UpdateConsumer(ctx context.Context, stream string, config *nats.ConsumerConfig) error
+	DeleteConsumer(ctx context.Context, stream, durable string) error
 	Close()
 }
 
@@ -81,6 +82,9 @@ func (a *natsAdmin) CreateConsumer(ctx context.Context, stream string, c *nats.C
 func (a *natsAdmin) UpdateConsumer(ctx context.Context, stream string, c *nats.ConsumerConfig) error {
 	_, err := a.js.UpdateConsumer(stream, c, nats.Context(ctx))
 	return err
+}
+func (a *natsAdmin) DeleteConsumer(ctx context.Context, stream, durable string) error {
+	return a.js.DeleteConsumer(stream, durable, nats.Context(ctx))
 }
 func (a *natsAdmin) Close() {
 	if a != nil && a.nc != nil {
@@ -152,7 +156,11 @@ func ProvisionNATSWithAdmin(ctx context.Context, input Input, admin JetStreamAdm
 	if admin == nil || validateNATSInput(input) != nil {
 		return errors.New("NATS provision 输入非法")
 	}
-	streams, consumers := natsTopology(input.Binding.JetStream)
+	// 每个角色的 input 都携带 deployment 级完整拓扑；初始化本身不按当前
+	// Pod 分片，避免 compute/alarm 先后顺序改变共享资源最终形态。
+	topology := input.Binding.JetStream
+	topology.Consumers = append([]model.Consumer(nil), input.Binding.JetStream.TopologyConsumers...)
+	streams, consumers := natsTopology(topology)
 	for _, expected := range streams {
 		actual, exists, err := admin.Stream(ctx, expected.Name)
 		if err != nil {
@@ -169,9 +177,7 @@ func ProvisionNATSWithAdmin(ctx context.Context, input Input, admin JetStreamAdm
 		// 同名 stream 可重试且最终收敛；不同 stream 的 overlap 仍由 JetStream
 		// 创建/更新 API 拒绝，不能被本分支掩盖。
 		merged := *expected
-		if expected.Name == input.Binding.JetStream.DeadLetterStream {
-			merged.Subjects = mergedSubjects(actual.Config.Subjects, expected.Subjects)
-		} else if !sameSubjects(actual.Config.Subjects, expected.Subjects) {
+		if expected.Name != input.Binding.JetStream.DeadLetterStream && !sameSubjects(actual.Config.Subjects, expected.Subjects) {
 			return provisionError("stream subject 冲突", expected.Name)
 		}
 		if !sameSubjects(actual.Config.Subjects, merged.Subjects) || !sameStreamPolicy(actual.Config, merged) {
@@ -197,6 +203,37 @@ func ProvisionNATSWithAdmin(ctx context.Context, input Input, admin JetStreamAdm
 		if !sameConsumerPolicy(actual.Config, *expected.config) {
 			if err := admin.UpdateConsumer(ctx, expected.stream, expected.config); err != nil {
 				return provisionError("更新 consumer", expected.config.Durable)
+			}
+		}
+	}
+	if err := removeDisabledRoleConsumers(ctx, admin, topology, consumers); err != nil {
+		return err
+	}
+	return nil
+}
+
+// removeDisabledRoleConsumers 只删除本产品冻结命名的 compute/alarm durable。
+// 因此角色删减可以收敛，而陌生 durable 不会被静默删除，仍由运行期严格校验
+// 暴露为拓扑异常。
+func removeDisabledRoleConsumers(ctx context.Context, admin JetStreamAdmin, topology binding.JetStreamInput, expected []expectedConsumer) error {
+	wanted := make(map[string]struct{}, len(expected))
+	for _, item := range expected {
+		wanted[item.stream+"\x00"+item.config.Durable] = struct{}{}
+	}
+	known := []struct{ stream, durable string }{
+		{topology.DataRawStream, "compute-raw-v1"}, {topology.DataRawStream, "alarm-raw-v1"},
+		{topology.DataDerivedStream, "compute-derived-v1"}, {topology.DataDerivedStream, "alarm-derived-v1"},
+		{topology.CommandStream, "compute-command-v1"},
+	}
+	for _, item := range known {
+		if _, required := wanted[item.stream+"\x00"+item.durable]; required {
+			continue
+		}
+		if _, exists, err := admin.Consumer(ctx, item.stream, item.durable); err != nil {
+			return provisionError("读取 consumer", item.durable)
+		} else if exists {
+			if err := admin.DeleteConsumer(ctx, item.stream, item.durable); err != nil {
+				return provisionError("删除已停用 consumer", item.durable)
 			}
 		}
 	}

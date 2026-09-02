@@ -104,9 +104,12 @@ type JetStream struct {
 	DataDerivedStream   string `json:"dataDerivedStream"`
 	EventStream         string `json:"eventStream"`
 	// CommandStream 隔离人工计算命令，命令不复用点位数据流的保留与消费语义。
-	CommandStream    string     `json:"commandStream"`
-	DeadLetterStream string     `json:"deadLetterStream"`
-	Consumers        []Consumer `json:"consumers"`
+	CommandStream    string `json:"commandStream"`
+	DeadLetterStream string `json:"deadLetterStream"`
+	// Consumers 仅包含本实例实际执行的角色。TopologyConsumers 则是控制面
+	// 下发的 deployment 级完整期望集合，只用于对共享 JetStream 资源做严格校验。
+	Consumers         []Consumer `json:"consumers"`
+	TopologyConsumers []Consumer `json:"topologyConsumers"`
 }
 
 // ComputeSandbox 仅包含受信资源和 Secret 引用；resolver 才能得到 endpoint/credential 值。

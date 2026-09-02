@@ -34,8 +34,8 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 	}
 	key := stableRuntimeKey(context.ProjectID, context.DeploymentID)
 	input := map[string]any{
-		"schemaVersion":         runtimeBindingInputVersion,
-		"releaseId":             workload.ReleaseID,
+		"schemaVersion": runtimeBindingInputVersion,
+		"releaseId":     workload.ReleaseID,
 		// 工作负载挂载的是摘要固定的 Release 目录，容器内没有节点 Agent 的 current 链接。
 		"runtimeArtifactPath":   "/opt/induforge/release/" + runtimeArtifactFile,
 		"runtimeArtifactSha256": manifest.Artifacts.Runtime.Checksum,
@@ -45,7 +45,7 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			"instanceId": "if-" + role + "-" + stableRuntimeKey(context.DeploymentID, fmt.Sprint(workload.Generation)),
 			"projectId":  context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
 			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/opt/induforge/release/runtime-artifact", "artifactFile": "runtime-project-artifact.json",
-			"jetStream":  runtimeJetStreamInput(role, key, context.Support),
+			"jetStream":  runtimeJetStreamInput(role, context.RuntimeEngines, key, context.Support),
 			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
 		},
 	}
@@ -57,16 +57,31 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 	return json.Marshal(input)
 }
 
-func runtimeJetStreamInput(role, key string, support RuntimeSupportResources) map[string]any {
+func runtimeJetStreamInput(role string, enabledRoles []string, key string, support RuntimeSupportResources) map[string]any {
 	streams := map[string]string{"raw": "IF_" + strings.ToUpper(key) + "_RAW", "derived": "IF_" + strings.ToUpper(key) + "_DERIVED", "event": "IF_" + strings.ToUpper(key) + "_EVENT", "command": "IF_" + strings.ToUpper(key) + "_COMMAND", "dlq": "IF_" + strings.ToUpper(key) + "_DLQ"}
-	consumer := func(kind, stream, subject string) map[string]any {
-		return map[string]any{"role": role, "consumerKey": role + "-" + kind + "-v1", "stream": stream, "durableName": role + "-" + kind + "-v1", "filterSubject": subject, "ackPolicy": "explicit", "ackWaitMs": 30000, "maxDeliver": 5, "backoffMs": []int{1000, 5000, 30000}, "maxAckPending": 32, "maxWaiting": 32, "maxRequestBatch": 32, "maxRequestExpiresMs": 5000, "maxRequestMaxBytes": 1 << 20, "deadLetterSubject": "dlq." + role + "-" + kind}
+	consumer := func(consumerRole, kind, stream, subject string) map[string]any {
+		return map[string]any{"role": consumerRole, "consumerKey": consumerRole + "-" + kind + "-v1", "stream": stream, "durableName": consumerRole + "-" + kind + "-v1", "filterSubject": subject, "ackPolicy": "explicit", "ackWaitMs": 30000, "maxDeliver": 5, "backoffMs": []int{1000, 5000, 30000}, "maxAckPending": 32, "maxWaiting": 32, "maxRequestBatch": 32, "maxRequestExpiresMs": 5000, "maxRequestMaxBytes": 1 << 20, "deadLetterSubject": "dlq." + consumerRole + "-" + kind}
 	}
-	consumers := []any{consumer("raw", streams["raw"], "data.raw.>"), consumer("derived", streams["derived"], "data.computed.>")}
-	if role == ServiceCompute {
-		consumers = append(consumers, consumer("command", streams["command"], "compute.command.>"))
+	topology := make([]any, 0, 5)
+	for _, enabledRole := range enabledRoles {
+		if enabledRole != ServiceCompute && enabledRole != ServiceAlarm {
+			continue
+		}
+		topology = append(topology, consumer(enabledRole, "raw", streams["raw"], "data.raw.>"), consumer(enabledRole, "derived", streams["derived"], "data.computed.>"))
+		if enabledRole == ServiceCompute {
+			topology = append(topology, consumer(enabledRole, "command", streams["command"], "compute.command.>"))
+		}
 	}
-	return map[string]any{"endpoint": support.NATSEndpoint, "serverResourceRef": support.NATSResourceRef, "credentialSecretRef": support.NATSCredentialSecretRef, "credentialSecretFile": "secrets/nats.json", "dataRawStream": streams["raw"], "dataDerivedStream": streams["derived"], "eventStream": streams["event"], "commandStream": streams["command"], "deadLetterStream": streams["dlq"], "consumers": consumers}
+	active := make([]any, 0, 3)
+	if role == ServiceBase {
+		active = append(active, topology...)
+	}
+	for _, item := range topology {
+		if item.(map[string]any)["role"] == role {
+			active = append(active, item)
+		}
+	}
+	return map[string]any{"endpoint": support.NATSEndpoint, "serverResourceRef": support.NATSResourceRef, "credentialSecretRef": support.NATSCredentialSecretRef, "credentialSecretFile": "secrets/nats.json", "dataRawStream": streams["raw"], "dataDerivedStream": streams["derived"], "eventStream": streams["event"], "commandStream": streams["command"], "deadLetterStream": streams["dlq"], "consumers": active, "topologyConsumers": topology}
 }
 
 func stableRuntimeKey(values ...string) string {

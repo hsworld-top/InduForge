@@ -17,7 +17,13 @@
     "artifactFile": "runtime/runtime-artifact.json",
     "readOnly": true
   },
-  "roles": ["writer", "alarm", "compute", "query", "coord"],
+  "roles": [
+    "writer",
+    "alarm",
+    "compute",
+    "query",
+    "coord"
+  ],
   "roleAssignments": [
     {
       "role": "writer",
@@ -122,8 +128,8 @@
     "credentialSecretRef": "secret://site-a/deployment-line1-prod/nats-runtime-engine",
     "dataRawStream": "DATA_RAW",
     "dataDerivedStream": "DATA_DERIVED",
-  "eventStream": "EVENT",
-  "commandStream": "COMMAND",
+    "eventStream": "EVENT",
+    "commandStream": "COMMAND",
     "deadLetterStream": "RUNTIME_DLQ",
     "consumers": [
       {
@@ -135,7 +141,11 @@
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
-        "backoffMs": [1000, 5000, 30000],
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
         "maxAckPending": 32,
         "maxWaiting": 32,
         "maxRequestBatch": 32,
@@ -152,7 +162,11 @@
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
-        "backoffMs": [1000, 5000, 30000],
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
         "maxAckPending": 32,
         "maxWaiting": 32,
         "maxRequestBatch": 32,
@@ -169,7 +183,11 @@
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
-        "backoffMs": [1000, 5000, 30000],
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
         "maxAckPending": 32,
         "maxWaiting": 32,
         "maxRequestBatch": 32,
@@ -186,7 +204,11 @@
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
-        "backoffMs": [1000, 5000, 30000],
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
         "maxAckPending": 32,
         "maxWaiting": 32,
         "maxRequestBatch": 32,
@@ -203,7 +225,11 @@
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
-        "backoffMs": [1000, 5000, 30000],
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
         "maxAckPending": 32,
         "maxWaiting": 32,
         "maxRequestBatch": 32,
@@ -211,40 +237,197 @@
         "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.writer-derived"
       },
-    {
-      "role": "compute",
-      "consumerKey": "compute-derived-v1",
+      {
+        "role": "compute",
+        "consumerKey": "compute-derived-v1",
         "stream": "DATA_DERIVED",
         "durableName": "compute-derived-v1",
         "filterSubject": "data.computed.>",
         "ackPolicy": "explicit",
         "ackWaitMs": 30000,
         "maxDeliver": 5,
-        "backoffMs": [1000, 5000, 30000],
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
         "maxAckPending": 32,
         "maxWaiting": 32,
         "maxRequestBatch": 32,
         "maxRequestExpiresMs": 5000,
         "maxRequestMaxBytes": 1048576,
-      "deadLetterSubject": "dlq.compute-derived"
-    },
-    {
-      "role": "compute",
-      "consumerKey": "compute-command-v1",
-      "stream": "COMMAND",
-      "durableName": "compute-command-v1",
-      "filterSubject": "compute.command.>",
-      "ackPolicy": "explicit",
-      "ackWaitMs": 30000,
-      "maxDeliver": 5,
-      "backoffMs": [1000, 5000, 30000],
-      "maxAckPending": 32,
-      "maxWaiting": 32,
-      "maxRequestBatch": 32,
-      "maxRequestExpiresMs": 5000,
-      "maxRequestMaxBytes": 1048576,
-      "deadLetterSubject": "dlq.compute-command"
-    }
+        "deadLetterSubject": "dlq.compute-derived"
+      },
+      {
+        "role": "compute",
+        "consumerKey": "compute-command-v1",
+        "stream": "COMMAND",
+        "durableName": "compute-command-v1",
+        "filterSubject": "compute.command.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.compute-command"
+      }
+    ],
+    "topologyConsumers": [
+      {
+        "role": "writer",
+        "consumerKey": "writer-raw-v1",
+        "stream": "DATA_RAW",
+        "durableName": "writer-v1",
+        "filterSubject": "data.raw.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.writer"
+      },
+      {
+        "role": "alarm",
+        "consumerKey": "alarm-raw-v1",
+        "stream": "DATA_RAW",
+        "durableName": "alarm-raw-v1",
+        "filterSubject": "data.raw.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.alarm"
+      },
+      {
+        "role": "alarm",
+        "consumerKey": "alarm-derived-v1",
+        "stream": "DATA_DERIVED",
+        "durableName": "alarm-derived-v1",
+        "filterSubject": "data.computed.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.alarm-derived"
+      },
+      {
+        "role": "compute",
+        "consumerKey": "compute-raw-v1",
+        "stream": "DATA_RAW",
+        "durableName": "compute-raw-v1",
+        "filterSubject": "data.raw.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.compute"
+      },
+      {
+        "role": "writer",
+        "consumerKey": "writer-derived-v1",
+        "stream": "DATA_DERIVED",
+        "durableName": "writer-derived-v1",
+        "filterSubject": "data.computed.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.writer-derived"
+      },
+      {
+        "role": "compute",
+        "consumerKey": "compute-derived-v1",
+        "stream": "DATA_DERIVED",
+        "durableName": "compute-derived-v1",
+        "filterSubject": "data.computed.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.compute-derived"
+      },
+      {
+        "role": "compute",
+        "consumerKey": "compute-command-v1",
+        "stream": "COMMAND",
+        "durableName": "compute-command-v1",
+        "filterSubject": "compute.command.>",
+        "ackPolicy": "explicit",
+        "ackWaitMs": 30000,
+        "maxDeliver": 5,
+        "backoffMs": [
+          1000,
+          5000,
+          30000
+        ],
+        "maxAckPending": 32,
+        "maxWaiting": 32,
+        "maxRequestBatch": 32,
+        "maxRequestExpiresMs": 5000,
+        "maxRequestMaxBytes": 1048576,
+        "deadLetterSubject": "dlq.compute-command"
+      }
     ]
   },
   "computeSandbox": {

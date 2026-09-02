@@ -94,7 +94,12 @@ func (h *Host) Start(ctx context.Context) error {
 		store.Close()
 		return h.fail("NATS_PREFLIGHT_FAILED")
 	}
-	if err = natsClient.ValidateStreamsAndConsumers(ctx, loaded.Config); err != nil {
+	// JetStream stream 与 durable 在 deployment 内由 compute/alarm 共享。运行
+	// 实例只执行 Config.Consumers，但必须以控制面下发的完整拓扑做精确预检，
+	// 不能把另一个角色或残留 durable 当作可忽略的额外项。
+	topologyConfig := loaded.Config
+	topologyConfig.JetStream.Consumers = append([]model.Consumer(nil), loaded.Config.JetStream.TopologyConsumers...)
+	if err = natsClient.ValidateStreamsAndConsumers(ctx, topologyConfig); err != nil {
 		natsClient.Close()
 		store.Close()
 		return h.fail("NATS_TOPOLOGY_INVALID")

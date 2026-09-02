@@ -59,6 +59,23 @@ func TestBuildEngineConfigAlarmBuildsSingleAlarmProducer(t *testing.T) {
 	}
 }
 
+func TestBuildEngineConfigKeepsFullDeploymentTopologyButOnlyRunsOwnRole(t *testing.T) {
+	input := validInput(roleCompute)
+	input.JetStream.TopologyConsumers = append(consumers(roleCompute), consumers(roleAlarm)...)
+	config, err := BuildEngineConfig(buildInput(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.JetStream.Consumers) != 3 || len(config.JetStream.TopologyConsumers) != 5 {
+		t.Fatalf("active=%d topology=%d", len(config.JetStream.Consumers), len(config.JetStream.TopologyConsumers))
+	}
+	for _, consumer := range config.JetStream.Consumers {
+		if consumer.Role != roleCompute {
+			t.Fatalf("compute 实例不应执行 %s consumer", consumer.Role)
+		}
+	}
+}
+
 func TestBuildEngineConfigRejectsIncompleteOrInvalidTopology(t *testing.T) {
 	t.Run("deployment context missing", func(t *testing.T) {
 		input := validInput(roleCompute)
@@ -106,6 +123,7 @@ func validInput(role string) Input {
 			CommandStream:        "COMMAND",
 			DeadLetterStream:     "RUNTIME_DLQ",
 			Consumers:            consumers(role),
+			TopologyConsumers:    consumers(role),
 		},
 		StateStore: StateStoreInput{ResourceRef: "site-resource://site-a/postgres", CredentialSecretRef: "secret://site-a/deployment-a/runtime-postgres", CredentialSecretFile: "secrets/runtime-postgres.json", Schema: "runtime"},
 	}

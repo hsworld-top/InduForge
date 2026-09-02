@@ -72,8 +72,11 @@ type JetStreamInput struct {
 	DeadLetterStream    string `json:"deadLetterStream"`
 	// CredentialSecretFile 是由受控挂载提供的相对文件路径；它只供
 	// resolver index 引用，绝不携带认证值。
-	CredentialSecretFile string           `json:"credentialSecretFile"`
-	Consumers            []model.Consumer `json:"consumers"`
+	CredentialSecretFile string `json:"credentialSecretFile"`
+	// Consumers 是本角色执行的消费项；TopologyConsumers 是同 deployment 已启用
+	// compute/alarm 角色的完整受控集合，供共享 JetStream 的严格调和和预检使用。
+	Consumers         []model.Consumer `json:"consumers"`
+	TopologyConsumers []model.Consumer `json:"topologyConsumers"`
 }
 
 // StateStoreInput 描述状态库的部署支撑。CredentialSecretRef 写入 v2 的
@@ -123,6 +126,7 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 			CommandStream:       input.JetStream.CommandStream,
 			DeadLetterStream:    input.JetStream.DeadLetterStream,
 			Consumers:           cloneConsumers(input.JetStream.Consumers),
+			TopologyConsumers:   cloneConsumers(input.JetStream.TopologyConsumers),
 		},
 		StateStore: model.StateStore{
 			Engine:                 "postgresql",
@@ -209,6 +213,12 @@ func validateInput(input BuildInput) error {
 	if len(input.JetStream.Consumers) == 0 {
 		return fmt.Errorf("构造 RuntimeEngine 配置缺少 jetStream.consumers")
 	}
+	if len(input.JetStream.TopologyConsumers) == 0 {
+		return fmt.Errorf("构造 RuntimeEngine 配置缺少 jetStream.topologyConsumers")
+	}
+	if err := validateTopologyConsumers(input.Role, input.JetStream.Consumers, input.JetStream.TopologyConsumers); err != nil {
+		return err
+	}
 
 	switch input.Role {
 	case roleCompute:
@@ -235,6 +245,35 @@ func validateInput(input BuildInput) error {
 		}
 	default:
 		return fmt.Errorf("RuntimeEngine role 必须为 compute 或 alarm")
+	}
+	return nil
+}
+
+func validateTopologyConsumers(role string, active, topology []model.Consumer) error {
+	seen := map[string]struct{}{}
+	activeCount := 0
+	for _, consumer := range topology {
+		if consumer.Role != roleCompute && consumer.Role != roleAlarm {
+			return fmt.Errorf("jetStream.topologyConsumers 包含非法角色")
+		}
+		if consumer.DurableName == "" || consumer.ConsumerKey == "" {
+			return fmt.Errorf("jetStream.topologyConsumers 包含空 consumer 标识")
+		}
+		if _, duplicate := seen[consumer.DurableName]; duplicate {
+			return fmt.Errorf("jetStream.topologyConsumers 存在重复 durable")
+		}
+		seen[consumer.DurableName] = struct{}{}
+		if consumer.Role == role {
+			activeCount++
+		}
+	}
+	if activeCount != len(active) {
+		return fmt.Errorf("jetStream.consumers 必须精确等于当前角色 topology")
+	}
+	for _, consumer := range active {
+		if _, exists := seen[consumer.DurableName]; !exists || consumer.Role != role {
+			return fmt.Errorf("jetStream.consumers 必须精确等于当前角色 topology")
+		}
 	}
 	return nil
 }

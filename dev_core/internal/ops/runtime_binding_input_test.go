@@ -8,6 +8,9 @@ import (
 
 func TestBuildRuntimeBindingInputIsDeterministicAndRoleScoped(t *testing.T) {
 	context := validRuntimeContext()
+	// 首次调和时两条服务均可能还是 pending；拓扑必须按 desired services
+	// 完整下发，不能等待 observed running。
+	context.RuntimeEngines = []string{ServiceAlarm, ServiceCompute}
 	for _, role := range []string{ServiceCompute, ServiceAlarm} {
 		workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: role, ReleaseID: testVersionID, Generation: 3}
 		first, err := BuildRuntimeBindingInput(workload, context)
@@ -32,6 +35,17 @@ func TestBuildRuntimeBindingInputIsDeterministicAndRoleScoped(t *testing.T) {
 		_, sandbox := binding["computeSandbox"]
 		if sandbox != (role == ServiceCompute) {
 			t.Fatalf("%s sandbox role rule invalid: %s", role, first)
+		}
+		jetStream := binding["jetStream"].(map[string]any)
+		if got := len(jetStream["topologyConsumers"].([]any)); got != 5 {
+			t.Fatalf("%s 首次双角色部署完整 topology consumers=%d", role, got)
+		}
+		wantActive := 2
+		if role == ServiceCompute {
+			wantActive = 3
+		}
+		if got := len(jetStream["consumers"].([]any)); got != wantActive {
+			t.Fatalf("%s active consumers=%d", role, got)
 		}
 	}
 }
