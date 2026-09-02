@@ -222,11 +222,16 @@ func (w *FileWorkspace) SyncContext(projectID string, files map[string][]byte) e
 		}
 	}
 
-	contextRoot := filepath.Join(workspacePath, ".induforge", "context")
+	// K3s 将该目录以只读 subPath 投影到 workspace/.induforge/context。
+	// 控制面只能在真实源目录内原子替换，不能对工作区挂载点执行 rename。
+	contextRoot := filepath.Join(projectDirectory, "context-state", "current")
 	if err := os.MkdirAll(filepath.Dir(contextRoot), 0o755); err != nil {
 		return err
 	}
-	backupRoot := filepath.Join(projectDirectory, "context-state", "current", newID())
+	backupRoot := filepath.Join(projectDirectory, "context-state", "previous", newID())
+	if err := os.MkdirAll(filepath.Dir(backupRoot), 0o755); err != nil {
+		return fmt.Errorf("创建旧上下文备份目录失败: %w", err)
+	}
 	hasPrevious := false
 	if _, err := os.Stat(contextRoot); err == nil {
 		if err := os.Rename(contextRoot, backupRoot); err != nil {

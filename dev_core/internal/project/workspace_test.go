@@ -67,6 +67,33 @@ func TestWorkspaceInitializeCreatesFinalDirectoryLayout(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSyncContextSwapsRealContextStateDirectory(t *testing.T) {
+	root := t.TempDir()
+	projectID := "11111111-1111-4111-8111-111111111111"
+	workspace, err := NewFileWorkspace(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := workspace.Initialize(projectID); err != nil {
+		t.Fatal(err)
+	}
+	current := filepath.Join(root, projectID, "context-state", "current")
+	if err := os.WriteFile(filepath.Join(current, "previous.json"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := workspace.SyncContext(projectID, map[string][]byte{"summary.json": []byte("new")}); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(current, "summary.json"))
+	if err != nil || string(content) != "new" {
+		t.Fatalf("上下文未落入真实源目录: %q, err=%v", content, err)
+	}
+	if _, err := os.Stat(filepath.Join(current, "previous.json")); !os.IsNotExist(err) {
+		t.Fatalf("旧上下文未被原子替换: %v", err)
+	}
+}
+
 func TestWorkspaceInitializeDoesNotOverwriteExistingFiles(t *testing.T) {
 	root := t.TempDir()
 	projectID := "11111111-1111-4111-8111-111111111111"
