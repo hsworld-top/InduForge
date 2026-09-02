@@ -42,6 +42,33 @@ type Loaded struct {
 	CollectorArtifacts map[string]model.CollectorArtifact
 }
 
+// DiagnosticCode 将启动期的制品错误归类为固定阶段码。日志只使用该值，不能回显
+// 文件路径、摘要或配置内容；对外健康原因仍由 RuntimeEngine 保持稳定错误码。
+func DiagnosticCode(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "配置文件"):
+		return "config-file"
+	case strings.Contains(message, "配置根目录"):
+		return "config-root"
+	case strings.Contains(message, "runtime-engine-config"):
+		return "config-schema"
+	case strings.Contains(message, "artifactMount"):
+		return "artifact-mount"
+	case strings.Contains(message, "只读挂载"):
+		return "artifact-mount-readonly"
+	case strings.Contains(message, "项目 Artifact"):
+		return "project-artifact"
+	case strings.Contains(message, "collector"):
+		return "collector-artifact"
+	default:
+		return "artifact-contract"
+	}
+}
+
 func Load(options Options) (*Loaded, error) {
 	if options.ConfigPath == "" {
 		return nil, fmt.Errorf("未提供 RuntimeEngine 配置路径")

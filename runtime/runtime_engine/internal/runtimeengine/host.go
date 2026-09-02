@@ -4,6 +4,7 @@ package runtimeengine
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -64,6 +65,8 @@ func (h *Host) Start(ctx context.Context) error {
 	readOnly := h.options.Production
 	loaded, err := loader.Load(loader.Options{ConfigPath: h.options.ConfigPath, ConfigRoot: h.options.ConfigRoot, RequireReadOnlyMount: &readOnly})
 	if err != nil {
+		// 仅记录固定阶段码，避免将制品路径、摘要或 Secret 泄露至容器日志。
+		log.Printf("RuntimeEngine artifact validation stage=%s", loader.DiagnosticCode(err))
 		return h.fail("ARTIFACT_VALIDATION_FAILED")
 	}
 	h.State.SetLoaded(loaded)
