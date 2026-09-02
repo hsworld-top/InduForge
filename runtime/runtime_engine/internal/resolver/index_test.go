@@ -163,6 +163,52 @@ func TestProductionIndexAndSecretUseSameReadOnlyMountProof(t *testing.T) {
 	}
 }
 
+func TestProductionResolvesProjectedSecretWithinIndexRoot(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secrets := filepath.Join(root, "secrets")
+	version := filepath.Join(secrets, "..2026_09_02")
+	if err = os.MkdirAll(version, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(version, "pg.json"), []byte(`{"schemaVersion":"postgres-dsn.v1","dsn":"postgres://safe"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink("..2026_09_02", filepath.Join(secrets, "..data")); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink("..data/pg.json", filepath.Join(secrets, "pg.json")); err != nil {
+		t.Fatal(err)
+	}
+	indexPath := filepath.Join(root, "index.json")
+	if err = os.WriteFile(indexPath, []byte(`{"schemaVersion":"collector-runtime-index.v1","resources":{},"secrets":{"secret://site/db":"secrets/pg.json"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withMountProof(t, root, true)
+	index, err := Open(indexPath, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dsn, err := index.ResolvePostgres(context.Background(), "secret://site/db"); err != nil || dsn != "postgres://safe" {
+		t.Fatalf("projected secret must resolve: dsn=%q err=%v", dsn, err)
+	}
+	outside := filepath.Join(t.TempDir(), "pg.json")
+	if err = os.WriteFile(outside, []byte(`{"schemaVersion":"postgres-dsn.v1","dsn":"postgres://outside"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(filepath.Join(secrets, "pg.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink(outside, filepath.Join(secrets, "pg.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = index.ResolvePostgres(context.Background(), "secret://site/db"); err == nil {
+		t.Fatal("escaped projected secret must be rejected")
+	}
+}
+
 func TestProductionRejectsWritableFileOnRWMount(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {

@@ -190,7 +190,14 @@ func (i *Index) secret(ref string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("secret 路径逃逸")
 	}
-	b, _, err := secureRead(path, i.production)
+	// Kubernetes Secret 投影通过 ..data 链接原子切换内容。配置文件本身仍
+	// 禁止符号链接；这里只允许将受控的相对 Secret 路径解析为 index 根内
+	// 的普通文件，随后继续以 O_NOFOLLOW 和只读挂载证明读取最终 inode。
+	resolved, err := resolveContainedSecretPath(i.directory, path)
+	if err != nil {
+		return nil, errors.New("secret 路径逃逸")
+	}
+	b, _, err := secureRead(resolved, i.production)
 	if err != nil {
 		return nil, errors.New("读取 secret 失败")
 	}
@@ -198,6 +205,22 @@ func (i *Index) secret(ref string) ([]byte, error) {
 		return nil, errors.New("secret JSON 非法")
 	}
 	return b, nil
+}
+
+func resolveContainedSecretPath(root, path string) (string, error) {
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil || !filepath.IsAbs(resolvedRoot) || filepath.Clean(resolvedRoot) != resolvedRoot {
+		return "", errors.New("secret root 无效")
+	}
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil || !filepath.IsAbs(resolvedPath) || filepath.Clean(resolvedPath) != resolvedPath {
+		return "", errors.New("secret 路径无效")
+	}
+	relative, err := filepath.Rel(resolvedRoot, resolvedPath)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", errors.New("secret 路径逃逸")
+	}
+	return resolvedPath, nil
 }
 func secureRead(path string, readOnly bool) ([]byte, os.FileInfo, error) {
 	fd, err := openNoFollow(path)
