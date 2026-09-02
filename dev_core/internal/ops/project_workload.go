@@ -290,7 +290,8 @@ metadata:
   labels: {induforge.io/project-workload: "true", induforge.io/service-id: %q}
 spec:
   replicas: 1
-  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  # 固定 hostPort 的单节点槽无法并行调度第二个 Pod；先退出旧 Pod，避免更新永久等待端口。
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 1, maxSurge: 0}}
   selector: {matchLabels: {app.kubernetes.io/name: %q}}
   template:
     metadata:
