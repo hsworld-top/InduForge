@@ -13,16 +13,14 @@ COPY contracts/project-templates ./contracts/project-templates
 COPY runtime/web-sdk ./runtime/web-sdk
 COPY designer/code-workspace/prepare-runtime-templates.mjs ./designer/code-workspace/prepare-runtime-templates.mjs
 
+# Pi Web 的构建依赖只用于生成最终 tgz，不能进入运行时离线 store；否则会与
+# 全局安装的 Pi Web 再次重复，中心节点导入镜像时会额外展开数 GiB。
 RUN pnpm install --frozen-lockfile \
       --filter @induforge/pi-web... \
-      --filter vite-vue-js \
-      --filter vite-vue-ts \
-      --filter vite-react-js \
-      --filter vite-react-ts \
-      --filter @induforge/runtime-sdk \
-      --store-dir /opt/induforge/pnpm-store \
+      --store-dir /tmp/induforge-build-pnpm-store \
     && pnpm --dir designer/pi-web build \
     && mkdir -p /tmp/induforge-pi-web \
+    && mkdir -p /opt/induforge \
     && pnpm --dir designer/pi-web pack --pack-destination /tmp/induforge-pi-web \
     && printf 'node=%s\nnpm=%s\npnpm=%s\nlock=%s\n' \
       "$(node --version)" \
@@ -31,7 +29,9 @@ RUN pnpm install --frozen-lockfile \
       "$(sha256sum pnpm-lock.yaml | cut -d ' ' -f 1)" \
       > /opt/induforge/pnpm-store.version
 
-RUN mkdir -p /tmp/induforge-runtime-sdk \
+# 仅向最终镜像的 store 预热四套模板的运行、构建和 Vite 预览依赖。这里不能
+# 复用上一步 Pi Web 的构建 store，否则会把无关的 Next/AI 依赖一并带入。
+RUN mkdir -p /tmp/induforge-runtime-sdk /opt/induforge/pnpm-store \
     && pnpm --dir runtime/web-sdk pack --pack-destination /tmp/induforge-runtime-sdk \
     && node designer/code-workspace/prepare-runtime-templates.mjs \
       /source/contracts/project-templates \
