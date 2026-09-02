@@ -47,6 +47,17 @@ RUN mkdir -p /tmp/induforge-runtime-sdk \
       "$(sha256sum /source/contracts/project-templates/vite-*/pnpm-lock.yaml | sha256sum | cut -d ' ' -f 1)" \
       >> /opt/induforge/pnpm-store.version
 
+# 在构建阶段清理和冻结模板。若在最终镜像 COPY 后递归 chown pnpm store，
+# OverlayFS 会复制整套离线依赖，造成数 GB 的无效镜像层。
+RUN rm -rf \
+      /source/contracts/project-templates/*/node_modules \
+      /source/contracts/project-templates/*/dist \
+      /source/contracts/project-templates/*/.pnpm-store \
+    && find /source/contracts/project-templates -type d -exec chmod 755 {} + \
+    && find /source/contracts/project-templates -type f -exec chmod 644 {} + \
+    && chown -R root:root /source/contracts/project-templates /opt/induforge/pnpm-store /opt/induforge/pnpm-store.version \
+    && chmod -R a-w /source/contracts/project-templates /opt/induforge/pnpm-store /opt/induforge/pnpm-store.version
+
 FROM codercom/code-server:4.131.0
 
 USER root
@@ -68,14 +79,6 @@ RUN pi_web_package="$(find /tmp/induforge-pi-web -maxdepth 1 -type f -name '*.tg
 COPY --from=workspace-assets /opt/induforge/pnpm-store /opt/induforge/pnpm-store
 COPY --from=workspace-assets /opt/induforge/pnpm-store.version /opt/induforge/pnpm-store.version
 COPY --from=workspace-assets /source/contracts/project-templates /opt/induforge/templates
-RUN rm -rf \
-      /opt/induforge/templates/*/node_modules \
-      /opt/induforge/templates/*/dist \
-      /opt/induforge/templates/*/.pnpm-store \
-    && find /opt/induforge/templates -type d -exec chmod 755 {} + \
-    && find /opt/induforge/templates -type f -exec chmod 644 {} + \
-    && chown -R root:root /opt/induforge/templates /opt/induforge/pnpm-store /opt/induforge/pnpm-store.version /opt/induforge/pi \
-    && chmod -R a-w /opt/induforge/templates /opt/induforge/pnpm-store /opt/induforge/pnpm-store.version /opt/induforge/pi
 
 COPY --chown=coder:coder designer/code-workspace/preview-control.mjs /opt/induforge/preview-control.mjs
 COPY --chown=coder:coder designer/code-workspace/workspace-initializer.mjs /opt/induforge/workspace-initializer.mjs

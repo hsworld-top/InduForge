@@ -154,6 +154,7 @@ build_business_images() {
     -t induforge/designer-code-server:4.131.0-node22-pnpm10.19.0 \
     -f "$REPO_ROOT/designer/code-workspace/Dockerfile" \
     "$REPO_ROOT"
+  "$REPO_ROOT/designer/code-workspace/verify-image.sh" induforge/designer-code-server:4.131.0-node22-pnpm10.19.0
 
   echo "构建数据服务镜像..."
   docker build -t induforge/data:latest -f "$REPO_ROOT/data_service/Dockerfile" "$REPO_ROOT"
