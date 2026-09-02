@@ -70,6 +70,9 @@ func main() {
 
 func loaderErrorClass(err error) string {
 	message := err.Error()
+	if stage, ok := strings.CutPrefix(message, "collector-loader:"); ok {
+		return stage
+	}
 	switch {
 	case strings.Contains(message, "artifact 契约"):
 		return "artifact-schema"

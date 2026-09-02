@@ -116,35 +116,35 @@ type Loaded struct {
 func Load(artifactPath, bindingPath, indexPath string) (*Loaded, error) {
 	artifactRaw, err := secureRead(artifactPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取 artifact 失败: %w", err)
+		return nil, stageError("artifact-read")
 	}
 	bindingRaw, err := secureRead(bindingPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取 binding 失败: %w", err)
+		return nil, stageError("binding-read")
 	}
 	indexRaw, err := secureRead(indexPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取 resolver index 失败: %w", err)
+		return nil, stageError("resolver-index-read")
 	}
 	schemas, err := compileSchemas()
 	if err != nil {
 		return nil, err
 	}
 	if err = validate(schemas["collector-runtime-artifact.schema.json"], artifactRaw); err != nil {
-		return nil, fmt.Errorf("artifact 契约校验失败: %w", err)
+		return nil, stageError("artifact-schema")
 	}
 	if err = validate(schemas["collector-runtime-binding.schema.json"], bindingRaw); err != nil {
-		return nil, fmt.Errorf("binding 契约校验失败: %w", err)
+		return nil, stageError("binding-schema")
 	}
 	var out Loaded
 	if err = strictDecode(artifactRaw, &out.Artifact); err != nil {
-		return nil, errors.New("artifact JSON 非法")
+		return nil, stageError("artifact-strict-decode")
 	}
 	if err = strictDecode(bindingRaw, &out.Binding); err != nil {
-		return nil, errors.New("binding JSON 非法")
+		return nil, stageError("binding-strict-decode")
 	}
 	if err = strictDecode(indexRaw, &out.Index); err != nil || out.Index.SchemaVersion != "collector-runtime-index.v1" || out.Index.Resources == nil || out.Index.Secrets == nil {
-		return nil, errors.New("resolver index 格式非法")
+		return nil, stageError("resolver-index-strict-decode")
 	}
 	if err = validateCross(&out, artifactRaw); err != nil {
 		return nil, err
@@ -156,10 +156,10 @@ func Load(artifactPath, bindingPath, indexPath string) (*Loaded, error) {
 func validateCross(v *Loaded, artifactRaw []byte) error {
 	d := sha256.Sum256(artifactRaw)
 	if v.Binding.Artifact.ArtifactID != v.Artifact.ArtifactID || v.Binding.Artifact.ArtifactRevision != v.Artifact.ArtifactRevision || v.Binding.Artifact.ArtifactDigest != "sha256:"+hex.EncodeToString(d[:]) {
-		return errors.New("binding artifact identity 或摘要不匹配")
+		return stageError("artifact-identity")
 	}
 	if v.Binding.WALCapacity.HighWatermarkBytes >= v.Binding.WALCapacity.MaxBytes || v.Binding.WALCapacity.DiagnosticReserveBytes >= v.Binding.WALCapacity.MaxBytes {
-		return errors.New("binding WAL 容量关系非法")
+		return stageError("wal-capacity")
 	}
 	connections := map[string]struct{}{}
 	for _, c := range v.Artifact.Connections {
@@ -167,25 +167,25 @@ func validateCross(v *Loaded, artifactRaw []byte) error {
 			continue
 		}
 		if c.DriverID != "modbus.tcp" && c.DriverID != "opcua.standard" {
-			return errors.New("artifact 使用未认证 driver")
+			return stageError("driver-allowlist")
 		}
 		connections[c.ConnectionID] = struct{}{}
 	}
 	for _, c := range v.Binding.Connections {
 		if _, ok := connections[c.ConnectionID]; !ok {
-			return errors.New("binding 引用了未知 connection")
+			return stageError("connection-reference")
 		}
 		if _, ok := v.Index.Resources[c.ResourceRef]; !ok {
-			return errors.New("binding resourceRef 未解析")
+			return stageError("connection-resource-reference")
 		}
 		for _, s := range c.SecretRefs {
 			if !safeRef(s, "secret://") || !safeRelative(v.Index.Secrets[s]) {
-				return errors.New("binding secretRef 未解析")
+				return stageError("connection-secret-reference")
 			}
 		}
 	}
 	if _, ok := v.Index.Resources[v.Binding.NATS.ServerResourceRef]; !ok || !safeRelative(v.Index.Secrets[v.Binding.NATS.CredentialSecretRef]) {
-		return errors.New("NATS 引用未解析")
+		return stageError("nats-reference")
 	}
 	seenPoint, seenSource := map[string]bool{}, map[string]bool{}
 	for _, m := range v.Artifact.PointMappings {
@@ -193,13 +193,16 @@ func validateCross(v *Loaded, artifactRaw []byte) error {
 			continue
 		}
 		if _, ok := connections[m.ConnectionID]; !ok || seenPoint[m.DatapointID] || seenSource[m.ConnectionID+"/"+m.VariableID] {
-			return errors.New("artifact mapping 不唯一或引用未知 connection")
+			return stageError("mapping-reference")
 		}
 		seenPoint[m.DatapointID] = true
 		seenSource[m.ConnectionID+"/"+m.VariableID] = true
 	}
 	return nil
 }
+
+// stageError 仅携带固定阶段码，供启动日志定位，不回显制品、连接或 Secret 内容。
+func stageError(stage string) error { return fmt.Errorf("collector-loader:%s", stage) }
 func safeRef(s, prefix string) bool {
 	return strings.HasPrefix(s, prefix) && len(s) > len(prefix) && !strings.ContainsAny(s, "\\\x00")
 }
