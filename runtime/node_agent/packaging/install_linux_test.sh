@@ -39,7 +39,8 @@ printf 'fake chrony dependency\n' > "$PACKAGE_DIR/time-sync/ubuntu-24.04/$ARCH/t
 printf '#!/usr/bin/env sh\nexit 0\n' > "$PACKAGE_DIR/capabilities/$ARCH/collector/industrial_collector"
 chmod +x "$PACKAGE_DIR/bin/node-agent-linux-$ARCH" "$PACKAGE_DIR/bin/node-hostd-linux-$ARCH" "$PACKAGE_DIR/bin/node-hostctl-linux-$ARCH" "$PACKAGE_DIR/k3s/$ARCH/k3s" "$PACKAGE_DIR/capabilities/$ARCH/project-gateway" "$PACKAGE_DIR/capabilities/$ARCH/runtime-api" "$PACKAGE_DIR/capabilities/$ARCH/runtime-engine" "$PACKAGE_DIR/capabilities/$ARCH/collector/industrial_collector"
 
-PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --enable-collector --node-data-dir "$TEMP_DIR/node-data/k3s" --server-url 'https://center.example.com' --enrollment-code 'one-time-code'
+PUBLIC_KEY='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --enable-collector --node-data-dir "$TEMP_DIR/node-data/k3s" --server-url 'https://center.example.com' --enrollment-code 'one-time-code' --release-signing-key-id release-signing-key-v1 --release-signing-public-key "$PUBLIC_KEY"
 
 test -x "$PREFIX/bin/node-agent"
 test -x "$PREFIX/bin/node-hostd"
@@ -55,6 +56,8 @@ grep -Fq "agentVersion: '1.2.3+test'" "$CONFIG_DIR/config.yaml"
 grep -Fq 'serverUrl: "https://center.example.com"' "$CONFIG_DIR/config.yaml"
 grep -Fq 'enrollmentCode: "one-time-code"' "$CONFIG_DIR/config.yaml"
 grep -Fq "hostDataDir: '$TEMP_DIR/node-data/k3s'" "$CONFIG_DIR/config.yaml"
+grep -Fq "keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml"
+grep -Fq "publicKey: '$PUBLIC_KEY'" "$CONFIG_DIR/config.yaml"
 awk '/group: collector/,/enabled: false/' "$CONFIG_DIR/config.yaml" | grep -Fq 'installed: true'
 
 # 覆盖真实旧版本升级路径：旧配置由 YAML 序列化器输出为 8 空格层级。安装器
@@ -83,16 +86,18 @@ logging:
     level: info
 EOF
 printf 'stale capability\n' > "$PREFIX/capabilities/$ARCH/stale-from-old-package"
-PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --node-data-dir "$TEMP_DIR/node-data/k3s" --node-ip 10.20.30.40 --server-url 'https://center.example.com'
+PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --node-data-dir "$TEMP_DIR/node-data/k3s" --node-ip 10.20.30.40 --server-url 'https://center.example.com' --release-signing-key-id release-signing-key-v1 --release-signing-public-key "$PUBLIC_KEY"
 test ! -e "$PREFIX/capabilities/$ARCH/stale-from-old-package"
 grep -Fq "        hostdSocket: /run/induforge/hostd.sock" "$CONFIG_DIR/config.yaml"
 grep -Fq "        hostDataDir: '$TEMP_DIR/node-data/k3s'" "$CONFIG_DIR/config.yaml"
 grep -Fq "        nodeIp: '10.20.30.40'" "$CONFIG_DIR/config.yaml"
-if PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --node-data-dir "/var/lib/induforge/bad'path" >/dev/null 2>&1; then
+grep -Fq "        trustKeys:" "$CONFIG_DIR/config.yaml"
+grep -Fq "          - keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml"
+if PREFIX="$PREFIX" CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --node-data-dir "/var/lib/induforge/bad'path" --release-signing-key-id release-signing-key-v1 --release-signing-public-key "$PUBLIC_KEY" >/dev/null 2>&1; then
   echo 'unsafe node data path unexpectedly accepted' >&2
   exit 1
 fi
-if PREFIX=/ CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service >/dev/null 2>&1; then
+if PREFIX=/ CONFIG_DIR="$CONFIG_DIR" "$PACKAGE_DIR/install.sh" --no-service --release-signing-key-id release-signing-key-v1 --release-signing-public-key "$PUBLIC_KEY" >/dev/null 2>&1; then
   echo 'unsafe install prefix unexpectedly accepted' >&2
   exit 1
 fi

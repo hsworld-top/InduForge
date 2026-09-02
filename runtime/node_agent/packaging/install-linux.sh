@@ -10,6 +10,8 @@ SERVER_URL=""
 ENROLLMENT_CODE=""
 HOST_DATA_DIR=""
 NODE_IP=""
+RELEASE_SIGNING_KEY_ID=""
+RELEASE_SIGNING_PUBLIC_KEY=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --prefix) PREFIX="$2"; shift 2;;
@@ -20,6 +22,8 @@ while [ "$#" -gt 0 ]; do
     --enrollment-code) ENROLLMENT_CODE="$2"; shift 2;;
     --node-data-dir) HOST_DATA_DIR="$2"; shift 2;;
     --node-ip) NODE_IP="$2"; shift 2;;
+    --release-signing-key-id) RELEASE_SIGNING_KEY_ID="$2"; shift 2;;
+    --release-signing-public-key) RELEASE_SIGNING_PUBLIC_KEY="$2"; shift 2;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
@@ -43,6 +47,8 @@ case "$HOST_DATA_DIR" in /*) ;; *) echo "--node-data-dir must be an absolute pat
 case "$HOST_DATA_DIR" in /|/bin|/boot|/dev|/etc|/home|/opt|/proc|/root|/run|/sys|/tmp|/usr|/var) echo "--node-data-dir cannot be a system directory" >&2; exit 2;; esac
 if ! printf '%s' "$HOST_DATA_DIR" | grep -Eq '^/[A-Za-z0-9._/-]+$'; then echo "--node-data-dir contains unsupported characters" >&2; exit 2; fi
 if [ -n "$NODE_IP" ] && ! printf '%s' "$NODE_IP" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9A-Fa-f:]+$'; then echo "--node-ip must be an IP address" >&2; exit 2; fi
+if [ -z "$RELEASE_SIGNING_KEY_ID" ] || ! printf '%s' "$RELEASE_SIGNING_KEY_ID" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'; then echo "--release-signing-key-id is required and invalid" >&2; exit 2; fi
+if [ -z "$RELEASE_SIGNING_PUBLIC_KEY" ] || [ "$(printf '%s' "$RELEASE_SIGNING_PUBLIC_KEY" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" != 32 ]; then echo "--release-signing-public-key must be a base64 Ed25519 public key" >&2; exit 2; fi
 RUN_USER="${NODE_AGENT_USER:-induforge}"
 RUN_GROUP="$RUN_USER"
 if [ "$(id -u)" -eq 0 ]; then
@@ -78,13 +84,14 @@ sed -i.bak "s|agentVersion:.*|agentVersion: '$SAFE_BUILD_VERSION'|" "$CONFIG_DIR
 # 老版本配置由 Go YAML 序列化器生成时可能使用 8 空格缩进，发布模板使用 4
 # 空格。插入字段必须沿用 dataDir 所在层级，不能写死缩进。
 insert_after_yaml_key() {
-  local source_key="$1" first_line="$2" second_line="${3:-}" temporary
+  local source_key="$1" first_line="$2" second_line="${3:-}" third_line="${4:-}" temporary
   temporary="$(mktemp "$CONFIG_DIR/config.yaml.XXXXXX")"
-  if ! awk -v source_key="$source_key" -v first_line="$first_line" -v second_line="$second_line" '
+  if ! awk -v source_key="$source_key" -v first_line="$first_line" -v second_line="$second_line" -v third_line="$third_line" '
     $0 ~ "^[[:space:]]*" source_key ":[[:space:]]*" && !inserted {
       match($0, /^[[:space:]]*/); indentation=substr($0, RSTART, RLENGTH)
       print; print indentation first_line
       if (second_line != "") print indentation second_line
+      if (third_line != "") print indentation third_line
       inserted=1; next
     }
     { print }
@@ -111,6 +118,13 @@ if [[ "$SERVER_URL$ENROLLMENT_CODE" == *$'\n'* || "$SERVER_URL$ENROLLMENT_CODE" 
 escape_sed_replacement() { printf '%s' "$1" | sed 's/[\\&|]/\\&/g'; }
 if [ -n "$SERVER_URL" ]; then SAFE_SERVER_URL="$(escape_sed_replacement "$SERVER_URL")"; sed -i.bak "s|serverUrl:.*|serverUrl: \"$SAFE_SERVER_URL\"|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"; fi
 if [ -n "$ENROLLMENT_CODE" ]; then SAFE_ENROLLMENT_CODE="$(escape_sed_replacement "$ENROLLMENT_CODE")"; sed -i.bak "s|enrollmentCode:.*|enrollmentCode: \"$SAFE_ENROLLMENT_CODE\"|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"; fi
+SAFE_RELEASE_SIGNING_KEY_ID="$(escape_sed_replacement "$RELEASE_SIGNING_KEY_ID")"
+SAFE_RELEASE_SIGNING_PUBLIC_KEY="$(escape_sed_replacement "$RELEASE_SIGNING_PUBLIC_KEY")"
+if grep -q '^[[:space:]]*trustKeys:' "$CONFIG_DIR/config.yaml"; then
+  sed -i.bak "s|trustKeys:.*|trustKeys:\n      - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'\n        publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
+else
+  insert_after_yaml_key dataDir "trustKeys:" "  - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'" "    publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'"
+fi
 if [ "$ENABLE_COLLECTOR" = true ]; then
   sed -i.bak '/group: collector/,/enabled: false/ s/installed: false/installed: true/' "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
 fi
