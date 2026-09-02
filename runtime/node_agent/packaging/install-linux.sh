@@ -121,7 +121,7 @@ if [ -n "$ENROLLMENT_CODE" ]; then SAFE_ENROLLMENT_CODE="$(escape_sed_replacemen
 SAFE_RELEASE_SIGNING_KEY_ID="$(escape_sed_replacement "$RELEASE_SIGNING_KEY_ID")"
 SAFE_RELEASE_SIGNING_PUBLIC_KEY="$(escape_sed_replacement "$RELEASE_SIGNING_PUBLIC_KEY")"
 if grep -q '^[[:space:]]*trustKeys:' "$CONFIG_DIR/config.yaml"; then
-  sed -i.bak "s|trustKeys:.*|trustKeys:\n      - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'\n        publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
+  sed -E -i.bak "s|^([[:space:]]*)trustKeys:.*|\1trustKeys:\n\1  - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'\n\1    publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
 else
   insert_after_yaml_key dataDir "trustKeys:" "  - keyId: '$SAFE_RELEASE_SIGNING_KEY_ID'" "    publicKey: '$SAFE_RELEASE_SIGNING_PUBLIC_KEY'"
 fi
