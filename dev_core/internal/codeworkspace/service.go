@@ -222,13 +222,13 @@ func (s *Service) inspect(ctx context.Context, projectID string) (Status, error)
 		return Status{}, err
 	}
 	status := "stopped"
-	if state.Running {
-		switch state.Health {
-		case "starting":
-			status = "starting"
-		case "unhealthy":
-			status = "error"
-		default:
+	switch state.Health {
+	case "starting":
+		status = "starting"
+	case "unhealthy":
+		status = "error"
+	default:
+		if state.Running {
 			status = "running"
 		}
 	}

@@ -74,6 +74,9 @@ func (k *KubernetesEngine) Inspect(ctx context.Context, name string) (ContainerS
 		return ContainerState{}, err
 	}
 	state := ContainerState{Name: name, Status: strings.ToLower(pod.Status.Phase), Running: pod.Status.Phase == "Running", Labels: pod.Metadata.Labels}
+	if pod.Status.Phase == "Pending" {
+		state.Health = "starting"
+	}
 	for _, c := range pod.Status.ContainerStatuses {
 		if c.State.Waiting != nil && (c.State.Waiting.Reason == "ImagePullBackOff" || c.State.Waiting.Reason == "ErrImagePull") {
 			state.Health = "unhealthy"
