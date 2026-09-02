@@ -138,6 +138,22 @@ func TestStartReusesExistingProjectContainer(t *testing.T) {
 	}
 }
 
+func TestStatusReportsPendingClusterWorkspaceAsStarting(t *testing.T) {
+	root := t.TempDir()
+	item := project.Project{ID: testProjectID, TenantID: "tenant", CreatedBy: "owner", Visibility: "private", WorkspacePath: filepath.Join(root, testProjectID, "workspace")}
+	service, err := NewService(fakeProjects{item: item}, &fakeEngine{state: ContainerState{
+		Name: containerName(testProjectID), Health: "starting",
+		Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.project-id": testProjectID, "com.induforge.role": "code-workspace"},
+	}}, Config{Image: "image", VolumeName: "workspaces"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := service.Status(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID)
+	if err != nil || status.Status != "starting" {
+		t.Fatalf("K3s Pending 工作区状态错误: %#v, %v", status, err)
+	}
+}
+
 func TestBuiltinDemoWorkspaceReceivesOfficialDefaultTemplateOnly(t *testing.T) {
 	root := t.TempDir()
 	demoID := "00000000-0000-4000-8000-000000000001"
