@@ -81,11 +81,17 @@ func (a *pgxAdmin) EnsureRole(ctx context.Context, role, password string) error 
 	if err := a.maintenance.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=$1)`, role).Scan(&exists); err != nil {
 		return err
 	}
-	statement := "CREATE ROLE " + quotePGIdentifier(role) + " LOGIN PASSWORD $1"
+	operation := "CREATE ROLE"
 	if exists {
-		statement = "ALTER ROLE " + quotePGIdentifier(role) + " LOGIN PASSWORD $1"
+		operation = "ALTER ROLE"
 	}
-	_, err := a.maintenance.Exec(ctx, statement, password)
+	// CREATE/ALTER ROLE 属 utility statement，PostgreSQL 不接受其中的绑定参数。
+	// 先由服务端 format(%I/%L) 参数化生成完整语句，再执行该受信结果。
+	var statement string
+	if err := a.maintenance.QueryRow(ctx, "SELECT format('"+operation+" %I LOGIN PASSWORD %L', $1, $2)", role, password).Scan(&statement); err != nil {
+		return err
+	}
+	_, err := a.maintenance.Exec(ctx, statement)
 	return err
 }
 func (a *pgxAdmin) InitializeSchema(ctx context.Context, database, schema, role string) error {
