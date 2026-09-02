@@ -81,11 +81,11 @@ func Prepare(in Input) error {
 	}
 	derived, err := deriveBuildInput(in.Binding, b)
 	if err != nil {
-		return fmt.Errorf("派生项目制品角色绑定失败: %w", err)
+		return fmt.Errorf("artifact-role-binding: %w", err)
 	}
 	config, err := binding.BuildEngineConfig(derived)
 	if err != nil {
-		return fmt.Errorf("配置构造失败: %w", err)
+		return fmt.Errorf("engine-config-binding: %w", err)
 	}
 	configRaw, err := json.Marshal(config)
 	if err != nil {
@@ -110,7 +110,8 @@ func Prepare(in Input) error {
 	readOnly := false
 	_, err = loader.Load(loader.Options{ConfigPath: checkPath, ConfigRoot: in.ArtifactDir, RequireReadOnlyMount: &readOnly})
 	if err != nil {
-		return fmt.Errorf("项目制品与角色分配不匹配")
+		// 原始 loader 错误可能携带项目路径或制品摘要；日志只保留可行动的校验阶段。
+		return fmt.Errorf("runtime-config-loader: %s", loaderErrorClass(err))
 	}
 	index, err := binding.BuildResolverIndex(in.Binding)
 	if err != nil {
@@ -120,6 +121,22 @@ func Prepare(in Input) error {
 		return fmt.Errorf("写入 bundle 失败")
 	}
 	return nil
+}
+
+func loaderErrorClass(err error) string {
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "runtime-engine-config"):
+		return "engine-config-schema"
+	case strings.Contains(message, "项目 Artifact 原始字节"):
+		return "project-artifact-digest"
+	case strings.Contains(message, "runtime-project-artifact"):
+		return "project-artifact-schema"
+	case strings.Contains(message, "Artifact") || strings.Contains(message, "artifact"):
+		return "project-artifact-model"
+	default:
+		return "engine-config-model"
+	}
 }
 
 // deriveBuildInput 只以已安全解包的 Artifact 原始 bytes 决定 Artifact ref 与

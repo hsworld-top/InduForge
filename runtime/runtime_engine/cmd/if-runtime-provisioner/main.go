@@ -85,6 +85,12 @@ func prepareErrorClass(err error) string {
 		return "artifact-integrity"
 	case strings.Contains(message, "解包"):
 		return "artifact-unpack"
+	case strings.Contains(message, "artifact-role-binding"):
+		return "artifact-role-binding"
+	case strings.Contains(message, "engine-config-binding"):
+		return "engine-config-binding"
+	case strings.Contains(message, "runtime-config-loader"):
+		return "runtime-config-" + strings.TrimPrefix(message, "runtime-config-loader: ")
 	case strings.Contains(message, "派生") || strings.Contains(message, "配置构造") || strings.Contains(message, "角色分配") || strings.Contains(message, "索引构造"):
 		return "binding-validation"
 	case strings.Contains(message, "bundle"):
