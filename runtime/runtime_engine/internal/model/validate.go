@@ -448,14 +448,18 @@ func ValidateProjectArtifact(artifact ProjectArtifact, config EngineConfig) erro
 			return fmt.Errorf("compute producer %q 未在项目 Artifact 中定义", computeID)
 		}
 	}
-	for _, unit := range artifact.ComputeUnits {
-		_, assigned := computeIDs(config)[unit.ID]
-		if unit.Enabled && !assigned {
-			return fmt.Errorf("enabled compute %q 必须且只能有一个 producer assignment", unit.ID)
-		}
-		if !unit.Enabled && assigned {
-			return fmt.Errorf("disabled compute %q 不得保留 producer assignment", unit.ID)
-		}
+	// compute/alarm 被拆成独立工作负载。只有 compute 角色负责所有启用计算单元的
+	// producer fence；alarm 只消费已验证的 derived 事件，不应要求挂载 compute producer。
+	if hasRole(config, "compute") {
+		for _, unit := range artifact.ComputeUnits {
+			_, assigned := computeIDs(config)[unit.ID]
+			if unit.Enabled && !assigned {
+				return fmt.Errorf("enabled compute %q 必须且只能有一个 producer assignment", unit.ID)
+			}
+			if !unit.Enabled && assigned {
+				return fmt.Errorf("disabled compute %q 不得保留 producer assignment", unit.ID)
+			}
+	}
 	}
 	if err := validateComputeDAG(computes, computeOutputOwner); err != nil {
 		return err
@@ -475,6 +479,15 @@ func ValidateProjectArtifact(artifact ProjectArtifact, config EngineConfig) erro
 		}
 	}
 	return nil
+}
+
+func hasRole(config EngineConfig, wanted string) bool {
+	for _, role := range config.Roles {
+		if role == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func validateWriteGrant(grant WriteGrant, pointID string) error {
