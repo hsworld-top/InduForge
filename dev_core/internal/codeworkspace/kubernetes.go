@@ -184,15 +184,41 @@ func (k *KubernetesEngine) Start(ctx context.Context, name string) error {
 }
 func (k *KubernetesEngine) Stop(ctx context.Context, name string) error { return k.Remove(ctx, name) }
 func (k *KubernetesEngine) Remove(ctx context.Context, name string) error {
-	err := k.request(ctx, http.MethodDelete, "/api/v1/namespaces/"+k.namespace+"/pods/"+name, nil, nil)
-	if err != nil && !errors.Is(err, ErrContainerNotFound) {
+	if err := k.removeResource(ctx, "/api/v1/namespaces/"+k.namespace+"/pods/"+name); err != nil {
 		return err
 	}
-	err = k.request(ctx, http.MethodDelete, "/api/v1/namespaces/"+k.namespace+"/services/"+name, nil, nil)
-	if err != nil && !errors.Is(err, ErrContainerNotFound) {
+	return k.removeResource(ctx, "/api/v1/namespaces/"+k.namespace+"/services/"+name)
+}
+
+// removeResource 等待 API 已确认删除，避免 Rebuild 立即复用名称时遇到 409。
+func (k *KubernetesEngine) removeResource(ctx context.Context, endpoint string) error {
+	err := k.request(ctx, http.MethodDelete, endpoint, nil, nil)
+	if errors.Is(err, ErrContainerNotFound) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
-	return nil
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		err = k.request(ctx, http.MethodGet, endpoint, nil, nil)
+		if errors.Is(err, ErrContainerNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("等待 Kubernetes 删除代码工作区资源超时: %s", endpoint)
+		case <-ticker.C:
+		}
+	}
 }
 func (k *KubernetesEngine) request(ctx context.Context, method, endpoint string, body, output any) error {
 	var reader io.Reader
