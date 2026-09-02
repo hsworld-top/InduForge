@@ -344,6 +344,10 @@ spec:
     spec:
       nodeSelector:
         induforge.io/center-node: "true"
+      # bubblewrap 为每次计算创建独立的 IPC/PID/网络命名空间，需保留容器级最小能力集。
+      securityContext:
+        seccompProfile:
+          type: Unconfined
       containers:
         - name: sandbox
           image: induforge/compute-sandbox:1.0.0
@@ -383,6 +387,21 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+              add: ["SYS_ADMIN", "NET_ADMIN", "SETUID", "SETGID"]
+            appArmorProfile:
+              type: Unconfined
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: temp
+              mountPath: /tmp
+            - name: dependencies
+              mountPath: /dependencies
+      volumes:
+        - name: temp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: dependencies
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
