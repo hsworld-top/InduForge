@@ -3795,7 +3795,7 @@ components:
       properties:
         projectId: { type: string, format: uuid }
         environmentId: { type: string, format: uuid }
-        mode: { type: string, enum: [development, release] }
+        mode: { type: string, enum: [development, production] }
         applicationVersionId:
           { type: string, format: uuid, description: 仅生产模式需要；开发模式由服务端更新内部 __DEV__ 制品槽位。 }
         placements:

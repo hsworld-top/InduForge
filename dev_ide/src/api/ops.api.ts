@@ -145,7 +145,7 @@ export interface ProjectDeployment {
   projectName: string
   environmentId: OpsId
   environmentName?: string
-  mode?: 'development' | 'release'
+  mode?: 'development' | 'production'
   applicationVersionId?: OpsId
   /** 仅兼容旧单节点列表响应；新部署统一由 environmentId + services 表达。 */
   nodeId?: OpsId
