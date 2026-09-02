@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -163,11 +164,18 @@ func ProvisionNATSWithAdmin(ctx context.Context, input Input, admin JetStreamAdm
 			}
 			continue
 		}
-		if !sameSubjects(actual.Config.Subjects, expected.Subjects) {
+		// compute、alarm 会为同一 deployment 分别执行初始化；DLQ stream 的
+		// subject 集合因此是分片抵达的。保留既有 subject 并并入本次受控分片，
+		// 同名 stream 可重试且最终收敛；不同 stream 的 overlap 仍由 JetStream
+		// 创建/更新 API 拒绝，不能被本分支掩盖。
+		merged := *expected
+		if expected.Name == input.Binding.JetStream.DeadLetterStream {
+			merged.Subjects = mergedSubjects(actual.Config.Subjects, expected.Subjects)
+		} else if !sameSubjects(actual.Config.Subjects, expected.Subjects) {
 			return provisionError("stream subject 冲突", expected.Name)
 		}
-		if !sameStreamPolicy(actual.Config, *expected) {
-			if err := admin.UpdateStream(ctx, expected); err != nil {
+		if !sameSubjects(actual.Config.Subjects, merged.Subjects) || !sameStreamPolicy(actual.Config, merged) {
+			if err := admin.UpdateStream(ctx, &merged); err != nil {
 				return provisionError("更新 stream", expected.Name)
 			}
 		}
@@ -274,6 +282,26 @@ func sameSubjects(actual, expected []string) bool {
 		}
 	}
 	return true
+}
+
+func mergedSubjects(actual, expected []string) []string {
+	set := make(map[string]struct{}, len(actual)+len(expected))
+	for _, value := range actual {
+		if value != "" {
+			set[value] = struct{}{}
+		}
+	}
+	for _, value := range expected {
+		if value != "" {
+			set[value] = struct{}{}
+		}
+	}
+	values := make([]string, 0, len(set))
+	for value := range set {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return values
 }
 
 func sameStreamPolicy(actual, expected nats.StreamConfig) bool {

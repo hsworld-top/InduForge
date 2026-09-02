@@ -8,6 +8,7 @@ import (
 
 	"github.com/indu-forge/runtime-engine/internal/binding"
 	"github.com/indu-forge/runtime-engine/internal/model"
+	"github.com/indu-forge/runtime-engine/internal/transportlimits"
 	"github.com/nats-io/nats.go"
 )
 
@@ -100,6 +101,30 @@ func TestProvisionNATSUsesOneGiBProjectQuotaAndShrinksExistingStreams(t *testing
 	}
 	if fake.updated != 2 || fake.streams["RAW"].Config.MaxBytes != streamMaxBytes || fake.streams["DERIVED"].Config.MaxBytes != streamMaxBytes {
 		t.Fatalf("existing stream quota was not shrunk: updated=%d raw=%d derived=%d", fake.updated, fake.streams["RAW"].Config.MaxBytes, fake.streams["DERIVED"].Config.MaxBytes)
+	}
+}
+
+func TestProvisionNATSMergesSameDeploymentDLQSubjects(t *testing.T) {
+	in := provisionInput()
+	// compute 已先创建 DLQ；alarm 的同 deployment 初始化只携带自己的 DLQ
+	// subject，必须合并而不是把已有同名 stream 误判为冲突。
+	in.Binding.JetStream.Consumers = in.Binding.JetStream.Consumers[:1]
+	streams, _ := natsTopology(in.Binding.JetStream)
+	var dlq *nats.StreamConfig
+	for _, stream := range streams {
+		if stream.Name == in.Binding.JetStream.DeadLetterStream {
+			dlq = stream
+		}
+	}
+	if dlq == nil {
+		t.Fatal("缺少 DLQ stream")
+	}
+	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{dlq.Name: {Config: nats.StreamConfig{Name: dlq.Name, Subjects: []string{"dlq.alarm"}, Retention: nats.LimitsPolicy, Storage: nats.FileStorage, Discard: nats.DiscardOld, MaxAge: streamMaxAge, MaxBytes: streamMaxBytes, MaxMsgSize: int32(transportlimits.MaxDLQPayloadBytes)}}}, consumers: map[string]*nats.ConsumerInfo{}}
+	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
+		t.Fatalf("同一部署 DLQ 分片不应冲突: %v", err)
+	}
+	if got := fake.streams[dlq.Name].Config.Subjects; !sameSubjects(got, []string{"dlq.alarm", dlq.Subjects[0]}) {
+		t.Fatalf("DLQ subjects=%v", got)
 	}
 }
 
