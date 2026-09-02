@@ -55,8 +55,16 @@ func ensureCollectorWALWithChown(dataRoot, deploymentID string, chown func(strin
 	if err = os.Chmod(path, 0o770); err != nil {
 		return "", fmt.Errorf("设置 collector WAL 权限失败")
 	}
-	if chown == nil || chown(path, collectorContainerUID, collectorContainerGID) != nil {
+	if chown == nil {
 		return "", fmt.Errorf("设置 collector WAL owner 失败")
+	}
+	if err = chown(path, collectorContainerUID, collectorContainerGID); err != nil {
+		// 正常 Linux 节点的 Agent 以 induforge 服务账户运行，不能自行 chown。
+		// 该路径刚由自身创建，工作负载模板会把固定的服务组 1000 加入 collector
+		// Pod；保留 owner 并使用 0770，比放宽到 world-writable 更安全。
+		if os.Geteuid() == 0 {
+			return "", fmt.Errorf("设置 collector WAL owner 失败")
+		}
 	}
 	return path, nil
 }

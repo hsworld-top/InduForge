@@ -181,6 +181,12 @@ func (a *Agent) installBoundRelease(ctx context.Context, command AgentCommand, g
 	if err != nil {
 		return err
 	}
+	boundServices := binding.EnabledServices
+	if binding.SchemaVersion == engineBindingSchema {
+		// v2 每条 Binding 只描述一个引擎，但同一 Release 仍依赖入口和数据运行
+		// 能力；按引擎派生固定能力集合，不能把空的 v1 enabledServices 误传下去。
+		boundServices = engineBindingCapabilities(binding.Engine)
+	}
 	_, err = installer.Install(ReleaseInstallInput{
 		Archive:                 bundle,
 		ExpectedOuterSHA256:     binding.Release.ArchiveSHA256,
@@ -192,7 +198,7 @@ func (a *Agent) installBoundRelease(ctx context.Context, command AgentCommand, g
 		NodeAgentVersion:        a.cfg.AgentVersion,
 		RuntimeVersion:          a.cfg.RuntimeVersion,
 		NodeCapabilities:        a.supervisor.Capabilities(),
-		BoundServices:           binding.EnabledServices,
+		BoundServices:           boundServices,
 		VerificationPublicKey:   ed25519.PublicKey(key),
 		KeyID:                   binding.Release.SigningKeyID,
 	})
@@ -338,6 +344,10 @@ func validatedBindingServices(values []string, collectorPort *int) (map[ServiceG
 }
 
 func bindingEnablesService(binding deploymentBinding, group ServiceGroup) bool {
+	if binding.SchemaVersion == engineBindingSchema {
+		engineGroup, ok := engineServiceGroup(binding.Engine)
+		return ok && engineGroup == group
+	}
 	for _, value := range binding.EnabledServices {
 		if ServiceGroup(value) == group {
 			return true
