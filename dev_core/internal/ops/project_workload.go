@@ -340,7 +340,7 @@ metadata:
 spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.DeploymentID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
 }
 
 // renderCollectorWorkloadManifest 明确以 collector CLI 消费受信 Release 子工件、
