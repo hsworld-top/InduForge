@@ -8,7 +8,7 @@ import (
 func TestFoundationResourceRefsAreInternalAndDeterministic(t *testing.T) {
 	environmentID := "66666666-6666-4666-8666-666666666666"
 	nats, err := foundationResourceRefs(environmentID, "nats_jetstream")
-	if err != nil || nats["service"] != "nats.if-env-666666666666.svc.cluster.local:4222" || nats["secretKey"] != "nats-token" || nats["authMode"] != "environment-token+project-subject-isolation" {
+	if err != nil || nats["service"] != "nats://nats.if-env-666666666666.svc.cluster.local:4222" || nats["secretKey"] != "nats-token" || nats["authMode"] != "environment-token+project-subject-isolation" {
 		t.Fatalf("nats refs invalid: %v %#v", err, nats)
 	}
 	postgres, err := foundationResourceRefs(environmentID, "if_history")

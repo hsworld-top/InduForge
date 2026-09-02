@@ -17,7 +17,7 @@ func foundationResourceRefs(environmentID, serviceType string) (map[string]strin
 	secretName := "foundation-credentials"
 	switch serviceType {
 	case "nats_jetstream":
-		return map[string]string{"service": "nats." + namespace + ".svc.cluster.local:4222", "resourceRef": "site-resource://" + environmentID + "/nats", "credentialSecretRef": "secret://" + environmentID + "/foundation/nats", "secretNamespace": namespace, "secretName": secretName, "secretKey": "nats-token", "authMode": "environment-token+project-subject-isolation"}, nil
+		return map[string]string{"service": "nats://nats." + namespace + ".svc.cluster.local:4222", "resourceRef": "site-resource://" + environmentID + "/nats", "credentialSecretRef": "secret://" + environmentID + "/foundation/nats", "secretNamespace": namespace, "secretName": secretName, "secretKey": "nats-token", "authMode": "environment-token+project-subject-isolation"}, nil
 	case "if_history":
 		return map[string]string{"service": "postgres." + namespace + ".svc.cluster.local:5432", "resourceRef": "site-resource://" + environmentID + "/postgres", "dsnSecretRef": "secret://" + environmentID + "/foundation/postgres", "secretNamespace": namespace, "secretName": secretName, "secretKey": "postgres-password", "database": "induforge_runtime", "adminUser": "postgres", "schemaBase": "runtime", "schemaPrefix": "runtime_"}, nil
 	default:
