@@ -167,20 +167,20 @@ func (s *Store) QueueComputeCommand(ctx context.Context, deploymentID string, co
 	var got runtimeview.ComputeCommand
 	err := s.pool.QueryRow(ctx, `INSERT INTO runtime_engine.compute_command_audit(deployment_id,command_id,compute_id,requested_by,requested_at,binding_epoch,idempotency_key,status)
 VALUES($1,$2::uuid,$3::uuid,$4,$5,$6,$7,'queued') ON CONFLICT(deployment_id,idempotency_key) DO NOTHING
-RETURNING command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,'')`, deploymentID, command.CommandID, command.ComputeID, command.RequestedBy, command.RequestedAt.UTC(), command.BindingEpoch, command.IdempotencyKey).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode)
+RETURNING command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,''),result_event_ids,result_version`, deploymentID, command.CommandID, command.ComputeID, command.RequestedBy, command.RequestedAt.UTC(), command.BindingEpoch, command.IdempotencyKey).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode, &got.ResultRefs, &got.ResultVersion)
 	if err == nil {
 		return got, true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return runtimeview.ComputeCommand{}, false, err
 	}
-	err = s.pool.QueryRow(ctx, `SELECT command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,'') FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND idempotency_key=$2`, deploymentID, command.IdempotencyKey).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode)
+	err = s.pool.QueryRow(ctx, `SELECT command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,''),result_event_ids,result_version FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND idempotency_key=$2`, deploymentID, command.IdempotencyKey).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode, &got.ResultRefs, &got.ResultVersion)
 	return got, false, err
 }
 
 func (s *Store) ComputeCommandStatus(ctx context.Context, deploymentID, commandID string) (runtimeview.ComputeCommand, error) {
 	var got runtimeview.ComputeCommand
-	err := s.pool.QueryRow(ctx, `SELECT command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,'') FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND command_id=$2::uuid`, deploymentID, commandID).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode)
+	err := s.pool.QueryRow(ctx, `SELECT command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,''),result_event_ids,result_version FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND command_id=$2::uuid`, deploymentID, commandID).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode, &got.ResultRefs, &got.ResultVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return runtimeview.ComputeCommand{}, runtimeview.ErrNotFound
 	}

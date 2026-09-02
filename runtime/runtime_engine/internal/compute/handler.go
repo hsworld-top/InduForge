@@ -87,7 +87,7 @@ func (h *Handler) PostgresHandler() ingress.PostgresHandler { return h.HandlePos
 
 // ExecuteManual 在命令消费者已完成部署、账户、fence 与去重校验的同一事务中执行。
 // 手工运行只接受 Artifact 明确声明 manual trigger 的已启用计算单元。
-func (h *Handler) ExecuteManual(ctx context.Context, tx *postgres.BusinessTx, computeID, commandEventID string, occurredAt time.Time) error {
+func (h *Handler) ExecuteManual(ctx context.Context, tx *postgres.BusinessTx, computeID, commandID, commandEventID string, occurredAt time.Time) error {
 	if h == nil || tx == nil || occurredAt.IsZero() || commandEventID == "" {
 		return errors.New("manual compute 命令非法")
 	}
@@ -102,7 +102,14 @@ func (h *Handler) ExecuteManual(ctx context.Context, tx *postgres.BusinessTx, co
 	if err := tx.RefreshComputeInputsFromCurrent(ctx, unit.ID, inputDatapointIDs(unit.Inputs)); err != nil {
 		return err
 	}
-	return h.executeAndQueue(ctx, tx, unit, producer, ingress.ValidatedMessage{Event: ingress.Event{EventID: commandEventID, SourceTimestamp: occurredAt.UTC().Format(time.RFC3339Nano)}, OccurredAt: occurredAt.UTC()})
+	if err := h.executeAndQueue(ctx, tx, unit, producer, ingress.ValidatedMessage{Event: ingress.Event{EventID: commandEventID, SourceTimestamp: occurredAt.UTC().Format(time.RFC3339Nano)}, OccurredAt: occurredAt.UTC()}); err != nil {
+		return err
+	}
+	refs := make([]string, 0, len(unit.Outputs))
+	for _, output := range unit.Outputs {
+		refs = append(refs, output.DatapointID)
+	}
+	return tx.CompleteComputeCommand(ctx, commandID, unit.Revision, refs)
 }
 
 func (h *Handler) HandlePostgres(ctx context.Context, tx *postgres.BusinessTx, message ingress.ValidatedMessage) error {

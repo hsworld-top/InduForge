@@ -94,9 +94,14 @@ export interface AlarmAcknowledgement {
 }
 
 export interface ComputeAdapter {
-  run?(ref: string, input?: unknown): unknown
+  run?(ref: string, input?: ComputeRunInput): unknown
   describe?(ref: string): unknown
+  status?(commandId: string, requestOptions?: HttpRequestOptions): unknown
 }
+
+export interface ComputeRunInput { idempotencyKey?: string }
+export interface ComputeCommandStatus { commandId: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; resultRefs?: string[]; resultVersion?: number; failureCode?: string }
+export interface ComputeCommandHandle { commandId: string; status(options?: HttpRequestOptions): Promise<SDKResult<ComputeCommandStatus>>; wait(options?: { timeoutMs?: number; intervalMs?: number } & HttpRequestOptions): Promise<SDKResult<ComputeCommandStatus>> }
 
 export interface NavigationAdapter {
   open2D(sceneId: string, options?: unknown): unknown

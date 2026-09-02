@@ -103,7 +103,7 @@ func (c *Consumer) handle(ctx context.Context, message jetstream.DeliveredMessag
 	sum := sha256.Sum256([]byte(command.CommandID))
 	eventID := hex.EncodeToString(sum[:])
 	_, err = c.store.ProcessMessage(ctx, postgres.Message{DeploymentID: c.config.DeploymentID, AccountID: c.config.AccountID, ConsumerKey: c.consumer.ConsumerKey, Role: "compute", Token: c.token, ProducerKey: "runtime-api", ProducerToken: postgres.ProducerToken{OwnerID: manual.OwnerID, Epoch: manual.Epoch}, EventID: eventID, RawBody: message.Body, Subject: message.Subject, CheckpointPosition: int64(message.StreamSequence), DeliveryCount: int(message.DeliveryCount), OccurredAt: message.OccurredAt}, func(ctx context.Context, tx *postgres.BusinessTx) error {
-		return c.handler.ExecuteManual(ctx, tx, command.ComputeID, eventID, requestedAt)
+		return c.handler.ExecuteManual(ctx, tx, command.ComputeID, command.CommandID, eventID, requestedAt)
 	}, postgres.ProcessOptions{})
 	if err != nil {
 		_ = c.store.SetComputeCommandStatus(context.Background(), command.DeploymentID, command.CommandID, "failed", "execution-failed")

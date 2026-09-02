@@ -433,9 +433,16 @@ func (s *Server) runCompute(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, request, http.StatusServiceUnavailable, 50031, "计算命令审计不可用")
 		return
 	}
-	if !inserted {
+	if !inserted && command.FailureCode != "publish-failed" {
 		writeOK(writer, request, map[string]any{"accepted": true, "commandId": command.CommandID, "status": command.Status, "idempotent": true})
 		return
+	}
+	if !inserted {
+		if err := s.config.CommandStore.SetComputeCommandStatus(request.Context(), s.config.DeploymentID, command.CommandID, "queued", ""); err != nil {
+			writeError(writer, request, http.StatusServiceUnavailable, 50031, "计算命令重试不可用")
+			return
+		}
+		command.Status, command.FailureCode = "queued", ""
 	}
 	subject := "compute.command." + s.config.DeploymentID
 	payload, _ := json.Marshal(map[string]any{"schemaVersion": "compute-command.v1", "subject": subject, "deploymentId": s.config.DeploymentID, "accountId": s.config.AccountID, "commandId": command.CommandID, "computeId": compute.ID, "requestedBy": command.RequestedBy, "requestedAt": now.Format(time.RFC3339Nano), "bindingEpoch": s.config.ManualEpoch, "idempotencyKey": command.IdempotencyKey})

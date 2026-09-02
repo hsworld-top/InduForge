@@ -63,14 +63,16 @@ type Store interface {
 }
 
 type ComputeCommand struct {
-	CommandID      string    `json:"commandId"`
-	ComputeID      string    `json:"computeId"`
-	RequestedBy    string    `json:"requestedBy"`
-	RequestedAt    time.Time `json:"requestedAt"`
-	BindingEpoch   int64     `json:"bindingEpoch"`
-	IdempotencyKey string    `json:"idempotencyKey"`
-	Status         string    `json:"status"`
-	FailureCode    string    `json:"failureCode,omitempty"`
+	CommandID      string          `json:"commandId"`
+	ComputeID      string          `json:"computeId"`
+	RequestedBy    string          `json:"requestedBy"`
+	RequestedAt    time.Time       `json:"requestedAt"`
+	BindingEpoch   int64           `json:"bindingEpoch"`
+	IdempotencyKey string          `json:"idempotencyKey"`
+	Status         string          `json:"status"`
+	FailureCode    string          `json:"failureCode,omitempty"`
+	ResultRefs     json.RawMessage `json:"resultRefs,omitempty"`
+	ResultVersion  int64           `json:"resultVersion,omitempty"`
 }
 
 type ComputeCommandStore interface {

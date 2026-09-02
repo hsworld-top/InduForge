@@ -75,6 +75,28 @@ func (s *Store) ComputeCommandStatus(ctx context.Context, deploymentID, commandI
 	return audit, err
 }
 
+// CompleteComputeCommand 在执行输出与 outbox 同一事务中保存输出点引用和 Artifact revision。
+func (b *BusinessTx) CompleteComputeCommand(ctx context.Context, commandID string, revision int64, outputPointIDs []string) error {
+	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(commandID) || revision < 1 {
+		return ErrInvalidInput
+	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
+	refs, err := json.Marshal(outputPointIDs)
+	if err != nil {
+		return ErrInvalidInput
+	}
+	result, err := b.tx.Exec(ctx, `UPDATE runtime_engine.compute_command_audit SET result_event_ids=$3::jsonb,result_version=$4,updated_at=now() WHERE deployment_id=$1 AND command_id=$2::uuid AND status='running'`, b.deploymentID, commandID, refs, revision)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return ErrFenceStale
+	}
+	return nil
+}
+
 func validCommandAudit(a ComputeCommandAudit) bool {
 	return a.DeploymentID != "" && canonicalPointUUID.MatchString(a.CommandID) && canonicalPointUUID.MatchString(a.ComputeID) && a.RequestedBy != "" && !a.RequestedAt.IsZero() && a.BindingEpoch > 0 && len(a.IdempotencyKey) >= 16 && len(a.IdempotencyKey) <= 128
 }
