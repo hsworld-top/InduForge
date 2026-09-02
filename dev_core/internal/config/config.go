@@ -48,6 +48,7 @@ type Config struct {
 	CodeServerBindHost       string
 	CodeWorkspaceEngine      string
 	CodeWorkspaceNamespace   string
+	CodeWorkspaceHostPath    string
 	DataServiceURL           string
 	DataServiceInternalToken string
 	CacheAddress             string
@@ -143,6 +144,7 @@ func Load() (Config, error) {
 		CodeServerBindHost:       firstEnvWithDefault("CODE_SERVER_BIND_HOST", "127.0.0.1"),
 		CodeWorkspaceEngine:      strings.TrimSpace(firstEnv("CODE_WORKSPACE_ENGINE")),
 		CodeWorkspaceNamespace:   firstEnvWithDefault("POD_NAMESPACE", "induforge-system"),
+		CodeWorkspaceHostPath:    firstEnvWithDefault("CODE_WORKSPACE_HOST_PATH", workspaceRoot),
 		DataServiceURL:           strings.TrimRight(firstEnv("DATA_SERVICE_URL"), "/"),
 		DataServiceInternalToken: dataServiceInternalToken,
 		CacheAddress:             net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),

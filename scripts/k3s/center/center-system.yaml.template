@@ -495,6 +495,9 @@ spec:
                   key: DATA_SERVICE_INTERNAL_TOKEN
             - name: CODE_WORKSPACE_ROOT
               value: /var/lib/induforge/workspaces
+            # 控制 Pod 内路径与节点 hostPath 不同，K3s 子 Pod 必须使用节点真实目录。
+            - name: CODE_WORKSPACE_HOST_PATH
+              value: __DATA_ROOT__/workspaces
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

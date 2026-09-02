@@ -51,7 +51,7 @@ func newCodeWorkspaceEngine(cfg config.Config) (codeworkspace.Engine, error) {
 	case "", "docker":
 		return codeworkspace.NewDockerClient(cfg.CodeServerDockerHost)
 	case "kubernetes", "k3s":
-		return codeworkspace.NewKubernetesEngine(codeworkspace.KubernetesConfig{Namespace: cfg.CodeWorkspaceNamespace, WorkspaceRoot: cfg.WorkspaceRoot})
+		return codeworkspace.NewKubernetesEngine(codeworkspace.KubernetesConfig{Namespace: cfg.CodeWorkspaceNamespace, WorkspaceRoot: cfg.CodeWorkspaceHostPath})
 	default:
 		return nil, fmt.Errorf("不支持的代码工作区引擎: %s", engine)
 	}
