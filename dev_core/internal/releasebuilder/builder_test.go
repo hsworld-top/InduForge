@@ -275,6 +275,19 @@ func readRuntimeContractJSON(t *testing.T, path string) any {
 	return document
 }
 
+func TestBuildAllowsOnlyInternalDevelopmentVersionMarker(t *testing.T) {
+	development := validInput(t)
+	development.Version = "__DEV__"
+	if _, err := Build(development); err != nil {
+		t.Fatalf("internal development marker must build: %v", err)
+	}
+	invalid := validInput(t)
+	invalid.Version = "__OTHER__"
+	if _, err := Build(invalid); err == nil || !strings.Contains(err.Error(), "projectCode 或 version") {
+		t.Fatalf("arbitrary underscore-prefixed version must remain rejected: %v", err)
+	}
+}
+
 func validInput(t *testing.T) Input {
 	t.Helper()
 	seed := bytes.Repeat([]byte{0x42}, ed25519.SeedSize)

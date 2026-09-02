@@ -200,7 +200,9 @@ func validateInput(input Input, limits buildLimits) error {
 	if !validUUID(input.ProjectID) || !validUUID(input.ReleaseID) {
 		return errors.New("projectId 和 releaseId 必须为 UUID")
 	}
-	if !validProjectCode(input.ProjectCode) || !validVersion(input.Version) {
+	// __DEV__ 是服务端生成、不会进入用户可见 Release 历史的开发槽标识；
+	// 仅为这个固定内部值放宽首字符规则，其他版本继续使用既有格式校验。
+	if !validProjectCode(input.ProjectCode) || (input.Version != "__DEV__" && !validVersion(input.Version)) {
 		return errors.New("projectCode 或 version 格式无效")
 	}
 	if !validStrictSemVer(input.MinNodeAgentVersion) || !validStrictSemVer(input.MinRuntimeVersion) {
