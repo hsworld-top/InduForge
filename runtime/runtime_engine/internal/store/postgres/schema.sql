@@ -204,3 +204,15 @@ CREATE TABLE runtime_engine.alarm_item_state (
 );
 CREATE INDEX alarm_item_state_due_idx ON runtime_engine.alarm_item_state
     (deployment_id, next_evaluation_at, alarm_item_id);
+
+-- Runtime API ACK 的不可变审计；状态快照仍由 alarm_item_state 的 CAS 维护。
+CREATE TABLE runtime_engine.alarm_ack_audit (
+    id bigserial PRIMARY KEY,
+    deployment_id text NOT NULL CHECK (deployment_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'),
+    alarm_item_id uuid NOT NULL,
+    subject_id text NOT NULL CHECK (length(subject_id) > 0),
+    comment text NOT NULL DEFAULT '' CHECK (length(comment) <= 2048),
+    acknowledged_at timestamptz NOT NULL,
+    state_version bigint NOT NULL CHECK (state_version > 0)
+);
+CREATE INDEX alarm_ack_audit_lookup_idx ON runtime_engine.alarm_ack_audit (deployment_id, alarm_item_id, acknowledged_at DESC);

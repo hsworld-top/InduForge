@@ -97,13 +97,16 @@ type ItemState struct {
 	ClearSince           *time.Time             `json:"clearSince"`
 	AlarmID              string                 `json:"alarmId"`
 	OpenedAt             *time.Time             `json:"openedAt"`
-	StateVersion         int64                  `json:"stateVersion"`
-	TransitionSequence   int64                  `json:"transitionSequence"`
-	LastValue            json.RawMessage        `json:"lastValue"`
-	LastQuality          string                 `json:"lastQuality"`
-	LastSourceAt         *time.Time             `json:"lastSourceAt"`
-	LastEvaluatedAt      *time.Time             `json:"lastEvaluatedAt"`
-	RateHistory          []RateSample           `json:"rateHistory"`
+	// AckedAt/AcknowledgedBy 由 Runtime API 通过同一条持久状态 CAS 写入；领域重新触发时清空。
+	AckedAt            *time.Time      `json:"ackedAt,omitempty"`
+	AcknowledgedBy     string          `json:"acknowledgedBy,omitempty"`
+	StateVersion       int64           `json:"stateVersion"`
+	TransitionSequence int64           `json:"transitionSequence"`
+	LastValue          json.RawMessage `json:"lastValue"`
+	LastQuality        string          `json:"lastQuality"`
+	LastSourceAt       *time.Time      `json:"lastSourceAt"`
+	LastEvaluatedAt    *time.Time      `json:"lastEvaluatedAt"`
+	RateHistory        []RateSample    `json:"rateHistory"`
 }
 
 type State struct {

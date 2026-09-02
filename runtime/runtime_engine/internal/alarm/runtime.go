@@ -358,10 +358,14 @@ func (r *Runtime) raise(item model.AlarmItem, s *ItemState, c *model.AlarmCondit
 	}
 	s.AlarmID = alarmID
 	s.OpenedAt = &source
+	s.AckedAt = nil
+	s.AcknowledgedBy = ""
 	s.ActiveConditionID = c.ID
 	s.CandidateConditionID = ""
 	s.CandidateSince = nil
 	s.ClearSince = nil
+	s.AckedAt = nil
+	s.AcknowledgedBy = ""
 	s.StateVersion++
 	s.TransitionSequence = seq
 	return r.event("RAISE", item, s, c, value, quality, source, now, received, nil)
@@ -395,6 +399,8 @@ func (r *Runtime) clear(item model.AlarmItem, s *ItemState, c model.AlarmConditi
 	s.ClearSince = nil
 	s.AlarmID = ""
 	s.OpenedAt = nil
+	s.AckedAt = nil
+	s.AcknowledgedBy = ""
 	return e, nil
 }
 func (r *Runtime) event(op string, item model.AlarmItem, s *ItemState, c *model.AlarmCondition, value json.RawMessage, quality string, source, now, received time.Time, previous *string) (*Event, error) {
@@ -1114,6 +1120,9 @@ func validateRestored(item model.AlarmItem, s ItemState) error {
 		}
 	} else if s.OpenedAt != nil {
 		return errors.New("inactive state 不得保留 openedAt")
+	}
+	if (s.AckedAt == nil) != (s.AcknowledgedBy == "") || (s.AckedAt != nil && (s.ActiveConditionID == "" || s.AckedAt.Location() != time.UTC)) {
+		return errors.New("ack state 非法")
 	}
 	if (s.CandidateConditionID == "") != (s.CandidateSince == nil) {
 		return errors.New("candidate state 不变量非法")
