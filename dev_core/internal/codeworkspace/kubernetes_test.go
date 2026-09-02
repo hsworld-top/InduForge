@@ -32,6 +32,7 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 		Environment: []string{"PNPM_HOME=/cache/pnpm"}, Labels: map[string]string{"com.induforge.managed": "true"},
 		Mounts: []Mount{
 			{Target: "/workspace", Subpath: "project-1/workspace"},
+			{Target: "/workspace/.induforge/context", Subpath: "project-1/context-state/current", ReadOnly: true},
 			{Target: "/cache", Subpath: "project-1/cache"},
 		},
 	}
@@ -51,6 +52,8 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 		`"drop":["ALL"]`,
 		`"add":["CHOWN"]`,
 		`"mountPath":"/project","name":"workspaces","subPath":"project-1"`,
+		`"mountPath":"/project/workspace/.induforge/context","name":"workspaces","readOnly":true,"subPath":"project-1/context-state/current"`,
+		`chown 1000:1000 /project/workspace/.induforge`,
 		`"INDUFORGE_KUBERNETES_WORKSPACE","value":"true"`,
 		`"name":"code-workspace"`,
 	} {
