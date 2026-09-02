@@ -81,6 +81,10 @@ func loaderErrorClass(err error) string {
 		return "artifact-identity"
 	case strings.Contains(message, "WAL"):
 		return "wal-capacity"
+	case strings.Contains(message, "secretRef"):
+		return "connection-secret-reference"
+	case strings.Contains(message, "driver"):
+		return "driver-allowlist"
 	case strings.Contains(message, "connection"):
 		return "connection-reference"
 	case strings.Contains(message, "NATS"):
