@@ -83,6 +83,44 @@ func TestRuntimeProjectArtifactProjectsCalcOutputToFrozenComputeIDContract(t *te
 	}
 }
 
+func TestRuntimeProjectArtifactProjectsBaseExternalSourcesWithoutSourceConfig(t *testing.T) {
+	projectID := uuid.NewString()
+	queryID, subscriptionID, connectionID, keyID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	point := func(path, sourceType, sourceID string, sourceConfig map[string]any) DataPointRecord {
+		return DataPointRecord{ID: uuid.NewString(), ProjectID: projectID, Path: path, Name: path, SourceType: sourceType, SourceID: &sourceID, SourceConfig: sourceConfig, DataType: "float64", Tags: []any{}, AttributeDefaults: map[string]string{}, RuntimePermissions: DefaultDataPointRuntimePermissions(), RefreshMode: "auto", Status: "active"}
+	}
+	snapshot := &ProjectSnapshot{DataPoints: []DataPointRecord{
+		point("query.temperature", "db.query", queryID, map[string]any{"queryId": queryID, "ignored": "not-in-runtime-artifact"}),
+		point("mqtt.temperature", "mqtt.subscription", subscriptionID, map[string]any{"subscriptionId": subscriptionID}),
+		point("realtime.temperature", "realtime.key", connectionID, map[string]any{"keyId": keyID, "ignored": "not-in-runtime-artifact"}),
+	}}
+	artifact, err := BuildRuntimeProjectArtifactV1(runtimeSchemaRootForTest(t), projectID, snapshot, time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("build artifact: %v", err)
+	}
+	byType := map[string]map[string]any{}
+	for _, raw := range artifact.DataPoints {
+		item := raw.(map[string]any)
+		byType[item["sourceType"].(string)] = item
+	}
+	for _, sourceType := range []string{"db.query", "mqtt.subscription"} {
+		if config := byType[sourceType]["sourceConfig"].(map[string]any); len(config) != 0 {
+			t.Fatalf("%s must not export source config: %#v", sourceType, config)
+		}
+	}
+	if config := byType["realtime.key"]["sourceConfig"].(map[string]any); len(config) != 1 || config["keyId"] != keyID {
+		t.Fatalf("realtime.key must export only keyId: %#v", config)
+	}
+}
+
+func TestRuntimeProjectArtifactRejectsRealtimeKeyWithoutKeyID(t *testing.T) {
+	projectID, connectionID := uuid.NewString(), uuid.NewString()
+	snapshot := &ProjectSnapshot{DataPoints: []DataPointRecord{{ID: uuid.NewString(), ProjectID: projectID, Path: "realtime.temperature", Name: "temperature", SourceType: "realtime.key", SourceID: &connectionID, SourceConfig: map[string]any{}, DataType: "float64", Tags: []any{}, AttributeDefaults: map[string]string{}, RuntimePermissions: DefaultDataPointRuntimePermissions(), RefreshMode: "auto", Status: "active"}}}
+	if _, err := BuildRuntimeProjectArtifactV1(runtimeSchemaRootForTest(t), projectID, snapshot, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "keyId") {
+		t.Fatalf("expected missing keyId rejection, got %v", err)
+	}
+}
+
 func TestRuntimeInputsRejectBooleanLiteralAliases(t *testing.T) {
 	pointID := uuid.NewString()
 	_, err := runtimeInputs(map[string]any{"datapointVariables": []any{map[string]any{"datapointId": pointID, "alias": "true"}}}, map[string]DataPointRecord{pointID: {ID: pointID, Status: "active"}})

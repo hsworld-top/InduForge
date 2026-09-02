@@ -90,6 +90,20 @@
             "sourceId": { "$ref": "common.schema.json#/$defs/uuid" },
             "sourceConfig": { "$ref": "#/$defs/calcOutputSourceConfig" }
           }
+        },
+        {
+          "properties": {
+            "sourceType": { "enum": ["db.query", "mqtt.subscription"] },
+            "sourceId": { "$ref": "common.schema.json#/$defs/uuid" },
+            "sourceConfig": { "$ref": "#/$defs/baseExternalSourceConfig" }
+          }
+        },
+        {
+          "properties": {
+            "sourceType": { "const": "realtime.key" },
+            "sourceId": { "$ref": "common.schema.json#/$defs/uuid" },
+            "sourceConfig": { "$ref": "#/$defs/realtimeKeySourceConfig" }
+          }
         }
       ],
       "properties": {
@@ -108,7 +122,7 @@
           "$ref": "common.schema.json#/$defs/dataPointType"
         },
         "sourceType": {
-          "enum": ["manual.input", "collector.point", "calc.output"]
+          "enum": ["manual.input", "collector.point", "calc.output", "db.query", "mqtt.subscription", "realtime.key"]
         },
         "sourceId": {
           "anyOf": [
@@ -210,6 +224,19 @@
       "required": ["computeId"],
       "properties": {
         "computeId": { "$ref": "common.schema.json#/$defs/uuid" }
+      }
+    },
+    "baseExternalSourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "realtimeKeySourceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId"],
+      "properties": {
+        "keyId": { "$ref": "common.schema.json#/$defs/uuid" }
       }
     },
     "computeUnit": {

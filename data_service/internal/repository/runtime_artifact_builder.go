@@ -116,13 +116,14 @@ func BuildRuntimeProjectArtifactV1(schemaRoot, projectID string, snapshot *Proje
 	return artifact, nil
 }
 
-// runtimeDataPointSourceType 将开发态内部 sourceType 投影为冻结的 Runtime V1 三分支。
-// manual 是平台写入模型的名称，节点契约中明确为 manual.input，避免被误认为未知 producer。
+// runtimeDataPointSourceType 将开发态 sourceType 投影为冻结的 Runtime V1 白名单。
+// db.query、mqtt.subscription 与 realtime.key 由基础引擎通过受控数据域访问，
+// 运行工件只携带来源引用，绝不携带连接或密钥配置。
 func runtimeDataPointSourceType(sourceType string) (string, error) {
 	switch sourceType {
 	case "manual":
 		return "manual.input", nil
-	case "collector.point", "calc.output":
+	case "collector.point", "calc.output", "db.query", "mqtt.subscription", "realtime.key":
 		return sourceType, nil
 	default:
 		return "", fmt.Errorf("sourceType %s 不允许进入运行产物", sourceType)
@@ -174,6 +175,20 @@ func runtimeSourceConfig(point DataPointRecord, collectorConnections map[string]
 		// data_service 内部需要 outputKey 来维护一对一输出；运行时冻结契约仅暴露
 		// 稳定的 computeId，避免把内部索引模型带入节点制品。
 		return map[string]any{"computeId": unitID}, nil
+	case "db.query", "mqtt.subscription":
+		if point.SourceID == nil {
+			return nil, fmt.Errorf("基础数据点 %s 缺少 sourceId", point.ID)
+		}
+		return map[string]any{}, nil
+	case "realtime.key":
+		if point.SourceID == nil {
+			return nil, fmt.Errorf("实时 Key 数据点 %s 缺少 sourceId", point.ID)
+		}
+		keyID, ok := point.SourceConfig["keyId"].(string)
+		if !ok || strings.TrimSpace(keyID) == "" {
+			return nil, fmt.Errorf("实时 Key 数据点 %s 缺少 keyId", point.ID)
+		}
+		return map[string]any{"keyId": keyID}, nil
 	default:
 		return nil, fmt.Errorf("数据点 %s sourceType %s 不允许进入运行产物", point.ID, point.SourceType)
 	}

@@ -559,7 +559,7 @@ func validateComputeOutputSource(raw json.RawMessage, computeID string) error {
 	return nil
 }
 
-// validateDataPointSource 让模型验证与 Schema 的三分支 source discriminator 完全一致。
+// validateDataPointSource 让模型验证与 Schema 的 source discriminator 完全一致。
 // 它也保护直接调用 ValidateProjectArtifact 的调用方，不依赖 loader 先做 Schema 校验。
 func validateDataPointSource(point DataPoint) error {
 	switch point.SourceType {
@@ -584,8 +584,32 @@ func validateDataPointSource(point DataPoint) error {
 		if err := validateComputeOutputSource(point.SourceConfig, *point.SourceID); err != nil {
 			return err
 		}
+	case "db.query", "mqtt.subscription":
+		if point.SourceID == nil || !canonicalUUID.MatchString(*point.SourceID) {
+			return fmt.Errorf("%s 的 sourceId 必须是 canonical UUID", point.SourceType)
+		}
+		if err := decodeStrictJSONObject(point.SourceConfig, &struct{}{}); err != nil {
+			return fmt.Errorf("%s 的 sourceConfig 必须是严格空对象", point.SourceType)
+		}
+	case "realtime.key":
+		if point.SourceID == nil || !canonicalUUID.MatchString(*point.SourceID) {
+			return fmt.Errorf("realtime.key 的 sourceId 必须是 canonical UUID")
+		}
+		if err := validateRealtimeKeySource(point.SourceConfig); err != nil {
+			return fmt.Errorf("realtime.key 的 sourceConfig 无效: %w", err)
+		}
 	default:
 		return fmt.Errorf("未知 sourceType %q", point.SourceType)
+	}
+	return nil
+}
+
+func validateRealtimeKeySource(raw json.RawMessage) error {
+	var source struct {
+		KeyID string `json:"keyId"`
+	}
+	if err := decodeStrictJSONObject(raw, &source); err != nil || !canonicalUUID.MatchString(source.KeyID) {
+		return fmt.Errorf("keyId 必须是 canonical UUID")
 	}
 	return nil
 }
