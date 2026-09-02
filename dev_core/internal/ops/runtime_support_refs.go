@@ -17,9 +17,12 @@ func foundationResourceRefs(environmentID, serviceType string) (map[string]strin
 	secretName := "foundation-credentials"
 	switch serviceType {
 	case "nats_jetstream":
-		return map[string]string{"service": "nats://nats." + namespace + ".svc.cluster.local:4222", "resourceRef": "site-resource://" + environmentID + "/nats", "credentialSecretRef": "secret://" + environmentID + "/foundation/nats", "secretNamespace": namespace, "secretName": secretName, "secretKey": "nats-token", "authMode": "environment-token+project-subject-isolation"}, nil
+		// 工作负载与环境基础服务始终位于同一 namespace。使用短 Service 名可避免
+		// ndots/search 后缀让集群内名称误入上游 DNS，同时仍由 Kubernetes Service
+		// 提供稳定寻址，不依赖易变的 ClusterIP。
+		return map[string]string{"service": "nats://nats:4222", "resourceRef": "site-resource://" + environmentID + "/nats", "credentialSecretRef": "secret://" + environmentID + "/foundation/nats", "secretNamespace": namespace, "secretName": secretName, "secretKey": "nats-token", "authMode": "environment-token+project-subject-isolation"}, nil
 	case "if_history":
-		return map[string]string{"service": "postgres." + namespace + ".svc.cluster.local:5432", "resourceRef": "site-resource://" + environmentID + "/postgres", "dsnSecretRef": "secret://" + environmentID + "/foundation/postgres", "secretNamespace": namespace, "secretName": secretName, "secretKey": "postgres-password", "database": "induforge_runtime", "adminUser": "postgres", "schemaBase": "runtime", "schemaPrefix": "runtime_"}, nil
+		return map[string]string{"service": "postgres:5432", "resourceRef": "site-resource://" + environmentID + "/postgres", "dsnSecretRef": "secret://" + environmentID + "/foundation/postgres", "secretNamespace": namespace, "secretName": secretName, "secretKey": "postgres-password", "database": "induforge_runtime", "adminUser": "postgres", "schemaBase": "runtime", "schemaPrefix": "runtime_"}, nil
 	default:
 		return nil, nil
 	}
