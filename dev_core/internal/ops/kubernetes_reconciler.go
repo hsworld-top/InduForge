@@ -345,8 +345,9 @@ func (r *KubernetesProjectReconciler) projectPodFailure(ctx context.Context, nam
 		return ProjectWorkloadStatus{}, fmt.Errorf("读取 Kubernetes Pod 状态失败: HTTP %d", resp.StatusCode)
 	}
 	type containerStatus struct {
-		Name  string `json:"name"`
-		State struct {
+		Name         string `json:"name"`
+		RestartCount int    `json:"restartCount"`
+		State        struct {
 			Waiting    struct{ Reason string } `json:"waiting"`
 			Terminated struct {
 				ExitCode int `json:"exitCode"`
@@ -371,7 +372,11 @@ func (r *KubernetesProjectReconciler) projectPodFailure(ctx context.Context, nam
 			}
 		}
 		for _, status := range pod.Status.ContainerStatuses {
-			if status.State.Waiting.Reason == "CrashLoopBackOff" {
+			// 探针反复终止、但每次存活时间足以重置 kubelet backoff 时，容器可能
+			// 永远处于 Running/Restarting 而不进入 CrashLoopBackOff。连续三次非零
+			// 退出同样是不可收敛的 rollout；SIGTERM 可让进程以 0 退出，因此不能用
+			// exitCode 过滤。连续重启三次必须结束 pending run 才能正式重试。
+			if status.State.Waiting.Reason == "CrashLoopBackOff" || status.RestartCount >= 3 {
 				return ProjectWorkloadStatus{Failed: true, Message: "运行容器 " + status.Name + " 反复崩溃"}, nil
 			}
 		}

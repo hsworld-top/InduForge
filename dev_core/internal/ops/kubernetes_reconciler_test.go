@@ -250,3 +250,19 @@ func TestKubernetesProjectReconcilerStatusReportsCrashLoop(t *testing.T) {
 		t.Fatalf("crash loop status=%+v err=%v", status, err)
 	}
 }
+
+func TestKubernetesProjectReconcilerStatusReportsRepeatedProbeRestart(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/pods") {
+			_, _ = w.Write([]byte(`{"items":[{"status":{"containerStatuses":[{"name":"runtime-api","restartCount":3,"state":{"running":{}},"lastState":{"terminated":{"exitCode":0,"reason":"Completed"}}}]}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":0}}`))
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase})
+	if err != nil || !status.Failed || !strings.Contains(status.Message, "runtime-api") {
+		t.Fatalf("repeated restart status=%+v err=%v", status, err)
+	}
+}
