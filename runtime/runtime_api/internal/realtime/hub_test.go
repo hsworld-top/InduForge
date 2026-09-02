@@ -42,6 +42,35 @@ func TestHubValidatesIdentityAndRoutesOnlySubscribedPaths(t *testing.T) {
 	}
 }
 
+func TestHubRoutesOnlyMatchingAlarmTransitions(t *testing.T) {
+	hub := NewHub("deployment-1", "account-1", testCatalog(t))
+	events, cancel := hub.SubscribeAlarms()
+	defer cancel()
+	payload := map[string]any{
+		"schemaVersion": "alarm.event.v1", "subject": "alarm.event", "eventId": "alarm-event-1",
+		"deploymentId": "deployment-1", "accountId": "account-1", "kind": "alarm-transition", "operation": "RAISE",
+		"alarmId": "temperature-high", "alarmItemId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "pointIds": []string{"22222222-2222-4222-8222-222222222222"},
+		"transition": map[string]any{"alarmState": "OPEN"},
+	}
+	body, _ := json.Marshal(payload)
+	if err := hub.AcceptAlarm("alarm.event", body); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-events:
+		if event.Operation != "RAISE" || event.AlarmItemID == "" {
+			t.Fatalf("unexpected alarm event: %#v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected alarm event")
+	}
+	payload["deploymentId"] = "other"
+	body, _ = json.Marshal(payload)
+	if err := hub.AcceptAlarm("alarm.event", body); err == nil {
+		t.Fatal("cross-deployment alarm must be rejected")
+	}
+}
+
 func testCatalog(t *testing.T) *artifact.Catalog {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "artifact.json")

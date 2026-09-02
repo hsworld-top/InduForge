@@ -191,6 +191,37 @@ func TestRuntimeAPIRejectsInvalidHistoryBoundsAndCollectorWrites(t *testing.T) {
 	}
 }
 
+func TestRuntimeAPIAlarmSocketRequiresGatewaySessionAndFiltersAlarmIdentity(t *testing.T) {
+	server, hub, token := newTestRuntimeAPI(t, &fakeStore{})
+	ws := httptest.NewServer(server.Handler())
+	defer ws.Close()
+	url := "ws" + strings.TrimPrefix(ws.URL, "http") + "/ws/v1/alarms"
+	connection, _, err := websocket.DefaultDialer.Dial(url, http.Header{"X-InduForge-Deployment-Id": []string{"deployment-1"}, "X-InduForge-Project-Id": []string{testProjectID}, "Authorization": []string{"Bearer " + token}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if err := connection.WriteJSON(map[string]any{"action": "subscribe"}); err != nil {
+		t.Fatal(err)
+	}
+	var subscribed map[string]any
+	if err := connection.ReadJSON(&subscribed); err != nil || subscribed["type"] != "subscribed" {
+		t.Fatalf("subscribe=%#v err=%v", subscribed, err)
+	}
+	payload := `{"schemaVersion":"alarm.event.v1","subject":"alarm.event","eventId":"alarm-event-1","deploymentId":"deployment-1","accountId":"account-1","kind":"alarm-transition","operation":"RAISE","alarmId":"temperature-high","alarmItemId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","pointIds":["22222222-2222-4222-8222-222222222222"],"transition":{"alarmState":"OPEN"}}`
+	if err := hub.AcceptAlarm("alarm.event", []byte(payload)); err != nil {
+		t.Fatal(err)
+	}
+	_ = connection.SetReadDeadline(time.Now().Add(time.Second))
+	var event map[string]any
+	if err := connection.ReadJSON(&event); err != nil || event["type"] != "alarm" {
+		t.Fatalf("event=%#v err=%v", event, err)
+	}
+	if err := hub.AcceptAlarm("alarm.event", []byte(strings.Replace(payload, `"deployment-1"`, `"other"`, 1))); err == nil {
+		t.Fatal("cross-deployment event must fail")
+	}
+}
+
 func TestRuntimeAPIWebSocketStreamsValidatedPointEvents(t *testing.T) {
 	server, hub, token := newTestRuntimeAPI(t, &fakeStore{})
 	httpServer := httptest.NewServer(server.Handler())

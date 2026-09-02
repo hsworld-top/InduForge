@@ -174,6 +174,7 @@ export interface HttpRuntimeOptions {
   baseUrl?: string
   /** 默认同源 /ws/v1/points。baseUrl 不规则时请显式指定。 */
   wsUrl?: string
+  alarmWsUrl?: string
   /** 会话建立时使用的 Bearer Token；不会保存到 SDK 外部。 */
   accessToken?: string
   /** 仅直连 Runtime API 或测试时传入；经 Gateway 的浏览器请求通常不应设置。 */

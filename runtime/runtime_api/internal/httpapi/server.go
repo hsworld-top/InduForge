@@ -106,6 +106,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/runtime/computes", s.requirePrincipal(http.HandlerFunc(s.computes)))
 	mux.Handle("POST /api/v1/runtime/computes/{id}/run", s.requirePrincipal(http.HandlerFunc(s.unsupportedAction)))
 	mux.Handle("GET /ws/v1/points", s.requirePrincipal(http.HandlerFunc(s.pointSocket)))
+	mux.Handle("GET /ws/v1/alarms", s.requirePrincipal(http.HandlerFunc(s.alarmSocket)))
 	return s.withCommonHeaders(mux)
 }
 

@@ -28,10 +28,27 @@ type PointEvent struct {
 	Path            string          `json:"path"`
 }
 
+// AlarmEvent 是浏览器可消费的报警变更；只接受冻结的 alarm.event.v1 中 alarm-transition 分支。
+type AlarmEvent struct {
+	SchemaVersion string   `json:"schemaVersion"`
+	Subject       string   `json:"subject"`
+	EventID       string   `json:"eventId"`
+	DeploymentID  string   `json:"deploymentId"`
+	AccountID     string   `json:"accountId"`
+	Kind          string   `json:"kind"`
+	Operation     string   `json:"operation"`
+	AlarmID       string   `json:"alarmId"`
+	AlarmItemID   string   `json:"alarmItemId"`
+	PointIDs      []string `json:"pointIds"`
+	Transition    any      `json:"transition"`
+}
+
 type subscription struct {
 	paths  map[string]struct{}
 	events chan PointEvent
 }
+
+type alarmSubscription struct{ events chan AlarmEvent }
 
 type Hub struct {
 	mu          sync.RWMutex
@@ -39,6 +56,7 @@ type Hub struct {
 	account     string
 	catalog     *artifact.Catalog
 	subscribers map[uint64]*subscription
+	alarms      map[uint64]*alarmSubscription
 	sequence    atomic.Uint64
 	lastEventNS atomic.Int64
 	connected   atomic.Bool
@@ -46,7 +64,25 @@ type Hub struct {
 }
 
 func NewHub(deploymentID, accountID string, catalog *artifact.Catalog) *Hub {
-	return &Hub{deployment: deploymentID, account: accountID, catalog: catalog, subscribers: map[uint64]*subscription{}}
+	return &Hub{deployment: deploymentID, account: accountID, catalog: catalog, subscribers: map[uint64]*subscription{}, alarms: map[uint64]*alarmSubscription{}}
+}
+
+func (h *Hub) SubscribeAlarms() (<-chan AlarmEvent, func()) {
+	id := h.sequence.Add(1)
+	sub := &alarmSubscription{events: make(chan AlarmEvent, 64)}
+	h.mu.Lock()
+	h.alarms[id] = sub
+	h.mu.Unlock()
+	var once sync.Once
+	cancel := func() {
+		once.Do(func() {
+			h.mu.Lock()
+			delete(h.alarms, id)
+			close(sub.events)
+			h.mu.Unlock()
+		})
+	}
+	return sub.events, cancel
 }
 
 func (h *Hub) Subscribe(paths []string) (<-chan PointEvent, func(), error) {
@@ -111,6 +147,36 @@ func (h *Hub) Accept(subject string, body []byte) error {
 		if _, interested := subscriber.paths[event.Path]; !interested {
 			continue
 		}
+		select {
+		case subscriber.events <- event:
+		default:
+			h.dropped.Add(1)
+		}
+	}
+	return nil
+}
+
+// AcceptAlarm 将 NATS alarm.event 收敛为统一报警变更，拒绝跨 deployment/account 和非报警转换消息。
+func (h *Hub) AcceptAlarm(subject string, body []byte) error {
+	if subject != "alarm.event" || len(body) == 0 || len(body) > 1<<20 {
+		return errors.New("报警实时事件 subject、大小非法")
+	}
+	var event AlarmEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		return fmt.Errorf("解析报警实时事件: %w", err)
+	}
+	if event.SchemaVersion != "alarm.event.v1" || event.Subject != "alarm.event" || event.Kind != "alarm-transition" || event.EventID == "" || event.DeploymentID != h.deployment || event.AccountID != h.account || event.AlarmID == "" || event.AlarmItemID == "" || len(event.PointIDs) == 0 || event.Transition == nil {
+		return errors.New("报警实时事件身份或内容不匹配")
+	}
+	switch event.Operation {
+	case "RAISE", "SEVERITY_CHANGE", "ACK", "CLEAR":
+	default:
+		return errors.New("报警实时事件 operation 不受支持")
+	}
+	h.lastEventNS.Store(time.Now().UTC().UnixNano())
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, subscriber := range h.alarms {
 		select {
 		case subscriber.events <- event:
 		default:
@@ -195,6 +261,14 @@ func ConnectNATS(ctx context.Context, options NATSOptions, hub *Hub) (*NATSSubsc
 		}
 		subscriber.subs = append(subscriber.subs, sub)
 	}
+	alarmSub, subscribeErr := connection.Subscribe("alarm.event", func(message *nats.Msg) {
+		_ = hub.AcceptAlarm(message.Subject, message.Data)
+	})
+	if subscribeErr != nil {
+		subscriber.Close()
+		return nil, fmt.Errorf("订阅 NATS alarm.event: %w", subscribeErr)
+	}
+	subscriber.subs = append(subscriber.subs, alarmSub)
 	if err := connection.FlushWithContext(ctx); err != nil {
 		subscriber.Close()
 		return nil, fmt.Errorf("激活 NATS 订阅: %w", err)

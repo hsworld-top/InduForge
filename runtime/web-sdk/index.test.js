@@ -477,3 +477,38 @@ test('HTTP Runtime WebSocket 订阅交付实时点位并传播关闭和错误', 
   assert.equal(errors[0].message, '订阅不可用')
   assert.equal(closes[0].wasClean, true)
 })
+
+test('HTTP Runtime WebSocket 订阅报警变更并传播关闭', async () => {
+  let socket
+  class FakeWebSocket {
+    constructor(url) { this.url = url; socket = this; queueMicrotask(() => this.onopen?.()) }
+    send(payload) { this.sent = JSON.parse(payload); queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: 'subscribed' }) })) }
+    close(code = 1000, reason = '') { this.onclose?.({ code, reason, wasClean: code === 1000 }) }
+  }
+  const received = []
+  const closes = []
+  const runtime = createHttpRuntime({ baseUrl: 'https://gateway.test/api/v1/runtime', WebSocket: FakeWebSocket })
+  const subscription = await runtime.alarmAdapter.subscribeChanges((event) => received.push(event), { onClose: (event) => closes.push(event) })
+  assert.equal(subscription.code, 0)
+  assert.equal(socket.url, 'wss://gateway.test/ws/v1/alarms')
+  assert.deepEqual(socket.sent, { action: 'subscribe' })
+  socket.onmessage({ data: JSON.stringify({ type: 'alarm', data: { operation: 'RAISE', alarmItemId: 'alarm-1' } }) })
+  assert.equal(received[0].operation, 'RAISE')
+  subscription.data()
+  assert.equal(closes[0].wasClean, true)
+})
+
+test('HTTP Runtime 报警订阅在异常关闭后重连', async () => {
+  const sockets = []
+  class FakeWebSocket {
+    constructor() { sockets.push(this); queueMicrotask(() => this.onopen?.()) }
+    send() { queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: 'subscribed' }) })) }
+    close(code = 1000, reason = '') { this.onclose?.({ code, reason, wasClean: code === 1000 }) }
+  }
+  const runtime = createHttpRuntime({ WebSocket: FakeWebSocket })
+  const subscription = await runtime.alarmAdapter.subscribeChanges(() => {}, { reconnectDelayMs: 0 })
+  sockets[0].onclose({ code: 1006, reason: 'network', wasClean: false })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(sockets.length, 2)
+  subscription.data()
+})

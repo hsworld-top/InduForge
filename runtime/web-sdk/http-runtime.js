@@ -179,6 +179,15 @@ function resolveWebSocketUrl(options, baseUrl) {
   return '/ws/v1/points'
 }
 
+function resolveAlarmWebSocketUrl(options, baseUrl) {
+  if (options.alarmWsUrl) return options.alarmWsUrl
+  if (/^https?:\/\//i.test(baseUrl))
+    return baseUrl.replace(/^http/i, 'ws').replace(/\/api\/v1\/runtime\/?$/, '/ws/v1/alarms')
+  if (typeof location !== 'undefined' && location.href)
+    return new URL('/ws/v1/alarms', location.href).toString()
+  return '/ws/v1/alarms'
+}
+
 function websocketError(message, details) {
   const error = new Error(message)
   Object.assign(error, details)
@@ -305,6 +314,51 @@ function createPointSubscription(options, baseUrl, path, handler, subscriptionOp
   })
 }
 
+function createAlarmSubscription(options, baseUrl, handler, subscriptionOptions = {}) {
+  const WebSocketImpl = options.WebSocket ?? globalThis.WebSocket
+  if (typeof WebSocketImpl !== 'function')
+    return Promise.resolve(sdkResult(RUNTIME_ERROR_CODE, '当前环境未提供 WebSocket，请通过 createHttpRuntime({ WebSocket }) 注入'))
+  if (typeof handler !== 'function') throw new TypeError('alarms.changes.subscribe(handler) 的 handler 必须是函数')
+  const timeoutMs = subscriptionOptions.timeoutMs ?? options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const reconnect = subscriptionOptions.reconnect !== false
+  const reconnectDelayMs = subscriptionOptions.reconnectDelayMs ?? 1_000
+  const reconnectMaxAttempts = subscriptionOptions.reconnectMaxAttempts ?? 3
+  if (!Number.isFinite(reconnectDelayMs) || reconnectDelayMs < 0 || !Number.isInteger(reconnectMaxAttempts) || reconnectMaxAttempts < 0)
+    throw new TypeError('报警 WebSocket 重连参数非法')
+  return new Promise((resolve) => {
+    let socket
+    let settled = false
+    let closedByClient = false
+    let timer
+    let reconnectTimer
+    let reconnectAttempts = 0
+    const finish = (result) => { if (!settled) { settled = true; clearTimeout(timer); resolve(result) } }
+    const close = () => { closedByClient = true; clearTimeout(reconnectTimer); socket?.close(1000, 'subscription closed') }
+    const connect = () => {
+      try { socket = new WebSocketImpl(resolveAlarmWebSocketUrl(options, baseUrl)) } catch (error) { finish(sdkResult(RUNTIME_ERROR_CODE, errorMessage(error, '无法建立 WebSocket 连接'))); return }
+      timer = setTimeout(() => { closedByClient = true; finish(sdkResult(RUNTIME_ERROR_CODE, 'WebSocket 订阅超时')); socket.close(1000, 'subscription timeout') }, timeoutMs)
+      socket.onopen = () => { try { socket.send(JSON.stringify({ action: 'subscribe' })) } catch (error) { finish(sdkResult(RUNTIME_ERROR_CODE, errorMessage(error, '无法发送 WebSocket 订阅请求'))) } }
+      socket.onmessage = (event) => {
+        if (typeof event.data !== 'string') return
+        let message
+        try { message = JSON.parse(event.data) } catch { subscriptionOptions.onError?.(websocketError('Runtime API 返回了无效 WebSocket 消息')); return }
+        if (message.type === 'subscribed') { clearTimeout(timer); reconnectAttempts = 0; finish(sdkResult(0, 'ok', close)); return }
+        if (message.type === 'alarm') { try { handler(message.data) } catch (error) { subscriptionOptions.onError?.(error) }; return }
+        if (message.type === 'error') { const error = websocketError(message.msg || 'Runtime API 拒绝 WebSocket 订阅', { code: message.code }); if (!settled) finish(sdkResult(RUNTIME_ERROR_CODE, error.message)); else subscriptionOptions.onError?.(error); closedByClient = true; socket.close() }
+      }
+      socket.onerror = () => { if (!settled) finish(sdkResult(RUNTIME_ERROR_CODE, 'Runtime API WebSocket 连接错误')); else if (!closedByClient) subscriptionOptions.onError?.(websocketError('Runtime API WebSocket 连接错误')) }
+      socket.onclose = (event) => {
+        clearTimeout(timer)
+        const detail = { code: event.code, reason: event.reason, wasClean: event.wasClean }
+        if (!settled) { finish(sdkResult(RUNTIME_ERROR_CODE, event.reason || 'Runtime API WebSocket 连接已关闭')); return }
+        subscriptionOptions.onClose?.(detail)
+        if (!closedByClient && reconnect && reconnectAttempts < reconnectMaxAttempts) { reconnectAttempts += 1; reconnectTimer = setTimeout(connect, reconnectDelayMs) }
+      }
+    }
+    connect()
+  })
+}
+
 /**
  * 为发布后的工程创建 Runtime API 浏览器适配器。
  * 默认使用同源 /api/v1/runtime 与 /ws/v1/points，Gateway 负责注入工程身份头。
@@ -401,7 +455,7 @@ export function createHttpRuntime(options = {}) {
       getItem: () => unsupported('alarms.items.get'),
       getSettings: () => unsupported('alarms.settings.get'),
       updateSettings: () => unsupported('alarms.settings.update'),
-      subscribeChanges: () => unsupported('alarms.changes.subscribe'),
+      subscribeChanges: (handler, subscriptionOptions) => createAlarmSubscription(options, baseUrl, handler, subscriptionOptions),
       acknowledge: (id, input = {}) => {
         if (typeof id !== 'string' || !id.trim())
           throw new TypeError('alarms.actions.acknowledge(id, input) 的 id 必须是非空字符串')
