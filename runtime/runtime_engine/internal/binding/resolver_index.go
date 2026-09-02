@@ -87,6 +87,12 @@ func WriteBundle(config model.EngineConfig, index ResolverIndex, targetDir strin
 		return fmt.Errorf("创建 bundle 临时目录失败: %w", err)
 	}
 	defer os.RemoveAll(temporary)
+	// 主运行容器将 /work 作为只读 bind mount，再把受控 Secret 投影到
+	// bundle/secrets。挂载点必须由仍可写的 init 容器预先创建，不能在
+	// 只读父挂载下由 OCI 运行时临时 mkdir。
+	if err = os.Mkdir(filepath.Join(temporary, "secrets"), 0o700); err != nil {
+		return fmt.Errorf("创建 bundle secret 挂载点失败: %w", err)
+	}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {

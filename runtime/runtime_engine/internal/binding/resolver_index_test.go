@@ -122,6 +122,13 @@ func TestWriteBundleUsesPrivateFilesAndRestoresOldBundleOnInstallFailure(t *test
 			t.Fatalf("%s permissions = %o, want 0600", name, info.Mode().Perm())
 		}
 	}
+	secrets, err := os.Stat(filepath.Join(target, "secrets"))
+	if err != nil {
+		t.Fatalf("bundle 应预建 Secret 挂载点: %v", err)
+	}
+	if !secrets.IsDir() || secrets.Mode().Perm() != 0o700 {
+		t.Fatalf("Secret 挂载点权限 = %o，期望目录 0700", secrets.Mode().Perm())
+	}
 
 	oldRename := renameBundle
 	calls := 0
