@@ -25,6 +25,18 @@ func TestReadSecretAcceptsAtomicWriterAndRejectsEscape(t *testing.T) {
 	if err != nil || string(payload) != "secret" {
 		t.Fatalf("payload=%q err=%v", payload, err)
 	}
+	if err := os.Chmod(filepath.Join(version, "token.json"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadSecret(filepath.Join(root, "token.json"), 1<<20); err != nil {
+		t.Fatalf("matching read-only group rejected: %v", err)
+	}
+	if err := os.Chmod(filepath.Join(version, "token.json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadSecret(filepath.Join(root, "token.json"), 1<<20); err == nil {
+		t.Fatal("other-readable secret accepted")
+	}
 
 	escapeRoot := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside")

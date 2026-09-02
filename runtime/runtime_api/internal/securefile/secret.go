@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // ReadSecret 接受普通文件，或 Kubernetes Secret AtomicWriter 的受控两级链接。
@@ -60,8 +61,20 @@ func ReadSecret(path string, limit int64) ([]byte, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > limit {
 		return nil, errors.New("secret 目标必须是受限普通文件")
 	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return nil, errors.New("secret 不能被所属组或其他用户读取")
+	permissions := info.Mode().Perm()
+	if permissions&0o007 != 0 || permissions&0o030 != 0 {
+		return nil, errors.New("secret 权限超出所属用户或只读运行组")
+	}
+	if permissions&0o040 != 0 {
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		groups, groupErr := os.Getgroups()
+		allowed := ok && groupErr == nil && int(stat.Gid) == os.Getegid()
+		for _, group := range groups {
+			allowed = allowed || ok && int(stat.Gid) == group
+		}
+		if !allowed {
+			return nil, errors.New("secret 只读运行组与进程不匹配")
+		}
 	}
 	file, err := os.Open(resolved)
 	if err != nil {
