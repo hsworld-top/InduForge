@@ -82,7 +82,7 @@ func TestLinuxPackageConfigDeclaresInstalledCapabilities(t *testing.T) {
 	if config.Agent.Ops.AgentVersion != "__BUILD_VERSION__" || len(config.Agent.Ops.Services) != 4 {
 		t.Fatalf("unexpected package ops config: %+v", config.Agent.Ops)
 	}
-	if !config.Agent.Ops.Services[0].Installed || config.Agent.Ops.Services[0].Enabled || config.Agent.Ops.Services[3].Installed {
+	if !config.Agent.Ops.Services[0].Installed || config.Agent.Ops.Services[0].Enabled || !config.Agent.Ops.Services[3].Installed {
 		t.Fatalf("installed/enabled templates were parsed incorrectly: %+v", config.Agent.Ops.Services)
 	}
 }

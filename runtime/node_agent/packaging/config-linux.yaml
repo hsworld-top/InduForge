@@ -36,6 +36,7 @@ agent:
         enabled: false
       - group: collector
         component: collector
-        installed: false # install.sh --enable-collector 将其改为 true
+        # Linux 正常节点包内置采集引擎能力；是否创建采集工作负载仍由工程部署决定。
+        installed: true
         enabled: false
 logging: { file: ./logs/agent.log, level: info }
