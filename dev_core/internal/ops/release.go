@@ -67,6 +67,18 @@ func validateDeployableRelease(projectID, releaseID, artifactKey, artifactHash, 
 // validateDeployableReleaseForDeployment 仅校验正式 Release 的不可变元数据；
 // 不解析构建内容，也不信任 Manifest 之外的制品位置或摘要。
 func validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID string, requireCollector bool, manifestJSON []byte) error {
+	return validateDeployableArtifactForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID, requireCollector, true, manifestJSON)
+}
+
+// validateDeployableDevelopmentArtifactForDeployment 校验服务端构建并写入开发绑定
+// 的临时制品。它仍校验制品身份、摘要、工件和兼容性，但不把生产 Release 冻结
+// sourceSnapshot 的字段约束套用到开发快照；开发采集绑定随后由数据域按当前权威
+// 快照再次校验，不能借此绕过数据域的项目隔离与完整性检查。
+func validateDeployableDevelopmentArtifactForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID string, requireCollector bool, manifestJSON []byte) error {
+	return validateDeployableArtifactForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID, requireCollector, false, manifestJSON)
+}
+
+func validateDeployableArtifactForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID string, requireCollector, requireFrozenCollectorSnapshot bool, manifestJSON []byte) error {
 	if strings.TrimSpace(artifactKey) == "" || !validObjectKey(artifactKey) || !strings.HasSuffix(artifactKey, ".tar.zst") {
 		return fmt.Errorf("%w: Release 对象键缺失或无效", ErrReleaseNotDeployable)
 	}
@@ -107,7 +119,7 @@ func validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, a
 		if err := validateReleaseArtifact(*manifest.Artifacts.Collector, collectorArtifactFile); err != nil {
 			return err
 		}
-		if collectorRequired && !validCollectorSourceSnapshot(manifest.Artifacts.Collector.SourceSnapshot, manifest.Artifacts.Collector.SourceSnapshotSHA256, projectID) {
+		if collectorRequired && requireFrozenCollectorSnapshot && !validCollectorSourceSnapshot(manifest.Artifacts.Collector.SourceSnapshot, manifest.Artifacts.Collector.SourceSnapshotSHA256, projectID) {
 			return fmt.Errorf("%w: Release collector sourceSnapshot 无效", ErrReleaseNotDeployable)
 		}
 	} else if collectorRequired {

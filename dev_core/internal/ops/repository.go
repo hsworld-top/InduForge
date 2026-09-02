@@ -1481,7 +1481,7 @@ func developmentReleaseMetadata(artifact *DevelopmentArtifact, projectID string)
 	metadata := releaseMetadata{ID: artifact.ReleaseID, Version: "__DEV__", ArtifactKey: artifact.ArtifactKey, ArtifactHash: artifact.ArtifactHash,
 		ManifestHash: artifact.ManifestHash, ChecksumsHash: artifact.ChecksumsHash, SigningKeyID: artifact.SigningKeyID,
 		ArtifactSize: artifact.ArtifactSize, Manifest: artifact.Manifest}
-	if _, err := deploymentRequirementsForRelease(metadata, projectID); err != nil {
+	if _, err := deploymentRequirementsForDevelopmentArtifact(metadata, projectID); err != nil {
 		return releaseMetadata{}, err
 	}
 	return metadata, nil
@@ -1533,6 +1533,33 @@ func deploymentRequirementsForRelease(metadata releaseMetadata, projectID string
 		}
 	}
 	if err = validateReleaseMetadata(metadata, projectID, requireCollector); err != nil {
+		return nil, err
+	}
+	return required, nil
+}
+
+// deploymentRequirementsForDevelopmentArtifact 只接受服务端刚构建并写入绑定的
+// 开发制品描述。生产 Release 必须拥有不可变的 collector sourceSnapshot；开发态
+// 的采集绑定则由数据域使用该次开发快照和当前权威配置完成二次校验。
+func deploymentRequirementsForDevelopmentArtifact(metadata releaseMetadata, projectID string) ([]string, error) {
+	required, err := deploymentEngineRequirements(metadata.Manifest)
+	if err != nil {
+		return nil, err
+	}
+	requireCollector := false
+	for _, engine := range required {
+		if engine == ServiceCollector {
+			requireCollector = true
+			break
+		}
+	}
+	if metadata.ArtifactSize <= 0 {
+		return nil, fmt.Errorf("%w: 开发制品归档大小缺失或无效", ErrReleaseNotDeployable)
+	}
+	if err = validateDeployableDevelopmentArtifactForDeployment(projectID, metadata.ID, metadata.ArtifactKey, metadata.ArtifactHash, metadata.ManifestHash, metadata.ChecksumsHash, metadata.SigningKeyID, requireCollector, metadata.Manifest); err != nil {
+		return nil, err
+	}
+	if _, _, err = developmentCollectorSourceSnapshotFromManifest(metadata.Manifest, projectID); err != nil {
 		return nil, err
 	}
 	return required, nil

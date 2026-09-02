@@ -54,7 +54,11 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 	} else {
 		return ProjectRuntimeContext{}, fmt.Errorf("部署模式非法")
 	}
-	if source, required, e := collectorSourceSnapshotFromManifest(out.Release.Manifest, out.ProjectID); e != nil {
+	collectorSnapshot := collectorSourceSnapshotFromManifest
+	if out.Mode == "development" {
+		collectorSnapshot = developmentCollectorSourceSnapshotFromManifest
+	}
+	if source, required, e := collectorSnapshot(out.Release.Manifest, out.ProjectID); e != nil {
 		return ProjectRuntimeContext{}, e
 	} else if required {
 		out.CollectorSourceSnapshot = source
@@ -108,4 +112,43 @@ func collectorSourceSnapshotFromManifest(raw []byte, projectID string) (json.Raw
 		return nil, true, fmt.Errorf("collector Release sourceSnapshot 缺失或无效")
 	}
 	return append(json.RawMessage(nil), manifest.Artifacts.Collector.SourceSnapshot...), true, nil
+}
+
+// developmentCollectorSourceSnapshotFromManifest 读取服务端开发制品中的采集快照。
+// 开发制品没有 production Release 的外层冻结摘要，但仍必须校验其内部工件摘要及
+// 项目身份；数据域构造 collector binding 时还会使用当前权威快照再次验证。
+func developmentCollectorSourceSnapshotFromManifest(raw []byte, projectID string) (json.RawMessage, bool, error) {
+	var manifest deployableReleaseManifest
+	if json.Unmarshal(raw, &manifest) != nil {
+		return nil, false, fmt.Errorf("开发制品 Manifest 无效")
+	}
+	required := false
+	for _, capability := range manifest.Capabilities {
+		if capability == ServiceCollector {
+			required = true
+			break
+		}
+	}
+	if !required {
+		return nil, false, nil
+	}
+	if manifest.Artifacts.Collector == nil || !validDevelopmentCollectorSourceSnapshot(manifest.Artifacts.Collector.SourceSnapshot, projectID) {
+		return nil, true, fmt.Errorf("collector 开发 sourceSnapshot 缺失或无效")
+	}
+	return append(json.RawMessage(nil), manifest.Artifacts.Collector.SourceSnapshot...), true, nil
+}
+
+func validDevelopmentCollectorSourceSnapshot(raw []byte, projectID string) bool {
+	if len(raw) == 0 || len(raw) > 16<<20 {
+		return false
+	}
+	var source struct {
+		SchemaVersion    string          `json:"schemaVersion"`
+		ProjectID        string          `json:"projectId"`
+		ArtifactRevision int64           `json:"artifactRevision"`
+		SHA256           string          `json:"sha256"`
+		Size             int             `json:"size"`
+		Artifact         json.RawMessage `json:"artifact"`
+	}
+	return json.Unmarshal(raw, &source) == nil && source.SchemaVersion == "collector-runtime-artifact.v1" && source.ProjectID == projectID && source.ArtifactRevision > 0 && source.Size == len(source.Artifact) && source.SHA256 == "sha256:"+sha256Hex(source.Artifact) && len(source.Artifact) > 0 && json.Valid(source.Artifact)
 }

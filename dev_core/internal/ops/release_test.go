@@ -136,6 +136,42 @@ func TestValidateDeployableReleaseRejectsSourceSnapshotAndMalformedMaterial(t *t
 	}
 }
 
+func TestDevelopmentArtifactAllowsCollectorSnapshotWithoutProductionDigest(t *testing.T) {
+	manifest := collectorRequiredManifestWithoutSnapshot(t)
+	production := releaseMetadata{ID: testVersionID, ArtifactKey: "releases/tenant/project/release.tar.zst", ArtifactHash: strings.Repeat("a", 64), ArtifactSize: 1, ManifestHash: strings.Repeat("e", 64), ChecksumsHash: strings.Repeat("f", 64), SigningKeyID: "induforge-release-2026-01", Manifest: manifest}
+	if _, err := deploymentRequirementsForRelease(production, testProjectID); !errors.Is(err, ErrReleaseNotDeployable) {
+		t.Fatalf("生产 Release 缺少冻结 sourceSnapshot 不应通过: %v", err)
+	}
+	development := &DevelopmentArtifact{ReleaseID: testVersionID, Version: "__DEV__", ArtifactKey: "development/tenant/project/dev.tar.zst", ArtifactHash: strings.Repeat("a", 64), ArtifactSize: 1, ManifestHash: strings.Repeat("e", 64), ChecksumsHash: strings.Repeat("f", 64), SigningKeyID: "induforge-release-2026-01", Manifest: manifest}
+	metadata, err := developmentReleaseMetadata(development, testProjectID)
+	if err != nil {
+		t.Fatalf("受控开发制品不应复用生产冻结快照限制: %v", err)
+	}
+	if required, err := deploymentRequirementsForDevelopmentArtifact(metadata, testProjectID); err != nil || !sameStrings(required, []string{ServiceBase, ServiceCollector}) {
+		t.Fatalf("开发制品引擎需求无效 required=%v err=%v", required, err)
+	}
+	if _, _, err := collectorSourceSnapshotFromManifest(manifest, testProjectID); err == nil {
+		t.Fatal("生产运行上下文接受了缺少冻结摘要的采集快照")
+	}
+	if snapshot, required, err := developmentCollectorSourceSnapshotFromManifest(manifest, testProjectID); err != nil || !required || len(snapshot) == 0 {
+		t.Fatalf("开发运行上下文未接受受控采集快照 required=%v err=%v", required, err)
+	}
+}
+
+func collectorRequiredManifestWithoutSnapshot(t *testing.T) []byte {
+	t.Helper()
+	manifest := validReleaseManifest(testProjectID)
+	manifest = strings.Replace(manifest, `"capabilities":["runtime.auth","runtime.datapoint"]`, `"capabilities":["collector"]`, 1)
+	manifest = strings.Replace(manifest, `"requiredNodeCapabilities":["project_entry","data_runtime"]`, `"requiredNodeCapabilities":["project_entry","data_runtime","collector"]`, 1)
+	source := collectorSourceSnapshotForManifest(testProjectID)
+	sourceDigest := sha256.Sum256(source)
+	manifest = strings.Replace(manifest, `,"sourceSnapshotSha256":"sha256:`+hex.EncodeToString(sourceDigest[:])+`"`, "", 1)
+	if strings.Contains(manifest, "sourceSnapshotSha256") {
+		t.Fatal("未移除生产 sourceSnapshot 摘要")
+	}
+	return []byte(manifest)
+}
+
 func validReleaseManifest(projectID string) string {
 	source := collectorSourceSnapshotForManifest(projectID)
 	sourceDigest := sha256.Sum256(source)
