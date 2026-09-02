@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"strings"
@@ -608,6 +609,11 @@ func (s *Service) CreateDeployment(ctx context.Context, actor auth.User, input C
 		if err != nil {
 			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("构建开发制品失败: %w", err)
 		}
+		required, requirementErr := deploymentEngineRequirements(artifact.Manifest)
+		if requirementErr != nil {
+			return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("开发制品引擎能力无效: %w", requirementErr)
+		}
+		log.Printf("development artifact built projectId=%s engines=%v", input.ProjectID, required)
 		input.DevelopmentArtifact = &artifact
 	}
 	if err := s.repository.ValidateDeploymentTargets(ctx, actor.TenantID, input); err != nil {
