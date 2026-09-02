@@ -1720,6 +1720,13 @@ func validateEngineDeploymentBinding(raw []byte, binding bindingMetadata, releas
 	} else if document.Ports.HostPort != nil {
 		return fmt.Errorf("%w: 非基础引擎不能暴露主机端口", ErrReleaseNotDeployable)
 	}
+	// 开发部署使用的是本次构建、已签名的开发制品，而不是 application_versions
+	// 中冻结的生产 Release。两者的采集快照规则不同，不能在节点拉取命令时又
+	// 套回生产校验，否则中心已创建工作负载但节点永远无法物化 hostPath 制品。
+	if document.Mode == "development" {
+		_, err := deploymentRequirementsForDevelopmentArtifact(release, binding.ProjectID)
+		return err
+	}
 	return validateReleaseMetadata(release, binding.ProjectID, document.Engine == ServiceCollector)
 }
 
