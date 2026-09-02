@@ -408,6 +408,15 @@ export const opsAPI = {
     )
     return { ...result, items: result.items.map(deployment) }
   },
+  async getDevelopmentDeploymentRequirements(projectId: OpsId) {
+    const data = unpack<{ engines?: DeploymentEngine[] }>(
+      await request.get('/ops/project-deployments/development-requirements', {
+        params: { projectId },
+        ...config,
+      }),
+    )
+    return Array.isArray(data.engines) ? data.engines : []
+  },
   async listProjectVersions(projectId: OpsId, query: ListParams = {}) {
     return list<ApplicationVersion>(
       await request.get(`/publish/${projectId}/versions`, {

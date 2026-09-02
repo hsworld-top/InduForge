@@ -150,6 +150,12 @@ type ReleaseSourceBuilder interface {
 	BuildReleaseSource(context.Context, Project, Version, string) (ReleaseSource, error)
 }
 
+// DevelopmentRequirementsSource 只读取当前数据域运行工件，用于开发部署在创建
+// 临时制品前展示权威引擎需求。它不构建前端、不写版本或对象存储。
+type DevelopmentRequirementsSource interface {
+	DevelopmentEngineRequirements(context.Context, Project, string) ([]string, error)
+}
+
 // DevelopmentArtifact 是内部部署槽使用的临时制品描述；它不写 application_versions，
 // 固定展示版本为 __DEV__，每次构建以唯一 releaseId 和摘要区分。
 type DevelopmentArtifact struct {
@@ -190,6 +196,30 @@ func (s *Service) SetEvents(events Events) { s.events = events }
 func (s *Service) SetReleaseValidator(validator ReleaseValidator)       { s.releases = validator }
 func (s *Service) SetReleaseSourceBuilder(builder ReleaseSourceBuilder) { s.sourceBuilder = builder }
 func (s *Service) SetSigningConfig(config SigningConfig)                { s.signing = config }
+
+// DevelopmentEngineRequirements 返回当前工程数据工件决定的开发部署引擎；开发态
+// 不创建 application_versions，也不允许页面从历史版本猜测可选引擎。
+func (s *Service) DevelopmentEngineRequirements(ctx context.Context, actor auth.User, projectID, authorization string) ([]string, error) {
+	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentExecute); err != nil {
+		return nil, err
+	}
+	project, err := s.repository.GetProject(ctx, actor.TenantID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if err = requireProject(actor, project, auth.CapabilityDeploymentExecute); err != nil {
+		return nil, err
+	}
+	source, ok := s.sourceBuilder.(DevelopmentRequirementsSource)
+	if !ok {
+		return nil, fmt.Errorf("开发引擎需求预检未配置")
+	}
+	requirements, err := source.DevelopmentEngineRequirements(ctx, project, authorization)
+	if err != nil {
+		return nil, fmt.Errorf("读取开发引擎需求失败: %w", err)
+	}
+	return requirements, nil
+}
 
 // BuildDevelopmentArtifact 复用正式受控源码构建、签名和对象存储链路，但不创建用户可见版本记录。
 func (s *Service) BuildDevelopmentArtifact(ctx context.Context, actor auth.User, projectID, authorization string) (DevelopmentArtifact, error) {

@@ -90,6 +90,10 @@ type Repository interface {
 // 不反向依赖发布模块的具体实现或其存储细节。
 type DevelopmentArtifactBuilder func(context.Context, auth.User, string, string) (DevelopmentArtifact, error)
 
+// DevelopmentRequirementsBuilder 返回由当前工程 runtime artifact 派生的引擎，
+// 而非从 __DEV__ 或用户选择的历史版本推断。
+type DevelopmentRequirementsBuilder func(context.Context, auth.User, string, string) ([]string, error)
+
 var foundationServiceTypes = []string{"if_realtime", "if_history", "if_timeseries", "if_message", "if_object", "nats_jetstream", "nginx", "traefik"}
 
 func validFoundationServiceType(value string) bool {
@@ -179,6 +183,7 @@ type Service struct {
 	releases                ReleaseStore
 	clusterTokenKey         []byte
 	developmentBuilder      DevelopmentArtifactBuilder
+	developmentRequirements DevelopmentRequirementsBuilder
 	foundationNodePreflight interface {
 		EnsureHostNodeLabels(context.Context, []string) error
 	}
@@ -198,6 +203,10 @@ func (s *Service) SetClusterTokenKey(key []byte) {
 
 func (s *Service) SetDevelopmentArtifactBuilder(builder DevelopmentArtifactBuilder) {
 	s.developmentBuilder = builder
+}
+
+func (s *Service) SetDevelopmentRequirementsBuilder(builder DevelopmentRequirementsBuilder) {
+	s.developmentRequirements = builder
 }
 
 func NewService(repository Repository, packages PackageStore, releases ...ReleaseStore) *Service {
@@ -556,6 +565,28 @@ func (s *Service) ListDeployments(ctx context.Context, actor auth.User, f PageFi
 		return nil, 0, err
 	}
 	return s.repository.ListDeployments(ctx, actor.TenantID, normalizePage(f))
+}
+
+// DevelopmentEngineRequirements 为页面返回开发部署的权威引擎集合。创建部署时仍
+// 会重新构建开发制品并从其 manifest 二次校验，避免预检与提交之间的配置竞态。
+func (s *Service) DevelopmentEngineRequirements(ctx context.Context, actor auth.User, projectID, authorization string) ([]string, error) {
+	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentExecute); err != nil {
+		return nil, err
+	}
+	if !validUUID(projectID) {
+		return nil, fmt.Errorf("工程 ID 格式无效")
+	}
+	if s.developmentRequirements == nil {
+		return nil, fmt.Errorf("开发引擎需求预检未配置")
+	}
+	requirements, err := s.developmentRequirements(ctx, actor, projectID, authorization)
+	if err != nil {
+		return nil, err
+	}
+	if len(requirements) == 0 || requirements[0] != ServiceBase {
+		return nil, fmt.Errorf("开发引擎需求无效")
+	}
+	return requirements, nil
 }
 func (s *Service) CreateDeployment(ctx context.Context, actor auth.User, input CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentExecute); err != nil {

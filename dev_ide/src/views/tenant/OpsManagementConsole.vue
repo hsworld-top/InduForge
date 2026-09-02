@@ -1582,7 +1582,7 @@
             :placeholder="$t('opsConsole.deployments.chooseRelease')"
             :loading="versionLoading"
             :disabled="!deployForm.projectId"
-              ><el-option
+            ><el-option
               v-for="version in versions.filter((item) => item.status === 'ready')"
               :key="version.id"
               :label="version.name ? `${version.version} · ${version.name}` : version.version"
@@ -1663,8 +1663,8 @@
               existingDeployment
                 ? $t('opsConsole.deployments.updateDeployment')
                 : deployForm.mode === 'production'
-                ? $t('opsConsole.deployments.deployProduction')
-                : $t('opsConsole.deployments.deployDevelopment')
+                  ? $t('opsConsole.deployments.deployProduction')
+                  : $t('opsConsole.deployments.deployDevelopment')
             }}</el-button
           >
         </div>
@@ -1952,6 +1952,8 @@ const deployForm = reactive({
     collector: '',
   } as Record<DeploymentEngineKey, string>,
 })
+const developmentRequirements = ref<DeploymentEngineKey[]>(['base'])
+const developmentRequirementsReady = ref(false)
 
 const refreshing = computed(() => Object.values(loading).some(Boolean))
 const selectedEnvironment = computed(
@@ -2003,17 +2005,17 @@ const environmentNodeRows = computed(() =>
       : isCenter
         ? t('opsConsole.nodes.unassignBlockedCenter')
         : hostedServices.length
-        ? t('opsConsole.nodes.unassignBlockedFoundation', {
-            count: hostedServices.length,
-            services: hostedServices
-              .map((service) => t(`opsConsole.foundation.services.${service.serviceType}`))
-              .join('、'),
-          })
-        : hasDeployment
-          ? t('opsConsole.nodes.unassignBlockedDeployment', {
-              project: node.assignedProjectName || t('opsConsole.nodes.unknownProject'),
+          ? t('opsConsole.nodes.unassignBlockedFoundation', {
+              count: hostedServices.length,
+              services: hostedServices
+                .map((service) => t(`opsConsole.foundation.services.${service.serviceType}`))
+                .join('、'),
             })
-          : ''
+          : hasDeployment
+            ? t('opsConsole.nodes.unassignBlockedDeployment', {
+                project: node.assignedProjectName || t('opsConsole.nodes.unknownProject'),
+              })
+            : ''
     return {
       id: node.id,
       name: node.name,
@@ -2279,16 +2281,15 @@ const deploymentRows = computed<DeploymentRow[]>(() =>
       environmentName:
         item.environmentName ||
         t('opsConsole.deployments.legacyNode', { name: item.nodeName || item.nodeId || '--' }),
-      services:
-        item.services?.map((service) => {
-          const labels: Record<string, string> = {
-            base: t('opsConsole.deployments.baseEngine'),
-            compute: t('opsConsole.deployments.computeEngine'),
-            alarm: t('opsConsole.deployments.alarmEngine'),
-            collector: t('opsConsole.deployments.collectionEngine'),
-          }
-          return labels[service.serviceType] || service.serviceType
-        }) || [t('opsConsole.deployments.baseEngine')],
+      services: item.services?.map((service) => {
+        const labels: Record<string, string> = {
+          base: t('opsConsole.deployments.baseEngine'),
+          compute: t('opsConsole.deployments.computeEngine'),
+          alarm: t('opsConsole.deployments.alarmEngine'),
+          collector: t('opsConsole.deployments.collectionEngine'),
+        }
+        return labels[service.serviceType] || service.serviceType
+      }) || [t('opsConsole.deployments.baseEngine')],
       status: running
         ? t('opsConsole.common.running')
         : failed
@@ -2354,10 +2355,8 @@ const existingDeployment = computed(() =>
   ),
 )
 const deploymentCapabilities = computed(() => {
-  const source =
-    deployForm.mode === 'production'
-      ? selectedVersion.value
-      : versions.value.find((item) => item.version === '__DEV__' || item.mode === 'development')
+  if (deployForm.mode === 'development') return new Set(developmentRequirements.value)
+  const source = selectedVersion.value
   const capabilities = (source?.capabilities || source?.manifest?.capabilities || []) as unknown[]
   return new Set(capabilities.map((item) => String(item).toLowerCase()))
 })
@@ -2380,6 +2379,7 @@ const canCreateDeployment = computed(() =>
     deployForm.projectId &&
     (deployForm.mode === 'development' || deployForm.applicationVersionId) &&
     deployForm.environmentId &&
+    (deployForm.mode === 'production' || developmentRequirementsReady.value) &&
     deploymentEngineRows.value.every((engine) => deployForm.placements[engine.key]) &&
     (deployForm.accessPort === null ||
       (deployForm.accessPort >= 1024 && deployForm.accessPort <= 65532)) &&
@@ -3172,6 +3172,15 @@ async function onProjectChange(projectId: string) {
   deployForm.applicationVersionId = ''
   versions.value = []
   if (!projectId) return
+  if (deployForm.mode === 'development') {
+    developmentRequirementsReady.value = false
+    try {
+      developmentRequirements.value = await opsAPI.getDevelopmentDeploymentRequirements(projectId)
+      setDefaultDeploymentPlacements()
+    } finally {
+      developmentRequirementsReady.value = true
+    }
+  }
   versionLoading.value = true
   try {
     const result = await opsAPI.listProjectVersions(projectId, { page: 1, pageSize: 50 })
@@ -3182,6 +3191,25 @@ async function onProjectChange(projectId: string) {
     versionLoading.value = false
   }
 }
+
+watch(
+  () => deployForm.mode,
+  (mode) => {
+    if (mode !== 'development' || !deployForm.projectId) return
+    developmentRequirementsReady.value = false
+    void opsAPI
+      .getDevelopmentDeploymentRequirements(deployForm.projectId)
+      .then((requirements) => {
+        developmentRequirements.value = requirements
+        setDefaultDeploymentPlacements()
+        developmentRequirementsReady.value = true
+      })
+      .catch((error) => {
+        developmentRequirementsReady.value = false
+        ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.prepareFailed')))
+      })
+  },
+)
 const isDeploymentNodeReady = (node: OpsNode) =>
   node.platform === 'linux' &&
   node.observedStatus === 'online' &&
@@ -3235,6 +3263,8 @@ async function openDeployDialog(initialProjectId = '') {
     accessPort: null,
   })
   Object.assign(deployForm.placements, { base: '', compute: '', alarm: '', collector: '' })
+  developmentRequirements.value = ['base']
+  developmentRequirementsReady.value = false
   deploymentNodes.value = []
   versions.value = []
   deployDialog.value = true

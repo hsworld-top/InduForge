@@ -3298,6 +3298,23 @@ paths:
                 { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
             },
         }
+  /ops/project-deployments/development-requirements:
+    get:
+      operationId: getDevelopmentDeploymentRequirements
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        [{ name: projectId, in: query, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/project-deployments/{id}:
     get:
       operationId: getProjectDeployment

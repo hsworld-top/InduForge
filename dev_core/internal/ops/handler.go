@@ -46,6 +46,7 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Get("/node-packages", h.listPackages)
 		r.Get("/node-packages/{id}/download", h.download)
 		r.Get("/project-deployments", h.listDeployments)
+		r.Get("/project-deployments/development-requirements", h.developmentEngineRequirements)
 		r.Post("/project-deployments", h.createDeployment)
 		r.Get("/project-deployments/{id}", h.getDeployment)
 		r.Post("/project-deployments/{id}/start", h.operateDeployment("start"))
@@ -202,6 +203,16 @@ func (h *Handler) createDeployment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		platformapi.WriteSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
+	})
+}
+func (h *Handler) developmentEngineRequirements(w http.ResponseWriter, r *http.Request) {
+	h.user(w, r, func(u auth.User) {
+		requirements, err := h.service.DevelopmentEngineRequirements(r.Context(), u, r.URL.Query().Get("projectId"), auth.ForwardAuthorization(r))
+		if err != nil {
+			h.err(w, r, err)
+			return
+		}
+		platformapi.WriteSuccess(w, r, map[string]any{"engines": requirements})
 	})
 }
 func (h *Handler) getDeployment(w http.ResponseWriter, r *http.Request) {

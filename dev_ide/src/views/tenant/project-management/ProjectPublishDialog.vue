@@ -247,6 +247,8 @@ const environments = ref<RuntimeEnvironment[]>([])
 const nodes = ref<OpsNode[]>([])
 const versions = ref<ManagedApplicationVersion[]>([])
 const deployments = ref<ProjectDeployment[]>([])
+const developmentRequirements = ref<EngineKey[]>(['base'])
+const developmentRequirementsReady = ref(false)
 const environmentId = ref('')
 const applicationVersionId = ref('')
 const placements = reactive<Record<EngineKey, string>>({
@@ -258,10 +260,8 @@ const placements = reactive<Record<EngineKey, string>>({
 
 const readyVersions = computed(() => versions.value.filter((item) => item.status === 'ready'))
 const selectedCapabilities = computed(() => {
-  const source =
-    mode.value === 'RELEASE'
-      ? readyVersions.value.find((item) => item.id === applicationVersionId.value)
-      : versions.value.find((item) => item.mode === 'development' || item.version === '__DEV__')
+  if (mode.value === 'DEV') return new Set(developmentRequirements.value)
+  const source = readyVersions.value.find((item) => item.id === applicationVersionId.value)
   const capabilities = (source?.capabilities || source?.manifest?.capabilities || []) as unknown[]
   return new Set(capabilities.map((item) => String(item).toLowerCase()))
 })
@@ -392,6 +392,7 @@ const nodeOptionLabel = (node: OpsNode) => {
 
 const canConfirm = computed(() => {
   if (!props.project?.id || !environmentId.value || nodeLoading.value) return false
+  if (mode.value === 'DEV' && !developmentRequirementsReady.value) return false
   if (mode.value === 'RELEASE' && !applicationVersionId.value) return false
   return engineRows.value.every((engine) => Boolean(placements[engine.key]))
 })
@@ -458,6 +459,21 @@ const loadPublishContext = async () => {
   }
 }
 
+const loadDevelopmentRequirements = async () => {
+  if (!props.project?.id) return
+  developmentRequirementsReady.value = false
+  try {
+    developmentRequirements.value = await opsAPI.getDevelopmentDeploymentRequirements(
+      props.project.id,
+    )
+    setDefaultPlacements()
+    developmentRequirementsReady.value = true
+  } catch (error) {
+    developmentRequirementsReady.value = false
+    throw error
+  }
+}
+
 const reset = () => {
   mode.value = 'DEV'
   activeView.value = 'publish'
@@ -467,6 +483,8 @@ const reset = () => {
   nodes.value = []
   versions.value = []
   deployments.value = []
+  developmentRequirements.value = ['base']
+  developmentRequirementsReady.value = false
   loadError.value = ''
   placements.base = ''
   placements.compute = ''
@@ -475,6 +493,13 @@ const reset = () => {
 }
 
 const syncPlacements = () => setDefaultPlacements()
+
+watch(mode, (value) => {
+  if (value === 'DEV')
+    void loadDevelopmentRequirements().catch((error) => {
+      loadError.value = getApiErrorMessage(error, t('projectManagement.publishContextLoadFailed'))
+    })
+})
 
 const submit = () => {
   if (!props.project?.id || !canConfirm.value) return
@@ -498,6 +523,9 @@ watch(
     if (!visible) return
     reset()
     void loadPublishContext()
+    void loadDevelopmentRequirements().catch((error) => {
+      loadError.value = getApiErrorMessage(error, t('projectManagement.publishContextLoadFailed'))
+    })
   },
 )
 </script>

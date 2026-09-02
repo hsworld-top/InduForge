@@ -91,6 +91,22 @@ func (b *ProjectReleaseSourceBuilder) SetHTTPClient(client *http.Client) {
 	}
 }
 
+// DevelopmentEngineRequirements 从当前数据域 runtime artifact 派生开发部署需求。
+// 该预检刻意跳过前端构建、Release 签名和对象存储，保持开发更新前的快速只读边界。
+func (b *ProjectReleaseSourceBuilder) DevelopmentEngineRequirements(ctx context.Context, project Project, authorization string) ([]string, error) {
+	if b == nil || b.httpClient == nil || b.tenantBindingEnsurer == nil {
+		return nil, fmt.Errorf("开发引擎需求预检未初始化")
+	}
+	if err := b.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, project.ID, project.TenantID); err != nil {
+		return nil, fmt.Errorf("同步数据服务项目租户绑定失败: %w", err)
+	}
+	artifact, _, err := b.fetchRuntimeArtifact(ctx, project.ID, authorization)
+	if err != nil {
+		return nil, err
+	}
+	return releasebuilder.DeriveEngineRequirements(artifact), nil
+}
+
 func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, project Project, version Version, authorization string) (ReleaseSource, error) {
 	if b == nil || b.frontend == nil || b.httpClient == nil {
 		return ReleaseSource{}, fmt.Errorf("正式 ReleaseSource 构建器未初始化")
