@@ -290,6 +290,9 @@ func (i *ReleaseInstaller) Install(input ReleaseInstallInput) (InstalledRelease,
 	if err := i.verifyRelease(staging, input); err != nil {
 		return InstalledRelease{}, err
 	}
+	if err := i.materializeRuntimeArtifact(staging); err != nil {
+		return InstalledRelease{}, err
+	}
 	if err := syncDirectory(staging); err != nil {
 		return InstalledRelease{}, fmt.Errorf("同步 Release 临时目录: %w", err)
 	}
@@ -312,6 +315,64 @@ func (i *ReleaseInstaller) Install(input ReleaseInstallInput) (InstalledRelease,
 		return InstalledRelease{}, fmt.Errorf("同步 Release 根目录: %w", err)
 	}
 	return i.store.activate(input.ExpectedOuterSHA256, finalName)
+}
+
+// materializeRuntimeArtifact 在已验签、已校验 outer Release 后安全解包运行子制品。
+// 结果写入同一摘要 Release 的 runtime-artifact 目录，供 K3s 以只读 hostPath 挂载。
+func (i *ReleaseInstaller) materializeRuntimeArtifact(root string) error {
+	archive, err := os.Open(filepath.Join(root, "runtime-artifact.tar.zst"))
+	if err != nil {
+		return fmt.Errorf("读取 runtime artifact: %w", err)
+	}
+	defer archive.Close()
+	decoder, err := zstd.NewReader(archive, zstd.WithDecoderMaxMemory(i.limits.MaxDecoderBytes))
+	if err != nil {
+		return fmt.Errorf("打开 runtime artifact: %w", err)
+	}
+	defer decoder.Close()
+	tmp, err := os.MkdirTemp(root, ".runtime-artifact-")
+	if err != nil {
+		return fmt.Errorf("创建 runtime artifact 临时目录: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+	reader := tar.NewReader(decoder)
+	found, count := false, 0
+	var total int64
+	for {
+		h, nextErr := reader.Next()
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+		if nextErr != nil {
+			return fmt.Errorf("读取 runtime artifact 条目: %w", nextErr)
+		}
+		if h.Typeflag != tar.TypeReg || h.Name != "runtime-project-artifact.json" || h.Size < 0 || h.Size > i.limits.MaxFileBytes {
+			return errors.New("runtime artifact 包含非法条目")
+		}
+		count++
+		total += h.Size
+		if count != 1 || total > i.limits.MaxTotalBytes {
+			return errors.New("runtime artifact 超过安全限制")
+		}
+		if err := writeArchiveRegularFile(filepath.Join(tmp, h.Name), reader, h.Size); err != nil {
+			return fmt.Errorf("写入 runtime artifact: %w", err)
+		}
+		found = true
+	}
+	if !found {
+		return errors.New("runtime artifact 缺少项目制品")
+	}
+	if err := syncDirectory(tmp); err != nil {
+		return err
+	}
+	target := filepath.Join(root, "runtime-artifact")
+	if _, err := os.Stat(target); err == nil {
+		return nil
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		return fmt.Errorf("提交 runtime artifact: %w", err)
+	}
+	return syncDirectory(root)
 }
 
 func (s *ReleaseStore) ensureRoots() error {
@@ -697,7 +758,21 @@ func sealRelease(root string) error {
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			return fmt.Errorf("Release 提交前出现非法目录: %s", entry.Name())
+			if entry.Name() != "runtime-artifact" {
+				return fmt.Errorf("Release 提交前出现非法目录: %s", entry.Name())
+			}
+			child := filepath.Join(root, entry.Name(), "runtime-project-artifact.json")
+			info, statErr := os.Lstat(child)
+			if statErr != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+				return errors.New("runtime artifact 物化目录无效")
+			}
+			if err := os.Chmod(child, 0444); err != nil {
+				return err
+			}
+			if err := os.Chmod(filepath.Join(root, entry.Name()), 0555); err != nil {
+				return err
+			}
+			continue
 		}
 		if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
 			return fmt.Errorf("Release 提交前出现非法文件: %s", entry.Name())

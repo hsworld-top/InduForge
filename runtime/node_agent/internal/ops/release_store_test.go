@@ -439,9 +439,12 @@ func testReleaseInstaller(t *testing.T) *ReleaseInstaller {
 func signedReleaseArchive(t *testing.T, privateKey ed25519.PrivateKey, keyID string, files map[string][]byte, additions []releaseTestEntry) signedReleaseFixture {
 	t.Helper()
 	files = cloneFiles(files)
+	if payload, exists := files["runtime-artifact.tar.zst"]; exists {
+		files["runtime-artifact.tar.zst"] = nestedRuntimeArtifact(t, payload)
+	}
 	standardFiles := map[string][]byte{
 		"client-assets.tar.zst":        []byte("client"),
-		"runtime-artifact.tar.zst":     []byte("runtime"),
+		"runtime-artifact.tar.zst":     nestedRuntimeArtifact(t, []byte(`{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","generatedAt":"2026-09-02T00:00:00Z","dataPoints":[],"computeUnits":[],"alarmItems":[]}`)),
 		"sbom.cdx.json":                []byte(`{"bomFormat":"CycloneDX"}`),
 		"resource-recommendation.json": []byte(`{"schemaVersion":"resource-recommendation.v1"}`),
 		"health-contract.json":         []byte(`{"schemaVersion":"health-contract.v1"}`),
@@ -535,6 +538,29 @@ func signedReleaseArchive(t *testing.T, privateKey ed25519.PrivateKey, keyID str
 		manifestDigest:  sha256Digest(manifest),
 		checksumsDigest: sha256Digest(checksumsRaw),
 	}
+}
+
+func nestedRuntimeArtifact(t *testing.T, payload []byte) []byte {
+	t.Helper()
+	var output bytes.Buffer
+	encoder, err := zstd.NewWriter(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := tar.NewWriter(encoder)
+	if err = writer.WriteHeader(&tar.Header{Name: "runtime-project-artifact.json", Mode: 0600, Size: int64(len(payload)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = writer.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = encoder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
 }
 
 func writeTarEntry(t *testing.T, writer *tar.Writer, entry releaseTestEntry) {
