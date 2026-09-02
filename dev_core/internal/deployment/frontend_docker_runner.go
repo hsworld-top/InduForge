@@ -179,7 +179,9 @@ func (r *DockerFrontendBuildRunner) bootstrapBuiltinWorkspace(ctx context.Contex
 		if _, err := os.Stat(filepath.Join(workspace, "package.json")); err == nil {
 			return nil
 		}
-		return fmt.Errorf("内置工程工作区包含未识别文件，拒绝覆盖")
+		if !isPlatformContextOnly(entries, workspace) {
+			return fmt.Errorf("内置工程工作区包含未识别文件，拒绝覆盖")
+		}
 	}
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		return fmt.Errorf("创建内置工程工作区失败: %w", err)
@@ -202,10 +204,20 @@ func (r *DockerFrontendBuildRunner) bootstrapBuiltinWorkspace(ctx context.Contex
 	return nil
 }
 
+// isPlatformContextOnly 只认可 K3s 平台挂载的 .induforge/context；任何用户文件或
+// 其他元数据均保持 fail-closed，模板初始化不会覆盖非空工程。
+func isPlatformContextOnly(entries []os.DirEntry, workspace string) bool {
+	if len(entries) != 1 || entries[0].Name() != ".induforge" || !entries[0].IsDir() {
+		return false
+	}
+	metadata, err := os.ReadDir(filepath.Join(workspace, ".induforge"))
+	return err == nil && len(metadata) == 1 && metadata[0].Name() == "context" && metadata[0].IsDir()
+}
+
 func bootstrapCommand(templateID string) string {
 	// dockerFrontendClient 将工作区子路径固定挂载为 /source；不要使用镜像中不存在的路径，
 	// 以保证初始化与正式构建读取同一受控 volume subpath。
-	return "test -z \"$(find /source -mindepth 1 -maxdepth 1 -print -quit)\"; staging=/source/.induforge-initialize; mkdir \"$staging\"; cp -a /opt/induforge/templates/" + templateID + "/. \"$staging\"/; rm -rf \"$staging/node_modules\" \"$staging/dist\" \"$staging/.pnpm-store\"; mkdir -p \"$staging/.induforge\"; printf '%s\\n' '{\"version\":1,\"templateId\":\"" + templateID + "\"}' > \"$staging/.induforge/project.json\"; find \"$staging\" -mindepth 1 -maxdepth 1 -exec mv {} /source/ \\;; rmdir \"$staging\""
+	return "test -z \"$(find /source -mindepth 1 -maxdepth 1 ! -name .induforge -print -quit)\"; if test -e /source/.induforge; then test -d /source/.induforge/context && test -z \"$(find /source/.induforge -mindepth 1 -maxdepth 1 ! -name context -print -quit)\"; fi; staging=/source/.induforge-initialize; mkdir \"$staging\"; cp -a /opt/induforge/templates/" + templateID + "/. \"$staging\"/; rm -rf \"$staging/node_modules\" \"$staging/dist\" \"$staging/.pnpm-store\"; mkdir -p \"$staging/.induforge\" /source/.induforge; printf '%s\\n' '{\"version\":1,\"templateId\":\"" + templateID + "\"}' > \"$staging/.induforge/project.json\"; find \"$staging\" -mindepth 1 -maxdepth 1 ! -name .induforge -exec mv {} /source/ \\;; find \"$staging/.induforge\" -mindepth 1 -maxdepth 1 -exec mv {} /source/.induforge/ \\;; rmdir \"$staging/.induforge\" \"$staging\""
 }
 
 type dockerFrontendClient struct {

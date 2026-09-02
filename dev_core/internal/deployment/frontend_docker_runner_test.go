@@ -177,6 +177,28 @@ func TestDockerFrontendBuildRunnerBootstrapsOnlyEmptyBuiltinWorkspace(t *testing
 	}
 }
 
+func TestDockerFrontendBuildRunnerBootstrapsPlatformContextOnlyWorkspace(t *testing.T) {
+	frontendTestRoot = t.TempDir()
+	e := &fakeDockerFrontendEngine{}
+	r, err := newDockerFrontendBuildRunner(e, DockerFrontendBuildRunnerConfig{Image: "builder", WorkspaceVolume: "volume", WorkspaceRoot: frontendTestRoot, BootstrapProjectID: releaseSourceProjectID, BootstrapTemplateID: "vite-vue-js"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := filepath.Join(frontendTestRoot, releaseSourceProjectID, "workspace", ".induforge", "context")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.BuildProjectFrontend(context.Background(), Project{ID: releaseSourceProjectID}, Version{ID: "22222222-2222-4222-8222-222222222223"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(bootstrapCommand("vite-vue-js"), "! -name context") {
+		t.Fatal("初始化命令必须只放行固定 context 挂载")
+	}
+	if isPlatformContextOnly([]os.DirEntry{}, workspace) {
+		t.Fatal("空目录条目不得视为平台上下文")
+	}
+}
+
 func anyStrings(values []any) []string {
 	result := make([]string, 0, len(values))
 	for _, value := range values {
