@@ -12,7 +12,9 @@
     @mousedown.stop
     @contextmenu.prevent
   >
-    <button type="button" :disabled="!selectedText" @click="copySelection">{{ ui('复制', 'Copy') }}</button>
+    <button type="button" :disabled="!selectedText" @click="copySelection">
+      {{ ui('复制', 'Copy') }}
+    </button>
     <button
       type="button"
       :disabled="!selectedText || !editorContextMenu.canModify"
@@ -23,11 +25,14 @@
     <button type="button" :disabled="!editorContextMenu.canModify" @click="pasteFromClipboard">
       {{ ui('粘贴', 'Paste') }}
     </button>
-    <button type="button" @click="formatFromContextMenu">{{ ui('格式化文档', 'Format Document') }}</button>
+    <button type="button" @click="formatFromContextMenu">
+      {{ ui('格式化文档', 'Format Document') }}
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { secureRandomUUID } from '@/utils/secure-random-uuid'
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { debugLogger } from '@/utils/debug'
 import * as monaco from 'monaco-editor'
@@ -119,7 +124,7 @@ let editorInstance = null
 let isInternalUpdate = false
 let typeDefinitionsDisposable: monaco.IDisposable | null = null
 let completionProviderDisposable: monaco.IDisposable | null = null
-const typeDefinitionsPath = `file:///induforge/editor-${crypto.randomUUID()}.d.ts`
+const typeDefinitionsPath = `file:///induforge/editor-${secureRandomUUID()}.d.ts`
 const selectedText = ref('')
 const editorContextMenu = ref({
   visible: false,

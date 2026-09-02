@@ -1,7 +1,12 @@
 <template>
   <DcDrawer v-model="visible" :title="t('quickAlarm.title')" :width="820" :max="920">
     <template #actions>
-      <button type="button" class="quick-alarm__icon" :title="t('quickAlarm.close')" @click="visible = false">
+      <button
+        type="button"
+        class="quick-alarm__icon"
+        :title="t('quickAlarm.close')"
+        @click="visible = false"
+      >
         <IconTablerX />
       </button>
     </template>
@@ -103,7 +108,10 @@
                 'is-advanced': configurationMode === 'advanced',
               }"
             >
-              <el-checkbox v-model="numericEnabled[item.key]" :aria-label="`${t('quickAlarm.enable')} ${item.label}`" />
+              <el-checkbox
+                v-model="numericEnabled[item.key]"
+                :aria-label="`${t('quickAlarm.enable')} ${item.label}`"
+              />
               <strong>{{ item.label }}</strong>
 
               <div v-if="item.kind === 'threshold'" class="quick-alarm__numeric-params">
@@ -173,7 +181,9 @@
           </template>
           <div class="quick-alarm__numeric-common">
             <label :class="{ 'is-advanced': configurationMode === 'advanced' }">
-              <el-checkbox v-model="numericEnabled.offline">{{ t('quickAlarm.offlineAlarm') }}</el-checkbox>
+              <el-checkbox v-model="numericEnabled.offline">{{
+                t('quickAlarm.offlineAlarm')
+              }}</el-checkbox>
               <el-select v-model="numericSeverities.offline" :disabled="!numericEnabled.offline">
                 <el-option
                   v-for="option in severityOptions"
@@ -190,7 +200,12 @@
           </div>
         </div>
 
-        <div v-else class="quick-alarm__types" role="radiogroup" :aria-label="t('quickAlarm.alarmType')">
+        <div
+          v-else
+          class="quick-alarm__types"
+          role="radiogroup"
+          :aria-label="t('quickAlarm.alarmType')"
+        >
           <button
             v-for="option in typeOptions"
             :key="option.value"
@@ -212,7 +227,11 @@
                 <el-option label="true" :value="true" />
                 <el-option label="false" :value="false" />
               </el-select>
-              <el-input v-else v-model="textExpected" :placeholder="t('quickAlarm.expectedValue')" />
+              <el-input
+                v-else
+                v-model="textExpected"
+                :placeholder="t('quickAlarm.expectedValue')"
+              />
             </label>
           </template>
 
@@ -257,14 +276,22 @@
           <header class="quick-alarm__advanced-head">
             <h3>{{ t('quickAlarm.additionalLimits') }}</h3>
             <div>
-              <button type="button" @click="addAdvancedLimit('high')">{{ t('quickAlarm.addHigh') }}</button>
-              <button type="button" @click="addAdvancedLimit('low')">{{ t('quickAlarm.addLow') }}</button>
+              <button type="button" @click="addAdvancedLimit('high')">
+                {{ t('quickAlarm.addHigh') }}
+              </button>
+              <button type="button" @click="addAdvancedLimit('low')">
+                {{ t('quickAlarm.addLow') }}
+              </button>
             </div>
           </header>
           <div v-if="advancedLimits.length" class="quick-alarm__limit-list">
             <div class="quick-alarm__limit-head" aria-hidden="true">
-              <span>{{ t('quickAlarm.name') }}</span><span>{{ t('quickAlarm.direction') }}</span><span>{{ t('quickAlarm.limit') }}</span><span>{{ t('quickAlarm.alarmText') }}</span
-              ><span>{{ t('quickAlarm.level') }}</span><span></span>
+              <span>{{ t('quickAlarm.name') }}</span
+              ><span>{{ t('quickAlarm.direction') }}</span
+              ><span>{{ t('quickAlarm.limit') }}</span
+              ><span>{{ t('quickAlarm.alarmText') }}</span
+              ><span>{{ t('quickAlarm.level') }}</span
+              ><span></span>
             </div>
             <div v-for="item in advancedLimits" :key="item.id" class="quick-alarm__limit-row">
               <el-input v-model="item.name" :placeholder="t('quickAlarm.customLimit')" />
@@ -340,7 +367,9 @@
 
       <footer class="quick-alarm__footer">
         <div>
-          <button type="button" class="quick-alarm__cancel" @click="visible = false">{{ t('quickAlarm.cancel') }}</button>
+          <button type="button" class="quick-alarm__cancel" @click="visible = false">
+            {{ t('quickAlarm.cancel') }}
+          </button>
           <button
             type="submit"
             class="quick-alarm__primary"
@@ -360,6 +389,7 @@
 </template>
 
 <script setup lang="ts">
+import { secureRandomUUID } from '@/utils/secure-random-uuid'
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
@@ -507,14 +537,14 @@ const pointPath = computed(() =>
         .map((point) => point.name || point.path)
         .join(', ') + (props.points.length > 3 ? '…' : ''),
 )
-const categoryLabel = computed(
-  () => t(`quickAlarm.categories.${category.value}`),
-)
-const numericItems = computed<Array<{
-  key: NumericAlarmKey
-  label: string
-  kind: 'threshold' | 'rate_of_change' | 'deviation' | 'offline'
-}>>(() => [
+const categoryLabel = computed(() => t(`quickAlarm.categories.${category.value}`))
+const numericItems = computed<
+  Array<{
+    key: NumericAlarmKey
+    label: string
+    kind: 'threshold' | 'rate_of_change' | 'deviation' | 'offline'
+  }>
+>(() => [
   { key: 'hh', label: t('quickAlarm.levels.hh'), kind: 'threshold' },
   { key: 'h', label: t('quickAlarm.levels.h'), kind: 'threshold' },
   { key: 'l', label: t('quickAlarm.levels.l'), kind: 'threshold' },
@@ -688,7 +718,7 @@ function resetAdvancedOptions() {
 function addAdvancedLimit(direction: 'high' | 'low') {
   const index = advancedLimits.value.filter((item) => item.direction === direction).length + 1
   advancedLimits.value.push({
-    id: crypto.randomUUID(),
+    id: secureRandomUUID(),
     direction,
     name: `${direction === 'high' ? t('quickAlarm.additionalHigh') : t('quickAlarm.additionalLow')} ${index}`,
     threshold: undefined,
@@ -744,7 +774,7 @@ function restoreNumericItems(items: AlarmItem[]) {
     alarmNames.value.limit = limit.displayName
     const custom = limit.conditions.filter((condition) => condition.params.presetLevel === 'custom')
     advancedLimits.value = custom.map((condition) => ({
-      id: condition.id || crypto.randomUUID(),
+      id: condition.id || secureRandomUUID(),
       direction: ['gt', 'gte'].includes(condition.operator) ? 'high' : 'low',
       name: String(condition.params.levelName || t('quickAlarm.additionalLimit')),
       threshold: Number(condition.params.threshold),

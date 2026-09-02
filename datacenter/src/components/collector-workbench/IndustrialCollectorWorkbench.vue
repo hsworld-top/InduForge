@@ -60,7 +60,10 @@
                     <span v-if="activeDriver">{{
                       formatCollectorDriverDisplayName(activeDriver)
                     }}</span>
-                    <span>{{ ui('驱动版本', 'Driver Version') }} {{ activeConnection.driverVersion }}</span>
+                    <span
+                      >{{ ui('驱动版本', 'Driver Version') }}
+                      {{ activeConnection.driverVersion }}</span
+                    >
                   </p>
                 </div>
               </div>
@@ -114,7 +117,9 @@
                   <header class="industrial-workbench__validation-head">
                     <div class="industrial-workbench__agent">
                       <span>
-                        <i :class="{ 'is-online': selectedAgent?.status === 'online' }" />{{ ui('调试代理', 'Debug Agent') }}
+                        <i :class="{ 'is-online': selectedAgent?.status === 'online' }" />{{
+                          ui('调试代理', 'Debug Agent')
+                        }}
                       </span>
                       <CollectorAgentSelector
                         ref="agentSelector"
@@ -152,7 +157,11 @@
                     </div>
                   </header>
                   <el-tabs v-model="validationTab" class="industrial-workbench__validation-tabs">
-                    <el-tab-pane v-if="supportsDeviceBrowse" :label="ui('设备浏览', 'Device Browse')" name="discovery">
+                    <el-tab-pane
+                      v-if="supportsDeviceBrowse"
+                      :label="ui('设备浏览', 'Device Browse')"
+                      name="discovery"
+                    >
                       <CollectorDiscoveryPanel
                         ref="discoveryPanel"
                         :project-id="projectId"
@@ -197,9 +206,20 @@
           </header>
           <section class="industrial-workbench__empty">
             <span><IconTablerTopologyStar3 /></span>
-            <strong>{{ ui('建立第一条工业采集连接', 'Create Your First Industrial Connection') }}</strong>
-            <p>{{ ui('无需调试代理也可以先完成协议配置和变量建模，连接测试与设备浏览可稍后执行。', 'Configure the protocol and model points without a debug agent. Connection tests and device browsing can be done later.') }}</p>
-            <el-button type="primary" @click="wizardVisible = true">{{ ui('创建工业采集连接', 'Create Industrial Connection') }}</el-button>
+            <strong>{{
+              ui('建立第一条工业采集连接', 'Create Your First Industrial Connection')
+            }}</strong>
+            <p>
+              {{
+                ui(
+                  '无需调试代理也可以先完成协议配置和变量建模，连接测试与设备浏览可稍后执行。',
+                  'Configure the protocol and model points without a debug agent. Connection tests and device browsing can be done later.',
+                )
+              }}
+            </p>
+            <el-button type="primary" @click="wizardVisible = true">{{
+              ui('创建工业采集连接', 'Create Industrial Connection')
+            }}</el-button>
           </section>
         </template>
       </main>
@@ -230,6 +250,7 @@
 </template>
 
 <script setup lang="ts">
+import { secureRandomUUID } from '@/utils/secure-random-uuid'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
@@ -288,7 +309,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   navigate: [payload: { module: 'datapoint'; objectId: string }]
 }>()
-const workspaceSessionId = crypto.randomUUID()
+const workspaceSessionId = secureRandomUUID()
 const selectedId = ref(props.connection?.id || '')
 const activeConnection = ref<CollectorConnection | null>(null)
 const activeDriver = ref<CollectorDriverDetail | null>(null)
@@ -322,9 +343,12 @@ const connectionSessionBusy = computed(() =>
 const connectionStatus = computed(() => {
   const status = activeSessionState.value.status
   if (status === 'connected') return { label: ui('已连接', 'Connected'), tone: 'success' as const }
-  if (status === 'connecting') return { label: ui('连接中', 'Connecting'), tone: 'primary' as const }
-  if (status === 'disconnecting') return { label: ui('断开中', 'Disconnecting'), tone: 'primary' as const }
-  if (status === 'error') return { label: ui('连接异常', 'Connection Error'), tone: 'danger' as const }
+  if (status === 'connecting')
+    return { label: ui('连接中', 'Connecting'), tone: 'primary' as const }
+  if (status === 'disconnecting')
+    return { label: ui('断开中', 'Disconnecting'), tone: 'primary' as const }
+  if (status === 'error')
+    return { label: ui('连接异常', 'Connection Error'), tone: 'danger' as const }
   return { label: ui('未连接', 'Disconnected'), tone: 'warning' as const }
 })
 const connectionSessionTime = computed(() => activeSessionState.value.connectedAt || '')
@@ -353,9 +377,15 @@ const canManageConnection = computed(() =>
     : false,
 )
 const connectionDisabledReason = computed(() => {
-  if (!selectedAgent.value) return ui('请先选择采集调试代理', 'Select a collector debug agent first')
-  if (selectedAgent.value.status !== 'online') return ui('所选采集调试代理当前离线', 'The selected debug agent is offline')
-  if (!canManageConnection.value) return ui('代理缺少当前驱动、版本或 Schema 能力', 'The agent does not support the current driver, version, or schema')
+  if (!selectedAgent.value)
+    return ui('请先选择采集调试代理', 'Select a collector debug agent first')
+  if (selectedAgent.value.status !== 'online')
+    return ui('所选采集调试代理当前离线', 'The selected debug agent is offline')
+  if (!canManageConnection.value)
+    return ui(
+      '代理缺少当前驱动、版本或 Schema 能力',
+      'The agent does not support the current driver, version, or schema',
+    )
   return ''
 })
 
@@ -395,10 +425,17 @@ const canRead = computed(() =>
     : false,
 )
 const pointReadDisabledReason = computed(() => {
-  if (!selectedAgent.value) return ui('请先选择采集调试代理', 'Select a collector debug agent first')
-  if (selectedAgent.value.status !== 'online') return ui('所选采集调试代理当前离线', 'The selected debug agent is offline')
-  if (activeSessionState.value.status !== 'connected') return ui('请先连接设备', 'Connect to the device first')
-  if (!canRead.value) return ui('代理缺少当前驱动、版本、Schema 或变量读取能力', 'The agent cannot read points with the current driver, version, or schema')
+  if (!selectedAgent.value)
+    return ui('请先选择采集调试代理', 'Select a collector debug agent first')
+  if (selectedAgent.value.status !== 'online')
+    return ui('所选采集调试代理当前离线', 'The selected debug agent is offline')
+  if (activeSessionState.value.status !== 'connected')
+    return ui('请先连接设备', 'Connect to the device first')
+  if (!canRead.value)
+    return ui(
+      '代理缺少当前驱动、版本、Schema 或变量读取能力',
+      'The agent cannot read points with the current driver, version, or schema',
+    )
   return ''
 })
 
@@ -436,7 +473,12 @@ async function connectConnection(connection: CollectorConnection) {
       'connection.open',
     )
   ) {
-    ElMessage.warning(ui('当前调试代理不支持该驱动的长连接', 'The selected debug agent does not support persistent connections for this driver'))
+    ElMessage.warning(
+      ui(
+        '当前调试代理不支持该驱动的长连接',
+        'The selected debug agent does not support persistent connections for this driver',
+      ),
+    )
     return
   }
 
@@ -449,13 +491,19 @@ async function connectConnection(connection: CollectorConnection) {
       input: { workspaceSessionId },
       timeoutSeconds: 120,
     })
-    const completed = await waitTaskCompletion(task, ui('建立调试长连接超时', 'Timed out while opening the debug connection'))
+    const completed = await waitTaskCompletion(
+      task,
+      ui('建立调试长连接超时', 'Timed out while opening the debug connection'),
+    )
     const result = completed.result as {
       connected?: boolean
       serverName?: string
       connectedAt?: string
     } | null
-    if (result?.connected !== true) throw new Error(ui('调试长连接未进入已连接状态', 'The debug connection did not enter the connected state'))
+    if (result?.connected !== true)
+      throw new Error(
+        ui('调试长连接未进入已连接状态', 'The debug connection did not enter the connected state'),
+      )
     updateConnectionSession(connection.id, {
       status: 'connected',
       connectedAt: result.connectedAt
@@ -465,7 +513,10 @@ async function connectConnection(connection: CollectorConnection) {
     })
     ElMessage.success(ui(`“${connection.name}”已连接`, `“${connection.name}” connected`))
   } catch (error) {
-    const message = error instanceof Error ? error.message : ui('建立调试长连接失败', 'Failed to open the debug connection')
+    const message =
+      error instanceof Error
+        ? error.message
+        : ui('建立调试长连接失败', 'Failed to open the debug connection')
     updateConnectionSession(connection.id, { status: 'error', message })
     ElMessage.error(message)
   }
@@ -490,11 +541,19 @@ async function disconnectConnection(
       operation: 'connection.close',
       input: { workspaceSessionId },
     })
-    if (!options.silent) await waitTaskCompletion(task, ui('断开调试长连接超时', 'Timed out while closing the debug connection'))
+    if (!options.silent)
+      await waitTaskCompletion(
+        task,
+        ui('断开调试长连接超时', 'Timed out while closing the debug connection'),
+      )
     updateConnectionSession(connection.id, { status: 'disconnected' })
-    if (!options.silent) ElMessage.success(ui(`“${connection.name}”已断开`, `“${connection.name}” disconnected`))
+    if (!options.silent)
+      ElMessage.success(ui(`“${connection.name}”已断开`, `“${connection.name}” disconnected`))
   } catch (error) {
-    const message = error instanceof Error ? error.message : ui('断开调试长连接失败', 'Failed to close the debug connection')
+    const message =
+      error instanceof Error
+        ? error.message
+        : ui('断开调试长连接失败', 'Failed to close the debug connection')
     updateConnectionSession(
       connection.id,
       options.silent ? { status: 'disconnected' } : { status: 'error', message },
@@ -573,7 +632,12 @@ async function reloadPointTableAfterRead(connectionId: string) {
   try {
     await pointTable.value?.reload()
   } catch {
-    ElMessage.warning(ui('调试结果已保存，但刷新当前页失败', 'The debug result was saved, but the current page could not be refreshed'))
+    ElMessage.warning(
+      ui(
+        '调试结果已保存，但刷新当前页失败',
+        'The debug result was saved, but the current page could not be refreshed',
+      ),
+    )
   }
 }
 
@@ -598,13 +662,21 @@ async function readCurrentPage(points: Array<Pick<CollectorPoint, 'id' | 'name'>
       operation: 'point.read',
       input: { workspaceSessionId, pointIds: currentPageCollectorPointIds(points) },
     })
-    const completed = await waitTaskCompletion(task, ui('获取当前页数据超时', 'Timed out while reading the current page'))
+    const completed = await waitTaskCompletion(
+      task,
+      ui('获取当前页数据超时', 'Timed out while reading the current page'),
+    )
     const result = CollectorPointReadResultSchema.parse(completed.result)
     await reloadPointTableAfterRead(connection.id)
 
     const { successCount, failures } = summarizeCollectorPointRead(points, result)
     if (failures.length === 0) {
-      ElMessage.success(ui(`已获取当前页 ${successCount} 个变量`, `Read ${successCount} point${successCount === 1 ? '' : 's'} on the current page`))
+      ElMessage.success(
+        ui(
+          `已获取当前页 ${successCount} 个变量`,
+          `Read ${successCount} point${successCount === 1 ? '' : 's'} on the current page`,
+        ),
+      )
       return
     }
     batchResultTitle.value = ui('当前页数据获取结果', 'Current Page Read Results')
@@ -612,7 +684,10 @@ async function readCurrentPage(points: Array<Pick<CollectorPoint, 'id' | 'name'>
     batchFailures.value = failures
     batchResultVisible.value = true
   } catch (error) {
-    const message = error instanceof Error ? error.message : ui('获取当前页数据失败', 'Failed to read the current page')
+    const message =
+      error instanceof Error
+        ? error.message
+        : ui('获取当前页数据失败', 'Failed to read the current page')
     await reloadPointTableAfterRead(connection.id)
     batchResultTitle.value = ui('当前页数据获取结果', 'Current Page Read Results')
     batchSuccessCount.value = 0
@@ -651,7 +726,12 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
     discoveryPanel.value?.markSelectedCreated(createdIndexes)
     if (result.list.length > 0) await pointTable.value?.reload(1)
     if (result.failed.length === 0) {
-      ElMessage.success(ui(`已新增 ${result.list.length} 个变量`, `Created ${result.list.length} point${result.list.length === 1 ? '' : 's'}`))
+      ElMessage.success(
+        ui(
+          `已新增 ${result.list.length} 个变量`,
+          `Created ${result.list.length} point${result.list.length === 1 ? '' : 's'}`,
+        ),
+      )
     } else {
       batchResultTitle.value = ui('批量新增结果', 'Batch Create Results')
       batchSuccessCount.value = result.list.length

@@ -4,6 +4,7 @@ import type {
   ComputeUnitSave,
 } from '@/api/schemas/compute.schema'
 import { datacenterLocale } from '@/i18n/runtime'
+import { secureRandomUUID } from '@/utils/secure-random-uuid'
 
 export interface ComputeEditorTab {
   id: string
@@ -62,7 +63,8 @@ export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
   const inputBindings = asRecord(unit.inputBindings)
   return {
     id: String(unit.id),
-    name: unit.name || (datacenterLocale.value === 'en' ? 'Unnamed Compute Unit' : '未命名计算单元'),
+    name:
+      unit.name || (datacenterLocale.value === 'en' ? 'Unnamed Compute Unit' : '未命名计算单元'),
     folderId: unit.folderId ? String(unit.folderId) : null,
     lang: String(unit.lang || unit.language || 'javascript'),
     status: String(unit.status || (unit.isEnabled === false ? 'disabled' : 'enabled')),
@@ -134,7 +136,7 @@ function toParameterRows(bindings: Record<string, unknown>): ComputeParameterRow
     if (!item || typeof item !== 'object') return null
     const record = item as Record<string, unknown>
     return {
-      uid: String(crypto.randomUUID()),
+      uid: secureRandomUUID(),
       name: String(record.name || ''),
       type: String(record.type || 'string'),
       required: record.required !== false,
@@ -155,7 +157,7 @@ function toDatapointVariableRows(bindings: Record<string, unknown>): ComputeData
     if (!item || typeof item !== 'object') return null
     const record = item as Record<string, unknown>
     return {
-      uid: String(crypto.randomUUID()),
+      uid: secureRandomUUID(),
       alias: String(record.alias || ''),
       path: String(record.path || ''),
       datapointId: record.datapointId ? String(record.datapointId) : undefined,

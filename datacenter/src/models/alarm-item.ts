@@ -1,4 +1,5 @@
 import type { Datapoint } from '@/api/schemas/datapoint.schema'
+import { secureRandomUUID } from '@/utils/secure-random-uuid'
 import type {
   AlarmCondition,
   AlarmConditionKind,
@@ -174,7 +175,7 @@ export function createAlarmCondition(
     stale: { maxAgeMs: 60000 },
   }
   return {
-    id: crypto.randomUUID(),
+    id: secureRandomUUID(),
     kind,
     operator: operators[kind],
     label: label || alarmConditionLabels[kind],
