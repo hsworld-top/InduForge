@@ -10,6 +10,7 @@ SERVER_URL=""
 ENROLLMENT_CODE=""
 HOST_DATA_DIR=""
 NODE_IP=""
+RUNTIME_DATA_DIR="/var/lib/induforge/node-agent"
 RELEASE_SIGNING_KEY_ID=""
 RELEASE_SIGNING_PUBLIC_KEY=""
 while [ "$#" -gt 0 ]; do
@@ -56,6 +57,13 @@ if [ "$(id -u)" -eq 0 ]; then
     if command -v useradd >/dev/null 2>&1; then useradd --system --home "$PREFIX" --shell /usr/sbin/nologin "$RUN_USER"; else adduser --system --home "$PREFIX" --disabled-login "$RUN_USER"; fi
   fi
   if ! getent group "$RUN_GROUP" >/dev/null 2>&1; then RUN_GROUP="$(id -gn "$RUN_USER")"; fi
+	install -d -m 0700 -o "$RUN_USER" -g "$RUN_GROUP" "$RUNTIME_DATA_DIR"
+	# 旧包把 Agent 身份与 Release 放在 PREFIX/data；首次升级时只复制到标准
+	# hostPath 根，保留旧目录作为可恢复备份，不在安装阶段删除用户数据。
+	if [ -f "$PREFIX/data/ops-agent-identity.json" ] && [ ! -f "$RUNTIME_DATA_DIR/ops-agent-identity.json" ]; then
+		cp -a "$PREFIX/data/." "$RUNTIME_DATA_DIR/"
+		chown -R "$RUN_USER:$RUN_GROUP" "$RUNTIME_DATA_DIR"
+	fi
 fi
 # 能力和离线资产是版本化制品，不保留上一包的未知文件；身份、运行数据、
 # Release 与日志目录单独保留，升级不会误删用户数据。
@@ -182,7 +190,7 @@ Restart=always
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=$PREFIX/data/hostd $HOST_DATA_DIR /etc/rancher/induforge-k3s /etc/chrony /etc/systemd/system /usr/local/bin /run/induforge
+ReadWritePaths=$PREFIX/data/hostd $RUNTIME_DATA_DIR $HOST_DATA_DIR /etc/rancher/induforge-k3s /etc/chrony /etc/systemd/system /usr/local/bin /run/induforge
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -197,7 +205,7 @@ User=$RUN_USER
 Group=$RUN_GROUP
 Environment=NODE_AGENT_WORKDIR=$PREFIX
 Environment=NODE_AGENT_CONFIG=$CONFIG_DIR/config.yaml
-Environment=NODE_AGENT_DATA_DIR=$PREFIX/data
+Environment=NODE_AGENT_DATA_DIR=$RUNTIME_DATA_DIR
 ExecStart=$PREFIX/bin/node-agent --daemon
 Restart=always
 RestartSec=3

@@ -59,6 +59,7 @@ grep -Fq 'enrollmentCode: "one-time-code"' "$CONFIG_DIR/config.yaml"
 grep -Fq "hostDataDir: '$TEMP_DIR/node-data/k3s'" "$CONFIG_DIR/config.yaml"
 grep -Fq "keyId: 'release-signing-key-v1'" "$CONFIG_DIR/config.yaml"
 grep -Fq "publicKey: '$PUBLIC_KEY'" "$CONFIG_DIR/config.yaml"
+grep -Fq 'Environment=NODE_AGENT_DATA_DIR=$RUNTIME_DATA_DIR' "$PACKAGE_DIR/install.sh"
 awk '/group: collector/,/enabled: false/' "$CONFIG_DIR/config.yaml" | grep -Fq 'installed: true'
 
 # 覆盖真实旧版本升级路径：旧配置由 YAML 序列化器输出为 8 空格层级。安装器
