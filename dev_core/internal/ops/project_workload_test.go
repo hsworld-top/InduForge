@@ -56,7 +56,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 		t.Fatalf("alarm must not receive sandbox Secret: %s", alarm)
 	}
 	collector, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", NodeID: testNodeID, Engine: ServiceCollector, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
-	for _, expected := range []string{"image: induforge/collector-engine:1.0.2", `command: ["/collector_artifact_unpack"]`, `command: ["/industrial_collector"]`, `"--artifact"`, `"--binding"`, `"--index"`, `"--listen"`, "mountPath: /etc/induforge/collector/secrets", "mountPath: /var/lib/induforge/collector/wal", `hostPath: {path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/state/collector-wal", type: Directory}`, "maxUnavailable: 1, maxSurge: 0"} {
+	for _, expected := range []string{"image: induforge/collector-engine:1.0.3", `command: ["/collector_artifact_unpack"]`, `command: ["/industrial_collector"]`, `"--artifact"`, `"--binding"`, `"--index"`, `"--listen"`, "mountPath: /etc/induforge/collector/secrets", "mountPath: /var/lib/induforge/collector/wal", `hostPath: {path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/state/collector-wal", type: Directory}`, "maxUnavailable: 1, maxSurge: 0"} {
 		if err != nil || !strings.Contains(collector, expected) {
 			t.Fatalf("collector workload missing %q: %v\n%s", expected, err, collector)
 		}
