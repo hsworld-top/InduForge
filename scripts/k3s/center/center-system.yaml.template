@@ -34,7 +34,8 @@ spec:
         - name: postgres
           image: docker.io/timescale/timescaledb:2.26.4-pg16
           imagePullPolicy: Never
-          args: ["-p", "18432"]
+          # TimescaleDB 扩展要求服务进程预加载；开发态 IF 时序库依赖该能力。
+          args: ["-p", "18432", "-c", "shared_preload_libraries=timescaledb"]
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -356,6 +357,42 @@ spec:
             - |
               until nc -z center-meta-store 18432; do sleep 2; done
               until nc -z center-cache-store 18379; do sleep 2; done
+        # IF 时序库固定使用 if_dev_data；在 data_service 启动和内置教程 seed 前完成空库与扩展准备。
+        - name: initialize-dev-timeseries
+          image: docker.io/timescale/timescaledb:2.26.4-pg16
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              case "${IF_META_STORE_DEV_DATA_DB}" in
+                ''|*[!A-Za-z0-9_]* ) echo "invalid IF_META_STORE_DEV_DATA_DB" >&2; exit 1 ;;
+              esac
+              export PGPASSWORD="${IF_META_STORE_PASSWORD}"
+              if ! psql -h center-meta-store -p 18432 -U "${IF_META_STORE_USER}" -d "${IF_META_STORE_ADMIN_DATABASE}" -tAc "SELECT 1 FROM pg_database WHERE datname='${IF_META_STORE_DEV_DATA_DB}'" | grep -qx 1; then
+                psql -h center-meta-store -p 18432 -U "${IF_META_STORE_USER}" -d "${IF_META_STORE_ADMIN_DATABASE}" -c "CREATE DATABASE \"${IF_META_STORE_DEV_DATA_DB}\""
+              fi
+              psql -h center-meta-store -p 18432 -U "${IF_META_STORE_USER}" -d "${IF_META_STORE_DEV_DATA_DB}" -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;'
+          env:
+            - name: IF_META_STORE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_USER
+            - name: IF_META_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_PASSWORD
+            - name: IF_META_STORE_ADMIN_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_ADMIN_DATABASE
+            - name: IF_META_STORE_DEV_DATA_DB
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_DEV_DATA_DB
       containers:
         - name: data
           image: __DATA_IMAGE__
