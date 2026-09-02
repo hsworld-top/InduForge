@@ -11,8 +11,8 @@ const (
 	projectGatewayImage  = "induforge/project-gateway:1.0.0"
 	runtimeAPIImage      = "induforge/project-runtime-api:1.0.0"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
-	runtimeEngineImage   = "induforge/runtime-engine:1.0.1"
-	collectorEngineImage = "induforge/collector-engine:1.0.1"
+	runtimeEngineImage   = "induforge/runtime-engine:1.0.2"
+	collectorEngineImage = "induforge/collector-engine:1.0.2"
 	computeSandboxImage  = "induforge/compute-sandbox:1.0.0"
 )
 
