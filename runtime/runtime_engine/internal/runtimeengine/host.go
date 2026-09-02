@@ -80,6 +80,7 @@ func (h *Host) Start(ctx context.Context) error {
 	}
 	store, err := postgres.Open(ctx, dsn)
 	if err != nil {
+		log.Printf("RuntimeEngine PostgreSQL preflight stage=%s", postgres.DiagnosticCode(err))
 		return h.fail("POSTGRES_PREFLIGHT_FAILED")
 	}
 	natsOptions, err := index.ResolveNATS(ctx, loaded.Config.JetStream.ServerResourceRef, loaded.Config.JetStream.CredentialSecretRef, loaded.Config.AccountID)

@@ -1,18 +1,28 @@
 package postgres
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
 
 func TestSchemaIsSingleV1Baseline(t *testing.T) {
-	for _, table := range []string{"schema_meta", "role_fence", "producer_fence", "processed_event", "consumer_checkpoint", "transactional_outbox", "processing_failure", "producer_sequence", "point_history", "point_current", "compute_input_snapshot", "compute_trigger_state", "compute_schedule_state", "alarm_item_state"} {
+	for _, table := range []string{"schema_meta", "role_fence", "producer_fence", "processed_event", "consumer_checkpoint", "transactional_outbox", "processing_failure", "producer_sequence", "point_history", "point_current", "compute_input_snapshot", "compute_command_audit", "compute_trigger_state", "compute_schedule_state", "alarm_item_state", "alarm_ack_audit"} {
 		if !strings.Contains(SchemaSQL, "runtime_engine."+table) {
 			t.Fatalf("缺少表 %s", table)
 		}
 	}
 	if strings.Contains(strings.ToUpper(SchemaSQL), "ALTER TABLE") {
 		t.Fatal("V1 基线不应包含迁移 ALTER")
+	}
+}
+
+func TestDiagnosticCodeDoesNotExposeConnectionDetails(t *testing.T) {
+	if got := DiagnosticCode(errors.New("PostgreSQL 状态库基线校验失败: runtime_engine")); got != "SCHEMA" {
+		t.Fatalf("schema diagnostic=%q", got)
+	}
+	if got := DiagnosticCode(errors.New("postgres://user:secret@host/database")); got != "UNKNOWN" {
+		t.Fatalf("unknown diagnostic=%q", got)
 	}
 }
 

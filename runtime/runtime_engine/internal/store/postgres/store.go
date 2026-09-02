@@ -38,6 +38,23 @@ var (
 	ErrStoreClosed = errors.New("postgres store 已终止")
 )
 
+// DiagnosticCode 仅把启动前校验失败归类为固定阶段码，供容器日志定位；不返回 DSN、用户名或驱动原始错误。
+func DiagnosticCode(err error) string {
+	if err == nil {
+		return "NONE"
+	}
+	switch {
+	case strings.Contains(err.Error(), "创建 PostgreSQL 连接池失败"):
+		return "POOL_CREATE"
+	case strings.Contains(err.Error(), "PostgreSQL 连通性校验失败"):
+		return "PING"
+	case strings.Contains(err.Error(), "PostgreSQL 状态库基线校验失败"):
+		return "SCHEMA"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // Store 不保存或记录 DSN；连接池仅由调用者传入的已解析 DSN 构造。
 type Store struct {
 	pool      *pgxpool.Pool
