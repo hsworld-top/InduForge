@@ -82,6 +82,12 @@ func TestReleaseInstallerVerifiesAndAtomicallyActivates(t *testing.T) {
 	if info, err := os.Stat(filepath.Join(installed.ReleaseDir, "release-manifest.json")); err != nil || info.Mode().Perm()&0222 != 0 {
 		t.Fatalf("installed Release must be sealed read-only: info=%v err=%v", info, err)
 	}
+	if info, err := os.Stat(installed.ReleaseDir); err != nil || info.Mode().Perm() != 0555 {
+		t.Fatalf("installed Release directory mode=%v err=%v", info, err)
+	}
+	if info, err := os.Stat(filepath.Join(installed.ReleaseDir, "runtime-artifact.tar.zst")); err != nil || info.Mode().Perm() != 0444 {
+		t.Fatalf("runtime artifact mode=%v err=%v", info, err)
+	}
 	pointerRaw, err := os.ReadFile(filepath.Join(store.root, "current.json"))
 	if err != nil {
 		t.Fatal(err)

@@ -660,11 +660,13 @@ func sealRelease(root string) error {
 		if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
 			return fmt.Errorf("Release 提交前出现非法文件: %s", entry.Name())
 		}
-		if err := os.Chmod(filepath.Join(root, entry.Name()), 0400); err != nil {
+		// K3s 以固定非 root UID 挂载内容寻址目录；other 只读位允许容器读取，
+		// 写位仍全部关闭，且上层 Agent 私有目录继续阻止宿主机普通用户遍历。
+		if err := os.Chmod(filepath.Join(root, entry.Name()), 0444); err != nil {
 			return err
 		}
 	}
-	return os.Chmod(root, 0500)
+	return os.Chmod(root, 0555)
 }
 
 func (s *ReleaseStore) activate(digest, finalName string) (InstalledRelease, error) {
