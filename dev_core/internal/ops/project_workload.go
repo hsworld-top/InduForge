@@ -383,7 +383,7 @@ spec:
         - name: collector-artifact-prepare
           image: %s
           imagePullPolicy: IfNotPresent
-          command: ["collector_artifact_unpack"]
+          command: ["/collector_artifact_unpack"]
           args: ["--archive", "/opt/induforge/release/%s", "--target", "/work/artifact"]
           resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
@@ -394,7 +394,7 @@ spec:
         - name: collector-engine
           image: %s
           imagePullPolicy: IfNotPresent
-          command: ["industrial_collector"]
+          command: ["/industrial_collector"]
           args: ["--artifact", "/work/artifact/collector-runtime-artifact.json", "--binding", "/etc/induforge/collector/binding.json", "--index", "/etc/induforge/collector/index.json", "--listen", "0.0.0.0:18080"]
           ports: [{name: http, containerPort: 18080}]
           readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 3, periodSeconds: 3}

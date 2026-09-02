@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/indu-forge/runtime-engine/internal/provision"
 	"github.com/indu-forge/runtime-engine/internal/provisioner"
@@ -68,10 +69,29 @@ func runPrepare(args []string) {
 		os.Exit(1)
 	}
 	if err := provisioner.Prepare(in); err != nil {
-		fmt.Fprintln(os.Stderr, "prepare: failed")
+		// 仅输出受控阶段分类，避免把 binding、制品路径或 Secret 内容写入容器日志。
+		fmt.Fprintf(os.Stderr, "prepare: failed (%s)\n", prepareErrorClass(err))
 		os.Exit(1)
 	}
 	fmt.Fprintln(os.Stdout, "prepare: complete")
+}
+
+func prepareErrorClass(err error) string {
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "输入") || strings.Contains(message, "身份") || strings.Contains(message, "路径"):
+		return "input-validation"
+	case strings.Contains(message, "摘要"):
+		return "artifact-integrity"
+	case strings.Contains(message, "解包"):
+		return "artifact-unpack"
+	case strings.Contains(message, "派生") || strings.Contains(message, "配置构造") || strings.Contains(message, "角色分配") || strings.Contains(message, "索引构造"):
+		return "binding-validation"
+	case strings.Contains(message, "bundle"):
+		return "bundle-write"
+	default:
+		return "artifact-read"
+	}
 }
 
 func runProvisionNATS(args []string) {

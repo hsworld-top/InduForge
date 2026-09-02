@@ -22,6 +22,9 @@ func TestBuildRuntimeBindingInputIsDeterministicAndRoleScoped(t *testing.T) {
 		if json.Unmarshal(first, &value) != nil || value["schemaVersion"] != runtimeBindingInputVersion || value["runtimeArtifactSha256"] == "" {
 			t.Fatalf("%s input contract incomplete: %s", role, first)
 		}
+		if value["runtimeArtifactPath"] != "/opt/induforge/release/"+runtimeArtifactFile {
+			t.Fatalf("%s runtime artifact path = %v", role, value["runtimeArtifactPath"])
+		}
 		binding := value["binding"].(map[string]any)
 		if binding["role"] != role || !strings.HasPrefix(binding["accountId"].(string), "if-") || strings.Contains(string(first), "producerAssignments") || strings.Contains(string(first), "computeProducers") {
 			t.Fatalf("%s input leaks derived fields: %s", role, first)

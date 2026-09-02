@@ -36,7 +36,8 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 	input := map[string]any{
 		"schemaVersion":         runtimeBindingInputVersion,
 		"releaseId":             workload.ReleaseID,
-		"runtimeArtifactPath":   "/opt/induforge/release/current/" + runtimeArtifactFile,
+		// 工作负载挂载的是摘要固定的 Release 目录，容器内没有节点 Agent 的 current 链接。
+		"runtimeArtifactPath":   "/opt/induforge/release/" + runtimeArtifactFile,
 		"runtimeArtifactSha256": manifest.Artifacts.Runtime.Checksum,
 		"artifactDir":           "/work/artifact", "bundleDir": "/work/bundle",
 		"binding": map[string]any{
