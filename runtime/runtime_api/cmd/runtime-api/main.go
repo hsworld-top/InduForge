@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -37,6 +38,12 @@ type postgresSecret struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		if err := runHealthcheckCommand(os.Args[2:]); err != nil {
+			fatal("runtime-api 健康检查失败", err)
+		}
+		return
+	}
 	var input options
 	flag.StringVar(&input.listen, "listen", "127.0.0.1:17801", "Runtime API 本机回环监听地址")
 	flag.StringVar(&input.artifactPath, "artifact", "", "runtime-project-artifact.v1 文件")
@@ -118,6 +125,40 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fatal("runtime-api 退出", err)
 	}
+}
+
+func runHealthcheckCommand(args []string) error {
+	flags := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	rawURL := flags.String("url", "", "仅允许 Runtime API 回环 /health URL")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		return errors.New("healthcheck 参数无效")
+	}
+	return checkLoopbackHealth(*rawURL, &http.Client{Timeout: 2 * time.Second})
+}
+
+func checkLoopbackHealth(rawURL string, client *http.Client) error {
+	endpoint, err := url.Parse(rawURL)
+	if err != nil || endpoint.Scheme != "http" || endpoint.User != nil || endpoint.Path != "/health" || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return errors.New("healthcheck URL 必须是 HTTP 回环 /health")
+	}
+	ip := net.ParseIP(endpoint.Hostname())
+	if ip == nil || !ip.IsLoopback() || endpoint.Port() == "" {
+		return errors.New("healthcheck URL 必须包含回环 IP 和端口")
+	}
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return err
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("请求 health endpoint: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("health endpoint 返回 HTTP %d", response.StatusCode)
+	}
+	return nil
 }
 
 func validateOptions(input options) error {
