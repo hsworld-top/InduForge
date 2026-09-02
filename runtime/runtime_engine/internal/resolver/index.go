@@ -106,7 +106,7 @@ func (i *Index) ResolveNATS(_ context.Context, resourceRef, secretRef, accountID
 		Username      string `json:"username"`
 		Password      string `json:"password"`
 	}
-	if !allowedObject(secret, &credential, "schemaVersion", "authType", "token", "username", "password") || credential.SchemaVersion != "nats-credential.v1" {
+	if !allowedNATSCredential(secret, &credential) || credential.SchemaVersion != "nats-credential.v1" {
 		return jetstream.ConnectionOptions{}, errors.New("NATS credential 非法")
 	}
 	var opts []nats.Option
@@ -133,6 +133,27 @@ func (i *Index) ResolveNATS(_ context.Context, resourceRef, secretRef, accountID
 		return jetstream.ConnectionOptions{}, err
 	}
 	return jetstream.NewConnectionOptions(value.URL, identity, opts...)
+}
+
+// allowedNATSCredential 保持严格 JSON/未知字段拒绝，同时接受 token 凭据的
+// 正式最小三字段表示，和采集器、节点 bootstrap 契约一致。
+func allowedNATSCredential(raw []byte, target any) bool {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(target) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(raw, &object) != nil {
+		return false
+	}
+	if _, ok := object["schemaVersion"]; !ok {
+		return false
+	}
+	if _, ok := object["authType"]; !ok {
+		return false
+	}
+	return len(object) == 2 || len(object) == 3 || len(object) == 5
 }
 
 func (i *Index) ResolvePostgres(_ context.Context, secretRef string) (string, error) {
