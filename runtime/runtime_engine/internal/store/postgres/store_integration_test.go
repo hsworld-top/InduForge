@@ -639,6 +639,12 @@ func TestPostgresV1Foundation(t *testing.T) {
 	})
 
 	t.Run("schema catalog verification rejects forged version", func(t *testing.T) {
+		if _, err := store.pool.Exec(ctx, `ALTER TABLE runtime_engine.alarm_ack_audit ALTER COLUMN id DROP DEFAULT`); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.VerifySchema(ctx); err == nil {
+			t.Fatal("alarm ACK 审计序列默认值漂移必须被拒绝")
+		}
 		if _, err := store.pool.Exec(ctx, `ALTER TABLE runtime_engine.point_current ADD COLUMN forged text`); err != nil {
 			t.Fatal(err)
 		}
