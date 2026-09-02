@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	projectGatewayImage  = "induforge/project-gateway:1.0.0"
-	runtimeAPIImage      = "induforge/project-runtime-api:1.0.0"
+	projectGatewayImage = "induforge/project-gateway:1.0.0"
+	runtimeAPIImage     = "induforge/project-runtime-api:1.0.0"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
 	runtimeEngineImage   = "induforge/runtime-engine:1.0.6"
@@ -88,6 +88,10 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		image, container = collectorEngineImage, "collector-engine"
 	}
 	hostPort := ""
+	// 运行时 bundle 由 init 容器写入 EmptyDir，主 RuntimeEngine 只读消费。
+	// 显式的只读 bind mount 是生产模式验证 site-index 可信来源的必要条件；
+	// base 网关仍保持原挂载语义。
+	workMountReadOnly := ""
 	sandbox := ""
 	runtimeInit, runtimeArgs, runtimeMounts, runtimeVolumes, apiSidecar := "", "", "", "", ""
 	if workload.Engine == ServiceBase {
@@ -167,6 +171,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.ProjectID, "if-"+stableRuntimeKey(workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, strconv.Itoa(max(1, workload.BindingRevision)), workload.RuntimeNATSEndpoint)
 	}
 	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
+		workMountReadOnly = ", readOnly: true"
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
 		if nameErr != nil {
 			return "", nameErr
@@ -328,7 +333,7 @@ spec:
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
-            - {name: work, mountPath: /work}
+            - {name: work, mountPath: /work%s}
 %s
 %s
       volumes:
@@ -347,7 +352,7 @@ metadata:
 spec:
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
 }
 
 // renderCollectorWorkloadManifest 明确以 collector CLI 消费受信 Release 子工件、

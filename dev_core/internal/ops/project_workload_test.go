@@ -24,6 +24,9 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if err != nil || !strings.Contains(compute, "IF_ENGINE_ROLE") || !strings.Contains(compute, `"compute"`) || strings.Contains(compute, "hostPort:") {
 		t.Fatalf("compute role/port isolation failed: %v\n%s", err, compute)
 	}
+	if !strings.Contains(compute, "- {name: work, mountPath: /work, readOnly: true}") {
+		t.Fatalf("compute 主容器必须以只读方式消费 init 生成的运行 bundle:\n%s", compute)
+	}
 	for _, expected := range []string{"initContainers:", "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-binding-prepare", `args: ["provision-nats", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/nats.json"]`, `args: ["provision-state", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/postgres-bootstrap.json"]`, `args: ["prepare", "--input", "/etc/induforge/runtime-binding/input.json"]`, `"--config-root", "/work/bundle"`, "name: runtime-secrets", "name: bootstrap-nats", "name: bootstrap-state", "postgres-bootstrap.json", "mountPath: /work/bundle/secrets", "name: runtime-binding", "emptyDir: {sizeLimit: \"768Mi\"}", "induforge.io/runtime-binding-sha256"} {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute binding manifest missing %q:\n%s", expected, compute)
