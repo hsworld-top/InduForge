@@ -11,5 +11,5 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/runtime-engine /usr/local/bin/runtime-engine
 COPY --from=build /out/if-runtime-provisioner /usr/local/bin/if-runtime-provisioner
-USER nonroot:nonroot
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/runtime-engine"]
