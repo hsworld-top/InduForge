@@ -58,6 +58,12 @@ type Artifact struct {
 	CollectorVersion string       `json:"collectorVersion"`
 	Connections      []Connection `json:"connections"`
 	PointMappings    []Mapping    `json:"pointMappings"`
+	WAL              WAL          `json:"wal"`
+}
+type WAL struct {
+	FSync        string `json:"fsync"`
+	Checksum     string `json:"checksum"`
+	CommitMarker string `json:"commitMarker"`
 }
 type ArtifactRef struct {
 	ArtifactID       string `json:"artifactId"`
