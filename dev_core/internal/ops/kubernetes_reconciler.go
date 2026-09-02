@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -517,8 +518,20 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if err != nil {
 			return err
 		}
+		responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 8<<10))
 		response.Body.Close()
 		if response.StatusCode/100 != 2 {
+			var status struct {
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(responseBody, &status)
+			message := strings.TrimSpace(status.Message)
+			if len(message) > 512 {
+				message = message[:512]
+			}
+			if message != "" {
+				return fmt.Errorf("Kubernetes 调和 %s/%s 失败: HTTP %d: %s", meta.Kind, meta.Metadata.Name, response.StatusCode, message)
+			}
 			return fmt.Errorf("Kubernetes 调和 %s/%s 失败: HTTP %d", meta.Kind, meta.Metadata.Name, response.StatusCode)
 		}
 	}
