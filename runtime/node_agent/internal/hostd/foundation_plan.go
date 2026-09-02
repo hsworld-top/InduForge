@@ -7,7 +7,15 @@ import (
 	"strings"
 )
 
-const FoundationSchemaVersion = "induforge.foundation-plan.v1"
+const (
+	FoundationSchemaVersion = "induforge.foundation-plan.v1"
+
+	// foundationNATSMaxPayloadBytes 必须高于运行数据面允许的最大 DLQ 信封。
+	// NodeAgent 与 RuntimeEngine 是独立 Go 模块，具体下限由 runtime-data-plane-v1
+	// 契约冻结；渲染测试会校验该余量，避免基础设施配置漂移导致运行时拒绝启动。
+	foundationNATSMaxPayloadBytes = 2 * 1024 * 1024
+	minimumDLQPayloadBytes        = 1_424_000
+)
 
 var foundationWorkloads = []string{"postgres", "redis", "emqx", "nats", "object", "nginx"}
 
@@ -94,7 +102,7 @@ func (plan FoundationPlan) RenderManifest(secret string) string {
 		// ClusterRole 或 K3s 管理员凭据，因此无法越过已登记的运行环境。
 		"apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: induforge-project-reconciler\n  namespace: " + namespace + "\nrules:\n  - apiGroups: [\"apps\"]\n    resources: [\"deployments\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"services\", \"configmaps\", \"secrets\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"pods\", \"events\"]\n    verbs: [\"get\", \"list\", \"watch\"]",
 		"apiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: induforge-project-reconciler\n  namespace: " + namespace + "\nsubjects:\n  - kind: ServiceAccount\n    name: center-control\n    namespace: induforge-system\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: Role\n  name: induforge-project-reconciler",
-		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: foundation-credentials\n  namespace: " + namespace + "\ntype: Opaque\nstringData:\n  postgres-password: " + quoteYAML(secret) + "\n  nats-token: " + quoteYAML(secret) + "\n  redis.conf: " + quoteYAML("requirepass "+secret+"\nappendonly yes\n") + "\n  nats.conf: " + quoteYAML("authorization { token: "+secret+" }\njetstream { store_dir: /data }\n") + "\n  object-access-key: " + quoteYAML(objectAccessKey) + "\n  object-secret-key: " + quoteYAML(secret) + "\n  s3.json: " + quoteYAML(objectConfig) + "\n  shared-password: " + quoteYAML(secret),
+		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: foundation-credentials\n  namespace: " + namespace + "\ntype: Opaque\nstringData:\n  postgres-password: " + quoteYAML(secret) + "\n  nats-token: " + quoteYAML(secret) + "\n  redis.conf: " + quoteYAML("requirepass "+secret+"\nappendonly yes\n") + "\n  nats.conf: " + quoteYAML(fmt.Sprintf("authorization { token: %s }\nmax_payload: %d\njetstream { store_dir: /data }\n", secret, foundationNATSMaxPayloadBytes)) + "\n  object-access-key: " + quoteYAML(objectAccessKey) + "\n  object-secret-key: " + quoteYAML(secret) + "\n  s3.json: " + quoteYAML(objectConfig) + "\n  shared-password: " + quoteYAML(secret),
 		renderStatefulSet(namespace, "postgres", "timescale/timescaledb:2.26.4-pg16", plan.Assignments["postgres"], plan.Claims["postgres"], []string{"containerPort: 5432"}, []string{"name: POSTGRES_PASSWORD\n              valueFrom:\n                secretKeyRef:\n                  name: foundation-credentials\n                  key: postgres-password", "name: POSTGRES_DB\n              value: induforge"}, "/var/lib/postgresql/data"),
 		renderStatefulSet(namespace, "redis", "redis:7.2-alpine", plan.Assignments["redis"], plan.Claims["redis"], []string{"containerPort: 6379"}, nil, "/data"),
 		renderStatefulSet(namespace, "emqx", "emqx/emqx:5.6.1", plan.Assignments["emqx"], plan.Claims["emqx"], []string{"containerPort: 1883"}, []string{

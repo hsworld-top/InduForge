@@ -221,7 +221,8 @@ deliveryCount、原 body 的 SHA-256 与受 1MiB 解码上限约束的 base64、
 DATA_RAW、DATA_DERIVED、EVENT 三个 stream 的 subjects 分别必须精确为 `data.raw.>`、`data.computed.>`、
 `alarm.event`，互不重叠；DLQ stream subjects 必须精确为所有 consumer `deadLetterSubject` 的去重集合。DATA stream
 必须显式 `MaxMsgSize <= 1MiB`；DLQ stream 和 server `MaxPayload` 均不得低于冻结的 `1,424,000` bytes，以容纳最大合法
-UTF-8/base64 DLQ envelope（极值 JSON 实测 1,423,548 bytes）。
+UTF-8/base64 DLQ envelope（极值 JSON 实测 1,423,548 bytes）。平台内置 Foundation NATS 的配置值固定为
+`max_payload: 2097152`（2MiB）；这是高于该下限的受控余量，不得回退为 NATS 的 1MiB 默认值。
 `dlqId`/Outbox dedupe key 为 `SHA-256(schemaVersion, deploymentId, consumerKey, originalSubject, eventId 或空字段,
 reasonCode, bodySha256)`，字段以 0x1f 拼接，忽略会随重试变化的 deliveryCount/occurredAt，以避免同一失败重复创建 Outbox。
 

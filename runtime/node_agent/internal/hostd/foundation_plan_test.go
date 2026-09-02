@@ -1,6 +1,7 @@
 package hostd
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -45,8 +46,11 @@ func TestFoundationPlanRendersFixedValidManifest(t *testing.T) {
 	if !strings.Contains(manifest, "EMQX_AUTHENTICATION__1__BACKEND") || !strings.Contains(manifest, "kind: Job") || !strings.Contains(manifest, "emqx-runtime-credential") {
 		t.Fatal("message broker must require the generated runtime credential")
 	}
-	if !strings.Contains(manifest, "nats-token:") || !strings.Contains(manifest, "nats.conf:") {
-		t.Fatal("foundation credentials must expose the raw NATS token without changing NATS config")
+	if foundationNATSMaxPayloadBytes < minimumDLQPayloadBytes {
+		t.Fatalf("NATS MaxPayload=%d must cover the frozen DLQ payload=%d", foundationNATSMaxPayloadBytes, minimumDLQPayloadBytes)
+	}
+	if !strings.Contains(manifest, "nats-token:") || !strings.Contains(manifest, "nats.conf:") || !strings.Contains(manifest, fmt.Sprintf("max_payload: %d", foundationNATSMaxPayloadBytes)) {
+		t.Fatal("foundation credentials must expose the NATS token and bounded MaxPayload config")
 	}
 	for _, document := range strings.Split(manifest, "\n---\n") {
 		var value any
