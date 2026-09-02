@@ -67,6 +67,10 @@ if [ "$(grep -Fc 'location = /health' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
   echo "center health endpoint is not exposed on both edge listeners" >&2
   exit 1
 fi
+if [ "$(grep -Fc 'location /api/v1/data' "$SCRIPT_DIR/nginx.conf")" -ne 2 ] || [ "$(grep -Fc 'proxy_pass http://center-data:18102;' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
+  echo "center data API is not exposed on both edge listeners" >&2
+  exit 1
+fi
 if ! grep -Fq 'COPY contracts/runtime /contracts/runtime' "$SCRIPT_DIR/data-prebuilt.Dockerfile"; then
   echo "data image must include runtime artifact schemas" >&2
   exit 1
