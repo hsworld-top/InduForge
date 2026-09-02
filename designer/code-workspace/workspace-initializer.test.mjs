@@ -122,6 +122,23 @@ test('已初始化工作区拒绝再次选择模板', async () => {
   )
 })
 
+test('仅有平台上下文挂载时仍可初始化，并保留上下文目录', async () => {
+  const { initializer, workspaceRoot } = await fixture()
+  const contextRoot = path.join(workspaceRoot, '.induforge', 'context')
+  await mkdir(contextRoot, { recursive: true })
+  await writeFile(path.join(contextRoot, 'runtime.json'), '{"project":"demo"}\n')
+
+  assert.equal((await initializer.status()).status, 'uninitialized')
+  await initializer.initialize('vite-vue-js')
+
+  assert.equal((await initializer.status()).status, 'initialized')
+  assert.equal(
+    await readFile(path.join(contextRoot, 'runtime.json'), 'utf8'),
+    '{"project":"demo"}\n',
+  )
+  assert.equal(JSON.parse(await readFile(path.join(workspaceRoot, '.induforge/project.json'))).version, 1)
+})
+
 test('非空且无标记的工作区不会被覆盖', async () => {
   const { initializer, workspaceRoot } = await fixture()
   await writeFile(path.join(workspaceRoot, 'user-file.txt'), 'keep')

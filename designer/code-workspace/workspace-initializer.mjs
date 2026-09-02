@@ -136,11 +136,31 @@ export function createWorkspaceInitializer(options = {}) {
     if (marker) {
       return workspaceState('initialized', marker.templateId, marker.initializedAt)
     }
-    const entries = await readdir(workspaceRoot)
+    const entries = await readdir(workspaceRoot, { withFileTypes: true })
     if (entries.length === 0) {
       const error = lastError
       lastError = null
       return workspaceState('uninitialized', null, null, error)
+    }
+    // Kubernetes 会把平台上下文单独挂载到工作区的 .induforge/context。
+    // 它不是用户工程文件；仅这一固定目录存在时仍允许首次模板初始化。
+    if (
+      entries.length === 1 &&
+      entries[0].name === '.induforge' &&
+      entries[0].isDirectory()
+    ) {
+      const metadataEntries = await readdir(path.join(workspaceRoot, '.induforge'), {
+        withFileTypes: true,
+      })
+      if (
+        metadataEntries.length === 1 &&
+        metadataEntries[0].name === 'context' &&
+        metadataEntries[0].isDirectory()
+      ) {
+        const error = lastError
+        lastError = null
+        return workspaceState('uninitialized', null, null, error)
+      }
     }
     return workspaceState(
       'error',
@@ -162,9 +182,21 @@ export function createWorkspaceInitializer(options = {}) {
   async function moveStagedWorkspace(stagingRoot) {
     const moved = []
     try {
-      for (const entry of await readdir(stagingRoot)) {
-        const target = path.join(workspaceRoot, entry)
-        await rename(path.join(stagingRoot, entry), target)
+      for (const entry of await readdir(stagingRoot, { withFileTypes: true })) {
+        // .induforge/context 可能是平台的独立挂载点。初始化标记与其共用父目录，
+        // 因此只移动本次生成的标记，绝不覆盖或移动平台上下文。
+        if (entry.name === '.induforge' && entry.isDirectory()) {
+          const metadataRoot = path.join(workspaceRoot, '.induforge')
+          await mkdir(metadataRoot, { recursive: true })
+          for (const metadataEntry of await readdir(path.join(stagingRoot, entry.name))) {
+            const target = path.join(metadataRoot, metadataEntry)
+            await rename(path.join(stagingRoot, entry.name, metadataEntry), target)
+            moved.push(target)
+          }
+          continue
+        }
+        const target = path.join(workspaceRoot, entry.name)
+        await rename(path.join(stagingRoot, entry.name), target)
         moved.push(target)
       }
     } catch (error) {
