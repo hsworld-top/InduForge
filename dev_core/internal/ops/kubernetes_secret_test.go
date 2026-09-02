@@ -2,6 +2,8 @@ package ops
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +18,20 @@ func TestKubeSecretClientDoesNotExposeData(t *testing.T) {
 		}
 		if r.Method == http.MethodPatch {
 			if strings.Contains(r.URL.RawQuery, "fieldManager") {
+				var body struct {
+					Data       map[string]string `json:"data"`
+					StringData map[string]string `json:"stringData"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Fatalf("decode patch body: %v", err)
+				}
+				if len(body.StringData) != 0 || body.Data["token"] == "" {
+					t.Fatal("Secret SSA must use encoded data rather than stringData")
+				}
+				value, err := base64.StdEncoding.DecodeString(body.Data["token"])
+				if err != nil || string(value) != "sensitive-value" {
+					t.Fatal("Secret SSA data was not losslessly encoded")
+				}
 				w.WriteHeader(200)
 				return
 			}
