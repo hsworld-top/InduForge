@@ -13,11 +13,15 @@ import (
 )
 
 type fakeAdmin struct {
-	streams   map[string]*nats.StreamInfo
-	consumers map[string]*nats.ConsumerInfo
-	failAt    string
-	created   int
-	updated   int
+	streams         map[string]*nats.StreamInfo
+	consumers       map[string]*nats.ConsumerInfo
+	failAt          string
+	created         int
+	updated         int
+	deleteErr       map[string]error
+	keepAfterDelete map[string]bool
+	deleteNotFound  map[string]bool
+	deleted         []string
 }
 
 func (f *fakeAdmin) Stream(_ context.Context, name string) (*nats.StreamInfo, bool, error) {
@@ -61,7 +65,18 @@ func (f *fakeAdmin) UpdateConsumer(_ context.Context, stream string, c *nats.Con
 	return nil
 }
 func (f *fakeAdmin) DeleteConsumer(_ context.Context, stream, durable string) error {
-	delete(f.consumers, stream+"/"+durable)
+	key := stream + "/" + durable
+	f.deleted = append(f.deleted, key)
+	if f.deleteNotFound[key] {
+		delete(f.consumers, key)
+		return nats.ErrConsumerNotFound
+	}
+	if err := f.deleteErr[key]; err != nil {
+		return err
+	}
+	if !f.keepAfterDelete[key] {
+		delete(f.consumers, key)
+	}
 	f.updated++
 	return nil
 }
@@ -184,6 +199,58 @@ func TestRemoveDisabledRoleConsumersKeepsExpectedAndRejectsUnknownAtRuntime(t *t
 	}
 	if _, exists := fake.consumers["RAW/foreign-v1"]; !exists {
 		t.Fatal("陌生 durable 不应在 provision 阶段静默删除")
+	}
+}
+
+func TestRemoveDisabledRoleConsumersRemovesHistoricalBaseDurablesFromRawAndDerived(t *testing.T) {
+	topology := binding.JetStreamInput{DataRawStream: "RAW", DataDerivedStream: "DERIVED", CommandStream: "COMMAND"}
+	fake := &fakeAdmin{consumers: map[string]*nats.ConsumerInfo{
+		"RAW/base-raw-v1":         {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "base-raw-v1"}},
+		"DERIVED/base-derived-v1": {Stream: "DERIVED", Config: nats.ConsumerConfig{Durable: "base-derived-v1"}},
+	}}
+	if err := removeDisabledRoleConsumers(context.Background(), fake, topology, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := fake.consumers["RAW/base-raw-v1"]; exists {
+		t.Fatal("历史 RAW base durable 未删除")
+	}
+	if _, exists := fake.consumers["DERIVED/base-derived-v1"]; exists {
+		t.Fatal("历史 DERIVED base durable 未删除")
+	}
+	if got, want := strings.Join(fake.deleted, ","), "RAW/base-raw-v1,DERIVED/base-derived-v1"; got != want {
+		t.Fatalf("删除参数=%q，期望 %q", got, want)
+	}
+}
+
+func TestRemoveDisabledRoleConsumersTreatsConcurrentNotFoundAsSuccess(t *testing.T) {
+	topology := binding.JetStreamInput{DataRawStream: "RAW", DataDerivedStream: "DERIVED", CommandStream: "COMMAND"}
+	fake := &fakeAdmin{consumers: map[string]*nats.ConsumerInfo{
+		"RAW/base-raw-v1": {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "base-raw-v1"}},
+	}, deleteNotFound: map[string]bool{"RAW/base-raw-v1": true}}
+	if err := removeDisabledRoleConsumers(context.Background(), fake, topology, nil); err != nil {
+		t.Fatalf("并发删除 not found 应幂等成功: %v", err)
+	}
+}
+
+func TestRemoveDisabledRoleConsumersReturnsFailureWhenDeleteFails(t *testing.T) {
+	topology := binding.JetStreamInput{DataRawStream: "RAW", DataDerivedStream: "DERIVED", CommandStream: "COMMAND"}
+	fake := &fakeAdmin{consumers: map[string]*nats.ConsumerInfo{
+		"RAW/base-raw-v1": {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "base-raw-v1"}},
+	}, deleteErr: map[string]error{"RAW/base-raw-v1": errors.New("broker failure")}}
+	err := removeDisabledRoleConsumers(context.Background(), fake, topology, nil)
+	if err == nil || !strings.Contains(err.Error(), "删除已停用 consumer") || !strings.Contains(err.Error(), "base-raw-v1") {
+		t.Fatalf("删除失败未返回受控错误: %v", err)
+	}
+}
+
+func TestRemoveDisabledRoleConsumersReturnsStableCodeWhenDeleteDidNotTakeEffect(t *testing.T) {
+	topology := binding.JetStreamInput{DataRawStream: "RAW", DataDerivedStream: "DERIVED", CommandStream: "COMMAND"}
+	fake := &fakeAdmin{consumers: map[string]*nats.ConsumerInfo{
+		"RAW/base-raw-v1": {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "base-raw-v1"}},
+	}, keepAfterDelete: map[string]bool{"RAW/base-raw-v1": true}}
+	err := removeDisabledRoleConsumers(context.Background(), fake, topology, nil)
+	if err == nil || !strings.Contains(err.Error(), HistoricalConsumerStillExistsCode) || !strings.Contains(err.Error(), "base-raw-v1") {
+		t.Fatalf("删除后仍存在未返回稳定错误码: %v", err)
 	}
 }
 

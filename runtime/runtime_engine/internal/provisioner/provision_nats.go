@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"sort"
 	"strings"
@@ -26,6 +27,9 @@ const (
 	// JetStream 基础服务仍保留一半空间给元数据、重放和运维余量。
 	streamMaxBytes        = int64(256 << 20)
 	commandStreamMaxBytes = int64(64 << 20)
+	// HistoricalConsumerStillExistsCode 用于删除旧 base consumer 后的最终确认。
+	// 该值会进入 init 容器的受控错误输出，供控制面稳定归类，不能携带 broker 原始错误。
+	HistoricalConsumerStillExistsCode = "NATS_HISTORICAL_CONSUMER_STILL_EXISTS"
 )
 
 // NATSCredentials 是 bootstrap 挂载中的最小 NATS 凭据。它从不实现 String，且
@@ -212,7 +216,7 @@ func ProvisionNATSWithAdmin(ctx context.Context, input Input, admin JetStreamAdm
 	return nil
 }
 
-// removeDisabledRoleConsumers 只删除本产品冻结命名的 compute/alarm durable。
+// removeDisabledRoleConsumers 只删除本产品冻结命名的历史 base 与运行角色 durable。
 // 因此角色删减可以收敛，而陌生 durable 不会被静默删除，仍由运行期严格校验
 // 暴露为拓扑异常。
 func removeDisabledRoleConsumers(ctx context.Context, admin JetStreamAdmin, topology binding.JetStreamInput, expected []expectedConsumer) error {
@@ -229,11 +233,22 @@ func removeDisabledRoleConsumers(ctx context.Context, admin JetStreamAdmin, topo
 		if _, required := wanted[item.stream+"\x00"+item.durable]; required {
 			continue
 		}
+		// 仅记录受控 stream/durable，便于定位旧 consumer 清理，不得输出 endpoint 或凭据。
+		log.Printf("NATS historical consumer cleanup stage=check stream=%s durable=%s", item.stream, item.durable)
 		if _, exists, err := admin.Consumer(ctx, item.stream, item.durable); err != nil {
 			return provisionError("读取 consumer", item.durable)
 		} else if exists {
-			if err := admin.DeleteConsumer(ctx, item.stream, item.durable); err != nil {
+			log.Printf("NATS historical consumer cleanup stage=delete stream=%s durable=%s", item.stream, item.durable)
+			if err := admin.DeleteConsumer(ctx, item.stream, item.durable); err != nil && !errors.Is(err, nats.ErrConsumerNotFound) {
 				return provisionError("删除已停用 consumer", item.durable)
+			}
+			// ConsumerInfo 与 DeleteConsumer 之间可能由并发重试完成删除；此时
+			// ErrConsumerNotFound 视为成功，但仍需读取确认，防止删除请求未生效。
+			log.Printf("NATS historical consumer cleanup stage=confirm stream=%s durable=%s", item.stream, item.durable)
+			if _, exists, err := admin.Consumer(ctx, item.stream, item.durable); err != nil {
+				return provisionError("确认已停用 consumer", item.durable)
+			} else if exists {
+				return fmt.Errorf("%s: %s", HistoricalConsumerStillExistsCode, item.durable)
 			}
 		}
 	}
