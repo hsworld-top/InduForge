@@ -14,6 +14,7 @@ import (
 
 	"github.com/indu-forge/runtime-engine/internal/store/postgres"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var safePGIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
@@ -80,22 +81,44 @@ func (a *pgxAdmin) CreateDatabase(ctx context.Context, name, owner string) error
 	return err
 }
 func (a *pgxAdmin) EnsureRole(ctx context.Context, role, password string) error {
-	var exists bool
-	if err := a.maintenance.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=$1)`, role).Scan(&exists); err != nil {
+	return retryCatalogUpdate(ctx, func() error {
+		var exists bool
+		if err := a.maintenance.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=$1)`, role).Scan(&exists); err != nil {
+			return err
+		}
+		operation := "CREATE ROLE"
+		if exists {
+			operation = "ALTER ROLE"
+		}
+		// CREATE/ALTER ROLE 属 utility statement，PostgreSQL 不接受其中的绑定参数。
+		// 先由服务端 format(%I/%L) 参数化生成完整语句，再执行该受信结果。
+		var statement string
+		if err := a.maintenance.QueryRow(ctx, "SELECT format('"+operation+" %I LOGIN PASSWORD %L', $1::text, $2::text)", role, password).Scan(&statement); err != nil {
+			return err
+		}
+		_, err := a.maintenance.Exec(ctx, statement)
 		return err
+	})
+}
+
+func retryCatalogUpdate(ctx context.Context, operation func() error) error {
+	for attempt := 0; attempt < 3; attempt++ {
+		err := operation()
+		if err == nil || !isRetryableCatalogError(err) || attempt == 2 {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(25*(1<<attempt)) * time.Millisecond):
+		}
 	}
-	operation := "CREATE ROLE"
-	if exists {
-		operation = "ALTER ROLE"
-	}
-	// CREATE/ALTER ROLE 属 utility statement，PostgreSQL 不接受其中的绑定参数。
-	// 先由服务端 format(%I/%L) 参数化生成完整语句，再执行该受信结果。
-	var statement string
-	if err := a.maintenance.QueryRow(ctx, "SELECT format('"+operation+" %I LOGIN PASSWORD %L', $1::text, $2::text)", role, password).Scan(&statement); err != nil {
-		return err
-	}
-	_, err := a.maintenance.Exec(ctx, statement)
-	return err
+	return nil
+}
+
+func isRetryableCatalogError(err error) bool {
+	var pgError *pgconn.PgError
+	return errors.As(err, &pgError) && pgError.Code == "40001" || strings.Contains(strings.ToLower(err.Error()), "tuple concurrently updated")
 }
 func (a *pgxAdmin) InitializeSchema(ctx context.Context, database, schema, role string) error {
 	cfg, err := pgx.ParseConfig(a.maintenanceDSN)
@@ -175,7 +198,39 @@ func ProvisionState(ctx context.Context, input Input, raw []byte) error {
 		return err
 	}
 	defer admin.Close()
+	// base/compute/alarm 会并行启动，却共享同一 deployment 的运行 role、
+	// database 与 schema。必须在 maintenance 连接上取得会话级 advisory lock，
+	// 覆盖 check/create/alter 的整个临界区，避免 PostgreSQL catalog 并发更新。
+	if pg, ok := admin.(*pgxAdmin); ok {
+		if err = pg.lockDeploymentState(timeout, input.Binding.DeploymentID, credentials.Database); err != nil {
+			return errors.New("PostgreSQL state provision 锁不可用")
+		}
+		defer pg.unlockDeploymentState(input.Binding.DeploymentID, credentials.Database)
+	}
 	return ProvisionStateWithAdmin(timeout, input, credentials, admin)
+}
+
+func (a *pgxAdmin) lockDeploymentState(ctx context.Context, deploymentID, database string) error {
+	if a == nil || a.maintenance == nil || strings.TrimSpace(deploymentID) == "" || !validPGIdentifier(database) {
+		return errors.New("state provision 锁输入非法")
+	}
+	// 有界等待避免异常维护连接无限阻塞 Pod 初始化；会话锁在 Close 时也会兜底释放。
+	if _, err := a.maintenance.Exec(ctx, "SET lock_timeout = '15s'; SET statement_timeout = '45s'"); err != nil {
+		return err
+	}
+	_, err := a.maintenance.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended($1, 0))`, stateProvisionLockKey(deploymentID, database))
+	return err
+}
+
+func (a *pgxAdmin) unlockDeploymentState(deploymentID, database string) {
+	if a == nil || a.maintenance == nil || deploymentID == "" || !validPGIdentifier(database) {
+		return
+	}
+	_, _ = a.maintenance.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended($1, 0))`, stateProvisionLockKey(deploymentID, database))
+}
+
+func stateProvisionLockKey(deploymentID, database string) string {
+	return "induforge-runtime-state/" + deploymentID + "/" + database
 }
 
 func ProvisionStateWithAdmin(ctx context.Context, input Input, credentials PostgresBootstrapCredentials, admin DBAdmin) error {
