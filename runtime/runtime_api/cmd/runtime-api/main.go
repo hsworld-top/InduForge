@@ -22,6 +22,7 @@ import (
 	"github.com/indu-forge/runtime-api/internal/httpapi"
 	"github.com/indu-forge/runtime-api/internal/postgres"
 	"github.com/indu-forge/runtime-api/internal/realtime"
+	"github.com/indu-forge/runtime-api/internal/securefile"
 )
 
 type options struct {
@@ -141,14 +142,7 @@ func validateOptions(input options) error {
 }
 
 func loadNATSToken(path string) (string, error) {
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > 1<<20 {
-		return "", errors.New("NATS 凭据必须是小于 1MiB 的普通文件")
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return "", errors.New("NATS 凭据不能被所属组或其他用户读取")
-	}
-	payload, err := os.ReadFile(path)
+	payload, err := securefile.ReadSecret(path, 1<<20)
 	if err != nil {
 		return "", err
 	}
@@ -172,17 +166,7 @@ func loadNATSToken(path string) (string, error) {
 }
 
 func loadPostgresSecret(path string) (postgresSecret, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return postgresSecret{}, err
-	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > 1<<20 {
-		return postgresSecret{}, errors.New("PostgreSQL secret 必须是小于 1MiB 的普通文件")
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return postgresSecret{}, errors.New("PostgreSQL secret 不能被所属组或其他用户读取")
-	}
-	payload, err := os.ReadFile(path)
+	payload, err := securefile.ReadSecret(path, 1<<20)
 	if err != nil {
 		return postgresSecret{}, err
 	}

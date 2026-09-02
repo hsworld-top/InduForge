@@ -8,10 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/indu-forge/runtime-api/internal/securefile"
 )
 
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -37,19 +38,9 @@ type tokenSecret struct {
 type Authorizer struct{ tokens []tokenRecord }
 
 func Load(path string) (*Authorizer, error) {
-	info, err := os.Lstat(path)
+	payload, err := securefile.ReadSecret(path, 1<<20)
 	if err != nil {
 		return nil, fmt.Errorf("读取 Runtime API token secret: %w", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > 1<<20 {
-		return nil, errors.New("Runtime API token secret 必须是小于 1MiB 的普通文件")
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return nil, errors.New("Runtime API token secret 不能被所属组或其他用户读取")
-	}
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
 	}
 	var secret tokenSecret
 	decoder := json.NewDecoder(strings.NewReader(string(payload)))
