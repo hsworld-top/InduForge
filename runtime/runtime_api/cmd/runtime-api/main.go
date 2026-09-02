@@ -105,7 +105,7 @@ func main() {
 	app, err := httpapi.New(httpapi.Config{
 		DeploymentID: input.deploymentID, ProjectID: input.projectID, AccountID: input.accountID,
 		SiteID: input.siteID, NodeID: input.nodeID, Version: input.version, ExecutionForm: input.executionForm,
-		SecureCookies: input.secureCookies, Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: input.manualEpoch, ManualWriter: store, Publisher: natsSubscriber,
+		SecureCookies: input.secureCookies, Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: input.manualEpoch, ManualWriter: store, Publisher: natsSubscriber, CommandStore: store, CommandPublisher: natsSubscriber,
 	})
 	if err != nil {
 		fatal("runtime-api 初始化失败", err)

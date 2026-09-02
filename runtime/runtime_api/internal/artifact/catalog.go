@@ -159,6 +159,11 @@ func (c *Catalog) PointByID(id string) (Point, bool) {
 	return point, ok
 }
 
+func (c *Catalog) ComputeByID(id string) (ComputeUnit, bool) {
+	compute, ok := c.computesByID[id]
+	return compute, ok
+}
+
 func (c *Catalog) Points() []Point {
 	result := make([]Point, 0, len(c.pointsByPath))
 	for _, point := range c.pointsByPath {

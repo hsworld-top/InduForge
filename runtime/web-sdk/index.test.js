@@ -384,10 +384,8 @@ test('HTTP Runtime 适配器使用会话、当前值、历史、报警和计算�
     requests.find(({ url }) => String(url).endsWith('/points/line.temperature/write')).init.body,
     '{"value":60}',
   )
-  assert.equal(
-    requests.find(({ url }) => String(url).endsWith('/computes/compute-1/run')).init.body,
-    '{"input":{}}',
-  )
+  const commandBody = JSON.parse(requests.find(({ url }) => String(url).endsWith('/computes/compute-1/run')).init.body)
+  assert.match(commandBody.idempotencyKey, /^run-/)
 })
 
 test('HTTP Runtime 适配器将取消和非标准响应归一为 SDKResult', async () => {

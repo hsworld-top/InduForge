@@ -477,12 +477,32 @@ export function createHttpRuntime(options = {}) {
     }),
     computeAdapter: Object.freeze({
       describe: findCompute,
-      run: (ref, input, requestOptions) =>
-        request(`computes/${encodeURIComponent(ref)}/run`, {
+      run: async (ref, input = {}, requestOptions) => {
+        const key = input?.idempotencyKey ?? `run-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+        const result = await request(`computes/${encodeURIComponent(ref)}/run`, {
           ...requestOptions,
           method: 'POST',
-          json: { input },
-        }),
+          json: { idempotencyKey: key },
+        })
+        if (result.code !== 0 || !result.data?.commandId) return result
+        const commandId = result.data.commandId
+        const handle = Object.freeze({
+          commandId,
+          status: (options) => request(`compute-commands/${encodeURIComponent(commandId)}`, options),
+          wait: async ({ timeoutMs = 30_000, intervalMs = 250, ...waitOptions } = {}) => {
+            const deadline = Date.now() + timeoutMs
+            let latest
+            do {
+              latest = await request(`compute-commands/${encodeURIComponent(commandId)}`, waitOptions)
+              if (latest.code !== 0 || ['succeeded', 'failed'].includes(latest.data?.status)) return latest
+              await new Promise((resolve) => setTimeout(resolve, intervalMs))
+            } while (Date.now() < deadline)
+            return sdkResult(RUNTIME_ERROR_CODE, '计算命令等待超时', latest?.data)
+          },
+        })
+        return { ...result, data: { ...result.data, handle } }
+      },
+      status: (commandId, requestOptions) => request(`compute-commands/${encodeURIComponent(commandId)}`, requestOptions),
     }),
   })
 }

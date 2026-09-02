@@ -217,6 +217,16 @@ func (s *NATSSubscriber) PublishRaw(ctx context.Context, subject string, payload
 	return s.connection.FlushWithContext(ctx)
 }
 
+func (s *NATSSubscriber) PublishCommand(ctx context.Context, subject string, payload []byte) error {
+	if s == nil || s.connection == nil || !strings.HasPrefix(subject, "compute.command.") || len(payload) == 0 || len(payload) > 1<<20 {
+		return errors.New("Runtime API command publish 参数非法")
+	}
+	if err := s.connection.Publish(subject, payload); err != nil {
+		return err
+	}
+	return s.connection.FlushWithContext(ctx)
+}
+
 type NATSOptions struct {
 	URL             string
 	CredentialsFile string

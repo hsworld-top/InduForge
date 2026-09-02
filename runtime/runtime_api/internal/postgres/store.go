@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 )
 
 type Store struct{ pool *pgxpool.Pool }
+
+var canonicalUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 func (s *Store) AcknowledgeAlarm(ctx context.Context, deploymentID, itemID string, expectedVersion int64, subjectID, comment string, now time.Time) (runtimeview.AlarmAcknowledgement, error) {
 	if expectedVersion < 1 || strings.TrimSpace(subjectID) == "" || len(comment) > 2048 {
@@ -155,6 +158,38 @@ func (s *Store) ReserveManualSequence(ctx context.Context, deploymentID string, 
 		return 0, err
 	}
 	return sequence, nil
+}
+
+func (s *Store) QueueComputeCommand(ctx context.Context, deploymentID string, command runtimeview.ComputeCommand) (runtimeview.ComputeCommand, bool, error) {
+	if s == nil || s.pool == nil || deploymentID == "" || !canonicalUUID.MatchString(command.CommandID) || !canonicalUUID.MatchString(command.ComputeID) || command.RequestedBy == "" || command.RequestedAt.IsZero() || command.BindingEpoch < 1 || len(command.IdempotencyKey) < 16 || len(command.IdempotencyKey) > 128 {
+		return runtimeview.ComputeCommand{}, false, errors.New("计算命令参数非法")
+	}
+	var got runtimeview.ComputeCommand
+	err := s.pool.QueryRow(ctx, `INSERT INTO runtime_engine.compute_command_audit(deployment_id,command_id,compute_id,requested_by,requested_at,binding_epoch,idempotency_key,status)
+VALUES($1,$2::uuid,$3::uuid,$4,$5,$6,$7,'queued') ON CONFLICT(deployment_id,idempotency_key) DO NOTHING
+RETURNING command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,'')`, deploymentID, command.CommandID, command.ComputeID, command.RequestedBy, command.RequestedAt.UTC(), command.BindingEpoch, command.IdempotencyKey).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode)
+	if err == nil {
+		return got, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return runtimeview.ComputeCommand{}, false, err
+	}
+	err = s.pool.QueryRow(ctx, `SELECT command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,'') FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND idempotency_key=$2`, deploymentID, command.IdempotencyKey).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode)
+	return got, false, err
+}
+
+func (s *Store) ComputeCommandStatus(ctx context.Context, deploymentID, commandID string) (runtimeview.ComputeCommand, error) {
+	var got runtimeview.ComputeCommand
+	err := s.pool.QueryRow(ctx, `SELECT command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,COALESCE(failure_code,'') FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND command_id=$2::uuid`, deploymentID, commandID).Scan(&got.CommandID, &got.ComputeID, &got.RequestedBy, &got.RequestedAt, &got.BindingEpoch, &got.IdempotencyKey, &got.Status, &got.FailureCode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return runtimeview.ComputeCommand{}, runtimeview.ErrNotFound
+	}
+	return got, err
+}
+
+func (s *Store) SetComputeCommandStatus(ctx context.Context, deploymentID, commandID, status, failure string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE runtime_engine.compute_command_audit SET status=$3,failure_code=NULLIF($4,''),updated_at=now() WHERE deployment_id=$1 AND command_id=$2::uuid`, deploymentID, commandID, status, failure)
+	return err
 }
 
 func (s *Store) Current(ctx context.Context, deploymentID, pointID string) (runtimeview.PointCurrent, error) {

@@ -61,3 +61,20 @@ type Store interface {
 	AlarmStates(context.Context, string, int) ([]AlarmState, error)
 	AcknowledgeAlarm(context.Context, string, string, int64, string, string, time.Time) (AlarmAcknowledgement, error)
 }
+
+type ComputeCommand struct {
+	CommandID      string    `json:"commandId"`
+	ComputeID      string    `json:"computeId"`
+	RequestedBy    string    `json:"requestedBy"`
+	RequestedAt    time.Time `json:"requestedAt"`
+	BindingEpoch   int64     `json:"bindingEpoch"`
+	IdempotencyKey string    `json:"idempotencyKey"`
+	Status         string    `json:"status"`
+	FailureCode    string    `json:"failureCode,omitempty"`
+}
+
+type ComputeCommandStore interface {
+	QueueComputeCommand(context.Context, string, ComputeCommand) (ComputeCommand, bool, error)
+	ComputeCommandStatus(context.Context, string, string) (ComputeCommand, error)
+	SetComputeCommandStatus(context.Context, string, string, string, string) error
+}

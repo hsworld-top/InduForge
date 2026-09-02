@@ -44,6 +44,10 @@ type Config struct {
 	Publisher interface {
 		PublishRaw(context.Context, string, []byte) error
 	}
+	CommandStore     runtimeview.ComputeCommandStore
+	CommandPublisher interface {
+		PublishCommand(context.Context, string, []byte) error
+	}
 }
 
 type Server struct {
@@ -74,7 +78,7 @@ func New(config Config) (*Server, error) {
 	if config.ExecutionForm != "native-linux" && config.ExecutionForm != "native-windows" && config.ExecutionForm != "k3s-workload" {
 		return nil, errors.New("executionForm 不受支持")
 	}
-	if config.Catalog == nil || config.Store == nil || config.Authorizer == nil || config.Realtime == nil || config.ManualWriter == nil || config.Publisher == nil || config.ManualEpoch < 1 {
+	if config.Catalog == nil || config.Store == nil || config.Authorizer == nil || config.Realtime == nil || config.ManualWriter == nil || config.Publisher == nil || config.CommandStore == nil || config.CommandPublisher == nil || config.ManualEpoch < 1 {
 		return nil, errors.New("catalog、store、authorizer、realtime 不能为空")
 	}
 	if config.Catalog.ProjectID != config.ProjectID {
@@ -104,7 +108,8 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/runtime/alarms/current", s.requirePrincipal(http.HandlerFunc(s.currentAlarms)))
 	mux.Handle("POST /api/v1/runtime/alarms/{id}/acknowledge", s.requirePrincipal(http.HandlerFunc(s.acknowledgeAlarm)))
 	mux.Handle("GET /api/v1/runtime/computes", s.requirePrincipal(http.HandlerFunc(s.computes)))
-	mux.Handle("POST /api/v1/runtime/computes/{id}/run", s.requirePrincipal(http.HandlerFunc(s.unsupportedAction)))
+	mux.Handle("POST /api/v1/runtime/computes/{id}/run", s.requirePrincipal(http.HandlerFunc(s.runCompute)))
+	mux.Handle("GET /api/v1/runtime/compute-commands/{id}", s.requirePrincipal(http.HandlerFunc(s.computeCommandStatus)))
 	mux.Handle("GET /ws/v1/points", s.requirePrincipal(http.HandlerFunc(s.pointSocket)))
 	mux.Handle("GET /ws/v1/alarms", s.requirePrincipal(http.HandlerFunc(s.alarmSocket)))
 	return s.withCommonHeaders(mux)
@@ -396,6 +401,81 @@ func hasAlarmAcknowledgeRole(roles []string) bool {
 
 func (s *Server) computes(writer http.ResponseWriter, request *http.Request) {
 	writeOK(writer, request, map[string]any{"items": s.config.Catalog.Computes(), "total": len(s.config.Catalog.Computes())})
+}
+
+func (s *Server) runCompute(writer http.ResponseWriter, request *http.Request) {
+	compute, ok := s.config.Catalog.ComputeByID(request.PathValue("id"))
+	if !ok {
+		writeError(writer, request, http.StatusNotFound, 40401, "计算单元不存在")
+		return
+	}
+	if !compute.Enabled || !manualComputeTrigger(compute.Trigger) || !hasAlarmAcknowledgeRole(principalFrom(request.Context()).Roles) {
+		writeError(writer, request, http.StatusForbidden, 40301, "当前身份无权手工运行该计算单元")
+		return
+	}
+	var body struct {
+		IdempotencyKey string `json:"idempotencyKey"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || decoder.Decode(&struct{}{}) != io.EOF || len(body.IdempotencyKey) < 16 || len(body.IdempotencyKey) > 128 {
+		writeError(writer, request, http.StatusBadRequest, 40001, "idempotencyKey 非法")
+		return
+	}
+	now := s.config.Now().UTC()
+	commandID, err := newCommandUUID()
+	if err != nil {
+		writeError(writer, request, http.StatusInternalServerError, 50001, "无法创建计算命令")
+		return
+	}
+	command, inserted, err := s.config.CommandStore.QueueComputeCommand(request.Context(), s.config.DeploymentID, runtimeview.ComputeCommand{CommandID: commandID, ComputeID: compute.ID, RequestedBy: principalFrom(request.Context()).SubjectID, RequestedAt: now, BindingEpoch: s.config.ManualEpoch, IdempotencyKey: body.IdempotencyKey, Status: "queued"})
+	if err != nil {
+		writeError(writer, request, http.StatusServiceUnavailable, 50031, "计算命令审计不可用")
+		return
+	}
+	if !inserted {
+		writeOK(writer, request, map[string]any{"accepted": true, "commandId": command.CommandID, "status": command.Status, "idempotent": true})
+		return
+	}
+	subject := "compute.command." + s.config.DeploymentID
+	payload, _ := json.Marshal(map[string]any{"schemaVersion": "compute-command.v1", "subject": subject, "deploymentId": s.config.DeploymentID, "accountId": s.config.AccountID, "commandId": command.CommandID, "computeId": compute.ID, "requestedBy": command.RequestedBy, "requestedAt": now.Format(time.RFC3339Nano), "bindingEpoch": s.config.ManualEpoch, "idempotencyKey": command.IdempotencyKey})
+	if err := s.config.CommandPublisher.PublishCommand(request.Context(), subject, payload); err != nil {
+		_ = s.config.CommandStore.SetComputeCommandStatus(context.Background(), s.config.DeploymentID, command.CommandID, "failed", "publish-failed")
+		writeError(writer, request, http.StatusServiceUnavailable, 50031, "计算命令发布失败")
+		return
+	}
+	writeOK(writer, request, map[string]any{"accepted": true, "commandId": command.CommandID, "status": "queued"})
+}
+
+func (s *Server) computeCommandStatus(writer http.ResponseWriter, request *http.Request) {
+	command, err := s.config.CommandStore.ComputeCommandStatus(request.Context(), s.config.DeploymentID, request.PathValue("id"))
+	if errors.Is(err, runtimeview.ErrNotFound) {
+		writeError(writer, request, http.StatusNotFound, 40401, "计算命令不存在")
+		return
+	}
+	if err != nil {
+		writeError(writer, request, http.StatusServiceUnavailable, 50031, "计算命令审计不可用")
+		return
+	}
+	writeOK(writer, request, command)
+}
+
+func manualComputeTrigger(raw json.RawMessage) bool {
+	var trigger struct {
+		Kind string `json:"kind"`
+	}
+	return json.Unmarshal(raw, &trigger) == nil && trigger.Kind == "manual"
+}
+
+func newCommandUUID() (string, error) {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	raw[6] = (raw[6] & 0x0f) | 0x40
+	raw[8] = (raw[8] & 0x3f) | 0x80
+	hex := hex.EncodeToString(raw[:])
+	return hex[:8] + "-" + hex[8:12] + "-" + hex[12:16] + "-" + hex[16:20] + "-" + hex[20:], nil
 }
 
 func (s *Server) writePoint(writer http.ResponseWriter, request *http.Request) {

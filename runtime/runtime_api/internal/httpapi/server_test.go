@@ -40,7 +40,19 @@ func (f *fakeStore) ReserveManualSequence(context.Context, string, int64) (int64
 
 type fakePublisher struct{}
 
-func (fakePublisher) PublishRaw(context.Context, string, []byte) error { return nil }
+func (fakePublisher) PublishRaw(context.Context, string, []byte) error     { return nil }
+func (fakePublisher) PublishCommand(context.Context, string, []byte) error { return nil }
+
+func (f *fakeStore) QueueComputeCommand(_ context.Context, _ string, command runtimeview.ComputeCommand) (runtimeview.ComputeCommand, bool, error) {
+	command.Status = "queued"
+	return command, true, nil
+}
+func (f *fakeStore) ComputeCommandStatus(_ context.Context, _ string, commandID string) (runtimeview.ComputeCommand, error) {
+	return runtimeview.ComputeCommand{CommandID: commandID, Status: "queued"}, nil
+}
+func (f *fakeStore) SetComputeCommandStatus(context.Context, string, string, string, string) error {
+	return nil
+}
 
 func (f *fakeStore) Ping(context.Context) error { return f.pingErr }
 
@@ -311,7 +323,7 @@ func newTestRuntimeAPIWithRolesAndHub(t *testing.T, store *fakeStore, roles []st
 	server, err := New(Config{
 		DeploymentID: "deployment-1", ProjectID: testProjectID, AccountID: "account-1",
 		SiteID: "site-1", NodeID: "node-1", Version: "release-1", ExecutionForm: "native-linux",
-		Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: 1, ManualWriter: store, Publisher: fakePublisher{},
+		Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: 1, ManualWriter: store, Publisher: fakePublisher{}, CommandStore: store, CommandPublisher: fakePublisher{},
 		Now: func() time.Time { return time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC) },
 	})
 	if err != nil {
