@@ -271,6 +271,11 @@ func (i *ReleaseInstaller) Install(input ReleaseInstallInput) (InstalledRelease,
 		if err := i.verifyRelease(finalDir, input); err != nil {
 			return InstalledRelease{}, fmt.Errorf("已有内容寻址 Release 校验失败: %w", err)
 		}
+		// 已封存目录为 0555；在完成验签后临时恢复 owner 写权限，仅用于原子补物化，
+		// 随后立即重新 seal，绝不修改任何已校验 payload。
+		if err := os.Chmod(finalDir, 0755); err != nil {
+			return InstalledRelease{}, fmt.Errorf("解封已有内容寻址 Release: %w", err)
+		}
 		// 升级旧节点时，已验签内容寻址 Release 可能尚未包含物化目录；只允许
 		// 基于同一已验证 tar 补齐，已有目录由 materialize 做结构校验且绝不覆盖。
 		if err := i.materializeRuntimeArtifact(finalDir); err != nil {
