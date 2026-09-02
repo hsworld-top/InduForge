@@ -8,6 +8,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/auth"
 	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -199,6 +200,8 @@ func (h *Handler) createDeployment(w http.ResponseWriter, r *http.Request) {
 		x.Authorization = auth.ForwardAuthorization(r)
 		d, run, e := h.service.CreateDeployment(r.Context(), u, x)
 		if e != nil {
+			// 客户端仅接收统一错误包络；服务端记录构建或调度前失败原因，便于定位部署未入队问题。
+			log.Printf("project deployment create failed projectId=%s environmentId=%s mode=%s: %v", x.ProjectID, x.EnvironmentID, x.Mode, e)
 			h.err(w, r, e)
 			return
 		}
