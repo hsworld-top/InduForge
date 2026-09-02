@@ -113,15 +113,29 @@ func (r *Resolver) secret(ref string) ([]byte, error) {
 	if filepath.Dir(path) != r.directory && !strings.HasPrefix(path, r.directory+string(filepath.Separator)) {
 		return nil, errors.New("secret 不可用")
 	}
-	info, err := os.Lstat(path)
+	// Kubernetes Secret 投影使用 ..data 软链接原子切换。只接受解析后仍位于
+	// resolver 索引目录下的普通文件，拒绝逃逸、循环和设备文件。
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, errors.New("secret 不可用")
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(r.directory)
+	if err != nil || !within(resolvedRoot, resolved) {
+		return nil, errors.New("secret 不可用")
+	}
+	info, err := os.Stat(resolved)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, errors.New("secret 不可用")
 	}
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(resolved)
 	if err != nil || len(b) > 1<<20 {
 		return nil, errors.New("secret 不可用")
 	}
 	return b, nil
+}
+func within(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 func strict(raw []byte, target any, keys ...string) bool {
 	d := json.NewDecoder(bytes.NewReader(raw))
