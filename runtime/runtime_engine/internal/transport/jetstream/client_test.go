@@ -28,7 +28,7 @@ func TestSevenConfiguredConsumersRequireExactDurablePullSettings(t *testing.T) {
 		t.Fatalf("fixture consumer count=%d", len(config.JetStream.Consumers))
 	}
 	for _, consumer := range config.JetStream.Consumers {
-		actual := js.ConsumerConfig{Durable: consumer.DurableName, FilterSubject: consumer.FilterSubject, DeliverPolicy: js.DeliverAllPolicy, ReplayPolicy: js.ReplayInstantPolicy, AckPolicy: js.AckExplicitPolicy, AckWait: time.Duration(consumer.AckWaitMS) * time.Millisecond, MaxDeliver: -1, BackOff: toDurations(consumer.BackoffMS), MaxAckPending: consumer.MaxAckPending, MaxWaiting: consumer.MaxWaiting, MaxRequestBatch: consumer.MaxRequestBatch, MaxRequestExpires: time.Duration(consumer.MaxRequestExpiresMS) * time.Millisecond, MaxRequestMaxBytes: consumer.MaxRequestMaxBytes}
+		actual := js.ConsumerConfig{Durable: consumer.DurableName, FilterSubject: consumer.FilterSubject, DeliverPolicy: js.DeliverAllPolicy, ReplayPolicy: js.ReplayInstantPolicy, AckPolicy: js.AckExplicitPolicy, AckWait: time.Duration(model.EffectiveAckWaitMS(consumer)) * time.Millisecond, MaxDeliver: consumer.MaxDeliver, BackOff: toDurations(consumer.BackoffMS), MaxAckPending: consumer.MaxAckPending, MaxWaiting: consumer.MaxWaiting, MaxRequestBatch: consumer.MaxRequestBatch, MaxRequestExpires: time.Duration(consumer.MaxRequestExpiresMS) * time.Millisecond, MaxRequestMaxBytes: consumer.MaxRequestMaxBytes}
 		if err := compareConsumer(actual, consumer); err != nil {
 			t.Fatalf("%s: %v", consumer.ConsumerKey, err)
 		}
@@ -145,8 +145,8 @@ func TestExpectedDurableNamesAreScopedToDataStream(t *testing.T) {
 }
 
 func TestConsumerTopologyRejectsPushAndFrozenAttributeDrift(t *testing.T) {
-	expected := model.Consumer{DurableName: "d", FilterSubject: "data.raw.>", AckWaitMS: 1000, BackoffMS: []int64{1000}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1 << 20}
-	good := js.ConsumerConfig{Durable: "d", FilterSubject: expected.FilterSubject, DeliverPolicy: js.DeliverAllPolicy, ReplayPolicy: js.ReplayInstantPolicy, AckPolicy: js.AckExplicitPolicy, AckWait: time.Second, MaxDeliver: -1, BackOff: []time.Duration{time.Second}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpires: 5 * time.Second, MaxRequestMaxBytes: 1 << 20}
+	expected := model.Consumer{DurableName: "d", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxDeliver: 5, BackoffMS: []int64{1000, 5000, 30000}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1 << 20}
+	good := js.ConsumerConfig{Durable: "d", FilterSubject: expected.FilterSubject, DeliverPolicy: js.DeliverAllPolicy, ReplayPolicy: js.ReplayInstantPolicy, AckPolicy: js.AckExplicitPolicy, AckWait: time.Second, MaxDeliver: 5, BackOff: []time.Duration{time.Second, 5 * time.Second, 30 * time.Second}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpires: 5 * time.Second, MaxRequestMaxBytes: 1 << 20}
 	if err := compareConsumer(good, expected); err != nil {
 		t.Fatal(err)
 	}

@@ -263,7 +263,7 @@ func validateNATSInput(in Input) error {
 		return errors.New("input")
 	}
 	for _, c := range j.Consumers {
-		if c.Stream == "" || c.DurableName == "" || c.FilterSubject == "" || c.AckWaitMS <= 0 || c.MaxAckPending <= 0 || c.MaxWaiting <= 0 || c.MaxRequestBatch <= 0 || c.MaxRequestExpiresMS <= 0 || c.MaxRequestMaxBytes <= 0 || c.DeadLetterSubject == "" {
+		if c.Stream == "" || c.DurableName == "" || c.FilterSubject == "" || c.AckWaitMS <= 0 || c.MaxDeliver <= 0 || c.MaxAckPending <= 0 || c.MaxWaiting <= 0 || c.MaxRequestBatch <= 0 || c.MaxRequestExpiresMS <= 0 || c.MaxRequestMaxBytes <= 0 || c.DeadLetterSubject == "" {
 			return errors.New("consumer")
 		}
 		// 输入虽来自受控 ConfigMap，仍只接受 runtime-engine 已冻结的两条
@@ -314,7 +314,7 @@ func consumerConfig(in model.Consumer) *nats.ConsumerConfig {
 	for i, value := range in.BackoffMS {
 		backoff[i] = time.Duration(value) * time.Millisecond
 	}
-	return &nats.ConsumerConfig{Durable: in.DurableName, FilterSubject: in.FilterSubject, DeliverPolicy: nats.DeliverAllPolicy, ReplayPolicy: nats.ReplayInstantPolicy, AckPolicy: nats.AckExplicitPolicy, AckWait: time.Duration(in.AckWaitMS) * time.Millisecond, MaxDeliver: -1, BackOff: backoff, MaxAckPending: in.MaxAckPending, MaxWaiting: in.MaxWaiting, MaxRequestBatch: in.MaxRequestBatch, MaxRequestExpires: time.Duration(in.MaxRequestExpiresMS) * time.Millisecond, MaxRequestMaxBytes: in.MaxRequestMaxBytes}
+	return &nats.ConsumerConfig{Durable: in.DurableName, FilterSubject: in.FilterSubject, DeliverPolicy: nats.DeliverAllPolicy, ReplayPolicy: nats.ReplayInstantPolicy, AckPolicy: nats.AckExplicitPolicy, AckWait: time.Duration(model.EffectiveAckWaitMS(in)) * time.Millisecond, MaxDeliver: in.MaxDeliver, BackOff: backoff, MaxAckPending: in.MaxAckPending, MaxWaiting: in.MaxWaiting, MaxRequestBatch: in.MaxRequestBatch, MaxRequestExpires: time.Duration(in.MaxRequestExpiresMS) * time.Millisecond, MaxRequestMaxBytes: in.MaxRequestMaxBytes}
 }
 
 func sameSubjects(actual, expected []string) bool {

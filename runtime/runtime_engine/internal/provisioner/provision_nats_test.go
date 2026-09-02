@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/binding"
 	"github.com/indu-forge/runtime-engine/internal/model"
@@ -82,6 +83,18 @@ func (f *fakeAdmin) DeleteConsumer(_ context.Context, stream, durable string) er
 }
 func (f *fakeAdmin) Close() {}
 
+func sameDurations(actual, expected []time.Duration) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	for index := range actual {
+		if actual[index] != expected[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestProvisionNATSCreateAndIdempotent(t *testing.T) {
 	in := provisionInput()
 	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{}, consumers: map[string]*nats.ConsumerInfo{}}
@@ -99,6 +112,48 @@ func TestProvisionNATSCreateAndIdempotent(t *testing.T) {
 	}
 	if got := fake.streams["RAW"].Config; got.Storage != nats.FileStorage || got.Retention != nats.LimitsPolicy {
 		t.Fatalf("stream policy = %#v", got)
+	}
+}
+
+func TestConsumerConfigUsesBindingRetryPolicyForAllRuntimeConsumers(t *testing.T) {
+	for _, consumer := range []model.Consumer{
+		{DurableName: "compute-raw-v1", AckWaitMS: 30000, MaxDeliver: 5, BackoffMS: []int64{1000, 5000, 30000}},
+		{DurableName: "compute-derived-v1", AckWaitMS: 30000, MaxDeliver: 5, BackoffMS: []int64{1000, 5000, 30000}},
+		{DurableName: "compute-command-v1", AckWaitMS: 30000, MaxDeliver: 5, BackoffMS: []int64{1000, 5000, 30000}},
+		{DurableName: "alarm-raw-v1", AckWaitMS: 30000, MaxDeliver: 5, BackoffMS: []int64{1000, 5000, 30000}},
+		{DurableName: "alarm-derived-v1", AckWaitMS: 30000, MaxDeliver: 5, BackoffMS: []int64{1000, 5000, 30000}},
+	} {
+		actual := consumerConfig(consumer)
+		if actual.AckWait != time.Second || actual.MaxDeliver != 5 || !sameDurations(actual.BackOff, []time.Duration{time.Second, 5 * time.Second, 30 * time.Second}) {
+			t.Fatalf("%s 的有效重试策略不匹配: %#v", consumer.DurableName, actual)
+		}
+	}
+}
+
+func TestConsumerConfigKeepsAckWaitWithoutBackoff(t *testing.T) {
+	actual := consumerConfig(model.Consumer{DurableName: "no-backoff", AckWaitMS: 30000, MaxDeliver: 5})
+	if actual.AckWait != 30*time.Second || actual.MaxDeliver != 5 || len(actual.BackOff) != 0 {
+		t.Fatalf("无 backoff 的确认等待应保留 binding 值: %#v", actual)
+	}
+}
+
+func TestProvisionNATSDoesNotUpdateEffectiveRetryPolicyOnSecondApply(t *testing.T) {
+	in := provisionInput()
+	for index := range in.Binding.JetStream.Consumers {
+		in.Binding.JetStream.Consumers[index].MaxDeliver = 5
+		in.Binding.JetStream.Consumers[index].BackoffMS = []int64{1000, 5000, 30000}
+	}
+	in.Binding.JetStream.TopologyConsumers = in.Binding.JetStream.Consumers
+	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{}, consumers: map[string]*nats.ConsumerInfo{}}
+	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
+		t.Fatal(err)
+	}
+	updates := fake.updated
+	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
+		t.Fatal(err)
+	}
+	if fake.updated != updates {
+		t.Fatalf("有效重试策略重复应用不应更新 consumer: before=%d after=%d", updates, fake.updated)
 	}
 }
 
@@ -279,6 +334,6 @@ func TestDecodeNATSCredentialsStrict(t *testing.T) {
 }
 
 func provisionInput() Input {
-	consumers := []model.Consumer{{Stream: "RAW", DurableName: "COMPUTE", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.compute"}, {Stream: "DERIVED", DurableName: "ALARM", FilterSubject: "data.computed.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.alarm"}, {Stream: "COMMAND", DurableName: "COMMAND", FilterSubject: "compute.command.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.command"}}
+	consumers := []model.Consumer{{Stream: "RAW", DurableName: "COMPUTE", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxDeliver: 5, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.compute"}, {Stream: "DERIVED", DurableName: "ALARM", FilterSubject: "data.computed.>", AckWaitMS: 30000, MaxDeliver: 5, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.alarm"}, {Stream: "COMMAND", DurableName: "COMMAND", FilterSubject: "compute.command.>", AckWaitMS: 30000, MaxDeliver: 5, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.command"}}
 	return Input{Binding: binding.Input{AccountID: "if-project", JetStream: binding.JetStreamInput{Endpoint: "nats://nats.default.svc:4222", DataRawStream: "RAW", DataDerivedStream: "DERIVED", EventStream: "EVENT", CommandStream: "COMMAND", DeadLetterStream: "DLQ", Consumers: consumers, TopologyConsumers: consumers}}}
 }
