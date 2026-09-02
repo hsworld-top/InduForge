@@ -61,6 +61,25 @@ func validateEnginePlacements(required []string, placements map[string]string) e
 	return nil
 }
 
+// validateEnginePlacementRequest 在制品构建前只校验请求形状。实际必需引擎只能
+// 由刚构建的受签名 manifest 决定，不能用预构建阶段的 base 集合拒绝有效选择。
+func validateEnginePlacementRequest(placements map[string]string) error {
+	if strings.TrimSpace(placements[ServiceBase]) == "" {
+		return fmt.Errorf("%s必须选择部署节点", ServiceBaseName)
+	}
+	for engine, nodeID := range placements {
+		if strings.TrimSpace(nodeID) == "" {
+			continue
+		}
+		switch engine {
+		case ServiceBase, ServiceCompute, ServiceAlarm, ServiceCollector:
+		default:
+			return fmt.Errorf("部署引擎不支持")
+		}
+	}
+	return nil
+}
+
 func sortedEngines(values []string) []string {
 	result := append([]string(nil), values...)
 	sort.Strings(result)

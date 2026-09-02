@@ -43,3 +43,13 @@ func TestValidateEnginePlacementsUsesBaseEngineDisplayName(t *testing.T) {
 		t.Fatalf("基础引擎文案不统一: %v", err)
 	}
 }
+
+func TestValidateEnginePlacementRequestDefersOptionalEnginesToManifest(t *testing.T) {
+	placements := map[string]string{ServiceBase: "node-1", ServiceCompute: "node-1", ServiceAlarm: "node-1", ServiceCollector: "node-1"}
+	if err := validateEnginePlacementRequest(placements); err != nil {
+		t.Fatalf("optional engine placements must pass request validation: %v", err)
+	}
+	if err := validateEnginePlacementRequest(map[string]string{ServiceBase: "node-1", "unknown": "node-1"}); err == nil {
+		t.Fatal("unknown engine must be rejected")
+	}
+}

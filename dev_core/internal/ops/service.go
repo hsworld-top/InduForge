@@ -732,7 +732,7 @@ func validateDeployment(in CreateDeploymentInput) error {
 	if in.AccessPort != 0 && (in.AccessPort < 1024 || in.AccessPort > 65532) {
 		return fmt.Errorf("工程访问端口必须在 1024 到 65532 之间")
 	}
-	return validateEnginePlacements([]string{ServiceBase}, in.Placements)
+	return validateEnginePlacementRequest(in.Placements)
 }
 func validUUID(value string) bool { _, err := uuid.Parse(value); return err == nil }
 func randomToken(bytes int) (string, error) {
