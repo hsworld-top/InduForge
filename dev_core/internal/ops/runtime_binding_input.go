@@ -57,11 +57,15 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 }
 
 func runtimeJetStreamInput(role, key string, support RuntimeSupportResources) map[string]any {
-	streams := map[string]string{"raw": "IF_" + strings.ToUpper(key) + "_RAW", "derived": "IF_" + strings.ToUpper(key) + "_DERIVED", "event": "IF_" + strings.ToUpper(key) + "_EVENT", "dlq": "IF_" + strings.ToUpper(key) + "_DLQ"}
+	streams := map[string]string{"raw": "IF_" + strings.ToUpper(key) + "_RAW", "derived": "IF_" + strings.ToUpper(key) + "_DERIVED", "event": "IF_" + strings.ToUpper(key) + "_EVENT", "command": "IF_" + strings.ToUpper(key) + "_COMMAND", "dlq": "IF_" + strings.ToUpper(key) + "_DLQ"}
 	consumer := func(kind, stream, subject string) map[string]any {
 		return map[string]any{"role": role, "consumerKey": role + "-" + kind + "-v1", "stream": stream, "durableName": role + "-" + kind + "-v1", "filterSubject": subject, "ackPolicy": "explicit", "ackWaitMs": 30000, "maxDeliver": 5, "backoffMs": []int{1000, 5000, 30000}, "maxAckPending": 32, "maxWaiting": 32, "maxRequestBatch": 32, "maxRequestExpiresMs": 5000, "maxRequestMaxBytes": 1 << 20, "deadLetterSubject": "dlq." + role + "-" + kind}
 	}
-	return map[string]any{"endpoint": support.NATSEndpoint, "serverResourceRef": support.NATSResourceRef, "credentialSecretRef": support.NATSCredentialSecretRef, "credentialSecretFile": "secrets/nats.json", "dataRawStream": streams["raw"], "dataDerivedStream": streams["derived"], "eventStream": streams["event"], "deadLetterStream": streams["dlq"], "consumers": []any{consumer("raw", streams["raw"], "data.raw.>"), consumer("derived", streams["derived"], "data.computed.>")}}
+	consumers := []any{consumer("raw", streams["raw"], "data.raw.>"), consumer("derived", streams["derived"], "data.computed.>")}
+	if role == ServiceCompute {
+		consumers = append(consumers, consumer("command", streams["command"], "compute.command.>"))
+	}
+	return map[string]any{"endpoint": support.NATSEndpoint, "serverResourceRef": support.NATSResourceRef, "credentialSecretRef": support.NATSCredentialSecretRef, "credentialSecretFile": "secrets/nats.json", "dataRawStream": streams["raw"], "dataDerivedStream": streams["derived"], "eventStream": streams["event"], "commandStream": streams["command"], "deadLetterStream": streams["dlq"], "consumers": consumers}
 }
 
 func stableRuntimeKey(values ...string) string {

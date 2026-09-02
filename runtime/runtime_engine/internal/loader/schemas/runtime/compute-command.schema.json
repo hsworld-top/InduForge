@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://induforge.dev/contracts/runtime/compute-command.schema.json",
+  "title": "compute-command.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "subject", "deploymentId", "accountId", "commandId", "computeId", "requestedBy", "requestedAt", "bindingEpoch", "idempotencyKey"],
+  "properties": {
+    "schemaVersion": {"const": "compute-command.v1"},
+    "subject": {"type": "string", "pattern": "^compute\\.command\\.[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "deploymentId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "accountId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "commandId": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "computeId": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "requestedBy": {"type": "string", "minLength": 1, "maxLength": 256},
+    "requestedAt": {"type": "string", "format": "date-time"},
+    "bindingEpoch": {"type": "integer", "minimum": 1},
+    "idempotencyKey": {"type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$"}
+  }
+}

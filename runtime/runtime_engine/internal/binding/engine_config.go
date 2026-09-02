@@ -68,6 +68,7 @@ type JetStreamInput struct {
 	DataRawStream       string `json:"dataRawStream"`
 	DataDerivedStream   string `json:"dataDerivedStream"`
 	EventStream         string `json:"eventStream"`
+	CommandStream       string `json:"commandStream"`
 	DeadLetterStream    string `json:"deadLetterStream"`
 	// CredentialSecretFile 是由受控挂载提供的相对文件路径；它只供
 	// resolver index 引用，绝不携带认证值。
@@ -119,6 +120,7 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 			DataRawStream:       input.JetStream.DataRawStream,
 			DataDerivedStream:   input.JetStream.DataDerivedStream,
 			EventStream:         input.JetStream.EventStream,
+			CommandStream:       input.JetStream.CommandStream,
 			DeadLetterStream:    input.JetStream.DeadLetterStream,
 			Consumers:           cloneConsumers(input.JetStream.Consumers),
 		},
@@ -183,6 +185,7 @@ func validateInput(input BuildInput) error {
 		"jetStream.dataRawStream":        input.JetStream.DataRawStream,
 		"jetStream.dataDerivedStream":    input.JetStream.DataDerivedStream,
 		"jetStream.eventStream":          input.JetStream.EventStream,
+		"jetStream.commandStream":        input.JetStream.CommandStream,
 		"jetStream.deadLetterStream":     input.JetStream.DeadLetterStream,
 		"stateStore.resourceRef":         input.StateStore.ResourceRef,
 		"stateStore.credentialSecretRef": input.StateStore.CredentialSecretRef,

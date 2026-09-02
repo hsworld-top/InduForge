@@ -67,13 +67,13 @@ func TestProvisionNATSCreateAndIdempotent(t *testing.T) {
 	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
 		t.Fatal(err)
 	}
-	if fake.created != 6 {
-		t.Fatalf("created = %d, want 6", fake.created)
+	if fake.created != 8 {
+		t.Fatalf("created = %d, want 8", fake.created)
 	}
 	if err := ProvisionNATSWithAdmin(context.Background(), in, fake); err != nil {
 		t.Fatal(err)
 	}
-	if fake.created != 6 || fake.updated != 0 {
+	if fake.created != 8 || fake.updated != 0 {
 		t.Fatalf("idempotent result created=%d updated=%d", fake.created, fake.updated)
 	}
 	if got := fake.streams["RAW"].Config; got.Storage != nats.FileStorage || got.Retention != nats.LimitsPolicy {
@@ -88,7 +88,7 @@ func TestProvisionNATSUsesOneGiBProjectQuotaAndShrinksExistingStreams(t *testing
 	for _, stream := range streams {
 		total += stream.MaxBytes
 	}
-	if len(streams) != 4 || total != 1<<30 {
+	if len(streams) != 5 || total != (4<<28)+(1<<26) {
 		t.Fatalf("stream count=%d total quota=%d", len(streams), total)
 	}
 	fake := &fakeAdmin{streams: map[string]*nats.StreamInfo{
@@ -150,5 +150,5 @@ func TestDecodeNATSCredentialsStrict(t *testing.T) {
 }
 
 func provisionInput() Input {
-	return Input{Binding: binding.Input{AccountID: "if-project", JetStream: binding.JetStreamInput{Endpoint: "nats://nats.default.svc:4222", DataRawStream: "RAW", DataDerivedStream: "DERIVED", EventStream: "EVENT", DeadLetterStream: "DLQ", Consumers: []model.Consumer{{Stream: "RAW", DurableName: "COMPUTE", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.compute"}, {Stream: "DERIVED", DurableName: "ALARM", FilterSubject: "data.computed.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.alarm"}}}}}
+	return Input{Binding: binding.Input{AccountID: "if-project", JetStream: binding.JetStreamInput{Endpoint: "nats://nats.default.svc:4222", DataRawStream: "RAW", DataDerivedStream: "DERIVED", EventStream: "EVENT", CommandStream: "COMMAND", DeadLetterStream: "DLQ", Consumers: []model.Consumer{{Stream: "RAW", DurableName: "COMPUTE", FilterSubject: "data.raw.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.compute"}, {Stream: "DERIVED", DurableName: "ALARM", FilterSubject: "data.computed.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.alarm"}, {Stream: "COMMAND", DurableName: "COMMAND", FilterSubject: "compute.command.>", AckWaitMS: 30000, MaxAckPending: 10, MaxWaiting: 10, MaxRequestBatch: 10, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1048576, DeadLetterSubject: "dlq.command"}}}}}
 }

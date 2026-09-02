@@ -136,6 +136,19 @@ func ValidatePointEvent(raw []byte) error {
 	return validateJSON(schemas.all["point-event.schema.json"], raw, "point-event")
 }
 
+// ValidateComputeCommand 对人工运行命令执行严格 JSON/Scheme 校验；调用者还必须
+// 复核 subject、部署账户与 binding epoch，避免合法命令跨部署执行。
+func ValidateComputeCommand(raw []byte) error {
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return fmt.Errorf("compute command JSON 键无效: %w", err)
+	}
+	schemas, err := compileSchemas()
+	if err != nil {
+		return err
+	}
+	return validateJSON(schemas.all["compute-command.schema.json"], raw, "compute-command")
+}
+
 // ValidateDLQEvent 确保最终写入 outbox 的失败证据始终符合冻结的 runtime.dlq.event.v1。
 func ValidateDLQEvent(raw []byte) error {
 	if err := rejectDuplicateJSONKeys(raw); err != nil {

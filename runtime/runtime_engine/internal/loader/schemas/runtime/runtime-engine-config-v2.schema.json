@@ -189,6 +189,7 @@
         "dataRawStream",
         "dataDerivedStream",
         "eventStream",
+        "commandStream",
         "deadLetterStream",
         "consumers"
       ],
@@ -208,6 +209,9 @@
           "$ref": "common.schema.json#/$defs/stableId"
         },
         "eventStream": {
+          "$ref": "common.schema.json#/$defs/stableId"
+        },
+        "commandStream": {
           "$ref": "common.schema.json#/$defs/stableId"
         },
         "deadLetterStream": {
@@ -252,7 +256,7 @@
               },
               "filterSubject": {
                 "type": "string",
-                "enum": ["data.raw.>", "data.computed.>"]
+                "enum": ["data.raw.>", "data.computed.>", "compute.command.>"]
               },
               "ackPolicy": {
                 "const": "explicit"

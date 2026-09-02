@@ -12,8 +12,12 @@ import (
 
 func TestDecodeAcceptsDevCoreGoldenFixture(t *testing.T) {
 	raw, err := os.ReadFile("testdata/dev-core.runtime-binding.input.v1.json")
-	if err != nil { t.Fatal(err) }
-	if _, err = Decode(raw); err != nil { t.Fatalf("dev_core golden fixture rejected: %v", err) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Decode(raw); err != nil {
+		t.Fatalf("dev_core golden fixture rejected: %v", err)
+	}
 }
 
 func TestDecodeRejectsUnknownFields(t *testing.T) {
@@ -109,7 +113,7 @@ func validInput() Input {
 	return Input{SchemaVersion: SchemaVersion, ReleaseID: "release-a", RuntimeArtifactPath: "/opt/induforge/release/runtime-artifact.tar.zst", RuntimeArtifactSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ArtifactDir: "/work/artifact", BundleDir: "/work/bundle", Binding: binding.Input{
 		TenantID: "tenant-a", SiteID: "site-a", NodeID: "node-a", InstanceID: "runtime-engine-alarm-0", ProjectID: "11111111-1111-4111-8111-111111111111", DeploymentID: "deployment-a", AccountID: "account-a", Role: "alarm",
 		ArtifactMountPath: "/work/artifact", ArtifactFile: "runtime-project-artifact.json",
-		JetStream:  binding.JetStreamInput{Endpoint: "nats://nats:4222", ServerResourceRef: "site-resource://site-a/nats", CredentialSecretRef: "secret://site-a/nats", CredentialSecretFile: "secrets/nats.json", DataRawStream: "DATA_RAW", DataDerivedStream: "DATA_DERIVED", EventStream: "EVENT", DeadLetterStream: "DLQ", Consumers: []model.Consumer{{Role: "alarm", ConsumerKey: "alarm-raw-v1", Stream: "DATA_RAW", DurableName: "alarm-raw-v1", FilterSubject: "data.raw.>", AckPolicy: "explicit", AckWaitMS: 1000, MaxDeliver: 1, BackoffMS: []int64{1000}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1 << 20, DeadLetterSubject: "dlq.alarm-raw"}, {Role: "alarm", ConsumerKey: "alarm-derived-v1", Stream: "DATA_DERIVED", DurableName: "alarm-derived-v1", FilterSubject: "data.computed.>", AckPolicy: "explicit", AckWaitMS: 1000, MaxDeliver: 1, BackoffMS: []int64{1000}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1 << 20, DeadLetterSubject: "dlq.alarm-derived"}}},
+		JetStream:  binding.JetStreamInput{Endpoint: "nats://nats:4222", ServerResourceRef: "site-resource://site-a/nats", CredentialSecretRef: "secret://site-a/nats", CredentialSecretFile: "secrets/nats.json", DataRawStream: "DATA_RAW", DataDerivedStream: "DATA_DERIVED", EventStream: "EVENT", CommandStream: "COMMAND", DeadLetterStream: "DLQ", Consumers: []model.Consumer{{Role: "alarm", ConsumerKey: "alarm-raw-v1", Stream: "DATA_RAW", DurableName: "alarm-raw-v1", FilterSubject: "data.raw.>", AckPolicy: "explicit", AckWaitMS: 1000, MaxDeliver: 1, BackoffMS: []int64{1000}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1 << 20, DeadLetterSubject: "dlq.alarm-raw"}, {Role: "alarm", ConsumerKey: "alarm-derived-v1", Stream: "DATA_DERIVED", DurableName: "alarm-derived-v1", FilterSubject: "data.computed.>", AckPolicy: "explicit", AckWaitMS: 1000, MaxDeliver: 1, BackoffMS: []int64{1000}, MaxAckPending: 32, MaxWaiting: 32, MaxRequestBatch: 32, MaxRequestExpiresMS: 5000, MaxRequestMaxBytes: 1 << 20, DeadLetterSubject: "dlq.alarm-derived"}}},
 		StateStore: binding.StateStoreInput{ResourceRef: "site-resource://site-a/postgres", CredentialSecretRef: "secret://site-a/pg", CredentialSecretFile: "secrets/pg.json", Schema: "runtime"},
 	}}
 }

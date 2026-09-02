@@ -18,11 +18,13 @@ import (
 )
 
 const (
-	provisionTimeout = 15 * time.Second
-	streamMaxAge     = 7 * 24 * time.Hour
-	// 单项目固定四条 stream，每条 256MiB；总上限 1GiB，确保默认 2GiB
+	provisionTimeout    = 15 * time.Second
+	streamMaxAge        = 7 * 24 * time.Hour
+	commandStreamMaxAge = 24 * time.Hour
+	// 单项目四条数据 stream 每条 256MiB，命令 stream 64MiB；总上限 1088MiB，确保默认 2GiB
 	// JetStream 基础服务仍保留一半空间给元数据、重放和运维余量。
-	streamMaxBytes = int64(256 << 20)
+	streamMaxBytes        = int64(256 << 20)
+	commandStreamMaxBytes = int64(64 << 20)
 )
 
 // NATSCredentials 是 bootstrap 挂载中的最小 NATS 凭据。它从不实现 String，且
@@ -197,7 +199,7 @@ func provisionError(stage, name string) error { return fmt.Errorf("NATS %s失败
 
 func validateNATSInput(in Input) error {
 	j := in.Binding.JetStream
-	if strings.TrimSpace(in.Binding.AccountID) == "" || validateNATSEndpoint(j.Endpoint) != nil || j.DataRawStream == "" || j.DataDerivedStream == "" || j.EventStream == "" || j.DeadLetterStream == "" || len(j.Consumers) == 0 {
+	if strings.TrimSpace(in.Binding.AccountID) == "" || validateNATSEndpoint(j.Endpoint) != nil || j.DataRawStream == "" || j.DataDerivedStream == "" || j.EventStream == "" || j.CommandStream == "" || j.DeadLetterStream == "" || len(j.Consumers) == 0 {
 		return errors.New("input")
 	}
 	for _, c := range j.Consumers {
@@ -206,7 +208,7 @@ func validateNATSInput(in Input) error {
 		}
 		// 输入虽来自受控 ConfigMap，仍只接受 runtime-engine 已冻结的两条
 		// 项目数据 subject，避免 provisioner 因错误输入取得其它项目 subject。
-		if (c.Stream != j.DataRawStream || c.FilterSubject != "data.raw.>") && (c.Stream != j.DataDerivedStream || c.FilterSubject != "data.computed.>") {
+		if (c.Stream != j.DataRawStream || c.FilterSubject != "data.raw.>") && (c.Stream != j.DataDerivedStream || c.FilterSubject != "data.computed.>") && (c.Stream != j.CommandStream || c.FilterSubject != "compute.command.>") {
 			return errors.New("consumer subject")
 		}
 	}
@@ -223,6 +225,7 @@ func natsTopology(in binding.JetStreamInput) ([]*nats.StreamConfig, []expectedCo
 		streamConfig(in.DataRawStream, []string{"data.raw.>"}, int32(transportlimits.MaxBodyBytes)),
 		streamConfig(in.DataDerivedStream, []string{"data.computed.>"}, int32(transportlimits.MaxBodyBytes)),
 		streamConfig(in.EventStream, []string{"alarm.event"}, int32(transportlimits.MaxBodyBytes)),
+		commandStreamConfig(in.CommandStream),
 	}
 	dlqSubjects := make([]string, 0, len(in.Consumers))
 	seen := make(map[string]struct{}, len(in.Consumers))
@@ -240,6 +243,10 @@ func natsTopology(in binding.JetStreamInput) ([]*nats.StreamConfig, []expectedCo
 
 func streamConfig(name string, subjects []string, maxMsgSize int32) *nats.StreamConfig {
 	return &nats.StreamConfig{Name: name, Subjects: append([]string(nil), subjects...), Retention: nats.LimitsPolicy, Storage: nats.FileStorage, Discard: nats.DiscardOld, MaxAge: streamMaxAge, MaxBytes: streamMaxBytes, MaxMsgSize: maxMsgSize}
+}
+
+func commandStreamConfig(name string) *nats.StreamConfig {
+	return &nats.StreamConfig{Name: name, Subjects: []string{"compute.command.>"}, Retention: nats.LimitsPolicy, Storage: nats.FileStorage, Discard: nats.DiscardOld, MaxAge: commandStreamMaxAge, MaxBytes: commandStreamMaxBytes, MaxMsgSize: int32(transportlimits.MaxBodyBytes)}
 }
 
 func consumerConfig(in model.Consumer) *nats.ConsumerConfig {

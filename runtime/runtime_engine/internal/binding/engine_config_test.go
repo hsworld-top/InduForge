@@ -103,6 +103,7 @@ func validInput(role string) Input {
 			DataRawStream:        "DATA_RAW",
 			DataDerivedStream:    "DATA_DERIVED",
 			EventStream:          "EVENT",
+			CommandStream:        "COMMAND",
 			DeadLetterStream:     "RUNTIME_DLQ",
 			Consumers:            consumers(role),
 		},
@@ -127,10 +128,14 @@ func buildInput(input Input) BuildInput {
 }
 
 func consumers(role string) []model.Consumer {
-	return []model.Consumer{
+	result := []model.Consumer{
 		consumer(role, "raw", "DATA_RAW", "data.raw.>"),
 		consumer(role, "derived", "DATA_DERIVED", "data.computed.>"),
 	}
+	if role == roleCompute {
+		result = append(result, consumer(role, "command", "COMMAND", "compute.command.>"))
+	}
+	return result
 }
 
 func consumer(role, kind, stream, subject string) model.Consumer {

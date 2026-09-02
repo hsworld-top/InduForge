@@ -28,7 +28,7 @@ func ValidateEngineConfig(config EngineConfig) error {
 	default:
 		return fmt.Errorf("不支持的 runtime-engine config schemaVersion %q", config.SchemaVersion)
 	}
-	streams := []string{config.JetStream.DataRawStream, config.JetStream.DataDerivedStream, config.JetStream.EventStream, config.JetStream.DeadLetterStream}
+	streams := []string{config.JetStream.DataRawStream, config.JetStream.DataDerivedStream, config.JetStream.EventStream, config.JetStream.CommandStream, config.JetStream.DeadLetterStream}
 	seenStreams := map[string]struct{}{}
 	for _, stream := range streams {
 		if stream == "" {
@@ -150,13 +150,16 @@ func ValidateEngineConfig(config EngineConfig) error {
 		}
 		kind, expectedStream := subjectKind(consumer.FilterSubject, config.JetStream)
 		if kind == "" {
-			return fmt.Errorf("consumer %q 的 filterSubject 必须完整覆盖 data.raw.> 或 data.computed.>", consumer.ConsumerKey)
+			return fmt.Errorf("consumer %q 的 filterSubject 必须是已冻结 Runtime subject", consumer.ConsumerKey)
 		}
 		if consumer.Stream != expectedStream {
 			return fmt.Errorf("consumer %q 的 stream %q 与 filterSubject %q 不匹配", consumer.ConsumerKey, consumer.Stream, consumer.FilterSubject)
 		}
 		if consumer.Role == "query" || consumer.Role == "coord" {
 			return fmt.Errorf("%s role 不允许 JetStream consumer", consumer.Role)
+		}
+		if kind == "command" && consumer.Role != "compute" {
+			return fmt.Errorf("command consumer 只能属于 compute role")
 		}
 		if coverage[consumer.Role] == nil {
 			coverage[consumer.Role] = map[string]bool{}
@@ -181,6 +184,9 @@ func ValidateEngineConfig(config EngineConfig) error {
 		}
 		if !enabled && len(coverage[role]) != 0 {
 			return fmt.Errorf("未启用 %s role 不允许 consumer", role)
+		}
+		if role == "compute" && enabled && !coverage[role]["command"] {
+			return fmt.Errorf("已启用 compute role 必须恰有 command consumer")
 		}
 	}
 	if _, compute := roles["compute"]; compute && config.ComputeSandbox == nil {
@@ -360,6 +366,8 @@ func subjectKind(subject string, streams JetStream) (string, string) {
 		return "raw", streams.DataRawStream
 	case "data.computed.>":
 		return "computed", streams.DataDerivedStream
+	case "compute.command.>":
+		return "command", streams.CommandStream
 	default:
 		return "", ""
 	}

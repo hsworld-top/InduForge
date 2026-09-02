@@ -122,7 +122,8 @@
     "credentialSecretRef": "secret://site-a/deployment-line1-prod/nats-runtime-engine",
     "dataRawStream": "DATA_RAW",
     "dataDerivedStream": "DATA_DERIVED",
-    "eventStream": "EVENT",
+  "eventStream": "EVENT",
+  "commandStream": "COMMAND",
     "deadLetterStream": "RUNTIME_DLQ",
     "consumers": [
       {
@@ -210,9 +211,9 @@
         "maxRequestMaxBytes": 1048576,
         "deadLetterSubject": "dlq.writer-derived"
       },
-      {
-        "role": "compute",
-        "consumerKey": "compute-derived-v1",
+    {
+      "role": "compute",
+      "consumerKey": "compute-derived-v1",
         "stream": "DATA_DERIVED",
         "durableName": "compute-derived-v1",
         "filterSubject": "data.computed.>",
@@ -225,8 +226,25 @@
         "maxRequestBatch": 32,
         "maxRequestExpiresMs": 5000,
         "maxRequestMaxBytes": 1048576,
-        "deadLetterSubject": "dlq.compute-derived"
-      }
+      "deadLetterSubject": "dlq.compute-derived"
+    },
+    {
+      "role": "compute",
+      "consumerKey": "compute-command-v1",
+      "stream": "COMMAND",
+      "durableName": "compute-command-v1",
+      "filterSubject": "compute.command.>",
+      "ackPolicy": "explicit",
+      "ackWaitMs": 30000,
+      "maxDeliver": 5,
+      "backoffMs": [1000, 5000, 30000],
+      "maxAckPending": 32,
+      "maxWaiting": 32,
+      "maxRequestBatch": 32,
+      "maxRequestExpiresMs": 5000,
+      "maxRequestMaxBytes": 1048576,
+      "deadLetterSubject": "dlq.compute-command"
+    }
     ]
   },
   "computeSandbox": {

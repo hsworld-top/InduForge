@@ -98,13 +98,15 @@ type Consumer struct {
 }
 
 type JetStream struct {
-	ServerResourceRef   string     `json:"serverResourceRef"`
-	CredentialSecretRef string     `json:"credentialSecretRef"`
-	DataRawStream       string     `json:"dataRawStream"`
-	DataDerivedStream   string     `json:"dataDerivedStream"`
-	EventStream         string     `json:"eventStream"`
-	DeadLetterStream    string     `json:"deadLetterStream"`
-	Consumers           []Consumer `json:"consumers"`
+	ServerResourceRef   string `json:"serverResourceRef"`
+	CredentialSecretRef string `json:"credentialSecretRef"`
+	DataRawStream       string `json:"dataRawStream"`
+	DataDerivedStream   string `json:"dataDerivedStream"`
+	EventStream         string `json:"eventStream"`
+	// CommandStream 隔离人工计算命令，命令不复用点位数据流的保留与消费语义。
+	CommandStream    string     `json:"commandStream"`
+	DeadLetterStream string     `json:"deadLetterStream"`
+	Consumers        []Consumer `json:"consumers"`
 }
 
 // ComputeSandbox 仅包含受信资源和 Secret 引用；resolver 才能得到 endpoint/credential 值。

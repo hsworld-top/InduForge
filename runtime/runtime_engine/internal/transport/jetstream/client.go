@@ -101,6 +101,7 @@ func (c *Client) ValidateStreamsAndConsumers(ctx context.Context, config model.E
 		{config.JetStream.DataRawStream, "data.raw.>"},
 		{config.JetStream.DataDerivedStream, "data.computed.>"},
 		{config.JetStream.EventStream, "alarm.event"},
+		{config.JetStream.CommandStream, "compute.command.>"},
 	} {
 		stream, err := c.js.Stream(ctx, expected.name)
 		if err != nil {
@@ -113,8 +114,8 @@ func (c *Client) ValidateStreamsAndConsumers(ctx context.Context, config model.E
 		if !exactSubjects(info.Config.Subjects, []string{expected.subject}) {
 			return errors.New("JetStream stream subject 拓扑不匹配")
 		}
-		if (expected.name == config.JetStream.DataRawStream || expected.name == config.JetStream.DataDerivedStream) && (info.Config.MaxMsgSize <= 0 || info.Config.MaxMsgSize > transportlimits.MaxBodyBytes) {
-			return errors.New("DATA stream MaxMsgSize 必须显式且不大于 1MiB")
+		if (expected.name == config.JetStream.DataRawStream || expected.name == config.JetStream.DataDerivedStream || expected.name == config.JetStream.CommandStream) && (info.Config.MaxMsgSize <= 0 || info.Config.MaxMsgSize > transportlimits.MaxBodyBytes) {
+			return errors.New("DATA/COMMAND stream MaxMsgSize 必须显式且不大于 1MiB")
 		}
 	}
 	dlq, err := c.js.Stream(ctx, config.JetStream.DeadLetterStream)
