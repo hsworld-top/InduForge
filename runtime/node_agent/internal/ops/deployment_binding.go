@@ -16,6 +16,7 @@ import (
 
 const (
 	deploymentBindingSchema = "deployment-binding.v1"
+	engineBindingSchema     = "deployment-binding.v2"
 	// 默认值只用于示例和测试；正式 Binding 以客户在部署阶段选择的访问端口为准。
 	gatewayPublicPort      = 17800
 	runtimeAPILoopbackPort = 17801
@@ -32,8 +33,13 @@ type deploymentBinding struct {
 	NodeID          string   `json:"nodeId"`
 	DeploymentID    string   `json:"deploymentId"`
 	ProjectID       string   `json:"projectId"`
+	EnvironmentID   string   `json:"environmentId,omitempty"`
+	ServiceID       string   `json:"serviceId,omitempty"`
+	Mode            string   `json:"mode,omitempty"`
+	Engine          string   `json:"engine,omitempty"`
 	EnabledServices []string `json:"enabledServices"`
 	Ports           struct {
+		HostPort                *int `json:"hostPort,omitempty"`
 		GatewayPublic           int  `json:"gatewayPublic"`
 		RuntimeAPILoopback      int  `json:"runtimeApiLoopback"`
 		EngineLoopback          int  `json:"engineLoopback"`
@@ -102,6 +108,9 @@ func (a *Agent) fetchDeploymentBinding(ctx context.Context, command AgentCommand
 	}
 	if err := validateDeploymentBinding(binding, command, identity.NodeID, a.supervisor); err != nil {
 		return deploymentBinding{}, err
+	}
+	if binding.SchemaVersion == engineBindingSchema {
+		binding.EnabledServices = engineBindingCapabilities(binding.Engine)
 	}
 	return binding, nil
 }
@@ -197,6 +206,9 @@ func (a *Agent) installBoundRelease(ctx context.Context, command AgentCommand, g
 }
 
 func validateDeploymentBinding(binding deploymentBinding, command AgentCommand, nodeID string, supervisor *Supervisor) error {
+	if binding.SchemaVersion == engineBindingSchema {
+		return validateEngineBinding(binding, command, nodeID, supervisor)
+	}
 	if binding.SchemaVersion != deploymentBindingSchema || !validRuntimeUUID(binding.BindingID) ||
 		binding.Revision < 1 || !validRuntimeUUID(binding.NodeID) || !validRuntimeUUID(binding.DeploymentID) ||
 		!validRuntimeUUID(binding.ProjectID) || !validRuntimeUUID(binding.Release.ID) {
@@ -234,6 +246,63 @@ func validateDeploymentBinding(binding deploymentBinding, command AgentCommand, 
 		}
 	}
 	return nil
+}
+
+func validateEngineBinding(binding deploymentBinding, command AgentCommand, nodeID string, supervisor *Supervisor) error {
+	if !validRuntimeUUID(binding.BindingID) || binding.Revision < 1 || !validRuntimeUUID(binding.NodeID) ||
+		!validRuntimeUUID(binding.DeploymentID) || !validRuntimeUUID(binding.ProjectID) ||
+		!validRuntimeUUID(binding.EnvironmentID) || !validRuntimeUUID(binding.ServiceID) || !validRuntimeUUID(binding.Release.ID) {
+		return fmt.Errorf("引擎 DeploymentBinding 身份字段无效")
+	}
+	if binding.NodeID != nodeID || binding.DeploymentID != command.DeploymentID || binding.ServiceID != command.ServiceID ||
+		binding.Engine != command.ServiceType || binding.Revision != command.BindingRevision || binding.Release.ID != command.ReleaseID ||
+		binding.Release.ArchiveSHA256 != command.ArchiveSHA256 || binding.Release.ManifestSHA256 != command.ManifestSHA256 ||
+		binding.Release.ChecksumsSHA256 != command.ChecksumsSHA256 || binding.Release.SigningKeyID != command.SigningKeyID {
+		return fmt.Errorf("引擎 DeploymentBinding 与当前节点、部署、服务或 Release 命令不匹配")
+	}
+	if binding.Mode != "development" && binding.Mode != "release" {
+		return fmt.Errorf("引擎 DeploymentBinding 模式无效")
+	}
+	group, ok := engineServiceGroup(binding.Engine)
+	if !ok || !supervisor.HasInstalledService(group) {
+		return fmt.Errorf("本机未安装引擎 %s 所需服务能力", binding.Engine)
+	}
+	if !validSHA256(binding.Release.ArchiveSHA256) || !validSHA256(binding.Release.ManifestSHA256) ||
+		!validSHA256(binding.Release.ChecksumsSHA256) || !validStableID(binding.Release.SigningKeyID) || len(binding.Secrets) != 0 {
+		return fmt.Errorf("引擎 DeploymentBinding Release 或 Secret 字段无效")
+	}
+	if binding.Engine == "base" {
+		if binding.Ports.HostPort == nil || *binding.Ports.HostPort < 1024 || *binding.Ports.HostPort > 65532 {
+			return fmt.Errorf("基础引擎 DeploymentBinding 端口无效")
+		}
+	} else if binding.Ports.HostPort != nil {
+		return fmt.Errorf("非基础引擎 DeploymentBinding 不能携带主机端口")
+	}
+	if _, err := parseBindingTime(binding.IssuedAt); err != nil {
+		return fmt.Errorf("引擎 DeploymentBinding issuedAt 无效: %w", err)
+	}
+	return nil
+}
+
+func engineServiceGroup(engine string) (ServiceGroup, bool) {
+	switch engine {
+	case "base":
+		return ServiceProjectEntry, true
+	case "compute", "alarm":
+		return ServiceDataRuntime, true
+	case "collector":
+		return ServiceCollector, true
+	default:
+		return "", false
+	}
+}
+
+func engineBindingCapabilities(engine string) []string {
+	values := []string{string(ServiceProjectEntry), string(ServiceDataRuntime)}
+	if engine == "collector" {
+		values = append(values, string(ServiceCollector))
+	}
+	return values
 }
 
 func validDeploymentPorts(binding deploymentBinding) bool {

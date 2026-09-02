@@ -520,6 +520,22 @@ func formalAgent(t *testing.T, serverURL, dataDir string, publicKey ed25519.Publ
 	return agent
 }
 
+func TestEngineServiceGroupRoutesAllK3sEngines(t *testing.T) {
+	tests := map[string]ServiceGroup{
+		"base": ServiceProjectEntry, "compute": ServiceDataRuntime,
+		"alarm": ServiceDataRuntime, "collector": ServiceCollector,
+	}
+	for engine, want := range tests {
+		got, ok := engineServiceGroup(engine)
+		if !ok || got != want {
+			t.Fatalf("engineServiceGroup(%q)=(%q,%v), want (%q,true)", engine, got, ok, want)
+		}
+	}
+	if _, ok := engineServiceGroup("project_entry"); ok {
+		t.Fatal("旧原生服务组不能作为 K3s 引擎类型")
+	}
+}
+
 func formalCommand() AgentCommand {
 	return AgentCommand{
 		NodeID: formalNodeID, DeploymentID: formalDeploymentID, ReleaseID: testReleaseID, ServiceID: formalServiceID,

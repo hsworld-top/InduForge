@@ -379,22 +379,31 @@ func (a *Agent) reconcile(ctx context.Context, command AgentCommand) error {
 	if command.NodeID == "" || command.NodeID != identity.NodeID {
 		return fmt.Errorf("服务未显式分配给本节点")
 	}
-	group := ServiceGroup(command.ServiceType)
-	if !validServiceGroup(group) {
-		return fmt.Errorf("不支持的服务类型: %s", command.ServiceType)
-	}
 	formal, err := commandUsesFormalRelease(command)
 	if err != nil {
-		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
 		return err
+	}
+	group := ServiceGroup(command.ServiceType)
+	engineCommand := false
+	if formal {
+		if engineGroup, ok := engineServiceGroup(command.ServiceType); ok {
+			group, engineCommand = engineGroup, true
+		} else if !validServiceGroup(group) {
+			return fmt.Errorf("不支持的引擎类型: %s", command.ServiceType)
+		}
+	} else if !validServiceGroup(group) {
+		return fmt.Errorf("不支持的服务类型: %s", command.ServiceType)
 	}
 	if formal && commandRequiresRunningRelease(command) {
 		if err := a.installBoundRelease(ctx, command, group); err != nil {
 			a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
 			return err
 		}
-		// Release 已验证不等于能够安全运行。Foundation、Secret 与固定计划的执行
-		// 门禁未满足时绝不能回退到旧静态 Supervisor。
+		if engineCommand {
+			// 四类工程引擎由中心 K3s 调和器唯一启动；NodeAgent 只验证并原子准备
+			// 节点制品，不能回退到旧原生 Supervisor 形成第二份活动实例。
+			return a.saveApplied(command.ServiceID, command.Generation)
+		}
 		err := a.formalLaunchGateError(command.DeploymentID)
 		a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
 		return err
