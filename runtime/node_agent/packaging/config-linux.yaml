@@ -15,8 +15,8 @@ agent:
     nodeIp: '__NODE_IP__'
     # Release 公钥只来自节点本地配置；中心 Binding 只能引用 keyId。
     trustKeys: []
-    # 未接入可验证的 Runtime 版本发现前保持为空，正式 Release 安装会 fail-closed。
-    runtimeVersion: ''
+    # 能力二进制与 Agent 来自同一离线包，兼容性版本固定为包 BUILD_VERSION。
+    runtimeVersion: '__BUILD_VERSION__'
     # installed 表示本机已安装的能力，可用于领取节点身份；enabled 只有在
     # releaseRoot/releaseDigest/executable/healthUrl 全部由本机运维配置后才可设为 true。
     # 中心不能下发命令、路径、环境变量或 release 物料。

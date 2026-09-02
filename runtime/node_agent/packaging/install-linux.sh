@@ -81,6 +81,7 @@ fi
 SAFE_BUILD_VERSION="$(printf '%s' "$BUILD_VERSION" | sed 's/[\\&|]/\\&/g')"
 SAFE_HOST_DATA_DIR="$(printf '%s' "$HOST_DATA_DIR" | sed 's/[\\&|]/\\&/g')"
 sed -i.bak "s|agentVersion:.*|agentVersion: '$SAFE_BUILD_VERSION'|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
+sed -i.bak "s|runtimeVersion:.*|runtimeVersion: '$SAFE_BUILD_VERSION'|" "$CONFIG_DIR/config.yaml" && rm -f "$CONFIG_DIR/config.yaml.bak"
 # 老版本配置由 Go YAML 序列化器生成时可能使用 8 空格缩进，发布模板使用 4
 # 空格。插入字段必须沿用 dataDir 所在层级，不能写死缩进。
 insert_after_yaml_key() {
