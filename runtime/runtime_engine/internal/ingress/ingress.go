@@ -407,6 +407,12 @@ func (r *Runner) verifyPointAndProducer(event Event) (string, ProducerToken, err
 		return "", ProducerToken{}, fmt.Errorf("%w: point_status", ErrPermanent)
 	}
 	if event.SchemaVersion == "data.raw.v1" {
+		if point.SourceType == "manual.input" {
+			if event.Source != nil || model.ValidateManualProducerFence(r.loaded.Config, model.Ownership{OwnerID: event.OwnerID, Epoch: event.Epoch}) != nil {
+				return "", ProducerToken{}, fmt.Errorf("%w: manual_producer_fence", ErrPermanent)
+			}
+			return "runtime-api", ProducerToken{OwnerID: event.OwnerID, Epoch: event.Epoch}, nil
+		}
 		if point.SourceType != "collector.point" || event.Source == nil {
 			return "", ProducerToken{}, fmt.Errorf("%w: raw_point", ErrPermanent)
 		}

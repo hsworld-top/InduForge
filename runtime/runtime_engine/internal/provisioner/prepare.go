@@ -137,10 +137,15 @@ func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, erro
 			ArtifactRevision: artifactRevision(artifact.ProjectArtifactVersion),
 			ArtifactDigest:   "sha256:" + hex.EncodeToString(digest[:]),
 		},
-		RoleOwnership: model.Ownership{OwnerID: input.InstanceID, Epoch: 1},
+		RoleOwnership:   model.Ownership{OwnerID: input.InstanceID, Epoch: 1},
+		ManualOwnership: model.Ownership{OwnerID: input.ManualOwner, Epoch: input.ManualEpoch},
 	}
 	if build.ProjectArtifact.ArtifactRevision < 1 {
 		return binding.BuildInput{}, fmt.Errorf("项目制品版本非法")
+	}
+	if build.ManualOwnership.OwnerID == "" && build.ManualOwnership.Epoch == 0 {
+		// 仅保留旧 binding 的本地测试兼容；控制面一旦发布该字段必须原样传递。
+		build.ManualOwnership = model.Ownership{OwnerID: "runtime-api", Epoch: 1}
 	}
 	switch input.Role {
 	case "compute":

@@ -140,6 +140,17 @@ type NATSSubscriber struct {
 	subs       []*nats.Subscription
 }
 
+// PublishRaw 仅允许 Runtime API 发布已由 HTTP 层构造的 data.raw 事件；权限仍由 deployment Account 的 NATS 凭据收敛。
+func (s *NATSSubscriber) PublishRaw(ctx context.Context, subject string, payload []byte) error {
+	if s == nil || s.connection == nil || !strings.HasPrefix(subject, "data.raw.") || len(payload) == 0 || len(payload) > 1<<20 {
+		return errors.New("Runtime API raw publish 参数非法")
+	}
+	if err := s.connection.Publish(subject, payload); err != nil {
+		return err
+	}
+	return s.connection.FlushWithContext(ctx)
+}
+
 type NATSOptions struct {
 	URL             string
 	CredentialsFile string

@@ -48,12 +48,7 @@
     "artifactMount": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "source",
-        "mountPath",
-        "artifactFile",
-        "readOnly"
-      ],
+      "required": ["source", "mountPath", "artifactFile", "readOnly"],
       "properties": {
         "source": {
           "const": "native-release"
@@ -79,13 +74,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": [
-          "writer",
-          "alarm",
-          "compute",
-          "query",
-          "coord"
-        ]
+        "enum": ["writer", "alarm", "compute", "query", "coord"]
       }
     },
     "roleAssignments": {
@@ -94,20 +83,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "role",
-          "ownership"
-        ],
+        "required": ["role", "ownership"],
         "properties": {
           "role": {
             "type": "string",
-            "enum": [
-              "writer",
-              "alarm",
-              "compute",
-              "query",
-              "coord"
-            ]
+            "enum": ["writer", "alarm", "compute", "query", "coord"]
           },
           "ownership": {
             "$ref": "common.schema.json#/$defs/ownership"
@@ -125,12 +105,17 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "producerType",
-              "collectorId",
-              "collectorArtifact",
-              "ownership"
-            ],
+            "required": ["producerType", "manualId", "ownership"],
+            "properties": {
+              "producerType": { "const": "manual" },
+              "manualId": { "const": "runtime-api" },
+              "ownership": { "$ref": "common.schema.json#/$defs/ownership" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["producerType", "collectorId", "collectorArtifact", "ownership"],
             "properties": {
               "producerType": {
                 "const": "collector"
@@ -160,12 +145,7 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "producerType",
-              "computeId",
-              "role",
-              "ownership"
-            ],
+            "required": ["producerType", "computeId", "role", "ownership"],
             "properties": {
               "producerType": {
                 "const": "compute"
@@ -184,11 +164,7 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "producerType",
-              "role",
-              "ownership"
-            ],
+            "required": ["producerType", "role", "ownership"],
             "properties": {
               "producerType": {
                 "const": "alarm"
@@ -263,13 +239,7 @@
             "properties": {
               "role": {
                 "type": "string",
-                "enum": [
-                  "writer",
-                  "alarm",
-                  "compute",
-                  "query",
-                  "coord"
-                ]
+                "enum": ["writer", "alarm", "compute", "query", "coord"]
               },
               "consumerKey": {
                 "$ref": "common.schema.json#/$defs/stableId"
@@ -322,8 +292,14 @@
       "additionalProperties": false,
       "required": ["serverResourceRef", "credentialSecretRef"],
       "properties": {
-        "serverResourceRef": { "type": "string", "pattern": "^site-resource://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$" },
-        "credentialSecretRef": { "type": "string", "pattern": "^secret://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$" }
+        "serverResourceRef": {
+          "type": "string",
+          "pattern": "^site-resource://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$"
+        },
+        "credentialSecretRef": {
+          "type": "string",
+          "pattern": "^secret://[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$"
+        }
       }
     },
     "stateStore": {

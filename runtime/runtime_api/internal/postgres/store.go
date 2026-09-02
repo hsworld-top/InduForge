@@ -56,6 +56,35 @@ func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
+// ReserveManualSequence 在同一数据库事务中复核 deployment 级 Runtime API producer fence 并分配单调 sequence。
+func (s *Store) ReserveManualSequence(ctx context.Context, deploymentID string, epoch int64) (int64, error) {
+	if s == nil || s.pool == nil || strings.TrimSpace(deploymentID) == "" || epoch < 1 {
+		return 0, errors.New("manual sequence 参数非法")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	var owner string
+	var fencedEpoch int64
+	if err = tx.QueryRow(ctx, `SELECT owner_id,epoch FROM runtime_engine.producer_fence WHERE deployment_id=$1 AND producer_key='runtime-api' FOR UPDATE`, deploymentID).Scan(&owner, &fencedEpoch); err != nil {
+		return 0, fmt.Errorf("读取 manual producer fence: %w", err)
+	}
+	if owner != "runtime-api" || fencedEpoch != epoch {
+		return 0, errors.New("manual producer fence 已失效")
+	}
+	var sequence int64
+	err = tx.QueryRow(ctx, `INSERT INTO runtime_engine.producer_sequence (deployment_id,producer_key,owner_id,epoch,last_sequence) VALUES ($1,'runtime-api','runtime-api',$2,1) ON CONFLICT (deployment_id,producer_key) DO UPDATE SET last_sequence=runtime_engine.producer_sequence.last_sequence+1,owner_id=EXCLUDED.owner_id,epoch=EXCLUDED.epoch,updated_at=now() WHERE runtime_engine.producer_sequence.owner_id='runtime-api' AND runtime_engine.producer_sequence.epoch=EXCLUDED.epoch RETURNING last_sequence`, deploymentID, epoch).Scan(&sequence)
+	if err != nil {
+		return 0, fmt.Errorf("分配 manual sequence: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return sequence, nil
+}
+
 func (s *Store) Current(ctx context.Context, deploymentID, pointID string) (runtimeview.PointCurrent, error) {
 	var item runtimeview.PointCurrent
 	var value []byte

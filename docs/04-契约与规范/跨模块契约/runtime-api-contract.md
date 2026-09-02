@@ -30,7 +30,9 @@ Runtime API 是发布工程的动态 HTTP/WebSocket 接口，必须只监听同�
 | `GET /api/v1/runtime/computes`              | 返回计算单元目录                                      |
 | `GET /ws/v1/points`                         | 经会话认证后订阅 NATS 实时点位事件                    |
 
-`POST /api/v1/runtime/points/{path}/write` 与 `POST /api/v1/runtime/computes/{id}/run` 已保留但当前明确返回 `501 / code=50031`。报警确认、设备写入、发布、任意动作及人工计算执行没有冻结请求/审计/结果契约，不能在 SDK 或 Gateway 中伪造成功。
+`POST /api/v1/runtime/points/{path}/write` 仅适用于 `manual.input` 且当前会话角色通过 Artifact `runtimePermissions.write` 的数据点。Runtime API 在 PostgreSQL 中以 deployment binding 下发的 `manualOwner/manualEpoch` 复核 `runtime-api` producer fence 并原子分配 sequence，再只向本 deployment Account 的 `data.raw.<pointId>` 发布冻结的 `data.raw.v1` 事件；它不直接篡改 `point_current`。Engine 的 writer、compute 与 alarm 消费同一事件，浏览器只能以其后续投影/WS 观察结果。
+
+`POST /api/v1/runtime/computes/{id}/run` 仍返回 `501 / code=50031`；报警确认、设备写入、发布及其他动作在其各自受控命令/审计契约冻结前不得由 SDK 或 Gateway 伪造成功。
 
 ## 4. 运行依赖和安全文件
 

@@ -50,7 +50,6 @@
     {
       "if": { "properties": { "schemaVersion": { "const": "data.raw.v1" } } },
       "then": {
-        "required": ["source"],
         "not": { "properties": { "computation": {} }, "required": ["computation"] },
         "properties": { "source": {}, "subject": { "type": "string", "pattern": "^data\\.raw\\." } }
       }

@@ -67,11 +67,20 @@ func ValidateEngineConfig(config EngineConfig) error {
 	collectorFiles := make(map[string]struct{})
 	collectorArtifacts := make(map[string]struct{})
 	alarmProducerCount := 0
+	manualProducerCount := 0
 	for _, producer := range config.ProducerAssignments {
 		if producer.Ownership.Epoch < 1 {
 			return fmt.Errorf("producerAssignment %q 的 ownership.epoch 必须至少为 1", producer.ProducerType)
 		}
 		switch producer.ProducerType {
+		case "manual":
+			if producer.ManualID != "runtime-api" {
+				return fmt.Errorf("manual producer 必须使用 runtime-api 身份")
+			}
+			manualProducerCount++
+			if manualProducerCount > 1 {
+				return fmt.Errorf("producerAssignments 只能有一个 manual producer")
+			}
 		case "collector":
 			if _, exists := collectorProducers[producer.CollectorID]; exists {
 				return fmt.Errorf("producerAssignments 存在重复 collectorId %q", producer.CollectorID)
@@ -178,6 +187,16 @@ func ValidateEngineConfig(config EngineConfig) error {
 		return fmt.Errorf("compute role 必须配置 computeSandbox")
 	}
 	return nil
+}
+
+// ValidateManualProducerFence 用固定 manual producer 防止 Runtime API 伪造或跨部署推进人工点位。
+func ValidateManualProducerFence(config EngineConfig, ownership Ownership) error {
+	for _, producer := range config.ProducerAssignments {
+		if producer.ProducerType == "manual" && producer.ManualID == "runtime-api" && producer.Ownership == ownership {
+			return nil
+		}
+	}
+	return fmt.Errorf("manual producer 的 owner/epoch 未通过 Runtime API fence")
 }
 
 // ValidateWALCapacity 复核 Schema 无法比较的高水位与诊断预留容量边界。

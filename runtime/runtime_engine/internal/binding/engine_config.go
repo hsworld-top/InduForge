@@ -19,14 +19,17 @@ const (
 // 当前冻结的 EngineConfig 只允许写入受控引用，不能把这些字段或任何 secret 值
 // 序列化进运行配置。保留它们可阻止调用方以不完整的运行支撑信息构造配置。
 type Input struct {
-	TenantID          string                `json:"tenantId"`
-	SiteID            string                `json:"siteId"`
-	NodeID            string                `json:"nodeId"`
-	InstanceID        string                `json:"instanceId"`
-	ProjectID         string                `json:"projectId"`
-	DeploymentID      string                `json:"deploymentId"`
-	AccountID         string                `json:"accountId"`
-	Role              string                `json:"role"`
+	TenantID     string `json:"tenantId"`
+	SiteID       string `json:"siteId"`
+	NodeID       string `json:"nodeId"`
+	InstanceID   string `json:"instanceId"`
+	ProjectID    string `json:"projectId"`
+	DeploymentID string `json:"deploymentId"`
+	AccountID    string `json:"accountId"`
+	Role         string `json:"role"`
+	// ManualOwner/ManualEpoch 由控制面随 deployment binding 原子下发；不得由 Runtime API 自行推导。
+	ManualOwner       string                `json:"manualOwner,omitempty"`
+	ManualEpoch       int64                 `json:"manualEpoch,omitempty"`
 	ArtifactMountPath string                `json:"artifactMountPath"`
 	ArtifactFile      string                `json:"artifactFile"`
 	JetStream         JetStreamInput        `json:"jetStream"`
@@ -46,6 +49,7 @@ type BuildInput struct {
 	RoleOwnership    model.Ownership
 	ComputeProducers []ComputeProducer
 	AlarmOwnership   model.Ownership
+	ManualOwnership  model.Ownership
 }
 
 // ComputeProducer 是 compute role 对一个计算单元的唯一 producer fencing 绑定。
@@ -85,6 +89,9 @@ type StateStoreInput struct {
 // 它不加载文件、不解析索引、也不接触任何 secret 值；调用方必须在此之前完成
 // 资源与 secret 引用的受控准备。
 func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
+	if input.ManualOwnership.OwnerID == "" && input.ManualOwnership.Epoch == 0 {
+		input.ManualOwnership = model.Ownership{OwnerID: "runtime-api", Epoch: 1}
+	}
 	if err := validateInput(input); err != nil {
 		return model.EngineConfig{}, err
 	}
@@ -124,6 +131,8 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 			CheckpointRequired:     true,
 		},
 	}
+	// 所有消费角色必须共享同一 manual producer fence，保证同一人工事件可被 writer/compute/alarm 验证。
+	config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{ProducerType: "manual", ManualID: "runtime-api", Ownership: input.ManualOwnership})
 
 	switch input.Role {
 	case roleCompute:
@@ -188,6 +197,9 @@ func validateInput(input BuildInput) error {
 	}
 	if input.RoleOwnership.Epoch < 1 {
 		return fmt.Errorf("构造 RuntimeEngine 配置 roleOwnership.epoch 必须至少为 1")
+	}
+	if input.ManualOwnership.OwnerID != "runtime-api" || input.ManualOwnership.Epoch < 1 {
+		return fmt.Errorf("构造 RuntimeEngine 配置 manual producer ownership 非法")
 	}
 	if len(input.JetStream.Consumers) == 0 {
 		return fmt.Errorf("构造 RuntimeEngine 配置缺少 jetStream.consumers")

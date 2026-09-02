@@ -40,7 +40,9 @@ type RoleAssignment struct {
 }
 
 type ProducerAssignment struct {
-	ProducerType      string                    `json:"producerType"`
+	ProducerType string `json:"producerType"`
+	// ManualID 固定为受控 Runtime API 的 producer 身份；它不是用户可选来源。
+	ManualID          string                    `json:"manualId,omitempty"`
 	CollectorID       string                    `json:"collectorId,omitempty"`
 	CollectorArtifact *CollectorArtifactBinding `json:"collectorArtifact,omitempty"`
 	ComputeID         string                    `json:"computeId,omitempty"`

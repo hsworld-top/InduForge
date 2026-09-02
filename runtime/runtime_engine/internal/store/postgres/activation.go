@@ -95,6 +95,10 @@ func ProducerKey(p model.ProducerAssignment) (string, error) {
 		if p.Role == "alarm" {
 			return "alarm", nil
 		}
+	case "manual":
+		if p.ManualID == "runtime-api" {
+			return "runtime-api", nil
+		}
 	}
 	return "", errors.New("producer assignment key 非法")
 }

@@ -3,10 +3,12 @@ package httpapi
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -33,6 +35,13 @@ type Config struct {
 	Authorizer    *runtimeauth.Authorizer
 	Realtime      *realtime.Hub
 	Now           func() time.Time
+	ManualEpoch   int64
+	ManualWriter  interface {
+		ReserveManualSequence(context.Context, string, int64) (int64, error)
+	}
+	Publisher interface {
+		PublishRaw(context.Context, string, []byte) error
+	}
 }
 
 type Server struct {
@@ -61,7 +70,7 @@ func New(config Config) (*Server, error) {
 	if config.ExecutionForm != "native-linux" && config.ExecutionForm != "native-windows" && config.ExecutionForm != "k3s-workload" {
 		return nil, errors.New("executionForm 不受支持")
 	}
-	if config.Catalog == nil || config.Store == nil || config.Authorizer == nil || config.Realtime == nil {
+	if config.Catalog == nil || config.Store == nil || config.Authorizer == nil || config.Realtime == nil || config.ManualWriter == nil || config.Publisher == nil || config.ManualEpoch < 1 {
 		return nil, errors.New("catalog、store、authorizer、realtime 不能为空")
 	}
 	if config.Catalog.ProjectID != config.ProjectID {
@@ -87,7 +96,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/runtime/catalog", s.requirePrincipal(http.HandlerFunc(s.catalog)))
 	mux.Handle("GET /api/v1/runtime/points/{path}", s.requirePrincipal(http.HandlerFunc(s.currentPoint)))
 	mux.Handle("GET /api/v1/runtime/points/{path}/history", s.requirePrincipal(http.HandlerFunc(s.pointHistory)))
-	mux.Handle("POST /api/v1/runtime/points/{path}/write", s.requirePrincipal(http.HandlerFunc(s.unsupportedAction)))
+	mux.Handle("POST /api/v1/runtime/points/{path}/write", s.requirePrincipal(http.HandlerFunc(s.writePoint)))
 	mux.Handle("GET /api/v1/runtime/alarms/current", s.requirePrincipal(http.HandlerFunc(s.currentAlarms)))
 	mux.Handle("GET /api/v1/runtime/computes", s.requirePrincipal(http.HandlerFunc(s.computes)))
 	mux.Handle("POST /api/v1/runtime/computes/{id}/run", s.requirePrincipal(http.HandlerFunc(s.unsupportedAction)))
@@ -242,7 +251,7 @@ func pointContract(point artifact.Point) map[string]any {
 		"dataType": point.DataType, "sourceType": point.SourceType, "sourceId": point.SourceID,
 		"status": point.Status, "unit": point.Unit, "precision": point.Precision,
 		"defaultValue": point.DefaultValue, "tags": point.Tags, "attributes": point.Attributes,
-		"capabilities": map[string]bool{"get": true, "read": true, "history": true, "subscribe": true, "set": false},
+		"capabilities": map[string]bool{"get": true, "read": true, "history": true, "subscribe": true, "set": point.SourceType == "manual.input"},
 	}
 }
 
@@ -340,6 +349,83 @@ func (s *Server) currentAlarms(writer http.ResponseWriter, request *http.Request
 
 func (s *Server) computes(writer http.ResponseWriter, request *http.Request) {
 	writeOK(writer, request, map[string]any{"items": s.config.Catalog.Computes(), "total": len(s.config.Catalog.Computes())})
+}
+
+func (s *Server) writePoint(writer http.ResponseWriter, request *http.Request) {
+	point, ok := s.config.Catalog.PointByPath(request.PathValue("path"))
+	if !ok {
+		writeError(writer, request, http.StatusNotFound, 40401, "数据点不存在")
+		return
+	}
+	if point.SourceType != "manual.input" || !writeAllowed(point.RuntimePermissions.Write, principalFrom(request.Context()).Roles) {
+		writeError(writer, request, http.StatusForbidden, 40301, "当前身份无权写入该数据点")
+		return
+	}
+	var body struct {
+		Value json.RawMessage `json:"value"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || len(body.Value) == 0 || !validManualValue(point.DataType, body.Value) {
+		writeError(writer, request, http.StatusBadRequest, 40001, "value 与数据点类型不匹配")
+		return
+	}
+	sequence, err := s.config.ManualWriter.ReserveManualSequence(request.Context(), s.config.DeploymentID, s.config.ManualEpoch)
+	if err != nil {
+		writeError(writer, request, http.StatusServiceUnavailable, 50031, "人工写入 producer fence 不可用")
+		return
+	}
+	now := s.config.Now().UTC()
+	id := manualEventID(s.config.DeploymentID, point.ID, s.config.ManualEpoch, sequence)
+	event := map[string]any{"schemaVersion": "data.raw.v1", "subject": "data.raw." + point.ID, "eventId": id, "deploymentId": s.config.DeploymentID, "accountId": s.config.AccountID, "pointId": point.ID, "ownerId": "runtime-api", "epoch": s.config.ManualEpoch, "sequence": sequence, "value": json.RawMessage(body.Value), "quality": "good", "sourceTimestamp": now.Format(time.RFC3339Nano), "serverTimestamp": now.Format(time.RFC3339Nano), "receivedAt": now.Format(time.RFC3339Nano)}
+	payload, _ := json.Marshal(event)
+	if err = s.config.Publisher.PublishRaw(request.Context(), "data.raw."+point.ID, payload); err != nil {
+		writeError(writer, request, http.StatusServiceUnavailable, 50031, "人工写入事件发布失败")
+		return
+	}
+	writeOK(writer, request, map[string]any{"accepted": true, "path": point.Path, "pointId": point.ID, "eventId": id, "sequence": sequence})
+}
+
+func writeAllowed(grant artifact.WritePermission, roles []string) bool {
+	for _, role := range roles {
+		for _, denied := range grant.DenyRoles {
+			if role == denied {
+				return false
+			}
+		}
+		for _, allowed := range grant.AllowRoles {
+			if role == allowed {
+				return true
+			}
+		}
+	}
+	return grant.Inherit
+}
+func validManualValue(dataType string, raw json.RawMessage) bool {
+	var v any
+	d := json.NewDecoder(strings.NewReader(string(raw)))
+	d.UseNumber()
+	if d.Decode(&v) != nil || d.Decode(&struct{}{}) != io.EOF {
+		return false
+	}
+	switch dataType {
+	case "bool":
+		_, ok := v.(bool)
+		return ok
+	case "string":
+		_, ok := v.(string)
+		return ok
+	case "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "float32", "float64":
+		_, ok := v.(json.Number)
+		return ok
+	default:
+		return false
+	}
+}
+func manualEventID(deploymentID, pointID string, epoch, sequence int64) string {
+	value := "data.raw.v1\x1f" + deploymentID + "\x1f" + pointID + "\x1fruntime-api\x1f" + strconv.FormatInt(epoch, 10) + "\x1f" + strconv.FormatInt(sequence, 10)
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
 }
 
 func (s *Server) unsupportedAction(writer http.ResponseWriter, request *http.Request) {

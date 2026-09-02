@@ -27,9 +27,10 @@ import (
 )
 
 type options struct {
-	listen, artifactPath, postgresSecret, tokenSecret, natsURL, natsCredentials string
-	deploymentID, projectID, accountID, siteID, nodeID, version, executionForm  string
-	secureCookies                                                               bool
+	listen, artifactPath, postgresSecret, tokenSecret, natsURL, natsCredentials             string
+	deploymentID, projectID, accountID, siteID, nodeID, version, executionForm, manualOwner string
+	manualEpoch                                                                             int64
+	secureCookies                                                                           bool
 }
 
 type postgresSecret struct {
@@ -58,6 +59,8 @@ func main() {
 	flag.StringVar(&input.nodeID, "node-id", "", "物理节点 ID")
 	flag.StringVar(&input.version, "version", "", "Release 版本")
 	flag.StringVar(&input.executionForm, "execution-form", nativeExecutionForm(), "native-linux 或 native-windows")
+	flag.StringVar(&input.manualOwner, "manual-owner", "", "部署 binding 下发的 manual producer owner")
+	flag.Int64Var(&input.manualEpoch, "manual-epoch", 0, "部署 binding 下发的 manual producer epoch")
 	flag.BoolVar(&input.secureCookies, "secure-cookies", true, "仅通过 HTTPS 发送运行会话 Cookie")
 	flag.Parse()
 	if strings.TrimSpace(input.natsURL) == "" {
@@ -102,7 +105,7 @@ func main() {
 	app, err := httpapi.New(httpapi.Config{
 		DeploymentID: input.deploymentID, ProjectID: input.projectID, AccountID: input.accountID,
 		SiteID: input.siteID, NodeID: input.nodeID, Version: input.version, ExecutionForm: input.executionForm,
-		SecureCookies: input.secureCookies, Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub,
+		SecureCookies: input.secureCookies, Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: input.manualEpoch, ManualWriter: store, Publisher: natsSubscriber,
 	})
 	if err != nil {
 		fatal("runtime-api 初始化失败", err)
@@ -170,11 +173,14 @@ func validateOptions(input options) error {
 	if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) {
 		return errors.New("runtime-api 必须只监听本机回环地址，由 project-gateway 对外提供入口")
 	}
-	values := []string{input.artifactPath, input.postgresSecret, input.tokenSecret, input.natsURL, input.natsCredentials, input.deploymentID, input.projectID, input.accountID, input.siteID, input.nodeID, input.version}
+	values := []string{input.artifactPath, input.postgresSecret, input.tokenSecret, input.natsURL, input.natsCredentials, input.deploymentID, input.projectID, input.accountID, input.siteID, input.nodeID, input.version, input.manualOwner}
 	for _, value := range values {
 		if strings.TrimSpace(value) == "" {
 			return errors.New("artifact、secret、NATS 与部署身份参数均不能为空")
 		}
+	}
+	if input.manualOwner != "runtime-api" || input.manualEpoch < 1 {
+		return errors.New("manual producer fence 参数无效")
 	}
 	if input.executionForm != "native-linux" && input.executionForm != "native-windows" && input.executionForm != "k3s-workload" {
 		return errors.New("execution-form 不受支持")

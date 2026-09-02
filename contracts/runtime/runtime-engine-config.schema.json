@@ -121,6 +121,16 @@
           {
             "type": "object",
             "additionalProperties": false,
+            "required": ["producerType", "manualId", "ownership"],
+            "properties": {
+              "producerType": { "const": "manual" },
+              "manualId": { "const": "runtime-api" },
+              "ownership": { "$ref": "common.schema.json#/$defs/ownership" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
             "required": [
               "producerType",
               "collectorId",

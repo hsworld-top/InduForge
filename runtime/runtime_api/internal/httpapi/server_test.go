@@ -27,6 +27,14 @@ type fakeStore struct {
 	alarms  []runtimeview.AlarmState
 }
 
+func (f *fakeStore) ReserveManualSequence(context.Context, string, int64) (int64, error) {
+	return 1, nil
+}
+
+type fakePublisher struct{}
+
+func (fakePublisher) PublishRaw(context.Context, string, []byte) error { return nil }
+
 func (f *fakeStore) Ping(context.Context) error { return f.pingErr }
 
 func (f *fakeStore) Current(context.Context, string, string) (runtimeview.PointCurrent, error) {
@@ -119,7 +127,7 @@ func TestRuntimeAPIHealthAndStatusReportRealDependencyState(t *testing.T) {
 	}
 }
 
-func TestRuntimeAPIRejectsInvalidHistoryBoundsAndUnsupportedWrites(t *testing.T) {
+func TestRuntimeAPIRejectsInvalidHistoryBoundsAndCollectorWrites(t *testing.T) {
 	server, _, token := newTestRuntimeAPI(t, &fakeStore{})
 	request := authenticatedRequest(http.MethodGet, "/api/v1/runtime/points/line.temperature/history?from=2026-08-31T11:00:00Z&to=2026-08-31T10:00:00Z", token, nil)
 	response := httptest.NewRecorder()
@@ -130,8 +138,8 @@ func TestRuntimeAPIRejectsInvalidHistoryBoundsAndUnsupportedWrites(t *testing.T)
 	request = authenticatedRequest(http.MethodPost, "/api/v1/runtime/points/line.temperature/write", token, nil)
 	response = httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusNotImplemented || !strings.Contains(response.Body.String(), "未启用") {
-		t.Fatalf("unsupported write status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "无权") {
+		t.Fatalf("collector write status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -185,7 +193,7 @@ func TestRuntimeAPIWebSocketStreamsValidatedPointEvents(t *testing.T) {
 
 const testProjectID = "11111111-1111-4111-8111-111111111111"
 
-func newTestRuntimeAPI(t *testing.T, store runtimeview.Store) (*Server, *realtime.Hub, string) {
+func newTestRuntimeAPI(t *testing.T, store *fakeStore) (*Server, *realtime.Hub, string) {
 	t.Helper()
 	catalogPath := filepath.Join(t.TempDir(), "artifact.json")
 	catalogPayload := `{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","dataPoints":[{"id":"22222222-2222-4222-8222-222222222222","path":"line.temperature","name":"温度","dataType":"float64","sourceType":"collector.point","sourceId":"33333333-3333-4333-8333-333333333333","runtimePermissions":{"write":{"allowRoles":[],"denyRoles":[],"inherit":true}},"refreshMode":"subscription","status":"active","unit":"C","precisionNum":1,"defaultValue":null,"tags":[],"attributeDefaults":{}}],"computeUnits":[],"alarmItems":[]}`
@@ -210,7 +218,7 @@ func newTestRuntimeAPI(t *testing.T, store runtimeview.Store) (*Server, *realtim
 	server, err := New(Config{
 		DeploymentID: "deployment-1", ProjectID: testProjectID, AccountID: "account-1",
 		SiteID: "site-1", NodeID: "node-1", Version: "release-1", ExecutionForm: "native-linux",
-		Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub,
+		Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: 1, ManualWriter: store, Publisher: fakePublisher{},
 		Now: func() time.Time { return time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC) },
 	})
 	if err != nil {
