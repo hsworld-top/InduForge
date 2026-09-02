@@ -48,6 +48,12 @@ func (m *Manager) ApplyFoundation(ctx context.Context, plan FoundationPlan) (Fou
 	if err := writeAtomic(manifestPath, []byte(plan.RenderManifest(secret)), 0600); err != nil {
 		return FoundationState{}, fmt.Errorf("写入固定基础服务清单失败: %w", err)
 	}
+	// Job 的 Pod 模板在 Kubernetes 中不可变。基础服务重应用可能因节点标签
+	// 变化而更新该模板，因此只删除已验证标签的可重复执行凭据引导 Job；
+	// 持久化服务与凭据 Secret 均由后续 apply 原样保留。
+	if err := m.recreateFoundationCredentialJob(ctx, plan.EnvironmentID); err != nil {
+		return FoundationState{}, err
+	}
 	if output, err := m.cfg.Runner.Run(ctx, m.cfg.BinaryPath, "kubectl", "apply", "-f", manifestPath); err != nil {
 		return FoundationState{}, commandError("应用基础服务清单", output, err)
 	}
@@ -56,6 +62,34 @@ func (m *Manager) ApplyFoundation(ctx context.Context, plan FoundationPlan) (Fou
 		return FoundationState{}, err
 	}
 	return m.observeFoundation(ctx, state), nil
+}
+
+func (m *Manager) recreateFoundationCredentialJob(ctx context.Context, environmentID string) error {
+	namespace := foundationNamespace(environmentID)
+	const name = "emqx-runtime-credential"
+	output, err := m.cfg.Runner.Run(ctx, m.cfg.BinaryPath, "kubectl", "-n", namespace, "get", "job/"+name, "-o", "json", "--ignore-not-found=true")
+	if err != nil {
+		return commandError("读取基础服务凭据引导任务", output, err)
+	}
+	if len(strings.TrimSpace(string(output))) == 0 {
+		return nil
+	}
+	var job struct {
+		Metadata struct {
+			Name   string            `json:"name"`
+			Labels map[string]string `json:"labels"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(output, &job); err != nil {
+		return errors.New("无法解析基础服务凭据引导任务")
+	}
+	if job.Metadata.Name != name || job.Metadata.Labels["induforge.io/component"] != "credential-bootstrap" {
+		return errors.New("拒绝清理非受控的基础服务凭据引导任务")
+	}
+	if output, err := m.cfg.Runner.Run(ctx, m.cfg.BinaryPath, "kubectl", "-n", namespace, "delete", "job/"+name, "--wait=true"); err != nil {
+		return commandError("清理基础服务凭据引导任务", output, err)
+	}
+	return nil
 }
 
 func (m *Manager) FoundationStatuses(ctx context.Context) ([]FoundationState, error) {

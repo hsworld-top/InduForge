@@ -74,6 +74,49 @@ func TestFoundationObservationTreatsLostHealthyWorkloadAsFailed(t *testing.T) {
 	}
 }
 
+func TestApplyFoundationRecreatesCredentialJobBeforeApplyingManifest(t *testing.T) {
+	manager, cluster := preparedManager(t)
+	if err := os.MkdirAll(filepath.Join(cluster.DataDir, "agent"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cluster.DataDir, "agent", "client-kubelet.crt"), []byte("registered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.saveState(ClusterState{
+		SchemaVersion: "induforge.cluster-state.v1", Generation: cluster.Generation, ClusterID: cluster.ClusterID,
+		NodeID: cluster.NodeID, Operation: OperationInitServer, K3sVersion: cluster.K3sVersion,
+		DataDir: cluster.DataDir, ServiceName: cluster.ServiceName(), ObservedState: "ready",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	plan := FoundationPlan{
+		SchemaVersion: FoundationSchemaVersion, Generation: 1,
+		EnvironmentID: "11111111-1111-4111-8111-111111111111", NodeID: cluster.NodeID,
+		Assignments: map[string]string{
+			"postgres": cluster.NodeID, "redis": cluster.NodeID, "emqx": cluster.NodeID,
+			"nats": cluster.NodeID, "object": cluster.NodeID, "nginx": cluster.NodeID,
+		},
+	}
+	if _, err := manager.ApplyFoundation(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	runner := manager.cfg.Runner.(*fakeRunner)
+	deleteCall := []string{manager.cfg.BinaryPath, "kubectl", "-n", foundationNamespace(plan.EnvironmentID), "delete", "job/emqx-runtime-credential", "--wait=true"}
+	applyCall := []string{manager.cfg.BinaryPath, "kubectl", "apply", "-f", manager.foundationManifestPath(plan.EnvironmentID)}
+	deleteIndex, applyIndex := -1, -1
+	for index, call := range runner.calls {
+		if reflect.DeepEqual(call, deleteCall) {
+			deleteIndex = index
+		}
+		if reflect.DeepEqual(call, applyCall) {
+			applyIndex = index
+		}
+	}
+	if deleteIndex < 0 || applyIndex < 0 || deleteIndex > applyIndex {
+		t.Fatalf("credential job must be recreated before manifest apply: %#v", runner.calls)
+	}
+}
+
 func TestDeleteFoundationDoesNotBlockNodeHeartbeat(t *testing.T) {
 	manager, plan := preparedManager(t)
 	if err := os.MkdirAll(filepath.Join(plan.DataDir, "agent"), 0700); err != nil {
@@ -103,6 +146,9 @@ func TestDeleteFoundationDoesNotBlockNodeHeartbeat(t *testing.T) {
 
 func (runner *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	runner.calls = append(runner.calls, append([]string{name}, args...))
+	if strings.Contains(strings.Join(args, " "), "get job/emqx-runtime-credential") {
+		return []byte(`{"metadata":{"name":"emqx-runtime-credential","labels":{"induforge.io/component":"credential-bootstrap"}}}`), nil
+	}
 	if len(args) == 6 && args[0] == "--mount=/proc/1/ns/mnt" && args[2] == "/bin/rm" && args[3] == "-rf" && args[4] == "--" {
 		return nil, os.RemoveAll(args[5])
 	}
