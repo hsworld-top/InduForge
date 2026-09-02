@@ -161,7 +161,9 @@ type DevelopmentRequirementsSource interface {
 type DevelopmentArtifact struct {
 	ReleaseID, Version, Bucket, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
 	ArtifactSize                                                                                     int64
-	Manifest                                                                                         map[string]any
+	// Manifest 必须保留 Builder 输出的原始字节。若经 map 反序列化再编码，会改变
+	// 嵌套 collector sourceSnapshot 的 artifact 字节，从而破坏其 SHA-256。
+	Manifest json.RawMessage
 }
 type SigningConfig struct {
 	Key   ed25519.PrivateKey
@@ -253,11 +255,10 @@ func (s *Service) BuildDevelopmentArtifact(ctx context.Context, actor auth.User,
 		}
 		return DevelopmentArtifact{}, err
 	}
-	manifest := map[string]any{}
-	if err = json.Unmarshal(result.Manifest, &manifest); err != nil {
-		return DevelopmentArtifact{}, err
+	if !json.Valid(result.Manifest) {
+		return DevelopmentArtifact{}, fmt.Errorf("开发制品 Manifest 无效")
 	}
-	return DevelopmentArtifact{ReleaseID: version.ID, Version: version.Version, Bucket: ref.Bucket, ArtifactKey: key, ArtifactHash: result.OuterSHA256, ArtifactSize: result.Size, Manifest: manifest, ManifestHash: result.ManifestSHA256, ChecksumsHash: result.ChecksumsSHA256, SigningKeyID: s.signing.KeyID}, nil
+	return DevelopmentArtifact{ReleaseID: version.ID, Version: version.Version, Bucket: ref.Bucket, ArtifactKey: key, ArtifactHash: result.OuterSHA256, ArtifactSize: result.Size, Manifest: append(json.RawMessage(nil), result.Manifest...), ManifestHash: result.ManifestSHA256, ChecksumsHash: result.ChecksumsSHA256, SigningKeyID: s.signing.KeyID}, nil
 }
 
 func (s *Service) ListVersions(ctx context.Context, actor auth.User, projectID string, page, limit int) ([]Version, int64, error) {

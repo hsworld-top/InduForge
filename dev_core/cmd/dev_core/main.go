@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -191,11 +190,7 @@ func main() {
 		if err != nil {
 			return ops.DevelopmentArtifact{}, err
 		}
-		manifest, err := json.Marshal(artifact.Manifest)
-		if err != nil {
-			return ops.DevelopmentArtifact{}, err
-		}
-		return ops.DevelopmentArtifact{ReleaseID: artifact.ReleaseID, Version: artifact.Version, Bucket: artifact.Bucket, ArtifactKey: artifact.ArtifactKey, ArtifactHash: artifact.ArtifactHash, ArtifactSize: artifact.ArtifactSize, Manifest: manifest, ManifestHash: artifact.ManifestHash, ChecksumsHash: artifact.ChecksumsHash, SigningKeyID: artifact.SigningKeyID}, nil
+		return ops.DevelopmentArtifact{ReleaseID: artifact.ReleaseID, Version: artifact.Version, Bucket: artifact.Bucket, ArtifactKey: artifact.ArtifactKey, ArtifactHash: artifact.ArtifactHash, ArtifactSize: artifact.ArtifactSize, Manifest: append([]byte(nil), artifact.Manifest...), ManifestHash: artifact.ManifestHash, ChecksumsHash: artifact.ChecksumsHash, SigningKeyID: artifact.SigningKeyID}, nil
 	})
 	opsService.SetDevelopmentRequirementsBuilder(func(buildCtx context.Context, actor auth.User, projectID, authorization string) ([]string, error) {
 		return deploymentService.DevelopmentEngineRequirements(buildCtx, actor, projectID, authorization)

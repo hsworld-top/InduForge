@@ -158,6 +158,21 @@ func TestDevelopmentArtifactAllowsCollectorSnapshotWithoutProductionDigest(t *te
 	}
 }
 
+func TestDevelopmentCollectorSnapshotRejectsTamperedDigestAndProject(t *testing.T) {
+	snapshot := collectorSourceSnapshotForManifest(testProjectID)
+	if !validDevelopmentCollectorSourceSnapshot(snapshot, testProjectID) {
+		t.Fatal("有效开发采集快照被拒绝")
+	}
+	tampered := strings.Replace(string(snapshot), `"sha256":"sha256:`, `"sha256":"sha256:0`, 1)
+	if validDevelopmentCollectorSourceSnapshot([]byte(tampered), testProjectID) {
+		t.Fatal("篡改采集工件摘要的开发快照被接受")
+	}
+	mismatchedProject := strings.Replace(string(snapshot), `"projectId":"`+testProjectID+`"`, `"projectId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"`, 1)
+	if validDevelopmentCollectorSourceSnapshot([]byte(mismatchedProject), testProjectID) {
+		t.Fatal("项目不匹配的开发采集快照被接受")
+	}
+}
+
 func collectorRequiredManifestWithoutSnapshot(t *testing.T) []byte {
 	t.Helper()
 	manifest := validReleaseManifest(testProjectID)
