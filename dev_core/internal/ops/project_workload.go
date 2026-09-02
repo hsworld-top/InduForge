@@ -12,7 +12,7 @@ const (
 	runtimeAPIImage     = "induforge/project-runtime-api:1.0.0"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
-	runtimeEngineImage   = "induforge/runtime-engine:1.0.13"
+	runtimeEngineImage   = "induforge/runtime-engine:1.0.14"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
 	computeSandboxImage  = "induforge/compute-sandbox:1.0.0"
 )

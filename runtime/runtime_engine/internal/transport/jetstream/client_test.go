@@ -59,6 +59,28 @@ func TestConnectionOptionsAccountIdentityIsChecked(t *testing.T) {
 	}
 }
 
+func TestDiagnosticCodeDoesNotExposeConnectionDetails(t *testing.T) {
+	for err, want := range map[error]string{
+		errNATSConnect:   "CONNECT",
+		errNATSFlush:     "FLUSH",
+		errJetStreamInit: "JETSTREAM",
+		errors.New("nats://token@internal.example:4222"): "UNKNOWN",
+	} {
+		if got := DiagnosticCode(err); got != want {
+			t.Fatalf("diagnostic code=%q want=%q", got, want)
+		}
+	}
+}
+
+func TestOpenCreatesDeadlineForBackgroundContext(t *testing.T) {
+	ctx, cancel := newOpenContext(context.Background())
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > natsOpenTimeout {
+		t.Fatal("NATS startup preflight must use a bounded deadline")
+	}
+}
+
 func TestClientCloseIsNilSafeAndConcurrentIdempotent(t *testing.T) {
 	var client Client
 	var group sync.WaitGroup

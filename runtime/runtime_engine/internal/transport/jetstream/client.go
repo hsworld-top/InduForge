@@ -20,8 +20,9 @@ import (
 
 const msgIDHeader = "Nats-Msg-Id"
 const (
-	MaxFetchBatch = 32
-	MaxFetchWait  = 5 * time.Second
+	MaxFetchBatch   = 32
+	MaxFetchWait    = 5 * time.Second
+	natsOpenTimeout = 15 * time.Second
 )
 
 var (
@@ -29,7 +30,25 @@ var (
 	// local record from a broker outage, so it never retries it forever.
 	ErrPayloadTooLarge = transportlimits.ErrOutboundPayloadTooLarge
 	ErrInvalidSubject  = transportlimits.ErrOutboundSubject
+	errNATSConnect     = errors.New("nats connect failed")
+	errNATSFlush       = errors.New("nats flush failed")
+	errJetStreamInit   = errors.New("jetstream init failed")
 )
+
+// DiagnosticCode 只将连接阶段归类为稳定码，禁止把 endpoint、token 或底层错误文本
+// 写入运行日志。调用方据此区分网络、认证确认与 JetStream 初始化失败。
+func DiagnosticCode(err error) string {
+	switch {
+	case errors.Is(err, errNATSConnect):
+		return "CONNECT"
+	case errors.Is(err, errNATSFlush):
+		return "FLUSH"
+	case errors.Is(err, errJetStreamInit):
+		return "JETSTREAM"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 // AccountIdentity 是 resolver 已验证的 NATS Account 身份。它刻意不实现可读 String/Marshal。
 type AccountIdentity struct{ value string }
@@ -67,20 +86,30 @@ func Open(ctx context.Context, options ConnectionOptions, expectedAccount string
 	if !options.account.Equal(expectedAccount) {
 		return nil, errors.New("NATS credential account 与 deployment account 不一致")
 	}
-	nc, err := nats.Connect(options.serverURL, options.options...)
+	// RuntimeEngine 的启动根 context 通常没有 deadline，而 nats.go 的
+	// FlushWithContext 要求 deadline。连接与确认仅使用局部有界上下文，不能把
+	// 运行期取消语义或无限等待带入启动预检。
+	openCtx, cancel := newOpenContext(ctx)
+	defer cancel()
+	connectOptions := append(append([]nats.Option(nil), options.options...), nats.Timeout(natsOpenTimeout))
+	nc, err := nats.Connect(options.serverURL, connectOptions...)
 	if err != nil {
-		return nil, errors.New("NATS 连接失败")
+		return nil, errNATSConnect
 	}
-	if err := nc.FlushWithContext(ctx); err != nil {
+	if err := nc.FlushWithContext(openCtx); err != nil {
 		nc.Close()
-		return nil, errors.New("NATS 连接校验失败")
+		return nil, errNATSFlush
 	}
 	client, err := js.New(nc)
 	if err != nil {
 		nc.Close()
-		return nil, errors.New("JetStream 初始化失败")
+		return nil, errJetStreamInit
 	}
 	return &Client{nc: nc, js: client}, nil
+}
+
+func newOpenContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, natsOpenTimeout)
 }
 
 func (c *Client) Close() {

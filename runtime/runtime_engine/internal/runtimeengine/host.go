@@ -90,6 +90,7 @@ func (h *Host) Start(ctx context.Context) error {
 	}
 	natsClient, err := jetstream.Open(ctx, natsOptions, loaded.Config.AccountID)
 	if err != nil {
+		log.Printf("RuntimeEngine NATS preflight stage=%s", jetstream.DiagnosticCode(err))
 		store.Close()
 		return h.fail("NATS_PREFLIGHT_FAILED")
 	}
