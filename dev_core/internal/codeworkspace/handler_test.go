@@ -89,7 +89,8 @@ func assertCodeWorkspaceResponse(t *testing.T, application *app.App, token, meth
 	}
 	var payload struct {
 		Data struct {
-			Services map[string]struct {
+			OnlineUsers []OnlineUser `json:"onlineUsers"`
+			Services    map[string]struct {
 				URL      *string `json:"url"`
 				HostPort *int    `json:"hostPort"`
 			} `json:"services"`
@@ -97,6 +98,9 @@ func assertCodeWorkspaceResponse(t *testing.T, application *app.App, token, meth
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
+	}
+	if payload.Data.OnlineUsers == nil {
+		t.Fatal("onlineUsers 必须是数组")
 	}
 	if code := payload.Data.Services["code"]; code.HostPort == nil || *code.HostPort != 49152 || ((method == http.MethodGet || strings.HasSuffix(path, "/start")) && code.URL == nil) {
 		t.Fatalf("code 服务契约错误: %+v", code)

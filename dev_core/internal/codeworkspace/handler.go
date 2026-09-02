@@ -53,7 +53,11 @@ func (h *Handler) execute(w http.ResponseWriter, r *http.Request, projectID stri
 	if parsedPort, parseErr := strconv.Atoi(status.HostPort); parseErr == nil {
 		hostPort = parsedPort
 	}
-	payload := map[string]any{"containerName": status.ContainerName, "status": status.Status, "hostPort": hostPort, "onlineUsers": status.OnlineUsers, "services": workspaceServices(r, status)}
+	onlineUsers := status.OnlineUsers
+	if onlineUsers == nil {
+		onlineUsers = []OnlineUser{}
+	}
+	payload := map[string]any{"containerName": status.ContainerName, "status": status.Status, "hostPort": hostPort, "onlineUsers": onlineUsers, "services": workspaceServices(r, status)}
 	if status.Status == "running" && status.HostPort != "" {
 		payload["url"] = codeServerURL(r, status.HostPort)
 	}
