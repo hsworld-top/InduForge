@@ -213,11 +213,25 @@ func secureRead(path string) ([]byte, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("路径必须为规范绝对路径")
 	}
-	info, err := os.Lstat(path)
+	// Kubernetes ConfigMap/Secret 投影通过 ..data 软链接原子切换内容。允许该
+	// 受控软链接，但解析后的文件必须仍在调用方提供的挂载目录内，避免软链逃逸。
+	root, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return nil, errors.New("父目录不可解析")
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, errors.New("文件不可解析")
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, errors.New("文件超出受控目录")
+	}
+	info, err := os.Stat(resolved)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, errors.New("必须是普通文件")
 	}
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(resolved)
 	if err != nil || len(b) > maxFileBytes {
 		return nil, errors.New("文件不可读或过大")
 	}

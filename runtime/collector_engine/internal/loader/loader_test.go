@@ -1,6 +1,8 @@
 package loader
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -29,5 +31,35 @@ func TestValidateCrossUsesNonSensitiveStageCodes(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "artifact-a") {
 		t.Fatalf("stage error must not leak artifact values: %v", err)
+	}
+}
+
+func TestSecureReadAllowsProjectedDataLinkButRejectsEscape(t *testing.T) {
+	dir := t.TempDir()
+	version := filepath.Join(dir, "..2026_09_02")
+	if err := os.Mkdir(version, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(version, "binding.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("..2026_09_02", filepath.Join(dir, "..data")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("..data/binding.json", filepath.Join(dir, "binding.json")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := secureRead(filepath.Join(dir, "binding.json")); err != nil || string(got) != "{}" {
+		t.Fatalf("projected data link must be accepted, got=%q err=%v", got, err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "escaped.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := secureRead(filepath.Join(dir, "escaped.json")); err == nil {
+		t.Fatal("escaped symlink must be rejected")
 	}
 }
