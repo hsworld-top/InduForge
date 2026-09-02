@@ -61,7 +61,9 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 	if strings.Contains(payload, `"allowPrivilegeEscalation":true`) {
 		t.Fatalf("工作区 Pod 不得允许权限提升: %s", payload)
 	}
-
+	if strings.Contains(payload, "chown -R") {
+		t.Fatalf("初始化器不得递归遍历用户缓存目录: %s", payload)
+	}
 }
 
 func TestKubernetesRemoveWaitsForResourceAbsence(t *testing.T) {

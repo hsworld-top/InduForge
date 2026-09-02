@@ -137,7 +137,9 @@ func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error
 		"imagePullPolicy": "Never",
 		"command": []string{"/bin/sh", "-ec", `
 mkdir -p /project/workspace /project/code-server-data /project/code-server-config /project/cache
-chown -R 1000:1000 /project/workspace /project/code-server-data /project/code-server-config /project/cache
+# 历史编辑器缓存中可能存在 coder 的 0700 子目录；初始化器只需修正四个挂载根
+# 目录，递归遍历既无必要，也会要求额外的目录绕过能力。
+chown 1000:1000 /project/workspace /project/code-server-data /project/code-server-config /project/cache
 `},
 		"securityContext": map[string]any{
 			"runAsUser":                0,
