@@ -90,6 +90,22 @@ func TestDevelopmentDeploymentDescriptorIsDurableAndReleaseIsPinned(t *testing.T
 	}
 }
 
+func TestDeploymentInsertReturningKeepsLatestRunPlaceholder(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("无法定位仓储实现文件")
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "repository.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 新建事务尚未写入 deployment_runs，因此 Version 后必须保留空的
+	// LatestRunID 占位，确保 RETURNING 与 scanDeployment 的 21 列严格对齐。
+	if !strings.Contains(string(raw), "COALESCE(application_version_id::text,''),'','',$5") {
+		t.Fatal("部署 INSERT RETURNING 缺少 LatestRunID 占位列")
+	}
+}
+
 func TestMapDeploymentCreateErrorPreservesProjectAndPortIsolation(t *testing.T) {
 	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_project_environment_key")); !errors.Is(err, ErrDeploymentExists) {
 		t.Fatalf("same project conflict=%v", err)
