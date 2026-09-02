@@ -261,7 +261,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 15, periodSeconds: 10}
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
-          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          securityContext: {runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: sandbox-secret, mountPath: /var/run/induforge/secrets, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.ProjectID)
