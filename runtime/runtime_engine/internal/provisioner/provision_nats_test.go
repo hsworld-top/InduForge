@@ -162,6 +162,7 @@ func TestRemoveDisabledRoleConsumersKeepsExpectedAndRejectsUnknownAtRuntime(t *t
 		"RAW/compute-raw-v1":       {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "compute-raw-v1"}},
 		"RAW/alarm-raw-v1":         {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "alarm-raw-v1"}},
 		"DERIVED/alarm-derived-v1": {Stream: "DERIVED", Config: nats.ConsumerConfig{Durable: "alarm-derived-v1"}},
+		"RAW/base-raw-v1":          {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "base-raw-v1"}},
 		// 陌生 durable 不在删除白名单内，预检的精确集合会负责拒绝它。
 		"RAW/foreign-v1": {Stream: "RAW", Config: nats.ConsumerConfig{Durable: "foreign-v1"}},
 	}}
@@ -174,6 +175,9 @@ func TestRemoveDisabledRoleConsumersKeepsExpectedAndRejectsUnknownAtRuntime(t *t
 	}
 	if _, exists := fake.consumers["DERIVED/alarm-derived-v1"]; exists {
 		t.Fatal("已停用 alarm derived durable 未删除")
+	}
+	if _, exists := fake.consumers["RAW/base-raw-v1"]; exists {
+		t.Fatal("历史 base durable 未删除")
 	}
 	if _, exists := fake.consumers["RAW/compute-raw-v1"]; !exists {
 		t.Fatal("当前 compute durable 被误删")

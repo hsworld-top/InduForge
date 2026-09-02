@@ -221,8 +221,8 @@ func removeDisabledRoleConsumers(ctx context.Context, admin JetStreamAdmin, topo
 		wanted[item.stream+"\x00"+item.config.Durable] = struct{}{}
 	}
 	known := []struct{ stream, durable string }{
-		{topology.DataRawStream, "compute-raw-v1"}, {topology.DataRawStream, "alarm-raw-v1"},
-		{topology.DataDerivedStream, "compute-derived-v1"}, {topology.DataDerivedStream, "alarm-derived-v1"},
+		{topology.DataRawStream, "base-raw-v1"}, {topology.DataRawStream, "compute-raw-v1"}, {topology.DataRawStream, "alarm-raw-v1"},
+		{topology.DataDerivedStream, "base-derived-v1"}, {topology.DataDerivedStream, "compute-derived-v1"}, {topology.DataDerivedStream, "alarm-derived-v1"},
 		{topology.CommandStream, "compute-command-v1"},
 	}
 	for _, item := range known {
