@@ -28,6 +28,7 @@ type ProjectRepository interface {
 type Config struct {
 	Image                    string
 	BindHost                 string
+	AllowedOrigins           string
 	VolumeName               string
 	DefaultTemplateProjectID string
 	DefaultTemplateID        string
@@ -66,6 +67,7 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	}
 	config.Image = strings.TrimSpace(config.Image)
 	config.BindHost = strings.TrimSpace(config.BindHost)
+	config.AllowedOrigins = strings.TrimSpace(config.AllowedOrigins)
 	config.VolumeName = strings.TrimSpace(config.VolumeName)
 	config.DefaultTemplateProjectID = strings.TrimSpace(config.DefaultTemplateProjectID)
 	config.DefaultTemplateID = strings.TrimSpace(config.DefaultTemplateID)
@@ -250,6 +252,11 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		}
 	}
 	environment := []string{"PNPM_HOME=/cache/pnpm", "npm_config_store_dir=/cache/pnpm-store", "XDG_CACHE_HOME=/cache"}
+	if s.config.AllowedOrigins != "" {
+		// 工作区四入口由中心页面跨端口访问；来源清单随中心部署配置注入，
+		// 不能沿用镜像内仅供本机开发的 localhost 默认值。
+		environment = append(environment, "PREVIEW_CONTROL_ALLOWED_ORIGINS="+s.config.AllowedOrigins, "PI_WEB_ALLOWED_PARENT_ORIGINS="+s.config.AllowedOrigins)
+	}
 	// 内置教程工程的源码同样必须经由代码工作区的官方模板初始化，不能由发布链路
 	// 复制或拼装。该环境变量只在工作区为空时生效，初始化器会原子写入共享卷。
 	if item.ID == s.config.DefaultTemplateProjectID {
