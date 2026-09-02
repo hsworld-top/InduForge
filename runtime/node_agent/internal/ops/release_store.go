@@ -271,6 +271,11 @@ func (i *ReleaseInstaller) Install(input ReleaseInstallInput) (InstalledRelease,
 		if err := i.verifyRelease(finalDir, input); err != nil {
 			return InstalledRelease{}, fmt.Errorf("已有内容寻址 Release 校验失败: %w", err)
 		}
+		// 升级旧节点时，已验签内容寻址 Release 可能尚未包含物化目录；只允许
+		// 基于同一已验证 tar 补齐，已有目录由 materialize 做结构校验且绝不覆盖。
+		if err := i.materializeRuntimeArtifact(finalDir); err != nil {
+			return InstalledRelease{}, fmt.Errorf("补物化已有内容寻址 Release: %w", err)
+		}
 		if err := sealRelease(finalDir); err != nil {
 			return InstalledRelease{}, fmt.Errorf("封存已有内容寻址 Release: %w", err)
 		}
@@ -367,6 +372,14 @@ func (i *ReleaseInstaller) materializeRuntimeArtifact(root string) error {
 	}
 	target := filepath.Join(root, "runtime-artifact")
 	if _, err := os.Stat(target); err == nil {
+		info, statErr := os.Lstat(filepath.Join(target, "runtime-project-artifact.json"))
+		if statErr != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("已有 runtime artifact 物化目录无效")
+		}
+		entries, readErr := os.ReadDir(target)
+		if readErr != nil || len(entries) != 1 {
+			return errors.New("已有 runtime artifact 物化目录结构无效")
+		}
 		return nil
 	}
 	if err := os.Rename(tmp, target); err != nil {
@@ -670,7 +683,15 @@ func verifyReleaseChecksums(root string, checksums releaseChecksums, maxFileByte
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			return fmt.Errorf("Release 包含非标准目录: %s", entry.Name())
+			if entry.Name() != "runtime-artifact" {
+				return fmt.Errorf("Release 包含非标准目录: %s", entry.Name())
+			}
+			info, statErr := os.Lstat(filepath.Join(root, entry.Name(), "runtime-project-artifact.json"))
+			children, readErr := os.ReadDir(filepath.Join(root, entry.Name()))
+			if statErr != nil || readErr != nil || len(children) != 1 || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+				return errors.New("Release runtime artifact 物化目录无效")
+			}
+			continue
 		}
 		if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
 			return fmt.Errorf("Release 包含非普通根文件: %s", entry.Name())
