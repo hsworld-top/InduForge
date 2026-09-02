@@ -5,9 +5,16 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/binding"
 )
+
+func TestProvisionTimeoutBoundaries(t *testing.T) {
+	if provisionTimeout != 15*time.Second || stateProvisionTimeout != 2*time.Minute || stateProvisionTimeout <= provisionTimeout {
+		t.Fatalf("unexpected provision timeouts: nats=%s state=%s", provisionTimeout, stateProvisionTimeout)
+	}
+}
 
 type fakeDBAdmin struct {
 	exists                bool
