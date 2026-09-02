@@ -17,6 +17,7 @@ import (
 
 const (
 	clientArchiveName       = "client-assets.tar.zst"
+	clientDigestMarkerName  = ".client-assets.sha256"
 	maxClientArchiveBytes   = 256 << 20
 	maxClientUnpackedBytes  = 512 << 20
 	maxClientIndividualSize = 128 << 20
@@ -68,13 +69,35 @@ func PrepareClientAssets(releaseRoot, clientRoot string) error {
 	if actual != expected {
 		return errors.New("client 子制品摘要与 Release 清单不一致")
 	}
-	if err := unpackClientArchive(archivePath, clientRoot); err != nil {
+	if reusableClientRoot(clientRoot, expected) {
+		return nil
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(clientRoot), ".client-assets-")
+	if err != nil {
+		return fmt.Errorf("创建 client 临时目录: %w", err)
+	}
+	defer os.RemoveAll(staging)
+	if err := unpackClientArchive(archivePath, staging); err != nil {
 		return err
 	}
-	if err := validateClientRoot(clientRoot); err != nil {
+	if err := validateClientRoot(staging); err != nil {
 		return fmt.Errorf("client 子制品不完整: %w", err)
 	}
+	if err := os.WriteFile(filepath.Join(staging, clientDigestMarkerName), []byte(expected+"\n"), 0o444); err != nil {
+		return fmt.Errorf("写入 client 完整标记: %w", err)
+	}
+	if err := os.RemoveAll(clientRoot); err != nil {
+		return fmt.Errorf("替换 client 解包目录: %w", err)
+	}
+	if err := os.Rename(staging, clientRoot); err != nil {
+		return fmt.Errorf("提交 client 解包目录: %w", err)
+	}
 	return nil
+}
+
+func reusableClientRoot(root, expected string) bool {
+	marker, err := os.ReadFile(filepath.Join(root, clientDigestMarkerName))
+	return err == nil && strings.TrimSpace(string(marker)) == expected && validateClientRoot(root) == nil
 }
 
 func safeDirectory(value, label string) (string, error) {
@@ -97,10 +120,6 @@ func prepareTargetDirectory(value string) (string, error) {
 	if info, statErr := os.Lstat(root); statErr == nil {
 		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return "", errors.New("client 解包目录必须是普通目录")
-		}
-		entries, readErr := os.ReadDir(root)
-		if readErr != nil || len(entries) != 0 {
-			return "", errors.New("client 解包目录必须为空")
 		}
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return "", fmt.Errorf("读取 client 解包目录: %w", statErr)

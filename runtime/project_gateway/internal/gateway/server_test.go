@@ -146,6 +146,28 @@ func TestPrepareClientAssetsVerifiesReleaseAndRejectsTraversal(t *testing.T) {
 			if err != nil || string(body) != "release-index" {
 				t.Fatalf("client was not unpacked safely: %q %v", body, err)
 			}
+			if err := PrepareClientAssets(releaseRoot, clientRoot); err != nil {
+				t.Fatalf("same artifact restart must be idempotent: %v", err)
+			}
+			if err := os.Chmod(filepath.Join(clientRoot, clientDigestMarkerName), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(clientRoot, clientDigestMarkerName), []byte("partial\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(filepath.Join(clientRoot, "index.html"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(clientRoot, "index.html"), []byte("partial"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := PrepareClientAssets(releaseRoot, clientRoot); err != nil {
+				t.Fatalf("partial target must be atomically rebuilt: %v", err)
+			}
+			body, err = os.ReadFile(filepath.Join(clientRoot, "index.html"))
+			if err != nil || string(body) != "release-index" {
+				t.Fatalf("partial target was reused: %q %v", body, err)
+			}
 		})
 	}
 }
