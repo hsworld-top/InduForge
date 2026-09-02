@@ -28,6 +28,7 @@ const historyRows = ref([])
 const currentAlarms = ref(null)
 const targetValue = ref(80)
 const computeResult = ref(null)
+const computeStatus = ref('idle')
 const latestLineEvent = ref(null)
 let unsubscribeLineEvents = null
 let unsubscribeAlarms = null
@@ -145,12 +146,29 @@ async function writeSetpoint() {
 async function runCompute() {
   operationLoading.value = true
   message.value = ''
+  computeStatus.value = 'queued'
+  computeResult.value = null
   try {
-    const result = await computes.byRef(COMPUTE_REF).run({
-      temperature: sampleValue(temperature.value),
-      pressure: sampleValue(pressure.value),
-    })
-    if (!showFailure(result, '运行计算失败')) computeResult.value = result.data
+    const result = await computes.byRef(COMPUTE_REF).run()
+    if (showFailure(result, '提交计算命令失败')) {
+      computeStatus.value = 'failed'
+      return
+    }
+    const handle = result.data?.handle
+    if (!handle) {
+      computeStatus.value = result.data?.status || 'queued'
+      message.value = '计算命令已排队'
+      return
+    }
+    message.value = `计算命令已排队：${handle.commandId}`
+    const completed = await handle.wait({ timeoutMs: 30_000, intervalMs: 300 })
+    if (showFailure(completed, '等待计算结果失败')) {
+      computeStatus.value = 'failed'
+      return
+    }
+    computeStatus.value = completed.data?.status || 'failed'
+    computeResult.value = completed.data
+    message.value = computeStatus.value === 'succeeded' ? '计算已完成' : `计算失败：${completed.data?.failureCode || '未知原因'}`
   } finally {
     operationLoading.value = false
   }
@@ -268,9 +286,10 @@ onBeforeUnmount(() => {
           <input id="setpoint" v-model.number="targetValue" type="number" step="0.1" />
           <button :disabled="operationLoading" @click="writeSetpoint">提交</button>
         </div>
-        <button class="compute-button" :disabled="operationLoading" @click="runCompute">
-          运行温度换算计算
+        <button class="compute-button" :disabled="operationLoading || computeStatus === 'queued' || computeStatus === 'running'" @click="runCompute">
+          {{ computeStatus === 'queued' || computeStatus === 'running' ? '计算执行中…' : '运行温度换算计算' }}
         </button>
+        <p v-if="computeStatus !== 'idle'" class="status-tag">计算状态：{{ computeStatus }}</p>
         <button class="compute-button" :disabled="operationLoading" @click="publishLineEvent">
           发布一号线测试消息
         </button>
