@@ -199,6 +199,7 @@ func (a *Agent) installBoundRelease(ctx context.Context, command AgentCommand, g
 		RuntimeVersion:          a.cfg.RuntimeVersion,
 		NodeCapabilities:        a.supervisor.Capabilities(),
 		BoundServices:           boundServices,
+		Engine:                  binding.Engine,
 		VerificationPublicKey:   ed25519.PublicKey(key),
 		KeyID:                   binding.Release.SigningKeyID,
 	})

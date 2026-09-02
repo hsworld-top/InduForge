@@ -378,7 +378,7 @@ spec:
     spec:
       nodeSelector: {induforge.io/host-node-id: %q}
       # 节点 Agent 以 induforge(1000) 创建 WAL；collector 仅以补充组访问该 0770 目录。
-      securityContext: {runAsNonRoot: true, fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
       initContainers:
         - name: collector-artifact-prepare
           image: %s

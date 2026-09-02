@@ -77,8 +77,11 @@ type ReleaseInstallInput struct {
 	RuntimeVersion          string
 	NodeCapabilities        []string
 	BoundServices           []string
-	VerificationPublicKey   ed25519.PublicKey
-	KeyID                   string
+	// Engine 非空时表示 v2 单引擎 Binding；Release 清单的全工程能力不能要求
+	// 每个分布式节点都安装其他引擎能力，改为校验该引擎的固定最小能力集。
+	Engine                string
+	VerificationPublicKey ed25519.PublicKey
+	KeyID                 string
 }
 
 // InstalledRelease 是已验证并被原子选为 current 的本地结果。
@@ -809,7 +812,15 @@ func validateManifestCompatibility(compatibility releaseCompatibility, input Rel
 	if err != nil {
 		return fmt.Errorf("DeploymentBinding 服务能力无效: %w", err)
 	}
-	required, err := normalizedNodeCapabilities(compatibility.RequiredNodeCapabilities)
+	requiredValues := compatibility.RequiredNodeCapabilities
+	if input.Engine != "" {
+		var ok bool
+		if _, ok = engineServiceGroup(input.Engine); !ok {
+			return fmt.Errorf("DeploymentBinding 引擎无效: %s", input.Engine)
+		}
+		requiredValues = engineBindingCapabilities(input.Engine)
+	}
+	required, err := normalizedNodeCapabilities(requiredValues)
 	if err != nil {
 		return fmt.Errorf("Release requiredNodeCapabilities 无效: %w", err)
 	}
