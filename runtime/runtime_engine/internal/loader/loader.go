@@ -167,8 +167,12 @@ func Load(options Options) (*Loaded, error) {
 		_ = path // 已通过原始路径、no-follow 和 TOCTOU 校验；返回 map 无需暴露载体路径。
 		collectorArtifacts[assignment.CollectorID] = collectorArtifact
 	}
-	if err := model.ValidateCollectorIngressMappings(config, artifact, collectorArtifacts); err != nil {
-		return nil, err
+	// compute/alarm 的分布式工作负载不挂载 collector Artifact；采集映射由
+	// collector 自己的受控 binding 校验。只有声明 collector producer 时才在此复核映射。
+	if len(collectorArtifacts) > 0 {
+		if err := model.ValidateCollectorIngressMappings(config, artifact, collectorArtifacts); err != nil {
+			return nil, err
+		}
 	}
 	return &Loaded{Config: config, Artifact: artifact, CollectorArtifacts: collectorArtifacts, ConfigBytes: configBytes, ArtifactBytes: artifactBytes, ConfigPath: configPath, ArtifactPath: artifactPath, ConfigSHA256: "sha256:" + hex.EncodeToString(configDigest[:]), ArtifactSHA256: actualDigest}, nil
 }

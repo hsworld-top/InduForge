@@ -260,6 +260,38 @@ func TestLoadValidArtifactAndRejectDigestOrSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestLoadSplitRuntimeRoleDoesNotRequireCollectorArtifact(t *testing.T) {
+	temporary, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mount := filepath.Join(temporary, "release")
+	if err = os.Mkdir(mount, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	artifact := fixture(t, "runtime-project-artifact.valid.json")
+	if err = os.WriteFile(filepath.Join(mount, "artifact.json"), artifact, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err = json.Unmarshal(fixtureConfig(t, mount, "artifact.json", artifact), &config); err != nil {
+		t.Fatal(err)
+	}
+	assignments := config["producerAssignments"].([]any)
+	config["producerAssignments"] = assignments[1:]
+	raw, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(temporary, "split-config.json")
+	if err = os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Load(testOptions(configPath, temporary)); err != nil {
+		t.Fatalf("split runtime role rejected without collector artifact: %v", err)
+	}
+}
+
 func TestLoadNativeV2RequiresReadOnlyReleaseRootAndRejectsSymlink(t *testing.T) {
 	temporary, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
