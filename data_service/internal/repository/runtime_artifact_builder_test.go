@@ -121,6 +121,22 @@ func TestRuntimeProjectArtifactRejectsRealtimeKeyWithoutKeyID(t *testing.T) {
 	}
 }
 
+func TestRuntimeProjectArtifactDerivesPointAlarmInput(t *testing.T) {
+	projectID, pointID := uuid.NewString(), uuid.NewString()
+	snapshot := &ProjectSnapshot{
+		DataPoints: []DataPointRecord{{ID: pointID, ProjectID: projectID, Path: "metrics.temperature", Name: "temperature", SourceType: "manual", SourceConfig: map[string]any{}, DataType: "float64", Tags: []any{}, AttributeDefaults: map[string]string{}, RuntimePermissions: DefaultDataPointRuntimePermissions(), RefreshMode: "auto", Status: "active"}},
+		AlarmItems: []AlarmItemRecord{{ID: uuid.NewString(), ProjectID: projectID, DisplayName: "温度越限", Mode: "point", EvaluationMode: "single", DatapointID: &pointID, IsEnabled: true, Revision: 1, Conditions: []AlarmItemConditionRecord{{ID: uuid.NewString(), Kind: "threshold", Operator: "gt", Params: map[string]any{"threshold": 80}, Severity: "warning"}}}},
+	}
+	artifact, err := BuildRuntimeProjectArtifactV1(runtimeSchemaRootForTest(t), projectID, snapshot, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("build artifact: %v", err)
+	}
+	inputs := artifact.AlarmItems[0].(map[string]any)["inputs"].([]any)
+	if len(inputs) != 1 || inputs[0].(map[string]any)["alias"] != "value" || inputs[0].(map[string]any)["datapointId"] != pointID {
+		t.Fatalf("point alarm must derive its datapoint input: %#v", inputs)
+	}
+}
+
 func TestRuntimeInputsRejectBooleanLiteralAliases(t *testing.T) {
 	pointID := uuid.NewString()
 	_, err := runtimeInputs(map[string]any{"datapointVariables": []any{map[string]any{"datapointId": pointID, "alias": "true"}}}, map[string]DataPointRecord{pointID: {ID: pointID, Status: "active"}})

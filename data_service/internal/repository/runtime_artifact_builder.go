@@ -346,10 +346,18 @@ func buildRuntimeAlarm(alarm AlarmItemRecord, points map[string]DataPointRecord)
 		item  map[string]any
 		order int
 	}
-	orderedInputs := make([]alarmInputOrder, 0, len(alarm.Inputs))
+	alarmInputs := alarm.Inputs
+	// 点报警的唯一输入由 datapointId 完整表达；持久化输入集合为空时，运行产物
+	// 直接从该权威引用生成 value 输入，避免部署工件依赖展示层的冗余明细。
+	if alarm.Mode == "point" && len(alarmInputs) == 0 && alarm.DatapointID != nil {
+		if point, ok := points[*alarm.DatapointID]; ok {
+			alarmInputs = []AlarmItemInputRecord{{DatapointID: point.ID, Path: point.Path, DataType: point.DataType, InputKey: "value"}}
+		}
+	}
+	orderedInputs := make([]alarmInputOrder, 0, len(alarmInputs))
 	seen := map[string]bool{}
 	seenDatapoints := map[string]bool{}
-	for _, input := range alarm.Inputs {
+	for _, input := range alarmInputs {
 		point, ok := points[input.DatapointID]
 		if !ok || point.Status == "invalid" || seen[input.InputKey] || seenDatapoints[input.DatapointID] || point.Path != input.Path || point.DataType != input.DataType {
 			return nil, fmt.Errorf("报警项 %s 输入引用无效", alarm.ID)
