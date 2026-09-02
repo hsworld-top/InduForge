@@ -420,6 +420,7 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if err != nil {
 			return fmt.Errorf("加载运行绑定上下文失败: %w", err)
 		}
+		workload.ProjectID = runtimeContext.ProjectID
 		input, err := BuildRuntimeBindingInput(workload, runtimeContext)
 		if err != nil {
 			return fmt.Errorf("构造运行绑定输入失败: %w", err)

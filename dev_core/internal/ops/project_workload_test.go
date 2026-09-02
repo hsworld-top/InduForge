@@ -8,11 +8,11 @@ import (
 func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	port := 17800
 	digest := "sha256:" + strings.Repeat("a", 64)
-	base, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2, HostPort: &port, RuntimeNATSEndpoint: "nats://nats:4222"})
+	base, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, ProjectID: testProjectID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2, HostPort: &port, RuntimeNATSEndpoint: "nats://nats:4222"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/host-node-id", "maxUnavailable: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "image: induforge/project-runtime-api:1.0.0", "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
+	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/host-node-id", "maxUnavailable: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "image: induforge/project-runtime-api:1.0.0", `"--project-id", "` + testProjectID + `"`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
 		if !strings.Contains(base, expected) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
