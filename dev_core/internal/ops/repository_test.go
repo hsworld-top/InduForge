@@ -135,6 +135,22 @@ func TestDeploymentAccessPortRulesAndIPv6URL(t *testing.T) {
 	}
 }
 
+func TestDeploymentObservedEndpointUsesManagedNodeAndAllocatedPort(t *testing.T) {
+	port := 17800
+	if got := deploymentObservedEndpoint("192.0.2.10", ServiceBase, port); got != "http://192.0.2.10:17800" {
+		t.Fatalf("running entry endpoint=%q", got)
+	}
+	if got := deploymentObservedEndpoint("192.0.2.10", ServiceCompute, port); got != "" {
+		t.Fatalf("non-entry endpoint=%q", got)
+	}
+	if got := deploymentObservedEndpoint("192.0.2.10", ServiceBase, 0); got != "" {
+		t.Fatalf("unallocated endpoint=%q", got)
+	}
+	if got := deploymentObservedEndpoint("not-an-ip", ServiceBase, port); got != "" {
+		t.Fatalf("unmanaged endpoint=%q", got)
+	}
+}
+
 func TestDeploymentCreationLocksTenantProjectAndPhysicalNode(t *testing.T) {
 	for name, query := range map[string]string{
 		"project": lockDeploymentProjectSQL,

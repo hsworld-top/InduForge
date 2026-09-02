@@ -317,6 +317,10 @@ func TestDeploymentPayloadOnlyUsesProjectEntryEndpoint(t *testing.T) {
 	if payload := deploymentPayload(deployment); payload["accessUrl"] == "" || payload["accessAvailable"] != false {
 		t.Fatalf("planned URL must stay unavailable: %#v", payload)
 	}
+	deployment.Services[2].ObservedStatus = "failed"
+	if payload := deploymentPayload(deployment); payload["accessUrl"] == "" || payload["accessAvailable"] != false {
+		t.Fatalf("failed entry must preserve planned URL but remain unavailable: %#v", payload)
+	}
 	deployment.Services = deployment.Services[:2]
 	if payload := deploymentPayload(deployment); payload["accessUrl"] != "" {
 		t.Fatalf("non-entry service must not produce accessUrl: %v", payload["accessUrl"])

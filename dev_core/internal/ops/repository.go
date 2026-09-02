@@ -512,14 +512,28 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 	}
 	affected := map[string]struct{}{}
 	for _, o := range in.Services {
+		var serviceType string
+		var publicPort int
+		var managedNodeAddress string
+		lookupErr := r.pool.QueryRow(ctx, `SELECT s.service_type,COALESCE(s.public_port,0),COALESCE(n.ip_address,'') FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.id=$1 AND s.node_id=$2`, o.ServiceID, n.ID).Scan(&serviceType, &publicPort, &managedNodeAddress)
+		if errors.Is(lookupErr, pgx.ErrNoRows) {
+			if o.Endpoint != "" {
+				return n, nil, fmt.Errorf("节点不能为未知工程服务上报访问地址")
+			}
+			continue
+		}
+		if lookupErr != nil {
+			return n, nil, lookupErr
+		}
+		// 用户访问地址只由已登记节点管理 IP 与中心分配端口生成；Agent/Kubernetes
+		// PodIP 均不是受控用户入口，不能通过心跳覆盖该地址。
+		endpoint := deploymentObservedEndpoint(managedNodeAddress, serviceType, publicPort)
 		var did string
-		e = r.pool.QueryRow(ctx, `UPDATE deployment_services s SET observed_status=$1,replicas_observed=$2,observed_generation=$3,last_message=$4,endpoint=CASE WHEN s.service_type='base' THEN $5 ELSE s.endpoint END,observed_at=now(),updated_at=now() WHERE s.id=$6 AND s.desired_generation=$3 AND s.node_id=$7 AND (s.service_type='base' OR $5='') RETURNING s.project_deployment_id`, o.ObservedStatus, o.ReplicasObserved, o.ObservedGeneration, o.Message, o.Endpoint, o.ServiceID, n.ID).Scan(&did)
+		e = r.pool.QueryRow(ctx, `UPDATE deployment_services s SET observed_status=$1,replicas_observed=$2,observed_generation=$3,last_message=$4,endpoint=CASE WHEN s.service_type='base' THEN $5 ELSE s.endpoint END,observed_at=now(),updated_at=now() WHERE s.id=$6 AND s.desired_generation=$3 AND s.node_id=$7 RETURNING s.project_deployment_id`, o.ObservedStatus, o.ReplicasObserved, o.ObservedGeneration, o.Message, endpoint, o.ServiceID, n.ID).Scan(&did)
 		if e == nil {
 			affected[did] = struct{}{}
 		} else if !errors.Is(e, pgx.ErrNoRows) {
 			return n, nil, e
-		} else if o.Endpoint != "" {
-			return n, nil, fmt.Errorf("只有工程入口服务可以上报访问地址")
 		}
 	}
 	for did := range affected {
@@ -1025,6 +1039,13 @@ func allocateDeploymentAccessPort(ctx context.Context, tx pgx.Tx, nodeID string)
 
 func deploymentAccessURL(nodeAddress string, port int) string {
 	return "http://" + net.JoinHostPort(nodeAddress, fmt.Sprintf("%d", port))
+}
+
+func deploymentObservedEndpoint(nodeAddress, serviceType string, publicPort int) string {
+	if serviceType != ServiceBase || publicPort < 1 || net.ParseIP(nodeAddress) == nil {
+		return ""
+	}
+	return deploymentAccessURL(nodeAddress, publicPort)
 }
 func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, user string, in CreateDeploymentInput) (ProjectDeployment, DeploymentRun, error) {
 	tx, e := r.pool.Begin(ctx)
