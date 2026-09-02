@@ -67,6 +67,10 @@ if [ "$(grep -Fc 'location = /health' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
   echo "center health endpoint is not exposed on both edge listeners" >&2
   exit 1
 fi
+if ! grep -Fq 'COPY contracts/runtime /contracts/runtime' "$SCRIPT_DIR/data-prebuilt.Dockerfile"; then
+  echo "data image must include runtime artifact schemas" >&2
+  exit 1
+fi
 
 if IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DATA_ROOT=/ IF_CENTER_DOCKER_GID=998 "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
   echo "unsafe data root was accepted" >&2
