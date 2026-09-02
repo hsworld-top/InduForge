@@ -187,9 +187,53 @@ export const runEventPresentation = (stage?: string, message?: string) => {
     'stop queued': '停止任务已创建，等待目标节点执行',
     'restart queued': '重启任务已创建，等待目标节点执行',
   }
+  if (stage === 'dispatched') {
+    return { stage: '已下发', message: '工作负载已下发，等待运行服务就绪' }
+  }
+  if (stage === 'ready' || stage === 'succeeded') {
+    return { stage: '已就绪', message: message || '全部运行服务已通过健康检查' }
+  }
   return {
     stage: stage === 'queued' ? '已受理' : stage || '状态更新',
     message: queuedMessages[normalizedMessage] || message || '状态已更新',
+  }
+}
+
+/**
+ * 部署详情只能由后端实际观察状态推进。下发 Kubernetes 工作负载不等于容器已启动，
+ * 更不能代表健康检查成功；只有入口与所有运行服务均已 running 才展示完成。
+ */
+export const deploymentDetailPresentation = (deployment?: {
+  observedStatus?: string
+  entryStatus?: string
+  services?: Array<Pick<DeploymentService, 'observedStatus'>>
+}) => {
+  const services = deployment?.services || []
+  const failed =
+    deployment?.observedStatus === 'failed' ||
+    deployment?.entryStatus === 'failed' ||
+    services.some((service) => service.observedStatus === 'failed')
+  const ready =
+    !failed &&
+    deployment?.observedStatus === 'running' &&
+    deployment?.entryStatus === 'running' &&
+    services.length > 0 &&
+    services.every((service) => service.observedStatus === 'running')
+  if (ready) {
+    return {
+      active: 4,
+      processStatus: 'process' as const,
+      prepareDescription: '运行资源已准备',
+      serviceDescription: '全部运行服务已启动',
+      healthDescription: '全部运行服务已通过健康检查',
+    }
+  }
+  return {
+    active: 1,
+    processStatus: failed ? ('error' as const) : ('process' as const),
+    prepareDescription: failed ? '运行资源准备失败，请查看服务状态' : '工作负载已下发，等待 Kubernetes 就绪',
+    serviceDescription: failed ? '运行服务未能启动' : '等待运行服务就绪',
+    healthDescription: failed ? '健康检查未通过' : '等待全部运行服务通过健康检查',
   }
 }
 export const deploymentStatePresentation = (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   capabilityLabel,
+  deploymentDetailPresentation,
   deploymentStatePresentation,
   enrollmentCapabilities,
   enrollmentInstallCommand,
@@ -43,6 +44,32 @@ describe('ops presentation', () => {
     expect(runEventPresentation('queued', 'deployment queued')).toEqual({
       stage: '已受理',
       message: '部署任务已创建，等待目标节点执行',
+    })
+    expect(runEventPresentation('dispatched', 'Kubernetes 工作负载已提交')).toEqual({
+      stage: '已下发',
+      message: '工作负载已下发，等待运行服务就绪',
+    })
+    expect(
+      deploymentDetailPresentation({
+        observedStatus: 'pending',
+        entryStatus: 'pending',
+        services: [{ observedStatus: 'pending' }],
+      }),
+    ).toMatchObject({
+      active: 1,
+      serviceDescription: '等待运行服务就绪',
+      healthDescription: '等待全部运行服务通过健康检查',
+    })
+    expect(
+      deploymentDetailPresentation({
+        observedStatus: 'running',
+        entryStatus: 'running',
+        services: [{ observedStatus: 'running' }],
+      }),
+    ).toMatchObject({
+      active: 4,
+      serviceDescription: '全部运行服务已启动',
+      healthDescription: '全部运行服务已通过健康检查',
     })
   })
   it('按平台固定节点能力，不允许生成不完整的运行节点', () => {

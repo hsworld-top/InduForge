@@ -1697,26 +1697,27 @@
           }}</el-descriptions-item>
         </el-descriptions>
         <h3 class="ops-drawer-heading">{{ $t('opsConsole.deployments.latestDeployment') }}</h3>
-        <el-steps direction="vertical" :active="4" finish-status="success">
+        <el-steps
+          direction="vertical"
+          :active="selectedDeploymentDetail.active"
+          finish-status="success"
+          :process-status="selectedDeploymentDetail.processStatus"
+        >
           <el-step
             :title="$t('opsConsole.deployments.validation')"
             :description="$t('opsConsole.deployments.validationDesc')"
           />
           <el-step
             :title="$t('opsConsole.deployments.prepare')"
-            :description="$t('opsConsole.deployments.prepareDesc')"
+            :description="selectedDeploymentDetail.prepareDescription"
           />
           <el-step
             :title="$t('opsConsole.deployments.serviceStart')"
-            :description="
-              $t('opsConsole.deployments.serviceStartDesc', {
-                services: selectedDeploymentRow.services.join(' / '),
-              })
-            "
+            :description="selectedDeploymentDetail.serviceDescription"
           />
           <el-step
             :title="$t('opsConsole.deployments.healthCheck')"
-            :description="$t('opsConsole.deployments.healthDesc')"
+            :description="selectedDeploymentDetail.healthDescription"
           />
         </el-steps>
       </template>
@@ -1750,6 +1751,7 @@ import { formatDateTime } from '@/utils/date'
 import {
   enrollmentCapabilities,
   enrollmentInstallCommand,
+  deploymentDetailPresentation,
   lifecyclePresentation,
   validateEnrollmentServerUrl,
 } from './utils/ops-presentation'
@@ -1803,6 +1805,7 @@ interface DeploymentRow {
   status: string
   statusClass: string
   updatedAt: string
+  deployment: ProjectDeployment
 }
 interface ProjectOption {
   id: string
@@ -2269,6 +2272,9 @@ const foundationDeployDisabled = computed(
     ),
 )
 const isFoundationRepair = computed(() => (selectedEnvironment.value?.foundationTotal || 0) > 0)
+const selectedDeploymentDetail = computed(() =>
+  deploymentDetailPresentation(selectedDeploymentRow.value?.deployment),
+)
 const deploymentRows = computed<DeploymentRow[]>(() =>
   deployments.value.map((item) => {
     const failed = item.observedStatus === 'failed' || item.entryStatus === 'failed'
@@ -2301,6 +2307,7 @@ const deploymentRows = computed<DeploymentRow[]>(() =>
       updatedAt: item.updatedAt
         ? formatDateTime(item.updatedAt)
         : t('opsConsole.common.statePending'),
+      deployment: item,
     }
   }),
 )
