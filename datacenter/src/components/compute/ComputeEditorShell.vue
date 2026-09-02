@@ -15,12 +15,7 @@
       v-else-if="!activeDraft"
       icon-name="compute"
       :title="ui('选择一个计算单元', 'Select a Compute Unit')"
-      :description="
-        ui(
-          '从左侧资源树选择计算单元，右侧会打开编辑标签。',
-          'Select a compute unit from the resource tree to open it in the editor.',
-        )
-      "
+      :description="ui('从左侧资源树选择计算单元，右侧会打开编辑标签。', 'Select a compute unit from the resource tree to open it in the editor.')"
     />
 
     <template v-else>
@@ -69,9 +64,7 @@
             type="button"
             class="compute-editor__icon-action"
             :title="activeDraft.isEnabled === false ? ui('启用', 'Enable') : ui('停用', 'Disable')"
-            :aria-label="
-              activeDraft.isEnabled === false ? ui('启用', 'Enable') : ui('停用', 'Disable')
-            "
+            :aria-label="activeDraft.isEnabled === false ? ui('启用', 'Enable') : ui('停用', 'Disable')"
             :disabled="saving"
             @click="$emit('toggle-enabled', activeDraft.id, activeDraft.isEnabled === false)"
           >
@@ -115,18 +108,9 @@
       </div>
 
       <div v-if="!sandboxAvailable" class="compute-editor__sandbox-warning">
-        <span v-if="capabilitiesLoading">{{
-          ui('正在检测独立计算沙箱…', 'Checking the isolated compute sandbox…')
-        }}</span>
+        <span v-if="capabilitiesLoading">{{ ui('正在检测独立计算沙箱…', 'Checking the isolated compute sandbox…') }}</span>
         <span v-else>
-          {{ ui('独立计算沙箱当前不可用：', 'The isolated compute sandbox is unavailable: ')
-          }}{{ sandboxUnavailableReason
-          }}{{
-            ui(
-              '。语法检查和开发态试运行已禁用。',
-              '. Syntax checking and development dry runs are disabled.',
-            )
-          }}
+          {{ ui('独立计算沙箱当前不可用：', 'The isolated compute sandbox is unavailable: ') }}{{ sandboxUnavailableReason }}{{ ui('。语法检查和开发态试运行已禁用。', '. Syntax checking and development dry runs are disabled.') }}
         </span>
         <button type="button" :disabled="capabilitiesLoading" @click="$emit('retry-capabilities')">
           {{ capabilitiesLoading ? ui('检测中', 'Checking') : ui('重新检测', 'Retry') }}
@@ -225,12 +209,7 @@
               <IconTablerX class="compute-editor__action-icon" />
             </button>
             <div class="compute-editor__output-path">
-              {{
-                ui(
-                  `${activeDraft.outputs.length} 个输出数据点`,
-                  `${activeDraft.outputs.length} output data point${activeDraft.outputs.length === 1 ? '' : 's'}`,
-                )
-              }}
+              {{ ui(`${activeDraft.outputs.length} 个输出数据点`, `${activeDraft.outputs.length} output data point${activeDraft.outputs.length === 1 ? '' : 's'}`) }}
             </div>
           </div>
           <label class="compute-editor__field">
@@ -265,11 +244,7 @@
               </label>
               <label class="compute-editor__field">
                 <span>{{ ui('显示名称', 'Display Name') }}</span>
-                <input
-                  v-model="output.name"
-                  :placeholder="ui('计算结果', 'Compute Result')"
-                  @input="markDirty"
-                />
+                <input v-model="output.name" :placeholder="ui('计算结果', 'Compute Result')" @input="markDirty" />
               </label>
               <label class="compute-editor__field">
                 <span>{{ ui('数据类型', 'Data Type') }}</span>
@@ -281,11 +256,7 @@
               </label>
               <label class="compute-editor__field">
                 <span>{{ ui('单位', 'Unit') }}</span>
-                <input
-                  v-model="output.unit"
-                  :placeholder="ui('可选', 'Optional')"
-                  @input="markDirty"
-                />
+                <input v-model="output.unit" :placeholder="ui('可选', 'Optional')" @input="markDirty" />
               </label>
               <label class="compute-editor__field">
                 <span>{{ ui('精度', 'Precision') }}</span>
@@ -301,9 +272,7 @@
                 <span>{{ ui('空值策略', 'Null Policy') }}</span>
                 <select v-model="output.nullPolicy" @change="markDirty">
                   <option value="error">{{ ui('本次运行失败', 'Fail This Run') }}</option>
-                  <option value="skip">
-                    {{ ui('跳过并保留旧值', 'Skip and Keep Previous Value') }}
-                  </option>
+                  <option value="skip">{{ ui('跳过并保留旧值', 'Skip and Keep Previous Value') }}</option>
                 </select>
               </label>
               <small>{{ output.path }}</small>
@@ -328,12 +297,7 @@
         <div
           v-show="!panelCollapsed"
           class="compute-editor__resize-handle"
-          :title="
-            ui(
-              '拖拽调整高度，双击切换最大高度',
-              'Drag to resize; double-click to toggle maximum height',
-            )
-          "
+          :title="ui('拖拽调整高度，双击切换最大高度', 'Drag to resize; double-click to toggle maximum height')"
           @dblclick="togglePanelMaxHeight"
           @pointerdown="startPanelResize"
         >
@@ -367,23 +331,14 @@
             </button>
           </div>
           <div class="compute-editor__cursor-status">
-            <span>{{
-              ui(
-                `行 ${cursorInfo.line}，列 ${cursorInfo.column}`,
-                `Ln ${cursorInfo.line}, Col ${cursorInfo.column}`,
-              )
-            }}</span>
+            <span>{{ ui(`行 ${cursorInfo.line}，列 ${cursorInfo.column}`, `Ln ${cursorInfo.line}, Col ${cursorInfo.column}`) }}</span>
             <span>{{ ui('空格', 'Spaces') }}: {{ cursorInfo.spaces }}</span>
           </div>
           <button
             type="button"
             class="compute-editor__panel-toggle"
             :title="panelCollapsed ? ui('展开', 'Expand') : ui('收起', 'Collapse')"
-            :aria-label="
-              panelCollapsed
-                ? ui('展开底部面板', 'Expand bottom panel')
-                : ui('收起底部面板', 'Collapse bottom panel')
-            "
+            :aria-label="panelCollapsed ? ui('展开底部面板', 'Expand bottom panel') : ui('收起底部面板', 'Collapse bottom panel')"
             @click="togglePanelCollapsed"
           >
             <IconTablerChevronUp
@@ -402,12 +357,7 @@
                   <button
                     type="button"
                     class="compute-editor__help-dot"
-                    :title="
-                      ui(
-                        '调用方传入的参数，脚本内按 argv[0]、argv[1] 顺序读取。',
-                        'Parameters supplied by the caller and read in order as argv[0], argv[1], and so on.',
-                      )
-                    "
+                    :title="ui('调用方传入的参数，脚本内按 argv[0]、argv[1] 顺序读取。', 'Parameters supplied by the caller and read in order as argv[0], argv[1], and so on.')"
                     :aria-label="ui('脚本参数说明', 'Script parameter help')"
                   >
                     ?
@@ -429,12 +379,7 @@
               class="compute-editor__empty compute-editor__empty-action"
             >
               <strong>{{ ui('还没有脚本参数', 'No Script Parameters') }}</strong>
-              <span>{{
-                ui(
-                  '脚本参数由调用方传入，脚本内通过 argv[0]、argv[1] 读取。',
-                  'Parameters are supplied by the caller and read as argv[0], argv[1], and so on.',
-                )
-              }}</span>
+              <span>{{ ui('脚本参数由调用方传入，脚本内通过 argv[0]、argv[1] 读取。', 'Parameters are supplied by the caller and read as argv[0], argv[1], and so on.') }}</span>
               <div>
                 <button type="button" class="compute-editor__compact-primary" @click="addInput">
                   <IconTablerPlus class="compute-editor__action-icon" />
@@ -458,11 +403,7 @@
                 class="compute-editor__mapping-row"
               >
                 <span class="compute-editor__row-index">argv[{{ index }}]</span>
-                <input
-                  v-model="row.name"
-                  :placeholder="ui('参数名', 'Parameter name')"
-                  @input="markDirty"
-                />
+                <input v-model="row.name" :placeholder="ui('参数名', 'Parameter name')" @input="markDirty" />
                 <select v-model="row.type" @change="markDirty">
                   <option value="string">string</option>
                   <option value="number">number</option>
@@ -475,11 +416,7 @@
                   <span></span>
                 </label>
                 <input v-model="row.defaultValue" placeholder="-" @input="markDirty" />
-                <input
-                  v-model="row.description"
-                  :placeholder="ui('调用方传参说明', 'Describe this argument')"
-                  @input="markDirty"
-                />
+                <input v-model="row.description" :placeholder="ui('调用方传参说明', 'Describe this argument')" @input="markDirty" />
                 <button
                   type="button"
                   class="compute-editor__row-icon"
@@ -501,12 +438,7 @@
                   <button
                     type="button"
                     class="compute-editor__help-dot"
-                    :title="
-                      ui(
-                        '变量名对应一个数据点对象，可直接调用 get、read、peek 等方法。',
-                        'Each variable references a data point object and supports methods such as get, read, and peek.',
-                      )
-                    "
+                    :title="ui('变量名对应一个数据点对象，可直接调用 get、read、peek 等方法。', 'Each variable references a data point object and supports methods such as get, read, and peek.')"
                     :aria-label="ui('数据点变量说明', 'Data point variable help')"
                   >
                     ?
@@ -528,12 +460,7 @@
               class="compute-editor__empty compute-editor__empty-action"
             >
               <strong>{{ ui('还没有数据点变量', 'No Data Point Variables') }}</strong>
-              <span>{{
-                ui(
-                  '从数据点列表选择后，会在这里管理变量名、路径和类型。',
-                  'Select a data point to manage its variable name, path, and type here.',
-                )
-              }}</span>
+              <span>{{ ui('从数据点列表选择后，会在这里管理变量名、路径和类型。', 'Select a data point to manage its variable name, path, and type here.') }}</span>
               <div>
                 <button
                   type="button"
@@ -615,9 +542,7 @@
                   class="compute-editor__trigger-card is-schedule"
                 >
                   <label class="compute-editor__field">
-                    <span v-if="activeDraft.triggerConfig.kind === 'interval'">{{
-                      ui('周期', 'Interval')
-                    }}</span>
+                    <span v-if="activeDraft.triggerConfig.kind === 'interval'">{{ ui('周期', 'Interval') }}</span>
                     <span v-else>{{ ui('执行时间', 'Run Time') }}</span>
                     <div
                       v-if="activeDraft.triggerConfig.kind === 'interval'"
@@ -855,12 +780,7 @@
                     </label>
                   </div>
                   <p class="compute-editor__trigger-note">
-                    {{
-                      ui(
-                        '该计划由节点运行时执行；开发态不会自动运行。',
-                        'This schedule runs on the node runtime and does not run automatically during development.',
-                      )
-                    }}
+                    {{ ui('该计划由节点运行时执行；开发态不会自动运行。', 'This schedule runs on the node runtime and does not run automatically during development.') }}
                   </p>
                   <div class="compute-editor__trigger-preview">
                     <button
@@ -870,11 +790,7 @@
                       :disabled="schedulePreviewLoading"
                       @click="previewSchedule"
                     >
-                      {{
-                        schedulePreviewLoading
-                          ? ui('预览中…', 'Previewing…')
-                          : ui('预览后续执行', 'Preview Upcoming Runs')
-                      }}
+                      {{ schedulePreviewLoading ? ui('预览中…', 'Previewing…') : ui('预览后续执行', 'Preview Upcoming Runs') }}
                     </button>
                     <div
                       v-if="schedulePreviewSummary"
@@ -883,8 +799,7 @@
                       <strong>{{ schedulePreviewSummary }}</strong>
                       <ol v-if="schedulePreviewRuns.length">
                         <li v-for="(run, index) in schedulePreviewRuns" :key="run">
-                          {{ ui(`第 ${index + 1} 次：`, `Run ${index + 1}: `)
-                          }}{{ formatScheduleRun(run) }}
+                          {{ ui(`第 ${index + 1} 次：`, `Run ${index + 1}: `) }}{{ formatScheduleRun(run) }}
                         </li>
                       </ol>
                     </div>
@@ -974,12 +889,7 @@
                     />
                   </label>
                   <p class="compute-editor__trigger-note">
-                    {{
-                      ui(
-                        '触发条件由节点运行时判断；开发态仅保存配置。',
-                        'The node runtime evaluates this trigger; development mode only saves the configuration.',
-                      )
-                    }}
+                    {{ ui('触发条件由节点运行时判断；开发态仅保存配置。', 'The node runtime evaluates this trigger; development mode only saves the configuration.') }}
                   </p>
                 </div>
                 <div
@@ -991,12 +901,7 @@
                     <textarea
                       v-model="activeDraft.triggerConfig.expression"
                       rows="2"
-                      :placeholder="
-                        ui(
-                          '例如：temperature > 80 && enabled',
-                          'Example: temperature > 80 && enabled',
-                        )
-                      "
+                      :placeholder="ui('例如：temperature > 80 && enabled', 'Example: temperature > 80 && enabled')"
                       @input="markDirty"
                     />
                   </label>
@@ -1013,12 +918,7 @@
                         {{ row.alias }}
                       </button>
                     </div>
-                    <small v-else>{{
-                      ui(
-                        '请先在“变量”中添加 bool、string 或数值数据点。',
-                        'Add a bool, string, or numeric data point under Variables first.',
-                      )
-                    }}</small>
+                    <small v-else>{{ ui('请先在“变量”中添加 bool、string 或数值数据点。', 'Add a bool, string, or numeric data point under Variables first.') }}</small>
                   </div>
                   <fieldset class="compute-editor__condition-phases">
                     <legend>{{ ui('触发阶段', 'Trigger Phases') }}</legend>
@@ -1064,22 +964,12 @@
                     </div>
                   </label>
                   <p class="compute-editor__trigger-note">
-                    {{
-                      ui(
-                        '进入、离开对应条件状态切换；持续在条件成立期间每次引用数据点变化时执行。节点通过 ctx.trigger.phase 提供 entered、active 或 exited。',
-                        'Entered and exited correspond to condition state changes. Active runs whenever a referenced data point changes while the condition remains true. The node exposes entered, active, or exited through ctx.trigger.phase.',
-                      )
-                    }}
+                    {{ ui('进入、离开对应条件状态切换；持续在条件成立期间每次引用数据点变化时执行。节点通过 ctx.trigger.phase 提供 entered、active 或 exited。', 'Entered and exited correspond to condition state changes. Active runs whenever a referenced data point changes while the condition remains true. The node exposes entered, active, or exited through ctx.trigger.phase.') }}
                   </p>
                 </div>
                 <div v-else class="compute-editor__trigger-card is-note">
                   <strong>{{ ui('手动触发', 'Manual Trigger') }}</strong>
-                  <span>{{
-                    ui(
-                      '脚本只在调用方调用、调试或手动运行时执行。',
-                      'The script runs only when invoked by a caller, debugger, or manual action.',
-                    )
-                  }}</span>
+                  <span>{{ ui('脚本只在调用方调用、调试或手动运行时执行。', 'The script runs only when invoked by a caller, debugger, or manual action.') }}</span>
                 </div>
               </section>
             </div>
@@ -1093,12 +983,7 @@
                   <button
                     type="button"
                     class="compute-editor__help-dot"
-                    :title="
-                      ui(
-                        `当前语言：${langText(activeDraft.lang)}，已选 ${dependencyCount} 个。`,
-                        `Language: ${langText(activeDraft.lang)}. ${dependencyCount} selected.`,
-                      )
-                    "
+                    :title="ui(`当前语言：${langText(activeDraft.lang)}，已选 ${dependencyCount} 个。`, `Language: ${langText(activeDraft.lang)}. ${dependencyCount} selected.`)"
                     :aria-label="ui('依赖库说明', 'Dependency help')"
                   >
                     ?
@@ -1141,11 +1026,7 @@
                 <strong>{{ dep.name }}</strong>
                 <code>{{ dep.importName || dep.name }}</code>
                 <span>{{ dep.version || '-' }}</span>
-                <em>{{
-                  isDependencyChecked(dep.id)
-                    ? ui('当前代码已使用', 'Used by Current Code')
-                    : ui('工程已安装', 'Installed in Project')
-                }}</em>
+                <em>{{ isDependencyChecked(dep.id) ? ui('当前代码已使用', 'Used by Current Code') : ui('工程已安装', 'Installed in Project') }}</em>
               </div>
             </div>
           </template>
@@ -1161,10 +1042,7 @@
                     :title="
                       activeDraft.dirty
                         ? ui('保存后才能试运行。', 'Save before running a dry run.')
-                        : ui(
-                            '试运行只检查脚本返回值，不会保存结果或写入数据点。',
-                            'A dry run only inspects the script return value; it does not save results or write data points.',
-                          )
+                        : ui('试运行只检查脚本返回值，不会保存结果或写入数据点。', 'A dry run only inspects the script return value; it does not save results or write data points.')
                     "
                     :aria-label="ui('调试说明', 'Debug help')"
                   >
@@ -1306,14 +1184,8 @@
       v-model="datapointPickerVisible"
       :project-id="projectId"
       :multiple="false"
-      :title="
-        datapointPickerIntent === 'trigger'
-          ? ui('选择变化触发数据点', 'Select Change Trigger Data Point')
-          : ui('选择数据点变量', 'Select Data Point Variable')
-      "
-      :confirm-text="
-        datapointPickerIntent === 'trigger' ? ui('选择', 'Select') : ui('插入', 'Insert')
-      "
+      :title="datapointPickerIntent === 'trigger' ? ui('选择变化触发数据点', 'Select Change Trigger Data Point') : ui('选择数据点变量', 'Select Data Point Variable')"
+      :confirm-text="datapointPickerIntent === 'trigger' ? ui('选择', 'Select') : ui('插入', 'Insert')"
       :disabled-reason="
         datapointPickerIntent === 'trigger' ? datapointTriggerDisabledReason : undefined
       "
@@ -1523,8 +1395,7 @@ const debugResultTabs = computed(() => [
 
 const sandboxAvailable = computed(() => props.capabilities?.sandboxStatus === 'available')
 const sandboxUnavailableReason = computed(
-  () =>
-    props.capabilities?.sandboxReason?.trim() || ui('隔离执行检查未通过', 'Isolation check failed'),
+  () => props.capabilities?.sandboxReason?.trim() || ui('隔离执行检查未通过', 'Isolation check failed'),
 )
 
 const codeTemplates = computed(() => {
@@ -1611,66 +1482,16 @@ function monacoTypeForDatapoint(dataType?: string) {
 }
 
 const datapointMemberCompletions = computed(() => [
-  {
-    label: 'get',
-    insertText: 'get()',
-    kind: 'method',
-    detail: ui('获取业务值快照', 'Get the business-value snapshot'),
-  },
-  {
-    label: 'read',
-    insertText: 'read()',
-    kind: 'method',
-    detail: ui('读取完整当前样本', 'Read the complete current sample'),
-  },
-  {
-    label: 'peek',
-    insertText: 'peek()',
-    kind: 'method',
-    detail: ui('读取已物化当前样本', 'Read the materialized current sample'),
-  },
-  {
-    label: 'set',
-    insertText: 'set(value)',
-    kind: 'method',
-    detail: ui('写入数据点', 'Write the data point'),
-  },
-  {
-    label: 'subscribe',
-    insertText: 'subscribe(handler)',
-    kind: 'method',
-    detail: ui('订阅数据变化', 'Subscribe to data changes'),
-  },
-  {
-    label: 'history',
-    insertText: 'history(query)',
-    kind: 'method',
-    detail: ui('查询历史样本', 'Query historical samples'),
-  },
-  {
-    label: 'refresh',
-    insertText: 'refresh()',
-    kind: 'method',
-    detail: ui('主动刷新来源', 'Refresh the source'),
-  },
-  {
-    label: 'run',
-    insertText: 'run()',
-    kind: 'method',
-    detail: ui('运行计算数据点', 'Run a compute data point'),
-  },
-  {
-    label: 'execute',
-    insertText: 'execute()',
-    kind: 'method',
-    detail: ui('执行按需数据点', 'Execute an on-demand data point'),
-  },
-  {
-    label: 'publish',
-    insertText: 'publish(payload)',
-    kind: 'method',
-    detail: ui('发布消息', 'Publish a message'),
-  },
+  { label: 'get', insertText: 'get()', kind: 'method', detail: ui('获取业务值快照', 'Get the business-value snapshot') },
+  { label: 'read', insertText: 'read()', kind: 'method', detail: ui('读取完整当前样本', 'Read the complete current sample') },
+  { label: 'peek', insertText: 'peek()', kind: 'method', detail: ui('读取已物化当前样本', 'Read the materialized current sample') },
+  { label: 'set', insertText: 'set(value)', kind: 'method', detail: ui('写入数据点', 'Write the data point') },
+  { label: 'subscribe', insertText: 'subscribe(handler)', kind: 'method', detail: ui('订阅数据变化', 'Subscribe to data changes') },
+  { label: 'history', insertText: 'history(query)', kind: 'method', detail: ui('查询历史样本', 'Query historical samples') },
+  { label: 'refresh', insertText: 'refresh()', kind: 'method', detail: ui('主动刷新来源', 'Refresh the source') },
+  { label: 'run', insertText: 'run()', kind: 'method', detail: ui('运行计算数据点', 'Run a compute data point') },
+  { label: 'execute', insertText: 'execute()', kind: 'method', detail: ui('执行按需数据点', 'Execute an on-demand data point') },
+  { label: 'publish', insertText: 'publish(payload)', kind: 'method', detail: ui('发布消息', 'Publish a message') },
   ...[
     'id',
     'ref',
@@ -1689,12 +1510,7 @@ const datapointMemberCompletions = computed(() => [
     'tags',
     'attributes',
     'capabilities',
-  ].map((label) => ({
-    label,
-    insertText: label,
-    kind: 'property',
-    detail: ui('数据点属性', 'Data point property'),
-  })),
+  ].map((label) => ({ label, insertText: label, kind: 'property', detail: ui('数据点属性', 'Data point property') })),
 ])
 
 const allTriggerTypes = computed(() => [
@@ -1753,21 +1569,13 @@ function javascriptTemplates(pointAlias: string): CodeTemplate[] {
     {
       id: 'argv',
       name: ui('获取脚本参数', 'Read Script Arguments'),
-      description: ui(
-        '读取调用方传入的 argv 参数。',
-        'Read argv arguments supplied by the caller.',
-      ),
+      description: ui('读取调用方传入的 argv 参数。', 'Read argv arguments supplied by the caller.'),
       code: 'const firstArg = argv[0];\nconst secondArg = argv[1];\n',
     },
     {
       id: 'datapoint-read',
       name: ui('读取数据点样本', 'Read Data Point Sample'),
-      description: disabled
-        ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.')
-        : ui(
-            `读取 ${point} 的值、质量和时间。`,
-            `Read the value, quality, and timestamp of ${point}.`,
-          ),
+      description: disabled ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.') : ui(`读取 ${point} 的值、质量和时间。`, `Read the value, quality, and timestamp of ${point}.`),
       code: `const result = await ${point}.read();
 if (result.code !== 0) return result;
 if (result.data.quality !== 'good') {
@@ -1780,12 +1588,7 @@ return result.data.value;
     {
       id: 'datapoint-get',
       name: ui('获取数据点业务值', 'Get Data Point Value'),
-      description: disabled
-        ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.')
-        : ui(
-            `调用 ${point}.get() 获取业务值。`,
-            `Call ${point}.get() to obtain its business value.`,
-          ),
+      description: disabled ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.') : ui(`调用 ${point}.get() 获取业务值。`, `Call ${point}.get() to obtain its business value.`),
       code: `const result = await ${point}.get();
 if (result.code !== 0) return result;
 return result.data.value;
@@ -1795,9 +1598,7 @@ return result.data.value;
     {
       id: 'datapoint-set',
       name: ui('写入数据点', 'Write Data Point'),
-      description: disabled
-        ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.')
-        : ui(`检查能力后写入 ${point}。`, `Check capabilities before writing ${point}.`),
+      description: disabled ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.') : ui(`检查能力后写入 ${point}。`, `Check capabilities before writing ${point}.`),
       code: `if (!${point}.capabilities.set) {
   return { error: ${JSON.stringify(writeError)} };
 }
@@ -1810,10 +1611,7 @@ return result.data;
     {
       id: 'output',
       name: ui('输出结果', 'Return Result'),
-      description: ui(
-        '把脚本结果返回给调用方和输出数据点。',
-        'Return the script result to the caller and output data points.',
-      ),
+      description: ui('把脚本结果返回给调用方和输出数据点。', 'Return the script result to the caller and output data points.'),
       code: 'return {\n  value: null,\n  updatedAt: new Date().toISOString()\n};\n',
     },
     {
@@ -1834,21 +1632,13 @@ function pythonTemplates(pointAlias: string): CodeTemplate[] {
     {
       id: 'argv',
       name: ui('获取脚本参数', 'Read Script Arguments'),
-      description: ui(
-        '读取调用方传入的 argv 参数。',
-        'Read argv arguments supplied by the caller.',
-      ),
+      description: ui('读取调用方传入的 argv 参数。', 'Read argv arguments supplied by the caller.'),
       code: 'def main(argv, dp, ctx):\n    first_arg = argv[0] if len(argv) > 0 else None\n    second_arg = argv[1] if len(argv) > 1 else None\n    return first_arg\n',
     },
     {
       id: 'datapoint-read',
       name: ui('读取数据点样本', 'Read Data Point Sample'),
-      description: disabled
-        ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.')
-        : ui(
-            `读取 ${point} 的值、质量和时间。`,
-            `Read the value, quality, and timestamp of ${point}.`,
-          ),
+      description: disabled ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.') : ui(`读取 ${point} 的值、质量和时间。`, `Read the value, quality, and timestamp of ${point}.`),
       code: `def main(argv, dp, ctx):
     result = ${point}.read()
     if result.code != 0:
@@ -1862,12 +1652,7 @@ function pythonTemplates(pointAlias: string): CodeTemplate[] {
     {
       id: 'datapoint-get',
       name: ui('获取数据点业务值', 'Get Data Point Value'),
-      description: disabled
-        ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.')
-        : ui(
-            `调用 ${point}.get() 获取业务值。`,
-            `Call ${point}.get() to obtain its business value.`,
-          ),
+      description: disabled ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.') : ui(`调用 ${point}.get() 获取业务值。`, `Call ${point}.get() to obtain its business value.`),
       code: `def main(argv, dp, ctx):
     result = ${point}.get()
     if result.code != 0:
@@ -1879,9 +1664,7 @@ function pythonTemplates(pointAlias: string): CodeTemplate[] {
     {
       id: 'datapoint-set',
       name: ui('写入数据点', 'Write Data Point'),
-      description: disabled
-        ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.')
-        : ui(`检查能力后写入 ${point}。`, `Check capabilities before writing ${point}.`),
+      description: disabled ? ui('请先在变量面板添加数据点。', 'Add a data point in Variables first.') : ui(`检查能力后写入 ${point}。`, `Check capabilities before writing ${point}.`),
       code: `def main(argv, dp, ctx):
     if not ${point}.capabilities["set"]:
         return {"error": ${JSON.stringify(writeError)}}
@@ -1896,10 +1679,7 @@ function pythonTemplates(pointAlias: string): CodeTemplate[] {
     {
       id: 'output',
       name: ui('输出结果', 'Return Result'),
-      description: ui(
-        '把脚本结果返回给调用方和输出数据点。',
-        'Return the script result to the caller and output data points.',
-      ),
+      description: ui('把脚本结果返回给调用方和输出数据点。', 'Return the script result to the caller and output data points.'),
       code: 'def main(argv, dp, ctx):\n    return {\n        "value": None\n    }\n',
     },
     {
@@ -2032,47 +1812,24 @@ const triggerSummary = computed(() => {
   if (activeDraft.value.triggerType === 'schedule') {
     const config = activeDraft.value.triggerConfig
     if (config.kind === 'daily')
-      return ui(
-        `每天 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`,
-        `Every day at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`,
-      )
+      return ui(`每天 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`, `Every day at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`)
     if (config.kind === 'weekly')
-      return ui(
-        `每周指定日期 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`,
-        `Weekly at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`,
-      )
+      return ui(`每周指定日期 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`, `Weekly at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`)
     if (config.kind === 'monthly')
-      return ui(
-        `每月按日期规则 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`,
-        `Monthly at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`,
-      )
+      return ui(`每月按日期规则 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`, `Monthly at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`)
     if (config.kind === 'yearly')
-      return ui(
-        `每年按日期规则 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`,
-        `Yearly at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`,
-      )
-    const unit =
-      config.unit === 'hours'
-        ? ui('小时', 'hour(s)')
-        : config.unit === 'minutes'
-          ? ui('分钟', 'minute(s)')
-          : ui('秒', 'second(s)')
+      return ui(`每年按日期规则 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`, `Yearly at ${config.time || '00:00:00'} (${config.timezone || 'time zone not set'})`)
+    const unit = config.unit === 'hours' ? ui('小时', 'hour(s)') : config.unit === 'minutes' ? ui('分钟', 'minute(s)') : ui('秒', 'second(s)')
     return ui(`每 ${config.every || 1} ${unit}执行一次`, `Run every ${config.every || 1} ${unit}`)
   }
   if (activeDraft.value.triggerType === 'datapoint_change') {
     return activeDraft.value.triggerConfig.path
-      ? ui(
-          `数据点变化时执行：${activeDraft.value.triggerConfig.path}`,
-          `Run when this data point changes: ${activeDraft.value.triggerConfig.path}`,
-        )
+      ? ui(`数据点变化时执行：${activeDraft.value.triggerConfig.path}`, `Run when this data point changes: ${activeDraft.value.triggerConfig.path}`)
       : ui('选择一个数据点作为变化触发源', 'Select a data point as the change trigger source')
   }
   if (activeDraft.value.triggerType === 'condition') {
     return activeDraft.value.triggerConfig.expression
-      ? ui(
-          `条件成立状态变化时执行：${activeDraft.value.triggerConfig.expression}`,
-          `Run when the condition state changes: ${activeDraft.value.triggerConfig.expression}`,
-        )
+      ? ui(`条件成立状态变化时执行：${activeDraft.value.triggerConfig.expression}`, `Run when the condition state changes: ${activeDraft.value.triggerConfig.expression}`)
       : ui('使用数据点变量配置条件表达式', 'Build a condition expression from data point variables')
   }
   return ui('由调用方或调试动作主动执行', 'Run explicitly by a caller or debug action')
@@ -2091,8 +1848,7 @@ const debugStateText = computed(() => {
 })
 
 const dryRunTooltip = computed(() => {
-  if (!sandboxAvailable.value)
-    return ui('独立计算沙箱不可用', 'Isolated compute sandbox unavailable')
+  if (!sandboxAvailable.value) return ui('独立计算沙箱不可用', 'Isolated compute sandbox unavailable')
   if (activeDraft.value?.dirty) return ui('请先保存后再试运行', 'Save before running a dry run')
   if (debugRunning.value) return ui('正在试运行', 'Dry run in progress')
   return ui('试运行', 'Dry Run')
@@ -2138,20 +1894,11 @@ const debugDatapointHintTone = computed(() =>
 const debugArgvHint = computed(() => {
   const parsed = debugArgvParsed.value
   const expected = activeDraft.value?.parameterRows.length || 0
-  if (!parsed.valid)
-    return ui('JSON 格式无效，试运行前需要修正。', 'Invalid JSON. Fix it before the dry run.')
-  if (!Array.isArray(parsed.value))
-    return ui('调用参数 JSON 必须是数组。', 'Arguments JSON must be an array.')
+  if (!parsed.valid) return ui('JSON 格式无效，试运行前需要修正。', 'Invalid JSON. Fix it before the dry run.')
+  if (!Array.isArray(parsed.value)) return ui('调用参数 JSON 必须是数组。', 'Arguments JSON must be an array.')
   const actual = parsed.value.length
-  if (actual === expected)
-    return ui(
-      `本次试运行传入 ${actual} 个参数。`,
-      `This dry run supplies ${actual} argument${actual === 1 ? '' : 's'}.`,
-    )
-  return ui(
-    `本次试运行参数数量和定义不一致：定义 ${expected} 个，实际 ${actual} 个。`,
-    `The dry-run argument count does not match the definitions: ${expected} defined, ${actual} supplied.`,
-  )
+  if (actual === expected) return ui(`本次试运行传入 ${actual} 个参数。`, `This dry run supplies ${actual} argument${actual === 1 ? '' : 's'}.`)
+  return ui(`本次试运行参数数量和定义不一致：定义 ${expected} 个，实际 ${actual} 个。`, `The dry-run argument count does not match the definitions: ${expected} defined, ${actual} supplied.`)
 })
 
 const debugDatapointHint = computed(() => {
@@ -2159,28 +1906,15 @@ const debugDatapointHint = computed(() => {
   const expectedAliases = (activeDraft.value?.datapointVariableRows || [])
     .map((row) => row.alias.trim())
     .filter(Boolean)
-  if (!parsed.valid)
-    return ui('JSON 格式无效，试运行前需要修正。', 'Invalid JSON. Fix it before the dry run.')
-  if (!isPlainRecord(parsed.value))
-    return ui('数据点模拟快照 JSON 必须是对象。', 'Data point snapshot JSON must be an object.')
+  if (!parsed.valid) return ui('JSON 格式无效，试运行前需要修正。', 'Invalid JSON. Fix it before the dry run.')
+  if (!isPlainRecord(parsed.value)) return ui('数据点模拟快照 JSON 必须是对象。', 'Data point snapshot JSON must be an object.')
   const keys = Object.keys(parsed.value)
   const invalidKey = keys.find((key) => !isDebugDatapointSnapshot(parsed.value[key]))
-  if (invalidKey)
-    return ui(
-      `“${invalidKey}”必须使用包含 value 的快照对象。`,
-      `“${invalidKey}” must be a snapshot object containing value.`,
-    )
+  if (invalidKey) return ui(`“${invalidKey}”必须使用包含 value 的快照对象。`, `“${invalidKey}” must be a snapshot object containing value.`)
   const missingCount = expectedAliases.filter((alias) => !(alias in parsed.value)).length
   const extraCount = keys.filter((key) => !expectedAliases.includes(key)).length
-  if (!missingCount && !extraCount)
-    return ui(
-      `本次试运行模拟 ${keys.length} 个数据点快照。`,
-      `This dry run simulates ${keys.length} data point snapshot${keys.length === 1 ? '' : 's'}.`,
-    )
-  return ui(
-    `本次试运行快照和变量定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`,
-    `The dry-run snapshots do not match the variable definitions: ${missingCount} missing and ${extraCount} extra.`,
-  )
+  if (!missingCount && !extraCount) return ui(`本次试运行模拟 ${keys.length} 个数据点快照。`, `This dry run simulates ${keys.length} data point snapshot${keys.length === 1 ? '' : 's'}.`)
+  return ui(`本次试运行快照和变量定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`, `The dry-run snapshots do not match the variable definitions: ${missingCount} missing and ${extraCount} extra.`)
 })
 
 const syntaxStatusTone = computed(() => {
@@ -2193,11 +1927,7 @@ const syntaxStatusTone = computed(() => {
 const syntaxStatusText = computed(() => {
   if (syntaxStatus.value === 'checking') return ui('检查中', 'Checking')
   if (syntaxStatus.value === 'failed') return ui('检查失败', 'Check Failed')
-  if (syntaxDiagnostics.value.length)
-    return ui(
-      `${syntaxDiagnostics.value.length} 个语法问题`,
-      `${syntaxDiagnostics.value.length} syntax problem${syntaxDiagnostics.value.length === 1 ? '' : 's'}`,
-    )
+  if (syntaxDiagnostics.value.length) return ui(`${syntaxDiagnostics.value.length} 个语法问题`, `${syntaxDiagnostics.value.length} syntax problem${syntaxDiagnostics.value.length === 1 ? '' : 's'}`)
   if (syntaxStatus.value === 'clean') return ui('语法正常', 'Syntax Valid')
   if (syntaxStatus.value === 'dirty') return ui('待检查', 'Check Pending')
   return ui('未检查', 'Not Checked')
@@ -2364,11 +2094,7 @@ async function ensureSyntaxClean() {
     activePanel.value = 'problems'
     panelCollapsed.value = false
     panelHeight.value = Math.max(panelHeight.value, 300)
-    ElMessage.warning(
-      syntaxDiagnostics.value.length
-        ? ui('请先修复语法问题', 'Fix the syntax problems first')
-        : syntaxErrorText.value,
-    )
+    ElMessage.warning(syntaxDiagnostics.value.length ? ui('请先修复语法问题', 'Fix the syntax problems first') : syntaxErrorText.value)
   }
   return ok
 }
@@ -2500,22 +2226,12 @@ function renameDatapointVariable(row: ComputeDatapointVariableRow, event: Event)
   if (next === previous) return
   if (!isValidVariableName(next, activeDraft.value.lang)) {
     input.value = previous
-    ElMessage.warning(
-      ui(
-        '变量名必须是当前脚本语言的合法且非保留名称',
-        'The variable name must be valid and not reserved in the current language',
-      ),
-    )
+    ElMessage.warning(ui('变量名必须是当前脚本语言的合法且非保留名称', 'The variable name must be valid and not reserved in the current language'))
     return
   }
   if (isDatapointAliasUsed(next, row.uid)) {
     input.value = previous
-    ElMessage.warning(
-      ui(
-        '当前计算单元中已存在同名变量',
-        'A variable with this name already exists in this compute unit',
-      ),
-    )
+    ElMessage.warning(ui('当前计算单元中已存在同名变量', 'A variable with this name already exists in this compute unit'))
     return
   }
   row.alias = next
@@ -2577,13 +2293,8 @@ function isTriggerScalarType(dataType?: string) {
 }
 
 function datapointTriggerDisabledReason(point: DatapointPickerSelection) {
-  if (point.status && point.status !== 'active')
-    return ui('变化触发只能选择状态正常的数据点', 'Change triggers require an active data point')
-  if (!isTriggerScalarType(point.dataType))
-    return ui(
-      '变化触发仅支持 bool、string 和数值数据点',
-      'Change triggers support only bool, string, and numeric data points',
-    )
+  if (point.status && point.status !== 'active') return ui('变化触发只能选择状态正常的数据点', 'Change triggers require an active data point')
+  if (!isTriggerScalarType(point.dataType)) return ui('变化触发仅支持 bool、string 和数值数据点', 'Change triggers support only bool, string, and numeric data points')
   return ''
 }
 
@@ -2640,12 +2351,7 @@ function confirmSelectedDatapoint(points: DatapointPickerSelection[]) {
       (row) => row.datapointId === target.id || row.path === target.path,
     )
   ) {
-    ElMessage.warning(
-      ui(
-        '当前计算单元已经添加该数据点',
-        'This data point has already been added to the compute unit',
-      ),
-    )
+    ElMessage.warning(ui('当前计算单元已经添加该数据点', 'This data point has already been added to the compute unit'))
     return
   }
   const pathName = target.path.split('.').pop() || 'tag'
@@ -2653,21 +2359,11 @@ function confirmSelectedDatapoint(points: DatapointPickerSelection[]) {
   const normalizedName = normalizeVariableName(preferredName, activeDraft.value.lang)
   const alias = uniqueDatapointAlias(/^_+$/.test(normalizedName) ? pathName : preferredName)
   if (!isValidVariableName(alias, activeDraft.value.lang)) {
-    ElMessage.warning(
-      ui(
-        '变量名必须是当前脚本语言的合法变量名',
-        'The variable name must be valid in the current language',
-      ),
-    )
+    ElMessage.warning(ui('变量名必须是当前脚本语言的合法变量名', 'The variable name must be valid in the current language'))
     return
   }
   if (isDatapointAliasUsed(alias)) {
-    ElMessage.warning(
-      ui(
-        '当前计算单元中已存在同名变量',
-        'A variable with this name already exists in this compute unit',
-      ),
-    )
+    ElMessage.warning(ui('当前计算单元中已存在同名变量', 'A variable with this name already exists in this compute unit'))
     return
   }
   datapointPickerVisible.value = false
@@ -2700,10 +2396,7 @@ async function executeDebug() {
   try {
     input = parseDebugInput()
   } catch (error) {
-    debugError.value =
-      error instanceof Error
-        ? error.message
-        : ui('试运行输入 JSON 格式无效', 'Invalid dry-run input JSON')
+    debugError.value = error instanceof Error ? error.message : ui('试运行输入 JSON 格式无效', 'Invalid dry-run input JSON')
     return
   }
 
@@ -2830,10 +2523,7 @@ async function previewSchedule() {
   } catch (error) {
     if (seq !== schedulePreviewSeq) return
     schedulePreviewErrors.value = [
-      {
-        field: '',
-        message: getApiErrorMessage(error, ui('定时配置无效', 'Invalid schedule configuration')),
-      },
+      { field: '', message: getApiErrorMessage(error, ui('定时配置无效', 'Invalid schedule configuration')) },
     ]
   } finally {
     if (seq === schedulePreviewSeq) schedulePreviewLoading.value = false
@@ -2906,18 +2596,11 @@ function parseDebugInput(): Record<string, unknown> {
     throw new Error(ui('argv JSON 必须是数组', 'argv JSON must be an array'))
   }
   if (!datapoints || typeof datapoints !== 'object' || Array.isArray(datapoints)) {
-    throw new Error(
-      ui('数据点模拟快照 JSON 必须是对象', 'Data point snapshot JSON must be an object'),
-    )
+    throw new Error(ui('数据点模拟快照 JSON 必须是对象', 'Data point snapshot JSON must be an object'))
   }
   for (const [alias, snapshot] of Object.entries(datapoints)) {
     if (!isDebugDatapointSnapshot(snapshot)) {
-      throw new Error(
-        ui(
-          `数据点“${alias}”必须使用包含 value 的快照对象`,
-          `Data point “${alias}” must use a snapshot object containing value`,
-        ),
-      )
+      throw new Error(ui(`数据点“${alias}”必须使用包含 value 的快照对象`, `Data point “${alias}” must use a snapshot object containing value`))
     }
   }
   return { argv, datapoints }
@@ -3156,23 +2839,13 @@ function validateDatapointVariableAliases() {
     if (!isValidVariableName(alias, activeDraft.value.lang)) {
       activePanel.value = 'variables'
       panelCollapsed.value = false
-      ElMessage.warning(
-        ui(
-          `数据点变量“${alias || row.path}”名称无效`,
-          `Invalid data point variable name: “${alias || row.path}”`,
-        ),
-      )
+      ElMessage.warning(ui(`数据点变量“${alias || row.path}”名称无效`, `Invalid data point variable name: “${alias || row.path}”`))
       return false
     }
     if (seen.has(alias)) {
       activePanel.value = 'variables'
       panelCollapsed.value = false
-      ElMessage.warning(
-        ui(
-          `当前计算单元中存在重复变量名“${alias}”`,
-          `Duplicate variable name in this compute unit: “${alias}”`,
-        ),
-      )
+      ElMessage.warning(ui(`当前计算单元中存在重复变量名“${alias}”`, `Duplicate variable name in this compute unit: “${alias}”`))
       return false
     }
     seen.add(alias)

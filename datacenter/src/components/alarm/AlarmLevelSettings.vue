@@ -17,10 +17,7 @@
 
     <section class="alarm-levels__section">
       <div class="alarm-levels__level-head" aria-hidden="true">
-        <span>{{ t('alarmLevels.color') }}</span
-        ><span>{{ t('alarmLevels.displayName') }}</span
-        ><span>{{ t('alarmLevels.key') }}</span
-        ><span>{{ t('alarmLevels.actions') }}</span>
+        <span>{{ t('alarmLevels.color') }}</span><span>{{ t('alarmLevels.displayName') }}</span><span>{{ t('alarmLevels.key') }}</span><span>{{ t('alarmLevels.actions') }}</span>
       </div>
       <div
         v-for="(item, index) in draft.severityDefinitions"
@@ -73,10 +70,7 @@
     </header>
     <section class="alarm-levels__section">
       <div class="alarm-levels__rule-head" aria-hidden="true">
-        <span>{{ t('alarmLevels.enabled') }}</span
-        ><span>{{ t('alarmLevels.currentLevel') }}</span
-        ><span>{{ t('alarmLevels.unacknowledgedSeconds') }}</span
-        ><span>{{ t('alarmLevels.targetLevel') }}</span
+        <span>{{ t('alarmLevels.enabled') }}</span><span>{{ t('alarmLevels.currentLevel') }}</span><span>{{ t('alarmLevels.unacknowledgedSeconds') }}</span><span>{{ t('alarmLevels.targetLevel') }}</span
         ><span></span>
       </div>
       <div v-for="rule in draft.escalationRules" :key="rule.id" class="alarm-levels__rule-row">
@@ -112,11 +106,7 @@
           <IconTablerTrash />
         </button>
       </div>
-      <el-empty
-        v-if="!draft.escalationRules.length"
-        :image-size="42"
-        :description="t('alarmLevels.emptyRules')"
-      />
+      <el-empty v-if="!draft.escalationRules.length" :image-size="42" :description="t('alarmLevels.emptyRules')" />
     </section>
   </div>
 </template>

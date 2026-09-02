@@ -63,8 +63,7 @@ export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
   const inputBindings = asRecord(unit.inputBindings)
   return {
     id: String(unit.id),
-    name:
-      unit.name || (datacenterLocale.value === 'en' ? 'Unnamed Compute Unit' : '未命名计算单元'),
+    name: unit.name || (datacenterLocale.value === 'en' ? 'Unnamed Compute Unit' : '未命名计算单元'),
     folderId: unit.folderId ? String(unit.folderId) : null,
     lang: String(unit.lang || unit.language || 'javascript'),
     status: String(unit.status || (unit.isEnabled === false ? 'disabled' : 'enabled')),

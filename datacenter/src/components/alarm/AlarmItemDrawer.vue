@@ -1,12 +1,7 @@
 <template>
   <DcDrawer v-model="visible" :title="drawerTitle" :width="760" :max="920">
     <template #actions>
-      <button
-        type="button"
-        class="alarm-editor__icon"
-        :title="t('alarmEditor.close')"
-        @click="visible = false"
-      >
+      <button type="button" class="alarm-editor__icon" :title="t('alarmEditor.close')" @click="visible = false">
         <IconTablerX />
       </button>
     </template>
@@ -15,9 +10,7 @@
       <section v-if="item" class="alarm-editor__impact">
         {{ t('alarmEditor.editImpact') }}
         <strong>{{
-          item.mode === 'point'
-            ? item.datapointName || item.path
-            : t('alarmEditor.currentComposite')
+          item.mode === 'point' ? item.datapointName || item.path : t('alarmEditor.currentComposite')
         }}</strong
         >。
       </section>
@@ -25,11 +18,7 @@
       <section class="alarm-editor__context-card">
         <div v-if="showIdentityFields" class="alarm-editor__grid">
           <label v-if="showIdentityFields" class="alarm-editor__field is-wide"
-            ><span>{{
-              draft.mode === 'derived'
-                ? t('alarmEditor.compositeName')
-                : t('alarmEditor.alarmNameOptional')
-            }}</span
+            ><span>{{ draft.mode === 'derived' ? t('alarmEditor.compositeName') : t('alarmEditor.alarmNameOptional') }}</span
             ><el-input
               v-model="draft.displayName"
               maxlength="100"
@@ -39,11 +28,7 @@
 
         <div class="alarm-editor__context-grid">
           <div class="alarm-editor__point-field">
-            <span>{{
-              draft.mode === 'derived'
-                ? t('alarmEditor.compositeInputs')
-                : t('alarmEditor.alarmPoint')
-            }}</span>
+            <span>{{ draft.mode === 'derived' ? t('alarmEditor.compositeInputs') : t('alarmEditor.alarmPoint') }}</span>
             <div v-if="draft.selectedPoints.length" class="alarm-editor__point-compact">
               <div>
                 <strong>{{ pointPreview }}</strong>
@@ -73,13 +58,11 @@
             />
           </label>
           <label class="alarm-editor__field is-switch"
-            ><span>{{ t('alarmEditor.enabled') }}</span
-            ><el-switch v-model="draft.isEnabled"
+            ><span>{{ t('alarmEditor.enabled') }}</span><el-switch v-model="draft.isEnabled"
           /></label>
         </div>
         <label v-if="showIdentityFields" class="alarm-editor__field"
-          ><span>{{ t('alarmEditor.descriptionOptional') }}</span
-          ><el-input v-model="draft.description" maxlength="500"
+          ><span>{{ t('alarmEditor.descriptionOptional') }}</span><el-input v-model="draft.description" maxlength="500"
         /></label>
       </section>
 
@@ -108,13 +91,7 @@
       <section class="alarm-editor__section is-card">
         <div class="alarm-editor__section-head">
           <div>
-            <h3>
-              {{
-                draft.evaluationMode === 'highest_matching'
-                  ? t('alarmEditor.limitLevels')
-                  : t('alarmEditor.alarmCondition')
-              }}
-            </h3>
+            <h3>{{ draft.evaluationMode === 'highest_matching' ? t('alarmEditor.limitLevels') : t('alarmEditor.alarmCondition') }}</h3>
             <p>{{ conditionHint }}</p>
           </div>
           <el-segmented
@@ -136,10 +113,7 @@
           </div>
           <div class="alarm-editor__levels">
             <div class="alarm-editor__level-head" aria-hidden="true">
-              <span>{{ t('alarmEditor.levelName') }}</span
-              ><span>{{ t('alarmEditor.direction') }}</span
-              ><span>{{ t('alarmEditor.threshold') }}</span
-              ><span>{{ t('alarmEditor.severity') }}</span
+              <span>{{ t('alarmEditor.levelName') }}</span><span>{{ t('alarmEditor.direction') }}</span><span>{{ t('alarmEditor.threshold') }}</span><span>{{ t('alarmEditor.severity') }}</span
               ><span></span>
             </div>
             <article
@@ -156,9 +130,7 @@
                 v-model="condition.operator"
                 class="alarm-editor__direction"
                 @change="sortLevels"
-                ><el-option :label="t('alarmEditor.highLimit')" value="gt" /><el-option
-                  :label="t('alarmEditor.lowLimit')"
-                  value="lt"
+                ><el-option :label="t('alarmEditor.highLimit')" value="gt" /><el-option :label="t('alarmEditor.lowLimit')" value="lt"
               /></el-select>
               <el-input-number
                 :model-value="numberParam(condition, 'threshold')"
@@ -186,22 +158,19 @@
               </button>
               <div v-if="advancedVisible" class="alarm-editor__level-advanced">
                 <label
-                  >{{ t('alarmEditor.deadband')
-                  }}<el-input-number
+                  >{{ t('alarmEditor.deadband') }}<el-input-number
                     v-model="condition.deadband"
                     :min="0"
                     controls-position="right"
                 /></label>
                 <label
-                  >{{ t('alarmEditor.triggerDelayMs')
-                  }}<el-input-number
+                  >{{ t('alarmEditor.triggerDelayMs') }}<el-input-number
                     v-model="condition.triggerDelayMs"
                     :min="0"
                     controls-position="right"
                 /></label>
                 <label
-                  >{{ t('alarmEditor.clearDelayMs')
-                  }}<el-input-number
+                  >{{ t('alarmEditor.clearDelayMs') }}<el-input-number
                     v-model="condition.clearDelayMs"
                     :min="0"
                     controls-position="right"
@@ -299,9 +268,7 @@
               @update:model-value="setParam(singleCondition, 'direction', $event)"
               ><el-option :label="t('alarmEditor.riseRate')" value="rise" /><el-option
                 :label="t('alarmEditor.fallRate')"
-                value="fall" /><el-option
-                :label="t('alarmEditor.absoluteRate')"
-                value="absolute" /></el-select
+                value="fall" /><el-option :label="t('alarmEditor.absoluteRate')" value="absolute" /></el-select
             ><el-input-number
               :model-value="numberParam(singleCondition, 'limit')"
               :min="0"
@@ -357,14 +324,13 @@
           /></el-select>
           <div v-if="advancedVisible" class="alarm-editor__level-advanced">
             <label v-if="conditionSupportsDeadband(singleCondition.kind)"
-              >{{ t('alarmEditor.deadband')
-              }}<el-input-number v-model="singleCondition.deadband" :min="0" /></label
+              >{{ t('alarmEditor.deadband') }}<el-input-number v-model="singleCondition.deadband" :min="0" /></label
             ><label v-if="singleCondition.kind !== 'transition'"
-              >{{ t('alarmEditor.triggerDelayMs')
-              }}<el-input-number v-model="singleCondition.triggerDelayMs" :min="0" /></label
+              >{{ t('alarmEditor.triggerDelayMs') }}<el-input-number
+                v-model="singleCondition.triggerDelayMs"
+                :min="0" /></label
             ><label
-              >{{ t('alarmEditor.clearDelayMs')
-              }}<el-input-number v-model="singleCondition.clearDelayMs" :min="0"
+              >{{ t('alarmEditor.clearDelayMs') }}<el-input-number v-model="singleCondition.clearDelayMs" :min="0"
             /></label>
           </div>
         </article>
@@ -383,22 +349,14 @@
           <label class="alarm-editor__field"
             ><span>{{ t('alarmEditor.notification') }}</span
             ><el-select v-model="draft.notification.mode" @change="changeNotificationMode"
-              ><el-option
-                :label="t('alarmEditor.inheritNotifications')"
-                value="inherit" /><el-option
+              ><el-option :label="t('alarmEditor.inheritNotifications')" value="inherit" /><el-option
                 :label="t('alarmEditor.noNotifications')"
-                value="off" /><el-option
-                :label="t('alarmEditor.customNotifications')"
-                value="custom" /></el-select
+                value="off" /><el-option :label="t('alarmEditor.customNotifications')" value="custom" /></el-select
           ></label>
           <template v-if="draft.notification.mode === 'custom'"
             ><div class="alarm-editor__checks">
-              <el-checkbox v-model="draft.notification.notifyOnRaise">{{
-                t('alarmEditor.notifyRaise')
-              }}</el-checkbox
-              ><el-checkbox v-model="draft.notification.notifyOnClear">{{
-                t('alarmEditor.notifyClear')
-              }}</el-checkbox>
+              <el-checkbox v-model="draft.notification.notifyOnRaise">{{ t('alarmEditor.notifyRaise') }}</el-checkbox
+              ><el-checkbox v-model="draft.notification.notifyOnClear">{{ t('alarmEditor.notifyClear') }}</el-checkbox>
             </div>
             <label class="alarm-editor__field"
               ><span>{{ t('alarmEditor.channels') }}</span
@@ -414,20 +372,14 @@
 
       <section class="alarm-editor__section is-card is-collapsible">
         <button type="button" class="alarm-editor__collapse" @click="debugVisible = !debugVisible">
-          <span>{{ t('alarmEditor.debug') }}</span
-          ><IconTablerChevronDown :class="{ 'is-open': debugVisible }" />
+          <span>{{ t('alarmEditor.debug') }}</span><IconTablerChevronDown :class="{ 'is-open': debugVisible }" />
         </button>
         <div v-if="debugVisible" class="alarm-editor__debug">
           <div class="alarm-editor__trial-table">
             <div class="alarm-editor__trial-row is-head">
               <span>{{ t('alarmEditor.offsetMs') }}</span
-              ><span>{{
-                draft.mode === 'derived' ? t('alarmEditor.inputJson') : t('alarmEditor.value')
-              }}</span
-              ><span>{{ t('alarmEditor.quality') }}</span
-              ><span>{{ t('alarmEditor.offline') }}</span
-              ><span>{{ t('alarmEditor.sourceTime') }}</span
-              ><span></span>
+              ><span>{{ draft.mode === 'derived' ? t('alarmEditor.inputJson') : t('alarmEditor.value') }}</span
+              ><span>{{ t('alarmEditor.quality') }}</span><span>{{ t('alarmEditor.offline') }}</span><span>{{ t('alarmEditor.sourceTime') }}</span><span></span>
             </div>
             <div v-for="row in trialRows" :key="row.id" class="alarm-editor__trial-row">
               <el-input-number v-model="row.offsetMs" :min="0" controls-position="right" />
@@ -444,9 +396,7 @@
               /></el-select>
               <el-checkbox v-model="row.offline" />
               <div class="alarm-editor__source-time">
-                <el-checkbox v-model="row.hasSourceTimestamp">{{
-                  t('alarmEditor.yes')
-                }}</el-checkbox>
+                <el-checkbox v-model="row.hasSourceTimestamp">{{ t('alarmEditor.yes') }}</el-checkbox>
                 <el-input-number
                   v-model="row.sourceAgeMs"
                   :disabled="!row.hasSourceTimestamp"
@@ -486,19 +436,12 @@
           <div v-if="trialResult" class="alarm-editor__trial-result">
             <div class="alarm-editor__trial-result-head">
               <strong>{{ t('alarmEditor.trialProcess') }}</strong>
-              <span>{{
-                trialResult.triggered ? t('alarmEditor.finalAlarm') : t('alarmEditor.finalNormal')
-              }}</span>
+              <span>{{ trialResult.triggered ? t('alarmEditor.finalAlarm') : t('alarmEditor.finalNormal') }}</span>
             </div>
             <div class="alarm-editor__result-table">
               <div class="alarm-editor__result-row is-head">
-                <span>{{ t('alarmEditor.time') }}</span
-                ><span>{{ t('alarmEditor.evaluation') }}</span
-                ><span>{{ t('alarmEditor.status') }}</span
-                ><span>{{ t('alarmEditor.activeLevel') }}</span
-                ><span>{{ t('alarmEditor.candidateLevel') }}</span
-                ><span>{{ t('alarmEditor.remainingDelay') }}</span
-                ><span>{{ t('alarmEditor.details') }}</span>
+                <span>{{ t('alarmEditor.time') }}</span><span>{{ t('alarmEditor.evaluation') }}</span><span>{{ t('alarmEditor.status') }}</span><span>{{ t('alarmEditor.activeLevel') }}</span
+                ><span>{{ t('alarmEditor.candidateLevel') }}</span><span>{{ t('alarmEditor.remainingDelay') }}</span><span>{{ t('alarmEditor.details') }}</span>
               </div>
               <div
                 v-for="(step, index) in trialResult.steps"
@@ -522,8 +465,7 @@
       </section>
 
       <footer class="alarm-editor__footer">
-        <button type="button" class="alarm-editor__cancel" @click="visible = false">
-          {{ t('alarmEditor.cancel') }}</button
+        <button type="button" class="alarm-editor__cancel" @click="visible = false">{{ t('alarmEditor.cancel') }}</button
         ><button type="submit" class="alarm-editor__primary" :disabled="saving">
           <IconTablerDeviceFloppy />{{ saveButtonText }}
         </button>
@@ -629,11 +571,7 @@ async function requestClose() {
   const discard = await ElMessageBox.confirm(
     t('alarmEditor.discardConfirm'),
     t('alarmEditor.closeEditor'),
-    {
-      confirmButtonText: t('alarmEditor.discard'),
-      cancelButtonText: t('alarmEditor.continueEdit'),
-      type: 'warning',
-    },
+    { confirmButtonText: t('alarmEditor.discard'), cancelButtonText: t('alarmEditor.continueEdit'), type: 'warning' },
   )
     .then(() => true)
     .catch(() => false)
@@ -675,10 +613,9 @@ const { definitions: severityDefinitions, loadDefinitions } = useAlarmLevelDefin
 const severityOptions = computed(() =>
   severityDefinitions.value.map((item) => ({
     value: item.key,
-    label:
-      datacenterLocale.value === 'en' && ['info', 'warning', 'major', 'critical'].includes(item.key)
-        ? t(`alarm.severities.${item.key}`)
-        : item.displayName,
+    label: datacenterLocale.value === 'en' && ['info', 'warning', 'major', 'critical'].includes(item.key)
+      ? t(`alarm.severities.${item.key}`)
+      : item.displayName,
   })),
 )
 const evaluationOptions = computed(() => [
@@ -693,11 +630,7 @@ const drawerTitle = computed(() =>
       : t('alarmEditor.newAlarm'),
 )
 const saveButtonText = computed(() =>
-  props.saving
-    ? t('alarmEditor.saving')
-    : props.item
-      ? t('alarmEditor.saveChanges')
-      : t('alarmEditor.createAlarm'),
+  props.saving ? t('alarmEditor.saving') : props.item ? t('alarmEditor.saveChanges') : t('alarmEditor.createAlarm'),
 )
 const enabledChannels = computed(() => props.channels.filter((channel) => channel.isEnabled))
 const isNumericPoint = computed(
@@ -733,8 +666,7 @@ const canManagePoints = computed(
   () => draft.value.mode === 'derived' || (!props.item && !isFixedPointCreate.value),
 )
 const selectedPointPath = computed(() => {
-  if (draft.value.selectedPoints.length !== 1)
-    return t('alarmEditor.pointCount', { count: selectedPointCount.value })
+  if (draft.value.selectedPoints.length !== 1) return t('alarmEditor.pointCount', { count: selectedPointCount.value })
   return draft.value.selectedPoints[0]?.path || ''
 })
 const conditionHint = computed(() =>
@@ -824,10 +756,7 @@ function setThreshold(condition: AlarmCondition, value: number | undefined) {
 }
 function changeSingleKind(kind: AlarmConditionKind) {
   draft.value.conditions = [
-    createAlarmCondition(
-      kind,
-      draft.value.mode === 'derived' ? t('alarmEditor.resultCondition') : '',
-    ),
+    createAlarmCondition(kind, draft.value.mode === 'derived' ? t('alarmEditor.resultCondition') : ''),
   ]
 }
 function setParam(condition: AlarmCondition, key: string, value: unknown) {
@@ -900,8 +829,7 @@ function operatorOptions(kind: AlarmConditionKind) {
 }
 
 function localValidate() {
-  if (draft.value.mode === 'derived' && !draft.value.displayName.trim())
-    return t('alarmEditor.validations.compositeName')
+  if (draft.value.mode === 'derived' && !draft.value.displayName.trim()) return t('alarmEditor.validations.compositeName')
   if (!selectedPointCount.value) return t('alarmEditor.validations.selectPoint')
   if (draft.value.mode === 'point' && !compatibleAlarmPoints(draft.value.selectedPoints))
     return t('alarmEditor.validations.incompatible')
@@ -950,11 +878,7 @@ async function submit() {
       await ElMessageBox.alert(
         `${conflict.message}${conflictPreview ? `：${conflictSuffix}` : ''}`,
         t('alarmEditor.cannotSave'),
-        {
-          confirmButtonText: conflict.conflictAlarmItemId
-            ? t('alarmEditor.openExisting')
-            : t('alarmEditor.understood'),
-        },
+        { confirmButtonText: conflict.conflictAlarmItemId ? t('alarmEditor.openExisting') : t('alarmEditor.understood') },
       )
       if (conflict.conflictAlarmItemId) emit('open-conflict', conflict.conflictAlarmItemId)
       return
@@ -966,16 +890,9 @@ async function submit() {
       const total = warningPoints.length || validation.warnings.length
       const preview = warningPoints.slice(0, 5).join('、')
       await ElMessageBox.confirm(
-        t('alarmEditor.conflictConfirm', {
-          count: total,
-          preview: preview ? ` (${preview}${total > 5 ? '…' : ''})` : '',
-        }),
+        t('alarmEditor.conflictConfirm', { count: total, preview: preview ? ` (${preview}${total > 5 ? '…' : ''})` : '' }),
         t('alarmEditor.conflictTitle'),
-        {
-          confirmButtonText: t('alarmEditor.confirmSave'),
-          cancelButtonText: t('alarmEditor.returnEdit'),
-          type: 'warning',
-        },
+        { confirmButtonText: t('alarmEditor.confirmSave'), cancelButtonText: t('alarmEditor.returnEdit'), type: 'warning' },
       )
       payload = {
         ...payload,
@@ -1096,9 +1013,7 @@ function trialStateLabel(value: AlarmTrialResult['steps'][number]['state']) {
 }
 function trialReasonLabel(reason: string, rate?: number | null) {
   const base = t(`alarmEditor.reasons.${reason}`)
-  return typeof rate === 'number'
-    ? t('alarmEditor.rateDetail', { reason: base, rate: rate.toFixed(4) })
-    : base
+  return typeof rate === 'number' ? t('alarmEditor.rateDetail', { reason: base, rate: rate.toFixed(4) }) : base
 }
 </script>
 
