@@ -44,7 +44,7 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			"tenantId": context.TenantID, "siteId": context.EnvironmentID, "nodeId": workload.NodeID,
 			"instanceId": "if-" + role + "-" + stableRuntimeKey(context.DeploymentID, fmt.Sprint(workload.Generation)),
 			"projectId":  context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
-			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/work/artifact", "artifactFile": "runtime-project-artifact.json",
+			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/opt/induforge/release/runtime-artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, key, context.Support),
 			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
 		},

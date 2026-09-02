@@ -210,7 +210,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: work, mountPath: /work}`, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage)
 		runtimeArgs = `
           command: ["runtime-engine"]
-          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/artifact", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
+          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/opt/induforge/release/runtime-artifact", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18080"]`
 		runtimeMounts = `
             - {name: runtime-secrets, mountPath: /work/bundle/secrets, readOnly: true}`
 		runtimeVolumes = fmt.Sprintf(`

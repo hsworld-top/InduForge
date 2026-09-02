@@ -53,7 +53,7 @@ func Prepare(in Input) error {
 	if err := validateInput(in); err != nil {
 		return err
 	}
-	if in.Binding.ArtifactMountPath != in.ArtifactDir || in.Binding.ArtifactFile != "runtime-project-artifact.json" {
+	if in.Binding.ArtifactMountPath != "/opt/induforge/release/runtime-artifact" || in.Binding.ArtifactFile != "runtime-project-artifact.json" {
 		return fmt.Errorf("项目制品目标与配置不一致")
 	}
 	f, err := os.Open(in.RuntimeArtifactPath)
