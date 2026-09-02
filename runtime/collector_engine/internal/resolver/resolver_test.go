@@ -66,3 +66,18 @@ func TestResolveNATSAcceptsProjectedSecretLinkOnlyWithinIndexDirectory(t *testin
 		t.Fatal("escaped Secret link must be rejected")
 	}
 }
+
+func TestResolveNATSAcceptsMinimalTokenCredential(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "nats.json"), []byte(`{"schemaVersion":"nats-credential.v1","authType":"token","token":"hidden"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	resource, _ := json.Marshal(map[string]string{"url": "nats://127.0.0.1:4222", "accountId": "account-a"})
+	r, err := New(&loader.Loaded{Index: loader.Index{Resources: map[string]json.RawMessage{"site-resource://site/nats": resource}, Secrets: map[string]string{"secret://site/nats": "nats.json"}}, IndexDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ResolveNATS(context.Background(), "site-resource://site/nats", "secret://site/nats", "account-a"); err != nil {
+		t.Fatalf("minimal token credential must be accepted: %v", err)
+	}
+}

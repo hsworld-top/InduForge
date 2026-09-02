@@ -54,7 +54,7 @@ func (r *Resolver) ResolveNATS(_ context.Context, resourceRef, secretRef, accoun
 		Username      string `json:"username"`
 		Password      string `json:"password"`
 	}
-	if !strict(secret, &credential, "schemaVersion", "authType", "token", "username", "password") || credential.SchemaVersion != "nats-credential.v1" {
+	if !strictNATSCredential(secret, &credential) || credential.SchemaVersion != "nats-credential.v1" {
 		return NATSConnection{}, errors.New("NATS credential 不可用")
 	}
 	var opts []nats.Option
@@ -73,6 +73,24 @@ func (r *Resolver) ResolveNATS(_ context.Context, resourceRef, secretRef, accoun
 		return NATSConnection{}, errors.New("NATS credential 不可用")
 	}
 	return NATSConnection{URL: resource.URL, Options: opts}, nil
+}
+func strictNATSCredential(raw []byte, target any) bool {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if d.Decode(target) != nil || d.Decode(&struct{}{}) != io.EOF {
+		return false
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(raw, &obj) != nil {
+		return false
+	}
+	if _, ok := obj["schemaVersion"]; !ok {
+		return false
+	}
+	if _, ok := obj["authType"]; !ok {
+		return false
+	}
+	return len(obj) == 3 || len(obj) == 5
 }
 func (r *Resolver) ResolveModbus(_ context.Context, ref string) (ModbusEndpoint, error) {
 	var v struct {
