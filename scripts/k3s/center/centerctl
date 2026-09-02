@@ -52,6 +52,7 @@ require_center_images() {
   available=$(containerd_images)
   for image in \
     "$CONTROL_IMAGE" "$DATA_IMAGE" "$EDGE_IMAGE" \
+    induforge/compute-sandbox:1.0.0 \
     induforge/designer-code-server:4.131.0-node22-pnpm10.19.0 \
     docker.io/timescale/timescaledb:2.26.4-pg16 \
     docker.io/library/redis:7.2-alpine \
@@ -192,6 +193,27 @@ ensure_data_service_internal_token() {
   printf '\nDATA_SERVICE_INTERNAL_TOKEN=%s\n' "$token" >> "$env_path"
 }
 
+ensure_compute_sandbox_token() {
+  env_path=$1
+  configured=$(sed -n 's/^DATA_SERVICE_COMPUTE_SANDBOX_TOKEN=//p' "$env_path" | tail -n 1)
+  if [ "${#configured}" -ge 24 ]; then
+    return
+  fi
+  # 开发态与沙箱共享同一个仅限集群内部的令牌；升级时沿用既有 Secret，避免重新应用后连接中断。
+  existing=$(kubectl_cmd -n "$NAMESPACE" get secret center-env -o jsonpath='{.data.DATA_SERVICE_COMPUTE_SANDBOX_TOKEN}' 2>/dev/null || true)
+  if [ -n "$existing" ]; then
+    token=$(printf '%s' "$existing" | base64 -d 2>/dev/null || true)
+  else
+    token=
+  fi
+  if [ "${#token}" -lt 24 ]; then
+    token=$(openssl rand -hex 32)
+  fi
+  sed -i.bak '/^DATA_SERVICE_COMPUTE_SANDBOX_TOKEN=/d' "$env_path"
+  rm -f "$env_path.bak"
+  printf '\nDATA_SERVICE_COMPUTE_SANDBOX_TOKEN=%s\n' "$token" >> "$env_path"
+}
+
 render_manifest() {
   validate_settings
   sed \
@@ -236,6 +258,7 @@ apply_center() {
   trap 'rm -rf "$temp_dir"' EXIT INT TERM
   tr -d '\r' < "$env_file" > "$temp_dir/center.env"
   ensure_data_service_internal_token "$temp_dir/center.env"
+  ensure_compute_sandbox_token "$temp_dir/center.env"
   render_manifest > "$temp_dir/center-system.yaml"
 
   kubectl_cmd apply -f "$SCRIPT_DIR/namespace.yaml"
@@ -259,7 +282,7 @@ apply_center() {
   esac
   for workload in \
     statefulset/center-meta-store statefulset/center-cache-store statefulset/center-object-store \
-    deployment/center-data deployment/center-control deployment/center-edge; do
+    deployment/compute-sandbox deployment/center-data deployment/center-control deployment/center-edge; do
     kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
   done
   doctor
@@ -276,6 +299,7 @@ show_summary() {
   for item in \
     'control|center-control|deployment' \
     'data|center-data|deployment' \
+    'compute-sandbox|compute-sandbox|deployment' \
     'edge|center-edge|deployment' \
     'database|center-meta-store|statefulset' \
     'cache|center-cache-store|statefulset' \
@@ -305,7 +329,7 @@ doctor() {
     echo "$unavailable" >&2
     failed=1
   fi
-  for service in center-control center-data; do
+  for service in center-control center-data compute-sandbox; do
     if ! kubectl_cmd -n "$NAMESPACE" get endpointslice \
       -l "kubernetes.io/service-name=$service" \
       -o jsonpath='{.items[0].endpoints[0].conditions.ready}' | grep -q true; then
@@ -326,6 +350,7 @@ show_logs() {
   case "$workload" in
     center-control) container=control ;;
     center-data) container=data ;;
+    compute-sandbox) container=sandbox ;;
     center-edge) container=nginx ;;
     center-meta-store) container=postgres ;;
     center-cache-store) container=redis ;;
@@ -339,7 +364,7 @@ restart_workload() {
   require_root restart
   workload=${1:-}
   case "$workload" in
-    center-control|center-data|center-edge) kubectl_cmd -n "$NAMESPACE" rollout restart "deployment/$workload" ;;
+    center-control|center-data|center-edge|compute-sandbox) kubectl_cmd -n "$NAMESPACE" rollout restart "deployment/$workload" ;;
     center-meta-store|center-cache-store|center-object-store) kubectl_cmd -n "$NAMESPACE" rollout restart "statefulset/$workload" ;;
     *) echo "restart requires a supported center workload" >&2; exit 2 ;;
   esac

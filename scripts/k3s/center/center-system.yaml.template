@@ -315,6 +315,78 @@ roleRef:
 apiVersion: v1
 kind: Service
 metadata:
+  # 计算沙箱仅通过集群 DNS 供 data_service 使用，不映射宿主机端口。
+  name: compute-sandbox
+  namespace: induforge-system
+spec:
+  selector:
+    app.kubernetes.io/name: compute-sandbox
+  ports:
+    - name: http
+      port: 18103
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute-sandbox
+  namespace: induforge-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: compute-sandbox
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: compute-sandbox
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      containers:
+        - name: sandbox
+          image: induforge/compute-sandbox:1.0.0
+          imagePullPolicy: Never
+          env:
+            - name: COMPUTE_SANDBOX_ADDR
+              value: :18103
+            - name: COMPUTE_SANDBOX_RUNTIME_PROFILE
+              value: development
+            - name: COMPUTE_SANDBOX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: DATA_SERVICE_COMPUTE_SANDBOX_TOKEN
+          ports:
+            - name: http
+              containerPort: 18103
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: center-data
   namespace: induforge-system
 spec:
@@ -407,6 +479,8 @@ spec:
               value: "false"
             - name: DATA_SERVICE_ADDR
               value: :18102
+            - name: DATA_SERVICE_COMPUTE_SANDBOX_URL
+              value: http://compute-sandbox:18103
             - name: DATA_SERVICE_INTERNAL_TOKEN
               valueFrom:
                 secretKeyRef:

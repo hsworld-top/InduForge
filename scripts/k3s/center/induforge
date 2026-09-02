@@ -25,8 +25,8 @@ ${BOLD}InduForge 中心开发系统运维${RESET}
 用法：
   induforge status [--json]
   induforge doctor [--json]
-  induforge logs [control|edge|database|cache|object-store]
-  induforge restart <control|edge|database|cache|object-store>
+  induforge logs [control|data|compute-sandbox|edge|database|cache|object-store]
+  induforge restart <control|data|compute-sandbox|edge|database|cache|object-store>
   induforge help
 
 环境变量：
@@ -60,6 +60,8 @@ state_text() {
 service_name() {
   case "$1" in
     control) echo center-control ;;
+    data) echo center-data ;;
+    compute-sandbox) echo compute-sandbox ;;
     edge) echo center-edge ;;
     database) echo center-meta-store ;;
     cache) echo center-cache-store ;;
@@ -71,6 +73,8 @@ service_name() {
 display_name() {
   case "$1" in
     control) echo 控制服务 ;;
+    data) echo 数据服务 ;;
+    compute-sandbox) echo 计算沙箱 ;;
     edge) echo IDE 访问入口 ;;
     database) echo 中心数据库 ;;
     cache) echo 中心缓存 ;;

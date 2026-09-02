@@ -36,6 +36,10 @@ for expected in \
   'image: induforge/data:1.0.0' \
   'image: induforge/edge:1.0.0' \
   'name: center-data' \
+  'name: compute-sandbox' \
+  'image: induforge/compute-sandbox:1.0.0' \
+  'value: http://compute-sandbox:18103' \
+  'key: DATA_SERVICE_COMPUTE_SANDBOX_TOKEN' \
   'name: induforge-center-control-node-labeler' \
   'resources: ["nodes"]' \
   'verbs: ["get", "list", "patch"]' \
@@ -62,7 +66,7 @@ if ! grep -Fq 'shared_preload_libraries=timescaledb' "$temp_dir/rendered.yaml"; 
   echo "center meta store must preload TimescaleDB" >&2
   exit 1
 fi
-if [ "$(grep -Fc 'induforge.io/center-node: "true"' "$temp_dir/rendered.yaml")" -ne 6 ]; then
+if [ "$(grep -Fc 'induforge.io/center-node: "true"' "$temp_dir/rendered.yaml")" -ne 7 ]; then
   echo "not every center workload is pinned to the center node" >&2
   exit 1
 fi
