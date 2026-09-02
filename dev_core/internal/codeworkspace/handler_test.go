@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -85,5 +86,24 @@ func assertCodeWorkspaceResponse(t *testing.T, application *app.App, token, meth
 	var envelope platformapi.Envelope
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || envelope.Code != 0 {
 		t.Fatalf("代码工作区接口响应错误: method=%s path=%s envelope=%+v err=%v", method, path, envelope, err)
+	}
+	var payload struct {
+		Data struct {
+			Services map[string]struct {
+				URL      *string `json:"url"`
+				HostPort *int    `json:"hostPort"`
+			} `json:"services"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if code := payload.Data.Services["code"]; code.HostPort == nil || *code.HostPort != 49152 || ((method == http.MethodGet || strings.HasSuffix(path, "/start")) && code.URL == nil) {
+		t.Fatalf("code 服务契约错误: %+v", code)
+	}
+	for _, name := range []string{"ai", "preview", "previewControl"} {
+		if _, ok := payload.Data.Services[name]; !ok {
+			t.Fatalf("缺少 %s 服务", name)
+		}
 	}
 }

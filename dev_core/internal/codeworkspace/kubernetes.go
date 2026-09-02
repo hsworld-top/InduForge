@@ -88,12 +88,19 @@ func (k *KubernetesEngine) Inspect(ctx context.Context, name string) (ContainerS
 	var service struct {
 		Spec struct {
 			Ports []struct {
-				NodePort int `json:"nodePort"`
+				Name     string `json:"name"`
+				NodePort int    `json:"nodePort"`
 			} `json:"ports"`
 		} `json:"spec"`
 	}
-	if err := k.request(ctx, http.MethodGet, "/api/v1/namespaces/"+k.namespace+"/services/"+name, nil, &service); err == nil && len(service.Spec.Ports) > 0 && service.Spec.Ports[0].NodePort > 0 {
-		state.HostPort = fmt.Sprint(service.Spec.Ports[0].NodePort)
+	if err := k.request(ctx, http.MethodGet, "/api/v1/namespaces/"+k.namespace+"/services/"+name, nil, &service); err == nil {
+		state.ServicePorts = make(map[string]string, len(service.Spec.Ports))
+		for _, port := range service.Spec.Ports {
+			if port.NodePort > 0 {
+				state.ServicePorts[port.Name] = fmt.Sprint(port.NodePort)
+			}
+		}
+		state.HostPort = state.ServicePorts["code"]
 	}
 	return state, nil
 }
@@ -101,7 +108,12 @@ func (k *KubernetesEngine) Inspect(ctx context.Context, name string) (ContainerS
 func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error {
 	labels := spec.Labels
 	labels["app.kubernetes.io/name"] = spec.Name
-	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"type": "NodePort", "selector": map[string]string{"app.kubernetes.io/name": spec.Name}, "ports": []any{map[string]any{"port": 3000, "targetPort": 3000, "protocol": "TCP"}}}}
+	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"type": "NodePort", "selector": map[string]string{"app.kubernetes.io/name": spec.Name}, "ports": []any{
+		map[string]any{"name": "code", "port": 3000, "targetPort": 3000, "protocol": "TCP"},
+		map[string]any{"name": "ai", "port": 30141, "targetPort": 30141, "protocol": "TCP"},
+		map[string]any{"name": "preview", "port": 5173, "targetPort": 5173, "protocol": "TCP"},
+		map[string]any{"name": "preview-control", "port": 5174, "targetPort": 5174, "protocol": "TCP"},
+	}}}
 	if err := k.request(ctx, http.MethodPost, "/api/v1/namespaces/"+k.namespace+"/services", service, nil); err != nil && !errors.Is(err, ErrContainerConflict) {
 		return err
 	}
@@ -110,7 +122,7 @@ func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error
 		mounts = append(mounts, map[string]any{"name": "workspaces", "mountPath": m.Target, "subPath": m.Subpath, "readOnly": m.ReadOnly})
 		_ = i
 	}
-	pod := map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"nodeSelector": map[string]string{"induforge.io/center-node": "true"}, "securityContext": map[string]any{"fsGroup": 1000}, "containers": []any{map[string]any{"name": "code-workspace", "image": spec.Image, "imagePullPolicy": "Never", "args": spec.Command, "workingDir": spec.WorkingDir, "env": envValues(spec.Environment), "ports": []any{map[string]any{"containerPort": 3000}}, "securityContext": map[string]any{"runAsUser": 1000, "runAsGroup": 1000, "allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}}, "volumeMounts": mounts}}, "volumes": []any{map[string]any{"name": "workspaces", "hostPath": map[string]any{"path": k.workspaceRoot, "type": "Directory"}}}}}
+	pod := map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"nodeSelector": map[string]string{"induforge.io/center-node": "true"}, "securityContext": map[string]any{"fsGroup": 1000}, "containers": []any{map[string]any{"name": "code-workspace", "image": spec.Image, "imagePullPolicy": "Never", "args": spec.Command, "workingDir": spec.WorkingDir, "env": envValues(spec.Environment), "ports": []any{map[string]any{"containerPort": 3000}, map[string]any{"containerPort": 30141}, map[string]any{"containerPort": 5173}, map[string]any{"containerPort": 5174}}, "securityContext": map[string]any{"runAsUser": 1000, "runAsGroup": 1000, "allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}}, "volumeMounts": mounts}}, "volumes": []any{map[string]any{"name": "workspaces", "hostPath": map[string]any{"path": k.workspaceRoot, "type": "Directory"}}}}}
 	if err := k.request(ctx, http.MethodPost, "/api/v1/namespaces/"+k.namespace+"/pods", pod, nil); err != nil {
 		return err
 	}

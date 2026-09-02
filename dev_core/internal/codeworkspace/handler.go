@@ -53,11 +53,37 @@ func (h *Handler) execute(w http.ResponseWriter, r *http.Request, projectID stri
 	if parsedPort, parseErr := strconv.Atoi(status.HostPort); parseErr == nil {
 		hostPort = parsedPort
 	}
-	payload := map[string]any{"containerName": status.ContainerName, "status": status.Status, "hostPort": hostPort, "onlineUsers": status.OnlineUsers}
+	payload := map[string]any{"containerName": status.ContainerName, "status": status.Status, "hostPort": hostPort, "onlineUsers": status.OnlineUsers, "services": workspaceServices(r, status)}
 	if status.Status == "running" && status.HostPort != "" {
 		payload["url"] = codeServerURL(r, status.HostPort)
 	}
 	platformapi.WriteSuccess(w, r, payload)
+}
+
+// workspaceServices 始终返回前端所需的四项服务，避免集群工作区因缺字段被当作断连。
+func workspaceServices(r *http.Request, status Status) map[string]any {
+	port := func(name string) string {
+		if status.ServicePorts != nil && status.ServicePorts[name] != "" {
+			return status.ServicePorts[name]
+		}
+		if name == "code" {
+			return status.HostPort
+		}
+		return ""
+	}
+	service := func(name string) map[string]any {
+		value := port(name)
+		var hostPort any
+		if parsed, err := strconv.Atoi(value); err == nil {
+			hostPort = parsed
+		}
+		var endpoint any
+		if status.Status == "running" && value != "" {
+			endpoint = codeServerURL(r, value)
+		}
+		return map[string]any{"url": endpoint, "hostPort": hostPort}
+	}
+	return map[string]any{"ai": service("ai"), "code": service("code"), "preview": service("preview"), "previewControl": service("preview-control")}
 }
 
 func codeServerURL(r *http.Request, port string) string {

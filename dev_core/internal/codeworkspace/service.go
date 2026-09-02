@@ -34,10 +34,11 @@ type Config struct {
 }
 
 type Status struct {
-	ContainerName string       `json:"containerName"`
-	Status        string       `json:"status"`
-	HostPort      string       `json:"hostPort,omitempty"`
-	OnlineUsers   []OnlineUser `json:"onlineUsers,omitempty"`
+	ContainerName string            `json:"containerName"`
+	Status        string            `json:"status"`
+	HostPort      string            `json:"hostPort,omitempty"`
+	ServicePorts  map[string]string `json:"-"`
+	OnlineUsers   []OnlineUser      `json:"onlineUsers,omitempty"`
 }
 
 type OnlineUser struct {
@@ -232,7 +233,7 @@ func (s *Service) inspect(ctx context.Context, projectID string) (Status, error)
 			status = "running"
 		}
 	}
-	return Status{ContainerName: containerName(projectID), Status: status, HostPort: state.HostPort}, nil
+	return Status{ContainerName: containerName(projectID), Status: status, HostPort: state.HostPort, ServicePorts: state.ServicePorts}, nil
 }
 
 func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
