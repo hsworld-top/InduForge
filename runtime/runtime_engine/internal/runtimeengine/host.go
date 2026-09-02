@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/indu-forge/runtime-engine/internal/alarm"
+	"github.com/indu-forge/runtime-engine/internal/command"
 	"github.com/indu-forge/runtime-engine/internal/compute"
 	"github.com/indu-forge/runtime-engine/internal/httpapi"
 	"github.com/indu-forge/runtime-engine/internal/ingress"
@@ -260,11 +261,24 @@ type workerPlan struct {
 	outbox  *outbox.Worker
 	alarm   *alarm.Handler
 	compute *compute.Handler
+	command *command.Consumer
 }
 
 func buildWorkerPlan(loaded *loader.Loaded, store *postgres.Store, natsClient *jetstream.Client, handlers map[string]ingress.PostgresHandler, alarmHandler *alarm.Handler, computeHandler *compute.Handler, health *httpapi.EngineState) (*workerPlan, error) {
 	plan := &workerPlan{store: store, nats: natsClient, alarm: alarmHandler, compute: computeHandler}
 	for _, consumer := range loaded.Config.JetStream.Consumers {
+		if consumer.FilterSubject == "compute.command.>" {
+			token, ok := roleToken(loaded.Config, "compute")
+			if !ok || computeHandler == nil {
+				return nil, errors.New("command worker invalid")
+			}
+			commandConsumer, err := command.New(loaded.Config, consumer, postgres.ConsumerRoleToken{OwnerID: token.OwnerID, Epoch: token.Epoch}, store, computeHandler)
+			if err != nil {
+				return nil, err
+			}
+			plan.command = commandConsumer
+			continue
+		}
 		handler := handlers[consumer.Role]
 		token, ok := roleToken(loaded.Config, consumer.Role)
 		if !ok || handler == nil {
@@ -288,6 +302,13 @@ func (h *Host) startWorkers(intake, work context.Context, loaded *loader.Loaded,
 		h.launch(work, func() {
 			if err := runner.RunWithDrain(intake, work, plan.nats, 32, 5*time.Second); err != nil {
 				h.workerFatal("INGRESS_FATAL")
+			}
+		})
+	}
+	if plan.command != nil {
+		h.launch(work, func() {
+			if err := plan.command.Run(intake, work, plan.nats); err != nil && intake.Err() == nil {
+				h.workerFatal("COMMAND_FATAL")
 			}
 		})
 	}

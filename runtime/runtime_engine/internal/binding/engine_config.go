@@ -142,7 +142,9 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 			ServerResourceRef:   input.ComputeSandbox.ServerResourceRef,
 			CredentialSecretRef: input.ComputeSandbox.CredentialSecretRef,
 		}
-		config.ProducerAssignments = make([]model.ProducerAssignment, 0, len(input.ComputeProducers))
+		// 人工命令由 Runtime API producer fence 保护；compute 输出仍使用各单元
+		// 自己的 producer fence。两者必须同时下发，不能以 append 覆盖 manual。
+		config.ProducerAssignments = append([]model.ProducerAssignment(nil), config.ProducerAssignments...)
 		for _, producer := range input.ComputeProducers {
 			config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{
 				ProducerType: "compute",

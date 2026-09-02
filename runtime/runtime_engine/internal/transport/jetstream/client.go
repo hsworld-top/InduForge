@@ -144,7 +144,7 @@ func (c *Client) ValidateStreamsAndConsumers(ctx context.Context, config model.E
 	// not merely verify that configured consumers exist: enumerate every
 	// server-side durable and reject additions (including stale query/coord
 	// consumers) before any worker or assignment is activated.
-	for _, streamName := range []string{config.JetStream.DataRawStream, config.JetStream.DataDerivedStream} {
+	for _, streamName := range []string{config.JetStream.DataRawStream, config.JetStream.DataDerivedStream, config.JetStream.CommandStream} {
 		stream, err := c.js.Stream(ctx, streamName)
 		if err != nil {
 			return errors.New("JetStream consumer stream 不可用")
@@ -178,8 +178,8 @@ func (c *Client) ValidateStreamsAndConsumers(ctx context.Context, config model.E
 }
 
 func expectedDurableNames(config model.EngineConfig, streamName string) ([]string, error) {
-	if streamName != config.JetStream.DataRawStream && streamName != config.JetStream.DataDerivedStream {
-		return nil, errors.New("仅允许校验 data stream durable")
+	if streamName != config.JetStream.DataRawStream && streamName != config.JetStream.DataDerivedStream && streamName != config.JetStream.CommandStream {
+		return nil, errors.New("仅允许校验 data/command stream durable")
 	}
 	seen := map[string]struct{}{}
 	expected := make([]string, 0, len(config.JetStream.Consumers))

@@ -26,7 +26,7 @@ func TestBuildEngineConfigComputeBuildsV2WithoutSecretValues(t *testing.T) {
 	if config.ComputeSandbox == nil || config.ComputeSandbox.ServerResourceRef != input.ComputeSandbox.ServerResourceRef || config.ComputeSandbox.CredentialSecretRef != input.ComputeSandbox.CredentialSecretRef {
 		t.Fatalf("compute sandbox reference mismatch: %+v", config.ComputeSandbox)
 	}
-	if len(config.ProducerAssignments) != 1 || config.ProducerAssignments[0].ProducerType != "compute" || config.ProducerAssignments[0].ComputeID != "44444444-4444-4444-8444-444444444444" {
+	if len(config.ProducerAssignments) != 2 || config.ProducerAssignments[0].ProducerType != "manual" || config.ProducerAssignments[1].ProducerType != "compute" || config.ProducerAssignments[1].ComputeID != "44444444-4444-4444-8444-444444444444" {
 		t.Fatalf("compute producer mismatch: %+v", config.ProducerAssignments)
 	}
 

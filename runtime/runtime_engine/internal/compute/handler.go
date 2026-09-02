@@ -85,6 +85,23 @@ func NewPostgresHandler(artifact model.ProjectArtifact, config model.EngineConfi
 }
 func (h *Handler) PostgresHandler() ingress.PostgresHandler { return h.HandlePostgres }
 
+// ExecuteManual 在命令消费者已完成部署、账户、fence 与去重校验的同一事务中执行。
+// 手工运行只接受 Artifact 明确声明 manual trigger 的已启用计算单元。
+func (h *Handler) ExecuteManual(ctx context.Context, tx *postgres.BusinessTx, computeID, commandEventID string, occurredAt time.Time) error {
+	if h == nil || tx == nil || occurredAt.IsZero() || commandEventID == "" {
+		return errors.New("manual compute 命令非法")
+	}
+	unit, exists := h.units[computeID]
+	if !exists || !unit.Enabled || unit.Trigger.Kind != "manual" {
+		return errors.New("计算单元不允许手工运行")
+	}
+	producer, assigned := h.producers[computeID]
+	if !assigned || producer.Role != "compute" {
+		return errors.New("计算单元 producer 未绑定")
+	}
+	return h.executeAndQueue(ctx, tx, unit, producer, ingress.ValidatedMessage{Event: ingress.Event{EventID: commandEventID, SourceTimestamp: occurredAt.UTC().Format(time.RFC3339Nano)}, OccurredAt: occurredAt.UTC()})
+}
+
 func (h *Handler) HandlePostgres(ctx context.Context, tx *postgres.BusinessTx, message ingress.ValidatedMessage) error {
 	if h == nil || tx == nil || message.Consumer.Role != "compute" {
 		return errors.New("compute role fence 不匹配")

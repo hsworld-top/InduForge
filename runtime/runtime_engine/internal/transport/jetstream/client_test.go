@@ -15,7 +15,7 @@ import (
 	js "github.com/nats-io/nats.go/jetstream"
 )
 
-func TestSixConfiguredConsumersRequireExactDurablePullSettings(t *testing.T) {
+func TestSevenConfiguredConsumersRequireExactDurablePullSettings(t *testing.T) {
 	var config model.EngineConfig
 	bytes, err := os.ReadFile(filepath.Join("../../../../../contracts/runtime/fixtures", "runtime-engine-config.valid.json"))
 	if err != nil {
@@ -24,7 +24,7 @@ func TestSixConfiguredConsumersRequireExactDurablePullSettings(t *testing.T) {
 	if err := json.Unmarshal(bytes, &config); err != nil {
 		t.Fatal(err)
 	}
-	if len(config.JetStream.Consumers) != 6 {
+	if len(config.JetStream.Consumers) != 7 {
 		t.Fatalf("fixture consumer count=%d", len(config.JetStream.Consumers))
 	}
 	for _, consumer := range config.JetStream.Consumers {
