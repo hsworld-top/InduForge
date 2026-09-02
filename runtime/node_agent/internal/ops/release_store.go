@@ -100,8 +100,21 @@ type releaseChecksums struct {
 }
 
 type releaseArtifactForVerification struct {
-	File     string `json:"file"`
-	Checksum string `json:"checksum"`
+	File                 string          `json:"file"`
+	Checksum             string          `json:"checksum"`
+	SourceSnapshot       json.RawMessage `json:"sourceSnapshot,omitempty"`
+	SourceSnapshotSHA256 string          `json:"sourceSnapshotSha256,omitempty"`
+}
+
+// collectorSourceSnapshotForVerification 是开发制品内采集快照的最小受信结构。
+// 节点只接受签名清单中与工件摘要一致的快照，避免为兼容新字段而放宽严格 JSON 校验。
+type collectorSourceSnapshotForVerification struct {
+	SchemaVersion    string          `json:"schemaVersion"`
+	ProjectID        string          `json:"projectId"`
+	ArtifactRevision int64           `json:"artifactRevision"`
+	SHA256           string          `json:"sha256"`
+	Size             int             `json:"size"`
+	Artifact         json.RawMessage `json:"artifact"`
 }
 
 type releaseCompatibility struct {
@@ -494,8 +507,34 @@ func (i *ReleaseInstaller) verifyRelease(root string, input ReleaseInstallInput)
 		if err := verifyManifestArtifact(*manifest.Artifacts.Collector, optionalCollectorPayload, declared); err != nil {
 			return err
 		}
+		if err := verifyCollectorSourceSnapshot(*manifest.Artifacts.Collector, manifest.ProjectID); err != nil {
+			return err
+		}
 	} else if _, exists := declared[optionalCollectorPayload]; exists {
 		return errors.New("Release 包含 collector 产物，但 manifest 未声明")
+	}
+	return nil
+}
+
+func verifyCollectorSourceSnapshot(artifact releaseArtifactForVerification, projectID string) error {
+	// 生产早期 Release 可以没有开发快照；一旦声明则必须完整且可校验。
+	if len(artifact.SourceSnapshot) == 0 && artifact.SourceSnapshotSHA256 == "" {
+		return nil
+	}
+	if len(artifact.SourceSnapshot) == 0 || len(artifact.SourceSnapshot) > 16<<20 || !validSHA256(artifact.SourceSnapshotSHA256) {
+		return errors.New("Release collector sourceSnapshot 无效")
+	}
+	if digestBytes(artifact.SourceSnapshot) != artifact.SourceSnapshotSHA256 {
+		return errors.New("Release collector sourceSnapshot 摘要不匹配")
+	}
+	var snapshot collectorSourceSnapshotForVerification
+	if err := strictDecodeJSON(artifact.SourceSnapshot, &snapshot); err != nil {
+		return fmt.Errorf("Release collector sourceSnapshot 格式无效: %w", err)
+	}
+	if snapshot.SchemaVersion != "collector-runtime-artifact.v1" || snapshot.ProjectID != projectID || snapshot.ArtifactRevision < 1 ||
+		snapshot.Size != len(snapshot.Artifact) || len(snapshot.Artifact) == 0 || !json.Valid(snapshot.Artifact) ||
+		snapshot.SHA256 != digestBytes(snapshot.Artifact) {
+		return errors.New("Release collector sourceSnapshot 内容无效")
 	}
 	return nil
 }

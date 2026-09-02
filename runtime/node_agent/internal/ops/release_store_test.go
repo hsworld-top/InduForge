@@ -101,6 +101,19 @@ func TestReleaseInstallerVerifiesAndAtomicallyActivates(t *testing.T) {
 	}
 }
 
+func TestCollectorSourceSnapshotRequiresBoundedSignedStructure(t *testing.T) {
+	payload := []byte(`{}`)
+	snapshot := []byte(`{"schemaVersion":"collector-runtime-artifact.v1","projectId":"` + testReleaseProjectID + `","artifactRevision":1,"sha256":"` + sha256Digest(payload) + `","size":2,"artifact":` + string(payload) + `}`)
+	artifact := releaseArtifactForVerification{SourceSnapshot: snapshot, SourceSnapshotSHA256: sha256Digest(snapshot)}
+	if err := verifyCollectorSourceSnapshot(artifact, testReleaseProjectID); err != nil {
+		t.Fatalf("有效采集快照被拒绝: %v", err)
+	}
+	artifact.SourceSnapshotSHA256 = sha256Digest([]byte("tampered"))
+	if err := verifyCollectorSourceSnapshot(artifact, testReleaseProjectID); err == nil {
+		t.Fatal("篡改快照摘要不应通过")
+	}
+}
+
 func TestReleaseInstallerFailureDoesNotActivate(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
