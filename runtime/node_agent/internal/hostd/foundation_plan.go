@@ -1,6 +1,8 @@
 package hostd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -92,19 +94,32 @@ func foundationNodeName(nodeID string) string {
 	return strings.ToLower(nodeID)
 }
 
+func foundationNATSConfig(secret string) string {
+	return fmt.Sprintf("authorization { token: %s }\nmax_payload: %d\njetstream { store_dir: /data }\n", secret, foundationNATSMaxPayloadBytes)
+}
+
+// foundationConfigHash 只把配置摘要写入 Pod 模板，不能把 token 等 Secret 原文
+// 写入元数据。subPath 挂载不会热更新，摘要变化可受控触发对应 Pod 重建。
+func foundationConfigHash(config string) string {
+	sum := sha256.Sum256([]byte(config))
+	return hex.EncodeToString(sum[:])
+}
+
 func (plan FoundationPlan) RenderManifest(secret string) string {
 	namespace := foundationNamespace(plan.EnvironmentID)
 	objectAccessKey := "if" + secret[:20]
 	objectConfig := fmt.Sprintf(`{"identities":[{"name":"induforge-runtime","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","List","Tagging","Write"]}]}`, objectAccessKey, secret)
+	natsConfig := foundationNATSConfig(secret)
+	natsConfigHash := foundationConfigHash(natsConfig)
 	parts := []string{
 		"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: " + namespace,
 		// Center 控制面仅被授予本环境命名空间的项目工作负载权限；不能取得
 		// ClusterRole 或 K3s 管理员凭据，因此无法越过已登记的运行环境。
 		"apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: induforge-project-reconciler\n  namespace: " + namespace + "\nrules:\n  - apiGroups: [\"apps\"]\n    resources: [\"deployments\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"services\", \"configmaps\", \"secrets\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"pods\", \"events\"]\n    verbs: [\"get\", \"list\", \"watch\"]",
 		"apiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: induforge-project-reconciler\n  namespace: " + namespace + "\nsubjects:\n  - kind: ServiceAccount\n    name: center-control\n    namespace: induforge-system\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: Role\n  name: induforge-project-reconciler",
-		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: foundation-credentials\n  namespace: " + namespace + "\ntype: Opaque\nstringData:\n  postgres-password: " + quoteYAML(secret) + "\n  nats-token: " + quoteYAML(secret) + "\n  redis.conf: " + quoteYAML("requirepass "+secret+"\nappendonly yes\n") + "\n  nats.conf: " + quoteYAML(fmt.Sprintf("authorization { token: %s }\nmax_payload: %d\njetstream { store_dir: /data }\n", secret, foundationNATSMaxPayloadBytes)) + "\n  object-access-key: " + quoteYAML(objectAccessKey) + "\n  object-secret-key: " + quoteYAML(secret) + "\n  s3.json: " + quoteYAML(objectConfig) + "\n  shared-password: " + quoteYAML(secret),
-		renderStatefulSet(namespace, "postgres", "timescale/timescaledb:2.26.4-pg16", plan.Assignments["postgres"], plan.Claims["postgres"], []string{"containerPort: 5432"}, []string{"name: POSTGRES_PASSWORD\n              valueFrom:\n                secretKeyRef:\n                  name: foundation-credentials\n                  key: postgres-password", "name: POSTGRES_DB\n              value: induforge"}, "/var/lib/postgresql/data"),
-		renderStatefulSet(namespace, "redis", "redis:7.2-alpine", plan.Assignments["redis"], plan.Claims["redis"], []string{"containerPort: 6379"}, nil, "/data"),
+		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: foundation-credentials\n  namespace: " + namespace + "\ntype: Opaque\nstringData:\n  postgres-password: " + quoteYAML(secret) + "\n  nats-token: " + quoteYAML(secret) + "\n  redis.conf: " + quoteYAML("requirepass "+secret+"\nappendonly yes\n") + "\n  nats.conf: " + quoteYAML(natsConfig) + "\n  object-access-key: " + quoteYAML(objectAccessKey) + "\n  object-secret-key: " + quoteYAML(secret) + "\n  s3.json: " + quoteYAML(objectConfig) + "\n  shared-password: " + quoteYAML(secret),
+		renderStatefulSet(namespace, "postgres", "timescale/timescaledb:2.26.4-pg16", plan.Assignments["postgres"], plan.Claims["postgres"], []string{"containerPort: 5432"}, []string{"name: POSTGRES_PASSWORD\n              valueFrom:\n                secretKeyRef:\n                  name: foundation-credentials\n                  key: postgres-password", "name: POSTGRES_DB\n              value: induforge"}, "/var/lib/postgresql/data", ""),
+		renderStatefulSet(namespace, "redis", "redis:7.2-alpine", plan.Assignments["redis"], plan.Claims["redis"], []string{"containerPort: 6379"}, nil, "/data", ""),
 		renderStatefulSet(namespace, "emqx", "emqx/emqx:5.6.1", plan.Assignments["emqx"], plan.Claims["emqx"], []string{"containerPort: 1883"}, []string{
 			"name: EMQX_DASHBOARD__DEFAULT_PASSWORD\n              valueFrom:\n                secretKeyRef:\n                  name: foundation-credentials\n                  key: shared-password",
 			"name: EMQX_AUTHENTICATION__1__MECHANISM\n              value: password_based",
@@ -112,9 +127,9 @@ func (plan FoundationPlan) RenderManifest(secret string) string {
 			"name: EMQX_AUTHENTICATION__1__USER_ID_TYPE\n              value: username",
 			"name: EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME\n              value: sha256",
 			"name: EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__SALT_POSITION\n              value: disable",
-		}, "/opt/emqx/data"),
-		renderStatefulSet(namespace, "nats", "nats:2.12.8-alpine", plan.Assignments["nats"], plan.Claims["nats"], []string{"containerPort: 4222"}, nil, "/data"),
-		renderStatefulSet(namespace, "object", "chrislusf/seaweedfs:3.85", plan.Assignments["object"], plan.Claims["object"], []string{"containerPort: 8333"}, nil, "/data"),
+		}, "/opt/emqx/data", ""),
+		renderStatefulSet(namespace, "nats", "nats:2.12.8-alpine", plan.Assignments["nats"], plan.Claims["nats"], []string{"containerPort: 4222"}, nil, "/data", natsConfigHash),
+		renderStatefulSet(namespace, "object", "chrislusf/seaweedfs:3.85", plan.Assignments["object"], plan.Claims["object"], []string{"containerPort: 8333"}, nil, "/data", ""),
 		renderDeployment(namespace, "nginx", "nginx:1.28-alpine", plan.Assignments["nginx"], "80"),
 		renderEMQXCredentialJob(namespace, plan.Assignments["emqx"]),
 	}
@@ -122,7 +137,7 @@ func (plan FoundationPlan) RenderManifest(secret string) string {
 	return strings.ReplaceAll(strings.Join(parts, "\n---\n"), "kubernetes.io/hostname", hostNodeIDLabel) + "\n"
 }
 
-func renderStatefulSet(namespace, name, image, nodeID, claim string, ports, env []string, mountPath string) string {
+func renderStatefulSet(namespace, name, image, nodeID, claim string, ports, env []string, mountPath, configHash string) string {
 	portBlock := ""
 	if len(ports) > 0 {
 		portBlock = "\n          ports:\n            - " + strings.Join(ports, "\n            - ")
@@ -168,7 +183,11 @@ func renderStatefulSet(namespace, name, image, nodeID, claim string, ports, env 
 			volumes += claimVolume
 		}
 	}
-	return fmt.Sprintf("apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: %s\n  namespace: %s\n  labels: {induforge.io/foundation: \"true\", induforge.io/service: %s}\nspec:\n  serviceName: %s\n  replicas: 1\n  selector:\n    matchLabels: {app: %s}\n  template:\n    metadata:\n      labels: {app: %s, induforge.io/foundation: \"true\", induforge.io/service: %s}\n    spec:\n      nodeSelector:\n        kubernetes.io/hostname: %s\n      containers:\n        - name: %s\n          image: %s\n          imagePullPolicy: Never%s%s%s\n          readinessProbe:\n            tcpSocket: {port: %s}\n            initialDelaySeconds: 5\n            periodSeconds: 5\n            failureThreshold: 6\n          livenessProbe:\n            tcpSocket: {port: %s}\n            initialDelaySeconds: 30\n            periodSeconds: 10\n            failureThreshold: 6\n          volumeMounts:\n            - name: data\n              mountPath: %s%s%s%s\n---\napiVersion: v1\nkind: Service\nmetadata: {name: %s, namespace: %s}\nspec:\n  selector: {app: %s}\n  ports:\n%s\n", name, namespace, name, name, name, name, name, foundationNodeName(nodeID), name, image, commandBlock, portBlock, envBlock, servicePort(name), servicePort(name), mountPath, volumeExtra, volumes, storage, name, namespace, name, servicePorts)
+	podAnnotations := ""
+	if configHash != "" {
+		podAnnotations = "\n      annotations:\n        induforge.io/config-sha256: " + configHash
+	}
+	return fmt.Sprintf("apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: %s\n  namespace: %s\n  labels: {induforge.io/foundation: \"true\", induforge.io/service: %s}\nspec:\n  serviceName: %s\n  replicas: 1\n  selector:\n    matchLabels: {app: %s}\n  template:\n    metadata:\n      labels: {app: %s, induforge.io/foundation: \"true\", induforge.io/service: %s}%s\n    spec:\n      nodeSelector:\n        kubernetes.io/hostname: %s\n      containers:\n        - name: %s\n          image: %s\n          imagePullPolicy: Never%s%s%s\n          readinessProbe:\n            tcpSocket: {port: %s}\n            initialDelaySeconds: 5\n            periodSeconds: 5\n            failureThreshold: 6\n          livenessProbe:\n            tcpSocket: {port: %s}\n            initialDelaySeconds: 30\n            periodSeconds: 10\n            failureThreshold: 6\n          volumeMounts:\n            - name: data\n              mountPath: %s%s%s%s\n---\napiVersion: v1\nkind: Service\nmetadata: {name: %s, namespace: %s}\nspec:\n  selector: {app: %s}\n  ports:\n%s\n", name, namespace, name, name, name, name, name, podAnnotations, foundationNodeName(nodeID), name, image, commandBlock, portBlock, envBlock, servicePort(name), servicePort(name), mountPath, volumeExtra, volumes, storage, name, namespace, name, servicePorts)
 }
 
 // EMQX 5.6 可以用静态配置创建内置数据库认证器，但该版本不支持在配置中
