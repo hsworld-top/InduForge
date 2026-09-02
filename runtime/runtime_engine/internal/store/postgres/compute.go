@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -22,6 +23,60 @@ type ComputeInputSnapshot struct {
 type ComputeInputResult struct {
 	Applied bool
 	Version int64
+}
+
+type ComputeCommandAudit struct {
+	DeploymentID, CommandID, ComputeID, RequestedBy, IdempotencyKey, Status string
+	RequestedAt                                                             time.Time
+	BindingEpoch, ResultVersion                                             int64
+	ResultEventIDs                                                          json.RawMessage
+	FailureCode                                                             string
+}
+
+// QueueComputeCommand 由 Runtime API 在发布前写入；同 idempotencyKey 的重试返回
+// 原记录，调用者据此禁止发布第二条命令。
+func (s *Store) QueueComputeCommand(ctx context.Context, audit ComputeCommandAudit) (ComputeCommandAudit, bool, error) {
+	if s == nil || s.pool == nil || !validCommandAudit(audit) || audit.Status != "queued" {
+		return ComputeCommandAudit{}, false, ErrInvalidInput
+	}
+	var existing ComputeCommandAudit
+	err := s.pool.QueryRow(ctx, `INSERT INTO runtime_engine.compute_command_audit(deployment_id,command_id,compute_id,requested_by,requested_at,binding_epoch,idempotency_key,status)
+VALUES ($1,$2::uuid,$3::uuid,$4,$5,$6,$7,'queued')
+ON CONFLICT (deployment_id,idempotency_key) DO NOTHING
+RETURNING deployment_id,command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,result_event_ids,result_version,COALESCE(failure_code,'')`, audit.DeploymentID, audit.CommandID, audit.ComputeID, audit.RequestedBy, audit.RequestedAt.UTC(), audit.BindingEpoch, audit.IdempotencyKey).Scan(&existing.DeploymentID, &existing.CommandID, &existing.ComputeID, &existing.RequestedBy, &existing.RequestedAt, &existing.BindingEpoch, &existing.IdempotencyKey, &existing.Status, &existing.ResultEventIDs, &existing.ResultVersion, &existing.FailureCode)
+	if err == nil {
+		return existing, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return ComputeCommandAudit{}, false, err
+	}
+	err = s.pool.QueryRow(ctx, `SELECT deployment_id,command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,result_event_ids,result_version,COALESCE(failure_code,'') FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND idempotency_key=$2`, audit.DeploymentID, audit.IdempotencyKey).Scan(&existing.DeploymentID, &existing.CommandID, &existing.ComputeID, &existing.RequestedBy, &existing.RequestedAt, &existing.BindingEpoch, &existing.IdempotencyKey, &existing.Status, &existing.ResultEventIDs, &existing.ResultVersion, &existing.FailureCode)
+	return existing, false, err
+}
+
+func (s *Store) SetComputeCommandStatus(ctx context.Context, deploymentID, commandID, status, failureCode string) error {
+	if s == nil || s.pool == nil || deploymentID == "" || !canonicalPointUUID.MatchString(commandID) || (status != "running" && status != "succeeded" && status != "failed") || (status == "failed") != (failureCode != "") {
+		return ErrInvalidInput
+	}
+	var previous string
+	err := s.pool.QueryRow(ctx, `UPDATE runtime_engine.compute_command_audit SET status=$3,failure_code=NULLIF($4,''),updated_at=now() WHERE deployment_id=$1 AND command_id=$2::uuid AND ((status='queued' AND $3 IN ('running','failed')) OR (status='running' AND $3 IN ('succeeded','failed')) OR status=$3) RETURNING status`, deploymentID, commandID, status, failureCode).Scan(&previous)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrFenceStale
+	}
+	return err
+}
+
+func (s *Store) ComputeCommandStatus(ctx context.Context, deploymentID, commandID string) (ComputeCommandAudit, error) {
+	if s == nil || s.pool == nil || deploymentID == "" || !canonicalPointUUID.MatchString(commandID) {
+		return ComputeCommandAudit{}, ErrInvalidInput
+	}
+	var audit ComputeCommandAudit
+	err := s.pool.QueryRow(ctx, `SELECT deployment_id,command_id::text,compute_id::text,requested_by,requested_at,binding_epoch,idempotency_key,status,result_event_ids,result_version,COALESCE(failure_code,'') FROM runtime_engine.compute_command_audit WHERE deployment_id=$1 AND command_id=$2::uuid`, deploymentID, commandID).Scan(&audit.DeploymentID, &audit.CommandID, &audit.ComputeID, &audit.RequestedBy, &audit.RequestedAt, &audit.BindingEpoch, &audit.IdempotencyKey, &audit.Status, &audit.ResultEventIDs, &audit.ResultVersion, &audit.FailureCode)
+	return audit, err
+}
+
+func validCommandAudit(a ComputeCommandAudit) bool {
+	return a.DeploymentID != "" && canonicalPointUUID.MatchString(a.CommandID) && canonicalPointUUID.MatchString(a.ComputeID) && a.RequestedBy != "" && !a.RequestedAt.IsZero() && a.BindingEpoch > 0 && len(a.IdempotencyKey) >= 16 && len(a.IdempotencyKey) <= 128
 }
 
 // UpsertComputeInput applies the same fact ordering as point_current, but in
@@ -108,6 +163,40 @@ FROM runtime_engine.compute_input_snapshot WHERE deployment_id=$1 AND compute_id
 		result[id] = value
 	}
 	return result, nil
+}
+
+// RefreshComputeInputsFromCurrent 为手工计算在同一业务事务内读取 point_current
+// 并同步到 compute 输入视图。它拒绝缺失和 bad 质量，避免用陈旧 Artifact 快照运行。
+func (b *BusinessTx) RefreshComputeInputsFromCurrent(ctx context.Context, computeID string, datapointIDs []string) error {
+	if b == nil || b.tx == nil || !canonicalPointUUID.MatchString(computeID) || len(datapointIDs) == 0 {
+		return ErrInvalidInput
+	}
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
+	for _, pointID := range datapointIDs {
+		if !canonicalPointUUID.MatchString(pointID) {
+			return ErrInvalidInput
+		}
+		var input ComputeInputSnapshot
+		err := b.tx.QueryRow(ctx, `SELECT owner_id,epoch,source_timestamp,server_timestamp,sequence,event_id,value,quality
+FROM runtime_engine.point_current WHERE deployment_id=$1 AND point_id=$2::uuid FOR SHARE`, b.deploymentID, pointID).
+			Scan(&input.OwnerID, &input.Epoch, &input.SourceTimestamp, &input.ServerTimestamp, &input.Sequence, &input.EventID, &input.Value, &input.Quality)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("manual compute 输入点位不存在")
+		}
+		if err != nil {
+			return err
+		}
+		if input.Quality == "bad" {
+			return fmt.Errorf("manual compute 输入点位质量为 bad")
+		}
+		input.DeploymentID, input.ComputeID, input.DatapointID, input.ReceivedAt = b.deploymentID, computeID, pointID, input.ServerTimestamp.UTC()
+		if _, err = b.UpsertComputeInput(ctx, input); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type ComputeTriggerState struct {

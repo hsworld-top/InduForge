@@ -156,6 +156,29 @@ CREATE TABLE runtime_engine.compute_input_snapshot (
 CREATE INDEX compute_input_snapshot_event_idx ON runtime_engine.compute_input_snapshot
     (deployment_id, compute_id, event_id);
 
+-- 手工计算命令是跨 API/Engine 的可轮询审计记录。command_id 在 deployment 内
+-- 唯一，状态机只允许 queued -> running -> succeeded/failed，避免重复投递重跑。
+CREATE TABLE runtime_engine.compute_command_audit (
+    deployment_id text NOT NULL CHECK (deployment_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'),
+    command_id uuid NOT NULL,
+    compute_id uuid NOT NULL,
+    requested_by text NOT NULL CHECK (length(requested_by) BETWEEN 1 AND 256),
+    requested_at timestamptz NOT NULL,
+    binding_epoch bigint NOT NULL CHECK (binding_epoch >= 1),
+    idempotency_key text NOT NULL CHECK (length(idempotency_key) BETWEEN 16 AND 128),
+    status text NOT NULL CHECK (status IN ('queued','running','succeeded','failed')),
+    result_event_ids jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(result_event_ids) = 'array'),
+    result_version bigint,
+    failure_code text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (deployment_id, command_id),
+    UNIQUE (deployment_id, idempotency_key),
+    CHECK ((status = 'failed') = (failure_code IS NOT NULL)),
+    CHECK (result_version IS NULL OR result_version > 0)
+);
+CREATE INDEX compute_command_audit_status_idx ON runtime_engine.compute_command_audit (deployment_id, command_id, updated_at DESC);
+
 -- Change/condition debounce is durable.  Keeping last_value here means a
 -- restart cannot turn an old value into a synthetic change edge.
 CREATE TABLE runtime_engine.compute_trigger_state (

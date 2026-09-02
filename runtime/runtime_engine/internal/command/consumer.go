@@ -90,12 +90,26 @@ func (c *Consumer) handle(ctx context.Context, message jetstream.DeliveredMessag
 	if err != nil || requestedAt.Location() != time.UTC {
 		return errors.New("command requestedAt 非法")
 	}
+	audit, err := c.store.ComputeCommandStatus(ctx, command.DeploymentID, command.CommandID)
+	if err != nil {
+		return err
+	}
+	if audit.Status == "succeeded" || audit.Status == "failed" {
+		return nil
+	}
+	if err := c.store.SetComputeCommandStatus(ctx, command.DeploymentID, command.CommandID, "running", ""); err != nil {
+		return err
+	}
 	sum := sha256.Sum256([]byte(command.CommandID))
 	eventID := hex.EncodeToString(sum[:])
 	_, err = c.store.ProcessMessage(ctx, postgres.Message{DeploymentID: c.config.DeploymentID, AccountID: c.config.AccountID, ConsumerKey: c.consumer.ConsumerKey, Role: "compute", Token: c.token, ProducerKey: "runtime-api", ProducerToken: postgres.ProducerToken{OwnerID: manual.OwnerID, Epoch: manual.Epoch}, EventID: eventID, RawBody: message.Body, Subject: message.Subject, CheckpointPosition: int64(message.StreamSequence), DeliveryCount: int(message.DeliveryCount), OccurredAt: message.OccurredAt}, func(ctx context.Context, tx *postgres.BusinessTx) error {
 		return c.handler.ExecuteManual(ctx, tx, command.ComputeID, eventID, requestedAt)
 	}, postgres.ProcessOptions{})
-	return err
+	if err != nil {
+		_ = c.store.SetComputeCommandStatus(context.Background(), command.DeploymentID, command.CommandID, "failed", "execution-failed")
+		return err
+	}
+	return c.store.SetComputeCommandStatus(ctx, command.DeploymentID, command.CommandID, "succeeded", "")
 }
 
 func manualFence(config model.EngineConfig) (model.Ownership, bool) {

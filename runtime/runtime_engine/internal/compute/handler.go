@@ -99,6 +99,9 @@ func (h *Handler) ExecuteManual(ctx context.Context, tx *postgres.BusinessTx, co
 	if !assigned || producer.Role != "compute" {
 		return errors.New("计算单元 producer 未绑定")
 	}
+	if err := tx.RefreshComputeInputsFromCurrent(ctx, unit.ID, inputDatapointIDs(unit.Inputs)); err != nil {
+		return err
+	}
 	return h.executeAndQueue(ctx, tx, unit, producer, ingress.ValidatedMessage{Event: ingress.Event{EventID: commandEventID, SourceTimestamp: occurredAt.UTC().Format(time.RFC3339Nano)}, OccurredAt: occurredAt.UTC()})
 }
 
