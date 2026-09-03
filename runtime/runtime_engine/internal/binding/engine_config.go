@@ -48,17 +48,23 @@ type Input struct {
 // 这些字段不得出现在 runtime-binding.input.v1，避免 Ops 输入伪造 producer fence。
 type BuildInput struct {
 	Input
-	ProjectArtifact  model.ArtifactRef
-	RoleOwnership    model.Ownership
-	ComputeProducers []ComputeProducer
-	AlarmOwnership   model.Ownership
-	ManualOwnership  model.Ownership
+	ProjectArtifact    model.ArtifactRef
+	RoleOwnership      model.Ownership
+	ComputeProducers   []ComputeProducer
+	CollectorProducers []CollectorProducer
+	AlarmOwnership     model.Ownership
+	ManualOwnership    model.Ownership
 }
 
 // ComputeProducer 是 compute role 对一个计算单元的唯一 producer fencing 绑定。
 type ComputeProducer struct {
 	ComputeID string          `json:"computeId"`
 	Ownership model.Ownership `json:"ownership"`
+}
+type CollectorProducer struct {
+	CollectorID string
+	Artifact    model.CollectorArtifactBinding
+	Ownership   model.Ownership
 }
 
 // JetStreamInput 只保存 endpoint 与受控引用，不包含认证值。
@@ -142,6 +148,9 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 	}
 	// 所有消费角色必须共享同一 manual producer fence，保证同一人工事件可被 writer/compute/alarm 验证。
 	config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{ProducerType: "manual", ManualID: "runtime-api", Ownership: input.ManualOwnership})
+	for _, producer := range input.CollectorProducers {
+		config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{ProducerType: "collector", CollectorID: producer.CollectorID, CollectorArtifact: &producer.Artifact, Ownership: producer.Ownership})
+	}
 
 	switch input.Role {
 	case roleCompute:

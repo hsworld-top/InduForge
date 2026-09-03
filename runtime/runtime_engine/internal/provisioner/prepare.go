@@ -25,13 +25,15 @@ const (
 )
 
 type Input struct {
-	SchemaVersion         string        `json:"schemaVersion"`
-	ReleaseID             string        `json:"releaseId"`
-	RuntimeArtifactPath   string        `json:"runtimeArtifactPath"`
-	RuntimeArtifactSHA256 string        `json:"runtimeArtifactSha256"`
-	ArtifactDir           string        `json:"artifactDir"`
-	BundleDir             string        `json:"bundleDir"`
-	Binding               binding.Input `json:"binding"`
+	SchemaVersion           string        `json:"schemaVersion"`
+	ReleaseID               string        `json:"releaseId"`
+	RuntimeArtifactPath     string        `json:"runtimeArtifactPath"`
+	RuntimeArtifactSHA256   string        `json:"runtimeArtifactSha256"`
+	CollectorArtifactPath   string        `json:"collectorArtifactPath,omitempty"`
+	CollectorArtifactSHA256 string        `json:"collectorArtifactSha256,omitempty"`
+	ArtifactDir             string        `json:"artifactDir"`
+	BundleDir               string        `json:"bundleDir"`
+	Binding                 binding.Input `json:"binding"`
 }
 
 func Decode(raw []byte) (Input, error) {
@@ -53,7 +55,7 @@ func Prepare(in Input) error {
 	if err := validateInput(in); err != nil {
 		return err
 	}
-	if in.Binding.ArtifactMountPath != "/opt/induforge/release/runtime-artifact" || in.Binding.ArtifactFile != "runtime-project-artifact.json" {
+	if in.Binding.ArtifactMountPath != "/work/artifact" || in.Binding.ArtifactFile != "runtime-project-artifact.json" {
 		return fmt.Errorf("项目制品目标与配置不一致")
 	}
 	f, err := os.Open(in.RuntimeArtifactPath)
@@ -74,12 +76,35 @@ func Prepare(in Input) error {
 	if err = provision.UnpackRuntimeArtifact(f, in.ArtifactDir, provision.Limits{MaxFiles: 128, MaxFileBytes: 128 << 20, MaxTotalBytes: 512 << 20}); err != nil {
 		return fmt.Errorf("安全解包失败")
 	}
+	var collectorRaw []byte
+	if in.CollectorArtifactPath != "" {
+		cf, openErr := os.Open(in.CollectorArtifactPath)
+		if openErr != nil {
+			return fmt.Errorf("读取采集制品失败")
+		}
+		defer cf.Close()
+		ch := sha256.New()
+		if _, copyErr := io.Copy(ch, cf); copyErr != nil || "sha256:"+hex.EncodeToString(ch.Sum(nil)) != in.CollectorArtifactSHA256 {
+			return fmt.Errorf("采集制品摘要不匹配")
+		}
+		if _, seekErr := cf.Seek(0, 0); seekErr != nil {
+			return fmt.Errorf("读取采集制品失败")
+		}
+		collectorDir := filepath.Join(in.ArtifactDir, "collector")
+		if unpackErr := provision.UnpackArtifact(cf, collectorDir, "collector-runtime-artifact.json", provision.Limits{MaxFiles: 128, MaxFileBytes: 128 << 20, MaxTotalBytes: 512 << 20}); unpackErr != nil {
+			return fmt.Errorf("安全解包采集制品失败")
+		}
+		collectorRaw, err = os.ReadFile(filepath.Join(collectorDir, "collector-runtime-artifact.json"))
+		if err != nil {
+			return fmt.Errorf("读取采集制品失败")
+		}
+	}
 	artifactPath := filepath.Join(in.ArtifactDir, "runtime-project-artifact.json")
 	b, err := os.ReadFile(artifactPath)
 	if err != nil {
 		return fmt.Errorf("读取项目制品失败")
 	}
-	derived, err := deriveBuildInput(in.Binding, b)
+	derived, err := deriveBuildInput(in.Binding, b, collectorRaw)
 	if err != nil {
 		return fmt.Errorf("artifact-role-binding: %w", err)
 	}
@@ -142,7 +167,7 @@ func loaderErrorClass(err error) string {
 // deriveBuildInput 只以已安全解包的 Artifact 原始 bytes 决定 Artifact ref 与
 // producer fencing；部署输入不能覆盖 compute/alarm 的 ID 或 owner。owner
 // 由 deployment+role 固定推导，epoch 只接受控制面冻结的服务 generation。
-func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, error) {
+func deriveBuildInput(input binding.Input, raw []byte, collectorRaw ...[]byte) (binding.BuildInput, error) {
 	var artifact model.ProjectArtifact
 	if err := json.Unmarshal(raw, &artifact); err != nil {
 		return binding.BuildInput{}, fmt.Errorf("项目制品 JSON 非法")
@@ -161,6 +186,14 @@ func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, erro
 	}
 	if build.ProjectArtifact.ArtifactRevision < 1 {
 		return binding.BuildInput{}, fmt.Errorf("项目制品版本非法")
+	}
+	if len(collectorRaw) > 0 && len(collectorRaw[0]) > 0 {
+		var collector model.CollectorArtifact
+		if json.Unmarshal(collectorRaw[0], &collector) != nil || collector.SchemaVersion != "collector-runtime-artifact.v1" {
+			return binding.BuildInput{}, fmt.Errorf("采集制品 JSON 非法")
+		}
+		digest := sha256.Sum256(collectorRaw[0])
+		build.CollectorProducers = []binding.CollectorProducer{{CollectorID: stableCollectorID(input.ProjectID, input.DeploymentID, input.NodeID), Artifact: model.CollectorArtifactBinding{Artifact: model.ArtifactRef{ArtifactID: collector.ArtifactID, ArtifactRevision: collector.ArtifactRevision, ArtifactDigest: "sha256:" + hex.EncodeToString(digest[:])}, ArtifactFile: "collector/collector-runtime-artifact.json"}, Ownership: model.Ownership{OwnerID: stableCollectorOwner(input.DeploymentID, input.NodeID), Epoch: input.FencingEpoch}}}
 	}
 	if build.ManualOwnership.OwnerID == "" && build.ManualOwnership.Epoch == 0 {
 		// 仅保留旧 binding 的本地测试兼容；控制面一旦发布该字段必须原样传递。
@@ -200,6 +233,16 @@ func deriveBuildInput(input binding.Input, raw []byte) (binding.BuildInput, erro
 func stableRoleOwner(deploymentID, role string) string {
 	sum := sha256.Sum256([]byte(deploymentID + "\x00" + role))
 	return "if-" + role + "-" + hex.EncodeToString(sum[:])[:16]
+}
+func stableCollectorID(projectID, deploymentID, nodeID string) string {
+	return stableCollectorValue("collector", projectID, deploymentID, nodeID)
+}
+func stableCollectorOwner(deploymentID, nodeID string) string {
+	return stableCollectorValue("collector-owner", deploymentID, nodeID)
+}
+func stableCollectorValue(prefix string, values ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(values, "\x1f")))
+	return prefix + "-" + hex.EncodeToString(sum[:20])
 }
 
 func artifactRevision(version string) int64 {

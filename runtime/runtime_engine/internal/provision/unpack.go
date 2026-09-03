@@ -16,6 +16,11 @@ type Limits struct {
 }
 
 func UnpackRuntimeArtifact(src io.Reader, target string, l Limits) error {
+	return UnpackArtifact(src, target, "runtime-project-artifact.json", l)
+}
+
+// UnpackArtifact 以同一安全边界解包冻结制品，并要求唯一的预期入口文件存在。
+func UnpackArtifact(src io.Reader, target, requiredFile string, l Limits) error {
 	if l.MaxFiles <= 0 || l.MaxFileBytes <= 0 || l.MaxTotalBytes <= 0 {
 		return fmt.Errorf("解包限制无效")
 	}
@@ -75,7 +80,7 @@ func UnpackRuntimeArtifact(src io.Reader, target string, l Limits) error {
 				return ce
 			}
 			total += h.Size
-			if n == "runtime-project-artifact.json" {
+			if n == requiredFile {
 				found = true
 			}
 		default:
@@ -83,7 +88,7 @@ func UnpackRuntimeArtifact(src io.Reader, target string, l Limits) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("归档缺少 runtime-project-artifact.json")
+		return fmt.Errorf("归档缺少 %s", requiredFile)
 	}
 	if e = os.RemoveAll(target); e != nil {
 		return e
