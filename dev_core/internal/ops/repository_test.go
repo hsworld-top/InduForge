@@ -129,13 +129,18 @@ func TestDeleteDeploymentUsesDedicatedOperation(t *testing.T) {
 }
 
 func TestDeploymentListAndTotalShareVisibleFilters(t *testing.T) {
-	if !contains(deploymentListFilter, "d.deleted_at IS NULL") || !contains(deploymentListFilter, "e.deleted_at IS NULL") {
-		t.Fatal("软删除部署或运行环境不得进入列表或总数")
+	for _, filter := range []string{deploymentListFilter, deploymentCountFilter} {
+		if !contains(filter, "d.deleted_at IS NULL") || !contains(filter, "e.deleted_at IS NULL") {
+			t.Fatal("软删除部署或运行环境不得进入列表或总数")
+		}
 	}
 	for _, predicate := range []string{"p.name ILIKE", "d.project_id::text=$5"} {
 		if !contains(deploymentListFilter, predicate) {
 			t.Fatalf("列表与总数必须共同覆盖搜索和工程环境范围: %s", predicate)
 		}
+	}
+	if !contains(deploymentCountFilter, "p.name ILIKE") || !contains(deploymentCountFilter, "d.project_id::text=$3") {
+		t.Fatal("count 查询必须覆盖与列表相同的搜索和工程范围")
 	}
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -145,8 +150,11 @@ func TestDeploymentListAndTotalShareVisibleFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(raw), "deploymentListFilter") < 3 {
-		t.Fatal("列表记录与 total 查询必须复用同一可见范围")
+	if !contains(deploymentCountFilter, "d.project_id::text=$3") || strings.Contains(deploymentCountFilter, "$4") || strings.Contains(deploymentCountFilter, "$5") {
+		t.Fatal("count 查询必须只绑定自身实际使用的搜索和工程范围参数")
+	}
+	if !strings.Contains(string(raw), "deploymentCountFilter, tenant, f.Search, f.ProjectID") {
+		t.Fatal("count 查询参数必须与 count 过滤条件严格对应")
 	}
 }
 

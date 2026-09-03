@@ -27,9 +27,11 @@ const defaultRuntimeEnvironmentCode = "default-runtime"
 // deploymentSelect 不从 project_deployments 推断节点；节点归属是 deployment_services 的属性。
 const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,COALESCE(d.application_version_id::text,''),COALESCE(v.version,CASE WHEN d.mode='development' THEN '__DEV__' ELSE '' END),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),COALESCE((SELECT operation FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),COALESCE(d.last_ready_mode,''),COALESCE(d.last_ready_application_version_id::text,''),COALESCE(lv.version,CASE WHEN d.last_ready_mode='development' THEN '__DEV__' ELSE '' END),COALESCE(d.last_ready_generation,0),d.last_ready_at,d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id LEFT JOIN application_versions lv ON lv.id=d.last_ready_application_version_id AND lv.tenant_id=d.tenant_id`
 
-// deploymentListFilter 是列表与总数共用的可见范围。软删除部署不得参与任一
-// 查询，否则空列表会携带错误 total，分页会显示不存在的记录范围。
+// deploymentListFilter 与 deploymentCountFilter 保持完全相同的可见语义，但参数
+// 编号必须分别适配分页查询与 count 查询。count 不接受无用途的 $3/$4，否则
+// PostgreSQL 无法从 SQL 推断参数类型。
 const deploymentListFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5)`
+const deploymentCountFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($3='' OR d.project_id::text=$3)`
 
 type releaseMetadata struct {
 	ID, Version, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
@@ -955,7 +957,7 @@ func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant strin
 		out = append(out, d)
 	}
 	var total int64
-	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id WHERE `+deploymentListFilter, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID).Scan(&total)
+	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id WHERE `+deploymentCountFilter, tenant, f.Search, f.ProjectID).Scan(&total)
 	return out, total, e
 }
 func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, tenant string, in CreateDeploymentInput) error {
