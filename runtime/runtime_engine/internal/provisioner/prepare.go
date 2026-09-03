@@ -140,6 +140,20 @@ func Prepare(in Input) error {
 	if err := binding.WriteBundle(config, index, in.BundleDir); err != nil {
 		return fmt.Errorf("写入 bundle 失败")
 	}
+	if err := exposeArtifactToSandbox(artifactPath, in.Binding.Role); err != nil {
+		return err
+	}
+	return nil
+}
+
+// exposeArtifactToSandbox 仅让 compute Pod 内同组 sandbox 读取已校验工件；其他角色继续 owner-only。
+func exposeArtifactToSandbox(path, role string) error {
+	if role != "compute" {
+		return nil
+	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		return fmt.Errorf("设置计算工件共享权限失败")
+	}
 	return nil
 }
 func verifyArtifactChecksum(reader io.Reader, expected string) error {

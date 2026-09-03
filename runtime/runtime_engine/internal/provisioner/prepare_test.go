@@ -3,6 +3,7 @@ package provisioner
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -139,6 +140,25 @@ func TestDeriveBuildInputSeparatesStableOwnerFromRolloutEpoch(t *testing.T) {
 	}
 	if nextBuild.RoleOwnership.OwnerID != firstBuild.RoleOwnership.OwnerID || nextBuild.RoleOwnership.Epoch != firstBuild.RoleOwnership.Epoch+1 || nextBuild.AlarmOwnership != nextBuild.RoleOwnership {
 		t.Fatalf("generation 提升必须只提升同一逻辑 owner 的 epoch：first=%+v next=%+v", firstBuild.RoleOwnership, nextBuild.RoleOwnership)
+	}
+}
+
+func TestExposeArtifactToSandboxOnlyAllowsComputeGroupRead(t *testing.T) {
+	for _, test := range []struct {
+		role string
+		want os.FileMode
+	}{{"compute", 0o640}, {"alarm", 0o600}} {
+		path := filepath.Join(t.TempDir(), "runtime-project-artifact.json")
+		if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := exposeArtifactToSandbox(path, test.role); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != test.want {
+			t.Fatalf("role %s mode = %v, want %o", test.role, info.Mode().Perm(), test.want)
+		}
 	}
 }
 

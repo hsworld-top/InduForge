@@ -12,7 +12,7 @@ const (
 	runtimeAPIImage     = "induforge/project-runtime-api:1.0.1"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
-	runtimeEngineImage   = "induforge/runtime-engine:1.0.29"
+	runtimeEngineImage   = "induforge/runtime-engine:1.0.30"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
 	computeSandboxImage  = "induforge/compute-sandbox:1.0.8"
 )
@@ -315,7 +315,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 15, periodSeconds: 10}
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
-          securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID", "SETPCAP"], drop: ["ALL"]}, seccompProfile: {type: Unconfined}}
+          securityContext: {runAsUser: 0, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID", "SETPCAP"], drop: ["ALL"]}, seccompProfile: {type: Unconfined}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: work, mountPath: /work, readOnly: true}
