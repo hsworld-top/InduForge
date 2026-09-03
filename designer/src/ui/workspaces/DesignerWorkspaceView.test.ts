@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DesignerWorkspaceView from './DesignerWorkspaceView.vue'
 import { contextPackApi } from './code/context-pack-api'
 import { resolveWorkspaceState } from './code/workspace-runtime'
@@ -82,6 +82,10 @@ let workspaceInitializationStatus: 'uninitialized' | 'initialized'
 let initializeTemplateId: string | null
 
 describe('DesignerWorkspaceView', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
     ResizeObserverStub.workspace = null
@@ -282,7 +286,7 @@ describe('DesignerWorkspaceView', () => {
     expect(wrapper.text()).not.toContain('选择工程模板')
   })
 
-  it('工作区异常时只显示恢复入口，不把已有源码当作待选模板', async () => {
+  it('工作区异常时只经页面内确认后重建，不把已有源码当作待选模板', async () => {
     const brokenWorkspace = {
       ...workspace,
       status: 'error' as const,
@@ -293,17 +297,12 @@ describe('DesignerWorkspaceView', () => {
         previewControl: { url: null, hostPort: null },
       },
     }
-    vi.mocked(resolveWorkspaceState)
-      .mockResolvedValueOnce(brokenWorkspace)
-      .mockResolvedValue(workspace)
-    let finishRebuild: (value: typeof workspace) => void = () => {}
-    codeWorkspaceApiMock.rebuild.mockImplementation(
-      () =>
-        new Promise<typeof workspace>((resolve) => {
-          finishRebuild = resolve
-        }),
-    )
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(resolveWorkspaceState).mockResolvedValue(brokenWorkspace)
+    const startingWorkspace = {
+      ...brokenWorkspace,
+      status: 'starting' as const,
+    }
+    codeWorkspaceApiMock.rebuild.mockResolvedValue(startingWorkspace)
 
     const wrapper = mount(DesignerWorkspaceView)
     await flushPromises()
@@ -316,23 +315,83 @@ describe('DesignerWorkspaceView', () => {
     expect(initializeTemplateId).toBeNull()
     expect(wrapper.get('.rebuild-workspace-button').text()).toBe('重新构建工作区')
 
-    const rebuildClick = wrapper.get('.rebuild-workspace-button').trigger('click')
+    await wrapper.get('.rebuild-workspace-button').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('.rebuild-workspace-button').text()).toBe('正在重新构建')
-    expect((wrapper.get('.rebuild-workspace-button').element as HTMLButtonElement).disabled).toBe(
-      true,
-    )
-    finishRebuild(workspace)
-    await rebuildClick
+    expect(codeWorkspaceApiMock.rebuild).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alertdialog"]').text()).toContain('重新构建开发工作区？')
+
+    await wrapper.get('[role="alertdialog"] .retry-setup-button').trigger('click')
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    expect(codeWorkspaceApiMock.rebuild).not.toHaveBeenCalled()
+
+    await wrapper.get('.rebuild-workspace-button').trigger('click')
+    await wrapper.get('[role="alertdialog"] .rebuild-workspace-button').trigger('click')
     await flushPromises()
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      '重新构建开发工作区会停止并重新创建开发服务，不会删除工程设计、页面源码或已发布版本。是否继续？',
-    )
+    expect(codeWorkspaceApiMock.rebuild).toHaveBeenCalledTimes(1)
     expect(codeWorkspaceApiMock.rebuild).toHaveBeenCalledWith('project-1')
-    expect(wrapper.find('.rebuild-workspace-button').exists()).toBe(false)
-    expect(wrapper.findAll('iframe')).toHaveLength(3)
+    expect(wrapper.get('.rebuild-workspace-button').text()).toBe('正在重新构建')
+    expect((wrapper.get('.rebuild-workspace-button').element as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('重建请求失败后允许再次打开确认框重试', async () => {
+    const brokenWorkspace = {
+      ...workspace,
+      status: 'error' as const,
+      services: {
+        ai: { url: null, hostPort: null },
+        code: { url: null, hostPort: null },
+        preview: { url: null, hostPort: null },
+        previewControl: { url: null, hostPort: null },
+      },
+    }
+    vi.mocked(resolveWorkspaceState).mockResolvedValue(brokenWorkspace)
+    codeWorkspaceApiMock.rebuild.mockRejectedValueOnce(new Error('控制面暂不可用'))
+
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    await wrapper.get('.rebuild-workspace-button').trigger('click')
+    await wrapper.get('[role="alertdialog"] .rebuild-workspace-button').trigger('click')
+    await flushPromises()
+
+    expect(codeWorkspaceApiMock.rebuild).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+    expect(wrapper.get('.rebuild-workspace-button').text()).toBe('重新构建工作区')
+    expect(wrapper.text()).toContain('控制面暂不可用')
+
+    await wrapper.get('.rebuild-workspace-button').trigger('click')
+    expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('组件卸载时取消后台重建轮询', async () => {
+    vi.useFakeTimers()
+    const brokenWorkspace = {
+      ...workspace,
+      status: 'error' as const,
+      services: {
+        ai: { url: null, hostPort: null },
+        code: { url: null, hostPort: null },
+        preview: { url: null, hostPort: null },
+        previewControl: { url: null, hostPort: null },
+      },
+    }
+    const startingWorkspace = { ...brokenWorkspace, status: 'starting' as const }
+    vi.mocked(resolveWorkspaceState).mockResolvedValue(brokenWorkspace)
+    codeWorkspaceApiMock.rebuild.mockResolvedValue(startingWorkspace)
+
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+    await wrapper.get('.rebuild-workspace-button').trigger('click')
+    await wrapper.get('[role="alertdialog"] .rebuild-workspace-button').trigger('click')
+    await flushPromises()
+
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(codeWorkspaceApiMock.get).not.toHaveBeenCalled()
   })
 
   it('运行态缺少预览控制入口时不显示模板或无效重新检查', async () => {

@@ -65,6 +65,7 @@ const workspace = ref<CodeWorkspaceState | null>(null)
 const workspaceLoading = ref(true)
 const workspaceError = ref('')
 const workspaceRebuilding = ref(false)
+const workspaceRebuildConfirmOpen = ref(false)
 const projectWorkspace = ref<WorkspaceInitializationState | null>(null)
 const projectWorkspaceLoading = ref(true)
 const projectWorkspaceError = ref('')
@@ -127,6 +128,7 @@ const workspaceInitialized = computed(() => projectWorkspace.value?.status === '
 // 源码可能仍完整保存在持久化目录；此处绝不能把恢复动作伪装成重新选模板。
 const workspaceRecoveryRequired = computed(
   () =>
+    workspaceRebuilding.value ||
     workspace.value?.status === 'error' ||
     (workspace.value?.status === 'running' && !previewControlUrl.value),
 )
@@ -551,36 +553,59 @@ async function retryWorkspace(): Promise<void> {
   await loadWorkspace(true)
 }
 
-// 仅在控制面已明确报告 error 时允许重建。该操作只替换工作区 Pod 与四入口 Service，
-// 工程源码、设计数据和平台上下文均位于持久化目录，不能被前端当作“重置工程”。
-async function rebuildWorkspace(): Promise<void> {
+// 首次点击只打开页面内确认框。Wujie 宿主无法可靠处理浏览器原生 confirm，
+// 且工作区重建不能被误触；确认后才发送恢复请求。
+function requestWorkspaceRebuild(): void {
   if (!projectId.value || !workspaceRecoveryRequired.value || workspaceRebuilding.value) return
-  if (
-    !window.confirm(
-      '重新构建开发工作区会停止并重新创建开发服务，不会删除工程设计、页面源码或已发布版本。是否继续？',
-    )
-  ) {
-    return
-  }
+  workspaceRebuildConfirmOpen.value = true
+}
 
+function cancelWorkspaceRebuild(): void {
+  if (!workspaceRebuilding.value) workspaceRebuildConfirmOpen.value = false
+}
+
+// 该操作只替换工作区 Pod 与四入口 Service，工程源码、设计数据和平台上下文保持在持久化目录。
+async function confirmWorkspaceRebuild(): Promise<void> {
+  if (!projectId.value || !workspaceRecoveryRequired.value || workspaceRebuilding.value) return
+  workspaceRebuildConfirmOpen.value = false
   const sequence = ++workspaceRequestSequence
   clearWorkspacePoll()
   workspaceRebuilding.value = true
   workspaceError.value = ''
   projectWorkspaceError.value = ''
   try {
-    let nextWorkspace = await codeWorkspaceApi.rebuild(projectId.value)
+    const nextWorkspace = await codeWorkspaceApi.rebuild(projectId.value)
+    if (sequence !== workspaceRequestSequence) return
+    workspace.value = nextWorkspace
+    // 控制面接受请求后立即结束点击处理；启动与健康检查在后台完成，
+    // 避免浏览器交互被最长 30 秒的轮询占住。
+    void monitorWorkspaceRebuild(sequence, nextWorkspace)
+  } catch (error) {
+    if (sequence === workspaceRequestSequence) {
+      workspaceError.value = getApiErrorMessage(error, '重新构建开发工作区失败')
+      workspaceRebuilding.value = false
+    }
+  }
+}
+
+async function monitorWorkspaceRebuild(
+  sequence: number,
+  initialWorkspace: CodeWorkspaceState,
+): Promise<void> {
+  let nextWorkspace = initialWorkspace
+  try {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       if (sequence !== workspaceRequestSequence) return
       workspace.value = nextWorkspace
       if (nextWorkspace.status === 'running') {
-        await loadWorkspace(false)
+        await loadProjectWorkspace(nextWorkspace.services.previewControl.url)
         return
       }
       if (nextWorkspace.status === 'error') {
         throw new Error('重新构建后开发工作区仍异常')
       }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 1500))
+      if (sequence !== workspaceRequestSequence) return
       nextWorkspace = await codeWorkspaceApi.get(projectId.value)
     }
     throw new Error('开发工作区启动超时，请稍后重新检查')
@@ -589,7 +614,7 @@ async function rebuildWorkspace(): Promise<void> {
       workspaceError.value = getApiErrorMessage(error, '重新构建开发工作区失败')
     }
   } finally {
-    workspaceRebuilding.value = false
+    if (sequence === workspaceRequestSequence) workspaceRebuilding.value = false
   }
 }
 </script>
@@ -692,7 +717,7 @@ async function rebuildWorkspace(): Promise<void> {
             type="button"
             class="rebuild-workspace-button"
             :disabled="workspaceRebuilding"
-            @click="rebuildWorkspace"
+            @click="requestWorkspaceRebuild"
           >
             {{ workspaceRebuilding ? '正在重新构建' : '重新构建工作区' }}
           </button>
@@ -912,6 +937,34 @@ async function rebuildWorkspace(): Promise<void> {
         </div>
       </section>
     </section>
+
+    <div
+      v-if="workspaceRebuildConfirmOpen"
+      class="workspace-rebuild-dialog-backdrop"
+      role="presentation"
+    >
+      <section
+        class="workspace-rebuild-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="workspace-rebuild-title"
+        aria-describedby="workspace-rebuild-description"
+      >
+        <span class="workspace-setup-kicker">DEVELOPMENT WORKSPACE</span>
+        <h2 id="workspace-rebuild-title">重新构建开发工作区？</h2>
+        <p id="workspace-rebuild-description">
+          将停止并重新创建开发服务，不会删除工程设计、页面源码或已发布版本。
+        </p>
+        <div class="workspace-rebuild-dialog-actions">
+          <button type="button" class="retry-setup-button" @click="cancelWorkspaceRebuild">
+            取消
+          </button>
+          <button type="button" class="rebuild-workspace-button" @click="confirmWorkspaceRebuild">
+            确认重新构建
+          </button>
+        </div>
+      </section>
+    </div>
 
     <footer v-if="workspaceInitialized" class="context-summary" :title="contextError">
       <span><b>上下文</b> {{ contextVersion }}</span>
@@ -1188,6 +1241,46 @@ async function rebuildWorkspace(): Promise<void> {
   border: 1px solid var(--line);
   color: var(--ink);
   background: var(--surface);
+}
+
+.workspace-rebuild-dialog-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(23 31 43 / 38%);
+}
+
+.workspace-rebuild-dialog {
+  width: min(420px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgb(18 28 42 / 22%);
+  background: var(--surface);
+}
+
+.workspace-rebuild-dialog h2 {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.workspace-rebuild-dialog p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.workspace-rebuild-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 .workbench-stage {
@@ -1583,7 +1676,9 @@ async function rebuildWorkspace(): Promise<void> {
 :global(html.dark) .template-option,
 :global([data-theme='dark']) .template-option,
 :global(html.dark) .workspace-setup-state,
-:global([data-theme='dark']) .workspace-setup-state {
+:global([data-theme='dark']) .workspace-setup-state,
+:global(html.dark) .workspace-rebuild-dialog,
+:global([data-theme='dark']) .workspace-rebuild-dialog {
   border-color: #3c434e;
   background: #242930;
 }
