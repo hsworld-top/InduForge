@@ -84,18 +84,15 @@ func TestJetStreamOptInPullAckAndMsgIDDuplicate(t *testing.T) {
 	if !ack.Duplicate {
 		t.Fatal("stable Msg-Id duplicate must receive duplicate PubAck")
 	}
-	sub, err := legacy.PullSubscribe(subject, "pull", nats.Bind(name, "pull"))
+	client := &Client{js: modern}
+	received, err := client.Fetch(t.Context(), name, "pull", 1, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	received, err := sub.Fetch(1, nats.MaxWait(time.Second))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(received[0].Data) != "immutable" {
+	if string(received[0].Body) != "immutable" {
 		t.Fatal("unexpected message bytes")
 	}
-	if err := received[0].Ack(); err != nil {
+	if err := received[0].Ack(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 }

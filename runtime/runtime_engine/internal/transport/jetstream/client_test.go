@@ -81,6 +81,20 @@ func TestOpenCreatesDeadlineForBackgroundContext(t *testing.T) {
 	}
 }
 
+func TestFetchUsesOnlyDeadlineContextOption(t *testing.T) {
+	ctx, cancel := newFetchContext(context.Background(), time.Second)
+	defer cancel()
+	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) <= 0 || time.Until(deadline) > time.Second {
+		t.Fatal("fetch must derive a bounded context")
+	}
+	// nats.go v1.53 rejects FetchContext combined with FetchMaxWait. The
+	// option factory is intentionally exact so a fake or real consumer always
+	// receives one, mutually compatible option.
+	if options := fetchOptions(ctx); len(options) != 1 {
+		t.Fatalf("fetch options=%d, must contain only FetchContext", len(options))
+	}
+}
+
 func TestClientCloseIsNilSafeAndConcurrentIdempotent(t *testing.T) {
 	var client Client
 	var group sync.WaitGroup

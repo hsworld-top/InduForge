@@ -372,7 +372,12 @@ func (c *Client) Fetch(ctx context.Context, streamName, durable string, batch in
 	if err != nil {
 		return nil, errors.New("JetStream consumer 不可用")
 	}
-	messages, err := consumer.Fetch(batch, js.FetchContext(ctx), js.FetchMaxWait(maxWait))
+	// nats.go 将 FetchContext 与 FetchMaxWait 视为互斥选项。运行期保留调用
+	// 方取消语义，同时用派生 deadline 约束本次拉取，避免启动后立即收到
+	// ErrInvalidOption 并耗尽 ingress 重试。
+	fetchCtx, cancel := newFetchContext(ctx, maxWait)
+	defer cancel()
+	messages, err := consumer.Fetch(batch, fetchOptions(fetchCtx)...)
 	if err != nil {
 		return nil, errors.New("JetStream fetch 失败")
 	}
@@ -391,6 +396,14 @@ func (c *Client) Fetch(ctx context.Context, streamName, durable string, batch in
 	}
 	return result, nil
 }
+
+func newFetchContext(ctx context.Context, maxWait time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, maxWait)
+}
+
+// fetchOptions 刻意仅生成 FetchContext。nats.go 不允许它与 FetchMaxWait 共存，
+// 这里保留成独立函数以便回归测试固定该调用契约。
+func fetchOptions(ctx context.Context) []js.FetchOpt { return []js.FetchOpt{js.FetchContext(ctx)} }
 
 type PublishMessage struct {
 	Subject   string
