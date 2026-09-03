@@ -27,6 +27,23 @@ type fakeStore struct {
 }
 type fakeHealth struct{ codes []string }
 
+type fakeStagedError struct{}
+
+func (fakeStagedError) Error() string        { return "safe" }
+func (fakeStagedError) FailureStage() string { return "sandbox-http-status" }
+func (fakeStagedError) FailureCode() string  { return "sandbox-http-4xx" }
+
+func TestFailureDiagnosticUsesStableStageAndCode(t *testing.T) {
+	stage, code := failureDiagnostic(fakeStagedError{})
+	if stage != "sandbox-http-status" || code != "sandbox-http-4xx" {
+		t.Fatalf("diagnostic=%s/%s", stage, code)
+	}
+	stage, code = failureDiagnostic(errors.New("sensitive detail"))
+	if stage != "handler" || code != "handler-failure" {
+		t.Fatalf("fallback diagnostic=%s/%s", stage, code)
+	}
+}
+
 func (h *fakeHealth) ReportIngressFailure(code string) { h.codes = append(h.codes, code) }
 
 func (s *fakeStore) Process(ctx context.Context, message ValidatedMessage) (ProcessResult, error) {

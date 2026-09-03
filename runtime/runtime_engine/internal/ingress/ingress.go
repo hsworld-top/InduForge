@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"regexp"
 	"time"
@@ -227,7 +228,9 @@ func (r *Runner) Handle(ctx context.Context, message Message) error {
 			return err
 		}
 		// 业务失败第一次出现即进入宿主健康视图；不能等到最终 DLQ 后才暴露退化。
-		r.report("handler-failure")
+		stage, code := failureDiagnostic(err)
+		log.Printf("runtime ingress failure stage=%s code=%s consumer=%s", stage, code, r.consumer.ConsumerKey)
+		r.report(code)
 		if message.DeliveryCount() == r.consumer.MaxDeliver {
 			return r.permanent(ctx, message, &validated.Event.EventID, "max-deliver", &validated, false)
 		}
@@ -244,6 +247,15 @@ func (r *Runner) Handle(ctx context.Context, message Message) error {
 		}
 	}
 	return acknowledge(ctx, message)
+}
+
+func failureDiagnostic(err error) (string, string) {
+	var staged interface{ FailureStage() string }
+	var coded interface{ FailureCode() string }
+	if errors.As(err, &staged) && errors.As(err, &coded) && staged.FailureStage() != "" && coded.FailureCode() != "" {
+		return staged.FailureStage(), coded.FailureCode()
+	}
+	return "handler", "handler-failure"
 }
 
 func (r *Runner) processWithProgress(ctx context.Context, message Message, validated ValidatedMessage) (ProcessResult, error) {

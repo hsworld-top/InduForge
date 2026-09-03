@@ -61,6 +61,13 @@ type ExecutionRequest struct {
 }
 type ExecutionResult struct{ Output json.RawMessage }
 
+type stagedError struct{ stage, code string }
+
+func (e *stagedError) Error() string          { return e.code }
+func (e *stagedError) FailureStage() string   { return e.stage }
+func (e *stagedError) FailureCode() string    { return e.code }
+func sandboxFailure(stage, code string) error { return &stagedError{stage: stage, code: code} }
+
 // SandboxDatapoint is the bounded, read-only snapshot exposed to compute code.
 // Write/subscribe capabilities are deliberately omitted so an artifact cannot
 // turn a deterministic compute execution into an out-of-transaction side effect.
@@ -324,7 +331,7 @@ func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (
 		if outerErr := ctx.Err(); outerErr != nil {
 			return ExecutionResult{}, outerErr
 		}
-		return ExecutionResult{}, errors.New("sandbox resolver 不可用")
+		return ExecutionResult{}, sandboxFailure("sandbox-resolve", "sandbox-resolver-unavailable")
 	}
 	input := make(map[string]any, len(request.Input))
 	for alias, raw := range request.Input {
@@ -388,7 +395,7 @@ func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (
 		if timeoutErr := sandboxTimeoutError(ctx, callCtx); timeoutErr != nil {
 			return ExecutionResult{}, timeoutErr
 		}
-		return ExecutionResult{}, errors.New("sandbox 调用失败")
+		return ExecutionResult{}, sandboxFailure("sandbox-http", "sandbox-http-call-failed")
 	}
 	defer response.Body.Close()
 	limited := io.LimitReader(response.Body, maxSandboxResponseBytes+1)
@@ -403,7 +410,11 @@ func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (
 		return ExecutionResult{}, timeoutErr
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return ExecutionResult{}, errors.New("sandbox 执行被拒绝")
+		code := "sandbox-http-4xx"
+		if response.StatusCode >= 500 {
+			code = "sandbox-http-5xx"
+		}
+		return ExecutionResult{}, sandboxFailure("sandbox-http-status", code)
 	}
 	var decoded struct {
 		Output         json.RawMessage   `json:"output"`
@@ -419,10 +430,10 @@ func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&decoded) != nil || decoder.Decode(&struct{}{}) != io.EOF || len(decoded.Output) == 0 || len(decoded.SideEffects) != 0 || decoded.ExecutionID != request.ExecutionID || decoded.ArtifactDigest != request.ArtifactDigest || decoded.ComputeUnitID != request.ComputeUnitID || decoded.Revision != request.ComputeRevision || decoded.DurationMS < 0 {
-		return ExecutionResult{}, errors.New("sandbox 响应非法")
+		return ExecutionResult{}, sandboxFailure("sandbox-contract", "sandbox-response-contract-invalid")
 	}
 	if !validRaw(decoded.Output) {
-		return ExecutionResult{}, errors.New("sandbox 输出非法")
+		return ExecutionResult{}, sandboxFailure("sandbox-contract", "sandbox-output-json-invalid")
 	}
 	if timeoutErr := sandboxTimeoutError(ctx, callCtx); timeoutErr != nil {
 		return ExecutionResult{}, timeoutErr

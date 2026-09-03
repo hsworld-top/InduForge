@@ -39,6 +39,18 @@ type UnitBusinessError struct {
 func (e *UnitBusinessError) Error() string        { return ErrUnitBusiness.Error() + ": " + e.ComputeID }
 func (e *UnitBusinessError) Unwrap() error        { return e.Cause }
 func (e *UnitBusinessError) Is(target error) bool { return target == ErrUnitBusiness }
+func (e *UnitBusinessError) FailureStage() string {
+	if staged, ok := e.Cause.(interface{ FailureStage() string }); ok {
+		return staged.FailureStage()
+	}
+	return "compute-handler"
+}
+func (e *UnitBusinessError) FailureCode() string {
+	if coded, ok := e.Cause.(interface{ FailureCode() string }); ok {
+		return coded.FailureCode()
+	}
+	return "compute-unit-business-failed"
+}
 
 // UnitBusinessFailures lets a host expose DEGRADED without losing the fact
 // that independent due units were still processed in this tick.
@@ -547,7 +559,7 @@ func (h *Handler) executeAndQueue(ctx context.Context, tx *postgres.BusinessTx, 
 		return outerErr
 	}
 	if err != nil {
-		return &UnitBusinessError{ComputeID: unit.ID, Cause: err}
+		return &UnitBusinessError{ComputeID: unit.ID, Cause: sandboxFailure("output-validation", "compute-output-contract-invalid")}
 	}
 	inputIDs := make([]string, 0, len(unit.Inputs))
 	for _, input := range unit.Inputs {
