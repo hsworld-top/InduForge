@@ -201,7 +201,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           image: %s
           imagePullPolicy: IfNotPresent
           command: ["runtime-engine"]
-          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/bundle", "--index", "/work/bundle/site-index.json", "--listen", "127.0.0.1:18082"]
+          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/bundle", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18082"]
           ports: [{name: writer-health, containerPort: 18082}]
           readinessProbe: {httpGet: {path: /health, port: writer-health}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: writer-health}, initialDelaySeconds: 15, periodSeconds: 10}

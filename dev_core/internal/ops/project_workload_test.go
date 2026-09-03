@@ -23,6 +23,9 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(base, "hostPort:") {
 		t.Fatalf("base 入口必须由稳定 ServiceLB 承载，不得绑定 Pod hostPort:\n%s", base)
 	}
+	if !strings.Contains(base, `"--listen", "0.0.0.0:18082"`) || strings.Contains(base, `"--listen", "127.0.0.1:18082"`) {
+		t.Fatalf("writer 健康端口必须可由 kubelet 通过 Pod IP 探测:\n%s", base)
+	}
 	if strings.Count(base, "mountPath: /var/run/induforge/runtime-viewer") != 1 {
 		t.Fatalf("viewer token must only be mounted once:\n%s", base)
 	}
