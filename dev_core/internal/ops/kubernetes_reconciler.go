@@ -301,6 +301,7 @@ func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Co
 			if !ok {
 				return count, fmt.Errorf("项目删除调和器未配置")
 			}
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'dispatched','正在停止 Kubernetes 工作负载' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
 			err = deleter.DeleteDeployment(ctx, environmentID, deploymentID)
 		} else {
 			err = stopper.StopDeployment(ctx, environmentID, deploymentID)
@@ -313,13 +314,18 @@ func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Co
 			if _, updateErr := r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE project_deployment_id=$2 AND desired_status='stopped'`, message, deploymentID); updateErr != nil {
 				return count, updateErr
 			}
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, message, deploymentID)
+			eventMessage := message
+			if deleting {
+				eventMessage = deletionFailureStage(message)
+			}
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, eventMessage, deploymentID)
 			if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
 				return count, err
 			}
 			continue
 		}
 		if deleting {
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'observed','运行态消息已清理，正在释放工程端口' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
 			if err = r.finalizeDeletedDeployment(ctx, deploymentID); err != nil {
 				return count, err
 			}
@@ -352,7 +358,18 @@ func (r *PostgreSQLRepository) finalizeDeletedDeployment(ctx context.Context, de
 	if _, err = tx.Exec(ctx, `UPDATE deployment_runs SET observed_status='stopped',progress=100,completed_at=now() WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'observed','工程端口已释放，部署已删除' FROM deployment_runs WHERE project_deployment_id=$1 AND operation='delete' ORDER BY started_at DESC,id DESC LIMIT 1`, deploymentID); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+// deletionFailureStage 只向工程使用者展示删除流程阶段，不暴露凭据、连接串或底层响应。
+func deletionFailureStage(message string) string {
+	if strings.Contains(message, "删除运行态消息") {
+		return "运行态消息清理失败"
+	}
+	return "Kubernetes 工作负载停止失败"
 }
 
 func projectReleaseDigest(value string) string {

@@ -1331,15 +1331,15 @@ func (r *PostgreSQLRepository) DeleteDeployment(ctx context.Context, tenant, did
 	if _, err = tx.Exec(ctx, `UPDATE project_deployments SET desired_status='stopped',observed_status='pending',deletion_requested_at=now(),updated_at=now() WHERE id=$1`, did); err != nil {
 		return DeploymentRun{}, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE deployment_services SET desired_status='stopped',observed_status='pending',desired_generation=desired_generation+1,last_operation='stop',updated_at=now() WHERE project_deployment_id=$1`, did); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE deployment_services SET desired_status='stopped',observed_status='pending',desired_generation=desired_generation+1,last_operation='delete',updated_at=now() WHERE project_deployment_id=$1`, did); err != nil {
 		return DeploymentRun{}, err
 	}
 	var run DeploymentRun
-	err = tx.QueryRow(ctx, `INSERT INTO deployment_runs(tenant_id,project_deployment_id,operation,desired_status,created_by) VALUES($1,$2,'stop','stopped',$3) RETURNING id,tenant_id,project_deployment_id,operation,desired_status,observed_status,progress,COALESCE(message,''),started_at,completed_at`, tenant, did, user).Scan(runScanArgs(&run)...)
+	err = tx.QueryRow(ctx, `INSERT INTO deployment_runs(tenant_id,project_deployment_id,operation,desired_status,created_by) VALUES($1,$2,'delete','stopped',$3) RETURNING id,tenant_id,project_deployment_id,operation,desired_status,observed_status,progress,COALESCE(message,''),started_at,completed_at`, tenant, did, user).Scan(runScanArgs(&run)...)
 	if err != nil {
 		return run, err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) VALUES($1,'queued','deployment deletion queued')`, run.ID); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) VALUES($1,'queued','删除任务已创建，等待停止 Kubernetes 工作负载')`, run.ID); err != nil {
 		return run, err
 	}
 	if err = tx.Commit(ctx); err != nil {

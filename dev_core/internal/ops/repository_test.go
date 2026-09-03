@@ -106,6 +106,28 @@ func TestDeploymentInsertReturningKeepsLatestRunPlaceholder(t *testing.T) {
 	}
 }
 
+func TestDeleteDeploymentUsesDedicatedOperation(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("无法定位仓储实现文件")
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "repository.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	implementation := string(raw)
+	if !contains(implementation, "last_operation='delete'") || !contains(implementation, "VALUES($1,$2,'delete','stopped',$3)") {
+		t.Fatal("删除部署必须持久化 delete 操作，不能伪装为 stop")
+	}
+	schema, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "..", "..", "db", "schema", "core-schema.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(schema), "'restart', 'delete'") {
+		t.Fatal("从零数据库基线必须允许 delete 操作")
+	}
+}
+
 func TestMapDeploymentCreateErrorPreservesProjectAndPortIsolation(t *testing.T) {
 	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_project_environment_key")); !errors.Is(err, ErrDeploymentExists) {
 		t.Fatalf("same project conflict=%v", err)

@@ -771,7 +771,7 @@ CREATE TABLE deployment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   project_deployment_id uuid NOT NULL REFERENCES project_deployments (id) ON DELETE CASCADE,
-  operation text NOT NULL CHECK (operation IN ('deploy', 'start', 'stop', 'restart')),
+  operation text NOT NULL CHECK (operation IN ('deploy', 'start', 'stop', 'restart', 'delete')),
   desired_status text NOT NULL CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'failed')),
   progress integer NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
@@ -808,7 +808,7 @@ CREATE TABLE deployment_services (
   replicas_observed integer NOT NULL DEFAULT 0 CHECK (replicas_observed >= 0),
   desired_generation bigint NOT NULL DEFAULT 1 CHECK (desired_generation > 0),
   observed_generation bigint NOT NULL DEFAULT 0 CHECK (observed_generation >= 0),
-  last_operation text NOT NULL DEFAULT 'deploy' CHECK (last_operation IN ('deploy', 'start', 'stop', 'restart')),
+  last_operation text NOT NULL DEFAULT 'deploy' CHECK (last_operation IN ('deploy', 'start', 'stop', 'restart', 'delete')),
   last_message text,
   endpoint text NOT NULL DEFAULT '' CHECK (
     endpoint = '' OR (
