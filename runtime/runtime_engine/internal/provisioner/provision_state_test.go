@@ -67,6 +67,15 @@ func TestProvisionStateCreateAndIdempotent(t *testing.T) {
 	if fake.created != 1 || fake.role != 2 || fake.schema != 2 {
 		t.Fatalf("idempotent calls: %#v", fake)
 	}
+	// 运行库按 project/environment 稳定，删除后重新部署会使用新的 deployment role。
+	// provisioner 必须复用通过基线校验的 schema，再向新 role 授权。
+	credentials.Username = "runtime_recreated"
+	if err := ProvisionStateWithAdmin(context.Background(), in, credentials, fake); err != nil {
+		t.Fatalf("recreated deployment role must reuse runtime schema: %v", err)
+	}
+	if fake.created != 1 || fake.role != 3 || fake.schema != 3 {
+		t.Fatalf("recreated deployment role: %#v", fake)
+	}
 }
 func TestProvisionStateConflictAndRollback(t *testing.T) {
 	in, credentials := stateInput()

@@ -144,9 +144,6 @@ func (a *pgxAdmin) InitializeSchema(ctx context.Context, database, schema, role 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if owner != "" && owner != role {
-		return errors.New("schema owner conflict")
-	}
 	if owner == "" {
 		if _, err = tx.Exec(ctx, "CREATE SCHEMA "+quotePGIdentifier(schema)+" AUTHORIZATION "+quotePGIdentifier(role)); err != nil {
 			return err
@@ -162,6 +159,9 @@ func (a *pgxAdmin) InitializeSchema(ctx context.Context, database, schema, role 
 			return err
 		}
 	} else {
+		// database 由 project+environment 稳定派生，但 deployment role 会随删除后
+		// 重建而变化。已验证的 schema 可以安全复用；随后仅向新的受信 role 授权，
+		// 不能因历史 deployment 的 owner 阻断同一工程环境再次部署。
 		var version string
 		if err = tx.QueryRow(ctx, "SELECT version FROM "+quotePGIdentifier(schema)+".schema_meta").Scan(&version); err != nil || version != "runtime_engine.v1" {
 			return errors.New("runtime schema conflict")
