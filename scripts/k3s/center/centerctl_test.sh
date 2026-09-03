@@ -87,6 +87,10 @@ if ! grep -Fq 'COPY contracts/runtime /contracts/runtime' "$SCRIPT_DIR/data-preb
   echo "data image must include runtime artifact schemas" >&2
   exit 1
 fi
+if ! grep -Fq 'COPY contracts/runtime /contracts/runtime' "$SCRIPT_DIR/../../../data_service/Dockerfile"; then
+  echo "source-built data image must include runtime artifact schemas" >&2
+  exit 1
+fi
 
 if IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DATA_ROOT=/ IF_CENTER_DOCKER_GID=998 "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
   echo "unsafe data root was accepted" >&2

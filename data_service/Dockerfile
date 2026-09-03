@@ -24,6 +24,8 @@ RUN apk add --no-cache ca-certificates
 COPY --from=builder /out/data-service ./data-service
 # 采集协议目录由运行时配置指定为 /contracts/collector-protocols，需随镜像发布。
 COPY contracts/collector-protocols /contracts/collector-protocols
+# 运行工件由数据服务生成时执行严格 schema 校验，源码构建镜像同样必须携带契约。
+COPY contracts/runtime /contracts/runtime
 
 EXPOSE 18102
 
