@@ -447,6 +447,12 @@ export const opsAPI = {
     )
     return { deployment: deployment(result.deployment), run: result.run }
   },
+  async deleteProjectDeployment(id: OpsId) {
+    const result = unpack<{ run: DeploymentRun }>(
+      await request.delete(`/ops/project-deployments/${id}`, config),
+    )
+    return result.run
+  },
   async getDeploymentRun(id: OpsId) {
     const result = unpack<DeploymentRun>(await request.get(`/ops/deployment-runs/${id}`, config))
     return { ...result, status: result.status || result.observedStatus }

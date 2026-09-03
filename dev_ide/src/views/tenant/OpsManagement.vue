@@ -629,6 +629,15 @@
             >
               停止工程
             </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              :loading="deploymentOperation === 'delete'"
+              :disabled="Boolean(deploymentOperation)"
+              @click="deleteDeployment"
+            >
+              删除部署
+            </el-button>
           </div>
 
           <h3 class="detail-heading">运行组成</h3>
@@ -753,7 +762,7 @@ const selectedDeployment = ref<ProjectDeployment | null>(null)
 const selectedRun = ref<DeploymentRun | null>(null)
 const runEvents = ref<DeploymentRunEvent[]>([])
 const detailLoading = ref(false)
-const deploymentOperation = ref<OpsDeploymentAction | ''>('')
+const deploymentOperation = ref<OpsDeploymentAction | 'delete' | ''>('')
 const existingDeploymentProjectId = ref('')
 let disposed = false
 let projectValidationRequest = 0
@@ -1305,16 +1314,18 @@ async function loadRun(runId: string) {
 const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
 
-async function pollRun(runId: string, deploymentId: string) {
+async function pollRun(runId: string, deploymentId: string, removed = false) {
   for (let attempt = 0; attempt < 20 && !disposed; attempt += 1) {
     const run = await loadRun(runId)
     if (disposed || run.status !== 'pending') break
     await delay(1500)
   }
   if (disposed) return
-  const detail = await opsAPI.getProjectDeployment(deploymentId)
-  if (disposed) return
-  selectedDeployment.value = detail
+  if (!removed) {
+    const detail = await opsAPI.getProjectDeployment(deploymentId)
+    if (disposed) return
+    selectedDeployment.value = detail
+  }
   await loadDeployments()
 }
 
@@ -1339,6 +1350,29 @@ async function operateDeployment(action: OpsDeploymentAction) {
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
     if (!disposed) ElMessage.error(apiErrorMessage(error, '工程部署操作失败'))
+  } finally {
+    if (!disposed) deploymentOperation.value = ''
+  }
+}
+
+async function deleteDeployment() {
+  const deployment = selectedDeployment.value
+  if (!deployment || deploymentOperation.value) return
+  try {
+    await ElMessageBox.confirm(
+      `删除工程“${deployment.projectName}”的部署将停止并清理运行资源、运行态消息，并释放端口。工程设计和已发布版本不会删除，是否继续？`,
+      '确认删除部署',
+      { confirmButtonText: '删除部署', cancelButtonText: '取消', type: 'warning', confirmButtonClass: 'el-button--danger' },
+    )
+    deploymentOperation.value = 'delete'
+    const run = await opsAPI.deleteProjectDeployment(deployment.id)
+    selectedRun.value = run
+    ElMessage.success('删除部署任务已下发')
+    if (run.id) await pollRun(run.id, deployment.id, true)
+    detailDrawer.value = false
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    if (!disposed) ElMessage.error(apiErrorMessage(error, '删除部署失败；若已有操作正在执行，请等待完成后重试'))
   } finally {
     if (!disposed) deploymentOperation.value = ''
   }
