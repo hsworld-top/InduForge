@@ -35,6 +35,9 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 		return nil, fmt.Errorf("运行支撑引用缺失")
 	}
 	role := workload.Engine
+	if role == ServiceBase {
+		role = "writer"
+	}
 	manualEpoch := workload.BindingRevision
 	if manualEpoch < 1 {
 		manualEpoch = 1
@@ -81,18 +84,20 @@ func runtimeJetStreamInput(role string, enabledRoles []string, key string, suppo
 	}
 	topology := make([]any, 0, 5)
 	for _, enabledRole := range enabledRoles {
-		if enabledRole != ServiceCompute && enabledRole != ServiceAlarm {
+		consumerRole := enabledRole
+		if enabledRole == ServiceBase {
+			consumerRole = "writer"
+		}
+		if consumerRole != "writer" && consumerRole != ServiceCompute && consumerRole != ServiceAlarm {
 			continue
 		}
-		topology = append(topology, consumer(enabledRole, "raw", streams["raw"], "data.raw.>"), consumer(enabledRole, "derived", streams["derived"], "data.computed.>"))
-		if enabledRole == ServiceCompute {
-			topology = append(topology, consumer(enabledRole, "command", streams["command"], "compute.command.>"))
+		topology = append(topology, consumer(consumerRole, "raw", streams["raw"], "data.raw.>"))
+		topology = append(topology, consumer(consumerRole, "derived", streams["derived"], "data.computed.>"))
+		if consumerRole == ServiceCompute {
+			topology = append(topology, consumer(consumerRole, "command", streams["command"], "compute.command.>"))
 		}
 	}
 	active := make([]any, 0, 3)
-	if role == ServiceBase {
-		active = append(active, topology...)
-	}
 	for _, item := range topology {
 		if item.(map[string]any)["role"] == role {
 			active = append(active, item)

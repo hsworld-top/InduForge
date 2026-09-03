@@ -94,7 +94,7 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 	if e != nil {
 		return ProjectRuntimeContext{}, e
 	}
-	engineRows, e := r.pool.Query(ctx, `SELECT service_type FROM deployment_services WHERE project_deployment_id=$1 AND desired_status='running' AND service_type IN ('compute','alarm') ORDER BY service_type`, deploymentID)
+	engineRows, e := r.pool.Query(ctx, `SELECT service_type FROM deployment_services WHERE project_deployment_id=$1 AND desired_status='running' AND service_type IN ('base','compute','alarm') ORDER BY service_type`, deploymentID)
 	if e != nil {
 		return ProjectRuntimeContext{}, e
 	}

@@ -206,10 +206,10 @@ type ProjectWorkloadApplier interface {
 	Reconcile(context.Context, ProjectWorkload) error
 }
 type ProjectWorkloadStatus struct {
-	Ready             bool
-	Failed            bool
-	ReplicasObserved  int
-	Message           string
+	Ready            bool
+	Failed           bool
+	ReplicasObserved int
+	Message          string
 }
 type ProjectWorkloadInspector interface {
 	Status(context.Context, ProjectWorkload) (ProjectWorkloadStatus, error)
@@ -425,6 +425,15 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 		}
 	}
 	if value.Status.ObservedGeneration >= value.Metadata.Generation && value.Status.AvailableReplicas >= value.Spec.Replicas {
+		if workload.Engine == ServiceBase && workload.HostPort != nil {
+			ready, serviceErr := r.projectEntryReady(ctx, namespace, name)
+			if serviceErr != nil {
+				return ProjectWorkloadStatus{}, serviceErr
+			}
+			if !ready {
+				return ProjectWorkloadStatus{ReplicasObserved: value.Status.AvailableReplicas, Message: "等待工程访问入口就绪"}, nil
+			}
+		}
 		return ProjectWorkloadStatus{Ready: true, ReplicasObserved: value.Status.AvailableReplicas, Message: "Kubernetes rollout 已就绪"}, nil
 	}
 	podStatus, err := r.projectPodFailure(ctx, namespace, name)
@@ -432,6 +441,42 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 		return podStatus, err
 	}
 	return ProjectWorkloadStatus{Message: "等待 Kubernetes rollout readiness"}, nil
+}
+
+// projectEntryReady 以 ServiceLB 已公布入口作为基础引擎完成门槛，
+// 避免 Pod 已 Ready 但用户端口尚未可达时提前显示“运行中”。
+func (r *KubernetesProjectReconciler) projectEntryReady(ctx context.Context, namespace, name string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint+"/api/v1/namespaces/"+namespace+"/services/"+name, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return false, fmt.Errorf("读取 Kubernetes 工程入口状态失败: HTTP %d", resp.StatusCode)
+	}
+	var service struct {
+		Status struct {
+			LoadBalancer struct {
+				Ingress []struct {
+					IP, Hostname string
+				} `json:"ingress"`
+			} `json:"loadBalancer"`
+		} `json:"status"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&service); err != nil {
+		return false, err
+	}
+	for _, ingress := range service.Status.LoadBalancer.Ingress {
+		if strings.TrimSpace(ingress.IP) != "" || strings.TrimSpace(ingress.Hostname) != "" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *KubernetesProjectReconciler) projectPodFailure(ctx context.Context, namespace, name string) (ProjectWorkloadStatus, error) {

@@ -56,8 +56,8 @@ func computeSandboxSecretName(deploymentID string) (string, error) {
 	return name + "-sandbox", nil
 }
 
-// RenderProjectWorkloadManifest 生成稳定资源名。base 暴露 hostPort；compute/alarm
-// 使用同一 runtime 镜像但强制不同 IF_ENGINE_ROLE，避免一个 Pod 同时执行两类任务。
+// RenderProjectWorkloadManifest 生成稳定资源名。base 由同端口 ServiceLB 暴露，
+// 内部同时运行网关、Runtime API 和 writer；compute/alarm 保持独立角色。
 func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	namespace, err := projectNamespace(workload.EnvironmentID)
 	if err != nil {
@@ -88,11 +88,13 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		image, container = collectorEngineImage, "collector-engine"
 	}
 	hostPort := ""
+	serviceType, servicePort := "ClusterIP", 80
+	rolloutStrategy := "maxUnavailable: 1, maxSurge: 0"
 	// 运行时 bundle 由 init 容器写入 EmptyDir，主 RuntimeEngine 只读消费。
 	// 显式的只读 bind mount 是生产模式验证 site-index 可信来源的必要条件；
 	// base 网关仍保持原挂载语义。
 	workMountReadOnly := ""
-	sandbox := ""
+	sandbox, writerSidecar := "", ""
 	runtimeInit, runtimeArgs, runtimeMounts, runtimeVolumes, apiSidecar := "", "", "", "", ""
 	if workload.Engine == ServiceBase {
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
@@ -134,7 +136,18 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
-            - {name: work, mountPath: /work}`, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage)
+            - {name: work, mountPath: /work}
+        - name: runtime-binding-prepare
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["if-runtime-provisioner"]
+          args: ["prepare", "--input", "/etc/induforge/runtime-binding/input.json"]
+          resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "768Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: runtime-binding, mountPath: /etc/induforge/runtime-binding, readOnly: true}
+            - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: work, mountPath: /work}`, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage, runtimeEngineImage)
 		runtimeVolumes = fmt.Sprintf(`
         - name: runtime-binding
           configMap: {name: %s}
@@ -156,12 +169,18 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
               - {key: runtime-api-nats.json, path: nats.json}
               - {key: runtime-api-postgres.json, path: postgres.json}
               - {key: runtime-api-tokens.json, path: tokens.json}
+        - name: runtime-secrets
+          secret:
+            secretName: %s
+            items:
+              - {key: nats.json, path: nats.json}
+              - {key: postgres.json, path: postgres.json}
         - name: runtime-viewer-token
           secret:
             secretName: %s
             defaultMode: 0440
             items:
-              - {key: runtime-api-token, path: token}`, bindingName, secretName, secretName, secretName, secretName)
+              - {key: runtime-api-token, path: token}`, bindingName, secretName, secretName, secretName, secretName, secretName)
 		runtimeMounts = `
             - {name: runtime-viewer-token, mountPath: /var/run/induforge/runtime-viewer, readOnly: true}`
 		apiSidecar = fmt.Sprintf(`
@@ -177,6 +196,20 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           volumeMounts:
             - {name: work, mountPath: /work, readOnly: true}
             - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.ProjectID, runtimeAccountID(workload.ProjectID, workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, strconv.Itoa(max(1, workload.BindingRevision)), workload.RuntimeNATSEndpoint)
+		writerSidecar = fmt.Sprintf(`
+        - name: runtime-writer
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["runtime-engine"]
+          args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/bundle", "--index", "/work/bundle/site-index.json", "--listen", "127.0.0.1:18082"]
+          ports: [{name: writer-health, containerPort: 18082}]
+          readinessProbe: {httpGet: {path: /health, port: writer-health}, initialDelaySeconds: 3, periodSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: writer-health}, initialDelaySeconds: 15, periodSeconds: 10}
+          resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: work, mountPath: /work, readOnly: true}
+            - {name: runtime-secrets, mountPath: /work/bundle/secrets, readOnly: true}`, runtimeEngineImage)
 	}
 	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		workMountReadOnly = ", readOnly: true"
@@ -286,7 +319,8 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		if workload.HostPort == nil || *workload.HostPort < 1024 || *workload.HostPort > 65532 || isReservedDeploymentPort(*workload.HostPort) {
 			return "", fmt.Errorf("基础引擎 hostPort 无效")
 		}
-		hostPort = fmt.Sprintf("\n              hostPort: %d", *workload.HostPort)
+		serviceType, servicePort = "LoadBalancer", *workload.HostPort
+		rolloutStrategy = "maxUnavailable: 0, maxSurge: 1"
 	} else if workload.HostPort != nil {
 		return "", fmt.Errorf("仅基础引擎允许 hostPort")
 	}
@@ -308,8 +342,7 @@ metadata:
   labels: {induforge.io/project-workload: "true", induforge.io/service-id: %q}
 spec:
   replicas: 1
-  # 固定 hostPort 的单节点槽无法并行调度第二个 Pod；先退出旧 Pod，避免更新永久等待端口。
-  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 1, maxSurge: 0}}
+  strategy: {type: RollingUpdate, rollingUpdate: {%s}}
   selector: {matchLabels: {app.kubernetes.io/name: %q}}
   template:
     metadata:
@@ -358,9 +391,10 @@ metadata:
   namespace: %s
   labels: {induforge.io/project-workload: "true", induforge.io/service-id: %q}
 spec:
+  type: %s
   selector: {app.kubernetes.io/name: %q}
-  ports: [{name: http, port: 80, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, name), nil
+  ports: [{name: http, port: %d, targetPort: http}]
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, rolloutStrategy, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar+writerSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, serviceType, name, servicePort), nil
 }
 
 // renderCollectorWorkloadManifest 明确以 collector CLI 消费受信 Release 子工件、

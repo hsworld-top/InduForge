@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	roleWriter  = "writer"
 	roleCompute = "compute"
 	roleAlarm   = "alarm"
 )
@@ -98,7 +99,7 @@ type StateStoreInput struct {
 	CredentialSecretFile string `json:"credentialSecretFile"`
 }
 
-// BuildEngineConfig 构造仅运行 compute 或 alarm 的 runtime-engine.config.v2。
+// BuildEngineConfig 构造仅运行 writer、compute 或 alarm 的 runtime-engine.config.v2。
 // 它不加载文件、不解析索引、也不接触任何 secret 值；调用方必须在此之前完成
 // 资源与 secret 引用的受控准备。
 func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
@@ -153,6 +154,7 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 	}
 
 	switch input.Role {
+	case roleWriter:
 	case roleCompute:
 		config.ComputeSandbox = &model.ComputeSandbox{
 			ServerResourceRef:   input.ComputeSandbox.ServerResourceRef,
@@ -236,6 +238,10 @@ func validateInput(input BuildInput) error {
 	}
 
 	switch input.Role {
+	case roleWriter:
+		if len(input.ComputeProducers) != 0 || input.ComputeSandbox != nil || input.AlarmOwnership.OwnerID != "" || input.AlarmOwnership.Epoch != 0 {
+			return fmt.Errorf("writer 配置不得声明 compute/alarm 专属资源")
+		}
 	case roleCompute:
 		if input.ComputeSandbox == nil || strings.TrimSpace(input.ComputeSandbox.ServerResourceRef) == "" || strings.TrimSpace(input.ComputeSandbox.CredentialSecretRef) == "" {
 			return fmt.Errorf("compute 配置缺少 computeSandbox 受控引用")
@@ -259,7 +265,7 @@ func validateInput(input BuildInput) error {
 			return fmt.Errorf("alarm 配置缺少 producer ownership")
 		}
 	default:
-		return fmt.Errorf("RuntimeEngine role 必须为 compute 或 alarm")
+		return fmt.Errorf("RuntimeEngine role 必须为 writer、compute 或 alarm")
 	}
 	return nil
 }
@@ -268,7 +274,7 @@ func validateTopologyConsumers(role string, active, topology []model.Consumer) e
 	seen := map[string]struct{}{}
 	activeCount := 0
 	for _, consumer := range topology {
-		if consumer.Role != roleCompute && consumer.Role != roleAlarm {
+		if consumer.Role != roleWriter && consumer.Role != roleCompute && consumer.Role != roleAlarm {
 			return fmt.Errorf("jetStream.topologyConsumers 包含非法角色")
 		}
 		if consumer.DurableName == "" || consumer.ConsumerKey == "" {

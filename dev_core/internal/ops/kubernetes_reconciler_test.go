@@ -263,6 +263,40 @@ func TestKubernetesProjectReconcilerStatusRequiresObservedReady(t *testing.T) {
 	}
 }
 
+func TestKubernetesProjectReconcilerStatusWaitsForBaseEntry(t *testing.T) {
+	port := 17800
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/services/") {
+			_, _ = w.Write([]byte(`{"status":{"loadBalancer":{}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":1}}`))
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase, HostPort: &port})
+	if err != nil || status.Ready || status.ReplicasObserved != 1 || !strings.Contains(status.Message, "访问入口") {
+		t.Fatalf("pending entry status=%+v err=%v", status, err)
+	}
+}
+
+func TestKubernetesProjectReconcilerStatusRequiresReadyBaseEntry(t *testing.T) {
+	port := 17800
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/services/") {
+			_, _ = w.Write([]byte(`{"status":{"loadBalancer":{"ingress":[{"ip":"172.16.125.130"}]}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"metadata":{"generation":3},"spec":{"replicas":1},"status":{"observedGeneration":3,"availableReplicas":1}}`))
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase, HostPort: &port})
+	if err != nil || !status.Ready || status.ReplicasObserved != 1 {
+		t.Fatalf("ready entry status=%+v err=%v", status, err)
+	}
+}
+
 func TestKubernetesProjectReconcilerStatusReportsInitPhase(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if strings.Contains(request.URL.Path, "/pods") {

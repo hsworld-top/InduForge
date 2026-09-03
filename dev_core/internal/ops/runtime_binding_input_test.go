@@ -94,6 +94,28 @@ func TestBuildRuntimeBindingInputIncludesCollectorProducerArtifact(t *testing.T)
 	}
 }
 
+func TestBuildRuntimeBindingInputMapsBaseToWriter(t *testing.T) {
+	context := validRuntimeContext()
+	context.RuntimeEngines = []string{ServiceBase, ServiceCompute, ServiceAlarm}
+	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceBase, ReleaseID: testVersionID, Generation: 3}
+	raw, err := BuildRuntimeBindingInput(workload, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]any
+	if json.Unmarshal(raw, &input) != nil {
+		t.Fatal("运行绑定不是 JSON")
+	}
+	binding := input["binding"].(map[string]any)
+	if binding["role"] != "writer" {
+		t.Fatalf("基础引擎内部角色=%v", binding["role"])
+	}
+	consumers := binding["jetStream"].(map[string]any)["consumers"].([]any)
+	if len(consumers) != 2 || consumers[0].(map[string]any)["consumerKey"] != "writer-raw-v1" || consumers[1].(map[string]any)["consumerKey"] != "writer-derived-v1" {
+		t.Fatalf("writer consumer 不完整: %s", raw)
+	}
+}
+
 func TestBuildRuntimeBindingInputFreezesServiceGenerationAsFencingEpoch(t *testing.T) {
 	context := validRuntimeContext()
 	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, Generation: 3}

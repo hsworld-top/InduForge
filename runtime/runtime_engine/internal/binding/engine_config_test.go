@@ -59,6 +59,21 @@ func TestBuildEngineConfigAlarmBuildsSingleAlarmProducer(t *testing.T) {
 	}
 }
 
+func TestBuildEngineConfigWriterBuildsStateProjectionRole(t *testing.T) {
+	build := buildInput(validInput(roleWriter))
+	build.CollectorProducers = []CollectorProducer{{CollectorID: "collector-a", Artifact: model.CollectorArtifactBinding{Artifact: model.ArtifactRef{ArtifactID: "collector-artifact-a", ArtifactRevision: 1, ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, ArtifactFile: "collector/collector-runtime-artifact.json"}, Ownership: model.Ownership{OwnerID: "collector-owner-a", Epoch: 1}}}
+	config, err := BuildEngineConfig(build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Roles) != 1 || config.Roles[0] != roleWriter || len(config.JetStream.Consumers) != 2 {
+		t.Fatalf("writer 配置不完整: %+v", config)
+	}
+	if err = model.ValidateRawProducerFence(config, "collector-a", model.Ownership{OwnerID: "collector-owner-a", Epoch: 1}); err != nil {
+		t.Fatalf("writer 采集生产者绑定失效: %v", err)
+	}
+}
+
 func TestBuildEngineConfigCarriesTrustedCollectorProducerForBothRoles(t *testing.T) {
 	for _, role := range []string{roleCompute, roleAlarm} {
 		build := buildInput(validInput(role))
@@ -157,7 +172,7 @@ func buildInput(input Input) BuildInput {
 	build := BuildInput{Input: input, ProjectArtifact: model.ArtifactRef{ArtifactID: "11111111-1111-4111-8111-111111111111", ArtifactRevision: 1, ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, RoleOwnership: model.Ownership{OwnerID: "runtime-engine-" + input.Role + "-0", Epoch: 1}}
 	if input.Role == roleCompute {
 		build.ComputeProducers = []ComputeProducer{{ComputeID: "44444444-4444-4444-8444-444444444444", Ownership: model.Ownership{OwnerID: "runtime-engine-compute-0", Epoch: 1}}}
-	} else {
+	} else if input.Role == roleAlarm {
 		build.AlarmOwnership = model.Ownership{OwnerID: "runtime-engine-alarm-0", Epoch: 1}
 	}
 	return build
