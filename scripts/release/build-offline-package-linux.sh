@@ -45,7 +45,7 @@ PRODUCT_INFRA_IMAGES=(
 BUSINESS_IMAGES=(
   "induforge/edge:latest"
   "induforge/control:latest"
-  "induforge/designer-code-server:4.131.0-node22-pnpm10.19.0"
+  "induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64"
   "induforge/data:latest"
 )
 
@@ -77,7 +77,7 @@ ARM64_RUNTIME_CONTEXTS=(
 PACKAGE_IMAGES=(
   "induforge/edge:latest"
   "induforge/control:latest"
-  "induforge/designer-code-server:4.131.0-node22-pnpm10.19.0"
+  "induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64"
   "induforge/data:latest"
   "induforge/meta-store:latest"
   "induforge/cache-store:latest"
@@ -151,10 +151,10 @@ build_business_images() {
   docker build -t induforge/control:latest -f "$REPO_ROOT/dev_core/Dockerfile" "$REPO_ROOT"
 
   docker build \
-    -t induforge/designer-code-server:4.131.0-node22-pnpm10.19.0 \
+    -t induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64 \
     -f "$REPO_ROOT/designer/code-workspace/Dockerfile" \
     "$REPO_ROOT"
-  "$REPO_ROOT/designer/code-workspace/verify-image.sh" induforge/designer-code-server:4.131.0-node22-pnpm10.19.0
+  "$REPO_ROOT/designer/code-workspace/verify-image.sh" induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64
 
   echo "构建数据服务镜像..."
   docker build -t induforge/data:latest -f "$REPO_ROOT/data_service/Dockerfile" "$REPO_ROOT"

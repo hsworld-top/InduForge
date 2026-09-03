@@ -636,7 +636,7 @@ spec:
               value: unix:///var/run/docker.sock
             # K3s 工作区镜像由离线安装包导入 containerd；不能沿用本地 Docker 的开发标签。
             - name: CODE_SERVER_IMAGE
-              value: induforge/designer-code-server:4.131.0-node22-pnpm10.19.0
+              value: induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64
             - name: CODE_WORKSPACE_ENGINE
               value: kubernetes
             - name: CODE_WORKSPACE_VOLUME

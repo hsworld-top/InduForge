@@ -3,7 +3,7 @@ set -eu
 
 # 离线 K3s 中心磁盘有限。docker image size 只反映层总量，还必须约束容器
 # 合并根文件系统，避免压缩 tar 很小但 containerd 解压后耗尽节点根盘。
-image=${1:-induforge/designer-code-server:4.131.0-node22-pnpm10.19.0}
+image=${1:-induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64}
 max_layer_bytes=$((3 * 1024 * 1024 * 1024))
 max_rootfs_bytes=$((5 * 1024 * 1024 * 1024 / 2))
 layer_size=$(docker image inspect --format '{{.Size}}' "$image")

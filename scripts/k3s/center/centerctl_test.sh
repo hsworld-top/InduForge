@@ -44,6 +44,7 @@ for expected in \
   'resources: ["nodes"]' \
   'verbs: ["get", "list", "patch"]' \
   'value: http://center-data:18102' \
+	'value: induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64' \
 	'DATA_SERVICE_INTERNAL_TOKEN' \
   'value: /contracts/collector-protocols' \
   'hostPort: 18080' \

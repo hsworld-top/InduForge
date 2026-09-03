@@ -40,7 +40,7 @@ services:
       CODE_WORKSPACE_ROOT: /var/lib/induforge/workspaces
       CODE_WORKSPACE_VOLUME: ${CODE_WORKSPACE_VOLUME:-induforge-control-workspaces}
       CODE_SERVER_DOCKER_HOST: unix:///var/run/docker.sock
-      CODE_SERVER_IMAGE: ${CODE_SERVER_IMAGE:-induforge/designer-code-server:4.131.0-node22-pnpm10.19.0}
+      CODE_SERVER_IMAGE: ${CODE_SERVER_IMAGE:-induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64}
       CODE_SERVER_BIND_HOST: ${CODE_SERVER_BIND_HOST:-127.0.0.1}
     volumes:
       - induforge-control-workspaces:/var/lib/induforge/workspaces
