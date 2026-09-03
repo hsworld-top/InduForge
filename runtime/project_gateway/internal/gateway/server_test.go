@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -107,6 +108,53 @@ func TestGatewayViewerProxyNeverForwardsClientCredentialsOrMutations(t *testing.
 		if response.Code != http.StatusForbidden || receivedPath != "" || strings.Contains(response.Body.String(), "viewer-token") {
 			t.Fatalf("mutation %s %s must remain local forbidden: status=%d upstream=%q body=%q", mutation.method, mutation.path, response.Code, receivedPath, response.Body.String())
 		}
+	}
+}
+
+func TestGatewayInjectsTokenFreeRuntimeBootstrapOnlyIntoHTMLEntry(t *testing.T) {
+	root := t.TempDir()
+	index := `<!doctype html><html><head><script type="module" src="/assets/app.js"></script></head><body><div id="app"></div></body></html>`
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte(index), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "assets"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "assets", "app.js"), []byte("console.log('app')"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previousAssets := browserRuntimeAssets
+	browserRuntimeAssets = fstest.MapFS{"runtime-sdk.js": {Data: []byte("export function createHttpRuntime() { return { adapter: {} } }")}}
+	defer func() { browserRuntimeAssets = previousAssets }()
+
+	server, upstream := newTestServerWithRoot(t, root)
+	defer upstream.Close()
+	entry := httptest.NewRecorder()
+	server.Handler().ServeHTTP(entry, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := entry.Body.String()
+	if entry.Code != http.StatusOK || strings.Count(body, "data-induforge-runtime-bootstrap") != 1 || strings.Contains(body, "viewer-token") {
+		t.Fatalf("entry bootstrap must be token-free and injected once: status=%d body=%s", entry.Code, body)
+	}
+	if strings.Index(body, "runtime-bootstrap.js") > strings.Index(body, "/assets/app.js") {
+		t.Fatalf("bootstrap must precede user module scripts: %s", body)
+	}
+
+	asset := httptest.NewRecorder()
+	server.Handler().ServeHTTP(asset, httptest.NewRequest(http.MethodGet, "/assets/app.js", nil))
+	if asset.Code != http.StatusOK || strings.Contains(asset.Body.String(), "runtime-bootstrap") {
+		t.Fatalf("non-html asset must not be injected: status=%d body=%s", asset.Code, asset.Body.String())
+	}
+
+	bootstrap := httptest.NewRecorder()
+	server.Handler().ServeHTTP(bootstrap, httptest.NewRequest(http.MethodGet, browserRuntimeBootstrapPath, nil))
+	if bootstrap.Code != http.StatusOK || !strings.Contains(bootstrap.Header().Get("Content-Type"), "javascript") || !strings.Contains(bootstrap.Body.String(), "createHttpRuntime") || strings.Contains(bootstrap.Body.String(), "viewer-token") {
+		t.Fatalf("bootstrap must be a token-free external module: status=%d headers=%v body=%s", bootstrap.Code, bootstrap.Header(), bootstrap.Body.String())
+	}
+
+	sdk := httptest.NewRecorder()
+	server.Handler().ServeHTTP(sdk, httptest.NewRequest(http.MethodGet, browserRuntimeSDKPath, nil))
+	if sdk.Code != http.StatusOK || !strings.Contains(sdk.Header().Get("Content-Type"), "javascript") || strings.Contains(strings.ToLower(sdk.Body.String()), "<html") {
+		t.Fatalf("runtime sdk asset must remain JavaScript: status=%d headers=%v body=%s", sdk.Code, sdk.Header(), sdk.Body.String())
 	}
 }
 
@@ -336,6 +384,11 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	if err := os.WriteFile(filepath.Join(root, "assets", "app.js"), []byte("console.log('release')"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return newTestServerWithRoot(t, root)
+}
+
+func newTestServerWithRoot(t *testing.T, root string) (*Server, *httptest.Server) {
+	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)

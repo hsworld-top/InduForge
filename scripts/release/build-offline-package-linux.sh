@@ -51,7 +51,7 @@ BUSINESS_IMAGES=(
 
 # 工程运行镜像只在 ARM64 Linux 节点执行。构建机仅使用 Docker，不导入 K3s。
 ARM64_RUNTIME_IMAGES=(
-  "induforge/project-gateway:1.0.1"
+  "induforge/project-gateway:1.0.2"
   "induforge/project-runtime-api:1.0.0"
   "induforge/runtime-engine:1.0.21"
   "induforge/compute-sandbox:1.0.0"
@@ -67,7 +67,7 @@ ARM64_RUNTIME_DOCKERFILES=(
 )
 
 ARM64_RUNTIME_CONTEXTS=(
-  "runtime/project_gateway"
+  "."
   "runtime/runtime_api"
   "runtime/runtime_engine"
   "compute_sandbox"
@@ -83,7 +83,7 @@ PACKAGE_IMAGES=(
   "induforge/cache-store:latest"
   "induforge/message-hub:latest"
   "induforge/object-store:latest"
-  "induforge/project-gateway:1.0.1"
+  "induforge/project-gateway:1.0.2"
   "induforge/project-runtime-api:1.0.0"
   "induforge/runtime-engine:1.0.21"
   "induforge/compute-sandbox:1.0.0"

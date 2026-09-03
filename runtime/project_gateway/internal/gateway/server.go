@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,16 @@ import (
 )
 
 const maxProxyBodyBytes = 2 << 20
+
+const (
+	browserRuntimeBootstrapPath = "/_induforge/runtime-bootstrap.js"
+	browserRuntimeSDKPath       = "/_induforge/runtime-sdk.js"
+	browserRuntimeBootstrapTag  = `<script type="module" src="/_induforge/runtime-bootstrap.js" data-induforge-runtime-bootstrap></script>`
+)
+
+// browserRuntimeAssets 是网关镜像内由 runtime/web-sdk 原样提供的浏览器 Runtime
+// 实现。工程静态制品和用户源码均不会获得 viewer token。
+var browserRuntimeAssets fs.FS = os.DirFS("/opt/induforge/runtime-sdk")
 
 type Server struct {
 	config     Config
@@ -109,6 +120,10 @@ func (s *Server) serveHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.handleHealth(writer, request)
 	case request.URL.Path == "/api/v1/status":
 		s.handleStatus(writer, request)
+	case request.URL.Path == browserRuntimeBootstrapPath:
+		serveBrowserRuntimeBootstrap(writer, request)
+	case request.URL.Path == browserRuntimeSDKPath:
+		serveBrowserRuntimeSDK(writer, request)
 	case request.URL.Path == "/api/v1/runtime/status":
 		request = request.Clone(request.Context())
 		request.URL.Path = "/api/v1/status"
@@ -206,6 +221,9 @@ func (s *Server) serveAsset(writer http.ResponseWriter, request *http.Request) {
 		http.NotFound(writer, request)
 		return
 	}
+	if clean == "index.html" {
+		content = injectBrowserRuntimeBootstrap(content)
+	}
 	if contentType := mime.TypeByExtension(path.Ext(clean)); contentType != "" {
 		writer.Header().Set("Content-Type", contentType)
 	}
@@ -214,6 +232,57 @@ func (s *Server) serveAsset(writer http.ResponseWriter, request *http.Request) {
 	} else {
 		writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
+	writer.Header().Set("Content-Length", strconvItoa(len(content)))
+	if request.Method == http.MethodHead {
+		writer.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = writer.Write(content)
+}
+
+func injectBrowserRuntimeBootstrap(content []byte) []byte {
+	if bytes.Contains(content, []byte("data-induforge-runtime-bootstrap")) {
+		return content
+	}
+	lower := bytes.ToLower(content)
+	headStart := bytes.Index(lower, []byte("<head"))
+	if headStart < 0 {
+		return content
+	}
+	headEnd := bytes.IndexByte(lower[headStart:], '>')
+	if headEnd < 0 {
+		return content
+	}
+	insertAt := headStart + headEnd + 1
+	result := make([]byte, 0, len(content)+len(browserRuntimeBootstrapTag))
+	result = append(result, content[:insertAt]...)
+	result = append(result, browserRuntimeBootstrapTag...)
+	return append(result, content[insertAt:]...)
+}
+
+func serveBrowserRuntimeBootstrap(writer http.ResponseWriter, request *http.Request) {
+	serveBrowserRuntimeScript(writer, request, []byte(`import { createHttpRuntime } from "/_induforge/runtime-sdk.js";
+if (!globalThis.__INDUFORGE_RUNTIME__) globalThis.__INDUFORGE_RUNTIME__ = createHttpRuntime();
+`))
+}
+
+func serveBrowserRuntimeSDK(writer http.ResponseWriter, request *http.Request) {
+	content, err := fs.ReadFile(browserRuntimeAssets, "runtime-sdk.js")
+	if err != nil {
+		http.NotFound(writer, request)
+		return
+	}
+	serveBrowserRuntimeScript(writer, request, content)
+}
+
+func serveBrowserRuntimeScript(writer http.ResponseWriter, request *http.Request, content []byte) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		writer.Header().Set("Allow", "GET, HEAD")
+		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writer.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Length", strconvItoa(len(content)))
 	if request.Method == http.MethodHead {
 		writer.WriteHeader(http.StatusOK)
