@@ -61,8 +61,10 @@ describe('ops presentation', () => {
       }),
     ).toMatchObject({
       active: 1,
-      serviceDescription: '等待运行服务就绪',
-      healthDescription: '等待全部运行服务通过健康检查',
+      steps: expect.arrayContaining([
+        expect.objectContaining({ title: '服务启动', description: '等待运行服务就绪' }),
+        expect.objectContaining({ title: '健康检查', description: '等待全部运行服务通过健康检查' }),
+      ]),
     })
     expect(
       deploymentDetailPresentation({
@@ -72,8 +74,10 @@ describe('ops presentation', () => {
       }),
     ).toMatchObject({
       active: 4,
-      serviceDescription: '全部运行服务已启动',
-      healthDescription: '全部运行服务已通过健康检查',
+      steps: expect.arrayContaining([
+        expect.objectContaining({ title: '服务启动', description: '全部运行服务已启动' }),
+        expect.objectContaining({ title: '健康检查', description: '全部运行服务已通过健康检查' }),
+      ]),
     })
     expect(
       deploymentDetailPresentation({
@@ -81,10 +85,12 @@ describe('ops presentation', () => {
         latestRunOperation: 'delete',
       }),
     ).toMatchObject({
-      active: 2,
-      prepareDescription: '正在停止 Kubernetes 工作负载',
-      serviceDescription: '工作负载停止后清理运行态消息',
-      healthDescription: '清理完成后释放工程端口并移出部署列表',
+      active: 0,
+      steps: [
+        { title: '停止运行资源', description: '正在停止 Kubernetes 工作负载' },
+        { title: '清理运行态消息', description: '工作负载停止后清理运行态消息' },
+        { title: '释放工程端口', description: '清理完成后释放工程端口并移出部署列表' },
+      ],
     })
     expect(
       deploymentDetailPresentation({
@@ -93,8 +99,10 @@ describe('ops presentation', () => {
       }),
     ).toMatchObject({
       processStatus: 'error',
-      serviceDescription: '运行态消息尚未完成清理',
-      healthDescription: '工程端口仍受保护，尚未释放',
+      steps: expect.arrayContaining([
+        expect.objectContaining({ title: '清理运行态消息', description: '运行态消息尚未完成清理' }),
+        expect.objectContaining({ title: '释放工程端口', description: '工程端口仍受保护，尚未释放' }),
+      ]),
     })
   })
   it('按平台固定节点能力，不允许生成不完整的运行节点', () => {

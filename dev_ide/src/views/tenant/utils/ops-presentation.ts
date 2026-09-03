@@ -215,22 +215,41 @@ export const deploymentDetailPresentation = (deployment?: {
 }) => {
 	if (deployment?.latestRunOperation === 'stop') {
 		const failed = deployment?.observedStatus === 'failed'
+		const stopped = deployment?.observedStatus === 'stopped'
 		return {
-			active: failed ? 1 : 2,
+			active: failed ? 0 : stopped ? 2 : 0,
 			processStatus: failed ? ('error' as const) : ('process' as const),
-			prepareDescription: failed ? '停止阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
-			serviceDescription: failed ? '运行资源尚未完全停止' : '等待运行资源确认停止',
-			healthDescription: '停止后保留部署配置、端口和运行态消息',
+			steps: [
+				{
+					title: '停止运行资源',
+					description: failed ? '停止阶段失败，请查看任务事件' : stopped ? '运行资源已停止' : '正在停止 Kubernetes 工作负载',
+				},
+				{
+					title: '保留部署配置',
+					description: failed ? '运行资源尚未完全停止' : '保留部署配置、端口和运行态消息',
+				},
+			],
 		}
 	}
 	if (deployment?.latestRunOperation === 'delete') {
 		const failed = deployment?.observedStatus === 'failed'
 		return {
-			active: failed ? 1 : 2,
+			active: 0,
 			processStatus: failed ? ('error' as const) : ('process' as const),
-			prepareDescription: failed ? '删除阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
-			serviceDescription: failed ? '运行态消息尚未完成清理' : '工作负载停止后清理运行态消息',
-			healthDescription: failed ? '工程端口仍受保护，尚未释放' : '清理完成后释放工程端口并移出部署列表',
+			steps: [
+				{
+					title: '停止运行资源',
+					description: failed ? '删除阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
+				},
+				{
+					title: '清理运行态消息',
+					description: failed ? '运行态消息尚未完成清理' : '工作负载停止后清理运行态消息',
+				},
+				{
+					title: '释放工程端口',
+					description: failed ? '工程端口仍受保护，尚未释放' : '清理完成后释放工程端口并移出部署列表',
+				},
+			],
 		}
 	}
   const services = deployment?.services || []
@@ -248,17 +267,23 @@ export const deploymentDetailPresentation = (deployment?: {
     return {
       active: 4,
       processStatus: 'process' as const,
-      prepareDescription: '运行资源已准备',
-      serviceDescription: '全部运行服务已启动',
-      healthDescription: '全部运行服务已通过健康检查',
+      steps: [
+        { title: '版本与环境校验', description: '部署条件已确认' },
+        { title: '运行资源准备', description: '运行资源已准备' },
+        { title: '服务启动', description: '全部运行服务已启动' },
+        { title: '健康检查', description: '全部运行服务已通过健康检查' },
+      ],
     }
   }
   return {
     active: 1,
     processStatus: failed ? ('error' as const) : ('process' as const),
-    prepareDescription: failed ? '运行资源准备失败，请查看服务状态' : '工作负载已下发，等待 Kubernetes 就绪',
-    serviceDescription: failed ? '运行服务未能启动' : '等待运行服务就绪',
-    healthDescription: failed ? '健康检查未通过' : '等待全部运行服务通过健康检查',
+    steps: [
+      { title: '版本与环境校验', description: '部署条件已确认' },
+      { title: '运行资源准备', description: failed ? '运行资源准备失败，请查看服务状态' : '工作负载已下发，等待 Kubernetes 就绪' },
+      { title: '服务启动', description: failed ? '运行服务未能启动' : '等待运行服务就绪' },
+      { title: '健康检查', description: failed ? '健康检查未通过' : '等待全部运行服务通过健康检查' },
+    ],
   }
 }
 export const deploymentStatePresentation = (

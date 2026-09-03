@@ -1737,20 +1737,10 @@
           :process-status="selectedDeploymentDetail.processStatus"
         >
           <el-step
-            :title="$t('opsConsole.deployments.validation')"
-            :description="$t('opsConsole.deployments.validationDesc')"
-          />
-          <el-step
-            :title="$t('opsConsole.deployments.prepare')"
-            :description="selectedDeploymentDetail.prepareDescription"
-          />
-          <el-step
-            :title="$t('opsConsole.deployments.serviceStart')"
-            :description="selectedDeploymentDetail.serviceDescription"
-          />
-          <el-step
-            :title="$t('opsConsole.deployments.healthCheck')"
-            :description="selectedDeploymentDetail.healthDescription"
+            v-for="step in selectedDeploymentDetail.steps"
+            :key="step.title"
+            :title="step.title"
+            :description="step.description"
           />
         </el-steps>
       </template>
