@@ -186,8 +186,12 @@ export const runEventPresentation = (stage?: string, message?: string) => {
     'start queued': '启动任务已创建，等待目标节点执行',
     'stop queued': '停止任务已创建，等待目标节点执行',
     'restart queued': '重启任务已创建，等待目标节点执行',
+    '删除任务已创建，等待停止 kubernetes 工作负载': '删除任务已创建，等待停止运行资源',
   }
   if (stage === 'dispatched') {
+    if (normalizedMessage === '正在停止 kubernetes 工作负载') {
+      return { stage: '处理中', message: message || '正在停止 Kubernetes 工作负载' }
+    }
     return { stage: '已下发', message: '工作负载已下发，等待运行服务就绪' }
   }
   if (stage === 'ready' || stage === 'succeeded') {
@@ -217,6 +221,16 @@ export const deploymentDetailPresentation = (deployment?: {
 			prepareDescription: failed ? '停止阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
 			serviceDescription: failed ? '运行资源尚未完全停止' : '等待运行资源确认停止',
 			healthDescription: '停止后保留部署配置、端口和运行态消息',
+		}
+	}
+	if (deployment?.latestRunOperation === 'delete') {
+		const failed = deployment?.observedStatus === 'failed'
+		return {
+			active: failed ? 1 : 2,
+			processStatus: failed ? ('error' as const) : ('process' as const),
+			prepareDescription: failed ? '删除阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
+			serviceDescription: failed ? '运行态消息尚未完成清理' : '工作负载停止后清理运行态消息',
+			healthDescription: failed ? '工程端口仍受保护，尚未释放' : '清理完成后释放工程端口并移出部署列表',
 		}
 	}
   const services = deployment?.services || []

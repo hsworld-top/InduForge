@@ -49,6 +49,10 @@ describe('ops presentation', () => {
       stage: '已下发',
       message: '工作负载已下发，等待运行服务就绪',
     })
+    expect(runEventPresentation('dispatched', '正在停止 Kubernetes 工作负载')).toEqual({
+      stage: '处理中',
+      message: '正在停止 Kubernetes 工作负载',
+    })
     expect(
       deploymentDetailPresentation({
         observedStatus: 'pending',
@@ -70,6 +74,27 @@ describe('ops presentation', () => {
       active: 4,
       serviceDescription: '全部运行服务已启动',
       healthDescription: '全部运行服务已通过健康检查',
+    })
+    expect(
+      deploymentDetailPresentation({
+        observedStatus: 'pending',
+        latestRunOperation: 'delete',
+      }),
+    ).toMatchObject({
+      active: 2,
+      prepareDescription: '正在停止 Kubernetes 工作负载',
+      serviceDescription: '工作负载停止后清理运行态消息',
+      healthDescription: '清理完成后释放工程端口并移出部署列表',
+    })
+    expect(
+      deploymentDetailPresentation({
+        observedStatus: 'failed',
+        latestRunOperation: 'delete',
+      }),
+    ).toMatchObject({
+      processStatus: 'error',
+      serviceDescription: '运行态消息尚未完成清理',
+      healthDescription: '工程端口仍受保护，尚未释放',
     })
   })
   it('按平台固定节点能力，不允许生成不完整的运行节点', () => {
