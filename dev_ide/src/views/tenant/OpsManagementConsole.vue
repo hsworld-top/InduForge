@@ -1696,6 +1696,39 @@
             selectedDeploymentRow.services.join('、')
           }}</el-descriptions-item>
         </el-descriptions>
+        <div class="ops-drawer-actions">
+          <el-button
+            size="small"
+            :loading="deploymentOperation === 'start'"
+            :disabled="Boolean(deploymentOperation) || !canStartDeployment"
+            @click="operateSelectedDeployment('start')"
+            >启动</el-button
+          >
+          <el-button
+            size="small"
+            :loading="deploymentOperation === 'restart'"
+            :disabled="Boolean(deploymentOperation) || !deploymentRunning"
+            @click="operateSelectedDeployment('restart')"
+            >重新启动</el-button
+          >
+          <el-button
+            size="small"
+            type="danger"
+            plain
+            :loading="deploymentOperation === 'stop'"
+            :disabled="Boolean(deploymentOperation) || !deploymentRunning"
+            @click="operateSelectedDeployment('stop')"
+            >停止</el-button
+          >
+          <el-button
+            size="small"
+            type="danger"
+            :loading="deploymentOperation === 'delete'"
+            :disabled="Boolean(deploymentOperation)"
+            @click="deleteSelectedDeployment"
+            >删除部署</el-button
+          >
+        </div>
         <h3 class="ops-drawer-heading">{{ $t('opsConsole.deployments.latestDeployment') }}</h3>
         <el-steps
           direction="vertical"
@@ -1862,11 +1895,18 @@ const deployDialog = ref(false)
 const deploymentDrawer = ref(false)
 const submittingEnrollment = ref(false)
 const submittingDeployment = ref(false)
+const deploymentOperation = ref<'start' | 'restart' | 'stop' | 'delete' | ''>('')
 const downloadingPackageId = ref('')
 const enrollmentCode = ref('')
 const enrollmentServerUrl = ref('')
 const createdEnrollment = ref<NodeEnrollment | null>(null)
 const selectedDeploymentRow = ref<DeploymentRow | null>(null)
+const deploymentRunning = computed(
+  () => selectedDeploymentRow.value?.deployment.observedStatus === 'running',
+)
+const canStartDeployment = computed(() =>
+  ['stopped', 'failed'].includes(selectedDeploymentRow.value?.deployment.observedStatus || ''),
+)
 const nodePage = reactive(createPageState())
 const deploymentPage = reactive(createPageState())
 const enrollmentPage = reactive(createPageState())
@@ -3328,6 +3368,37 @@ function handleOpenDeployEvent(event: Event) {
 function openDeploymentRow(row: DeploymentRow) {
   selectedDeploymentRow.value = row
   deploymentDrawer.value = true
+}
+
+async function operateSelectedDeployment(action: 'start' | 'restart' | 'stop') {
+  const row = selectedDeploymentRow.value
+  if (!row || deploymentOperation.value) return
+  try {
+    if (action !== 'start') {
+      await ElMessageBox.confirm(`确定${action === 'stop' ? '停止' : '重新启动'}工程“${row.projectName}”吗？`, '确认操作', { type: 'warning' })
+    }
+    deploymentOperation.value = action
+    await opsAPI.operateProjectDeployment(row.deployment.id, action)
+    ElMessage.success('工程部署操作已下发')
+    await loadDeployments()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(apiErrorMessage(error, '工程部署操作失败，请等待当前任务完成后重试'))
+  } finally { deploymentOperation.value = '' }
+}
+
+async function deleteSelectedDeployment() {
+  const row = selectedDeploymentRow.value
+  if (!row || deploymentOperation.value) return
+  try {
+    await ElMessageBox.confirm(`删除部署将清理运行资源和运行态消息，并释放端口；工程设计和发布版本不会删除。确定删除“${row.projectName}”的部署吗？`, '确认删除部署', { type: 'warning', confirmButtonText: '删除部署' })
+    deploymentOperation.value = 'delete'
+    await opsAPI.deleteProjectDeployment(row.deployment.id)
+    ElMessage.success('删除部署任务已下发')
+    deploymentDrawer.value = false
+    await loadDeployments()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(apiErrorMessage(error, '删除部署失败，请等待当前任务完成后重试'))
+  } finally { deploymentOperation.value = '' }
 }
 
 function openEnrollmentDialog() {
