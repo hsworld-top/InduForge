@@ -96,3 +96,32 @@ func TestKubernetesRemoveWaitsForResourceAbsence(t *testing.T) {
 		t.Fatalf("资源未确认消失即结束，GET 次数=%d", getCount)
 	}
 }
+
+func TestKubernetesInspectMapsEvictedWorkspaceToUnhealthy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pods/"):
+			_, _ = w.Write([]byte(`{
+				"metadata":{"labels":{"com.induforge.managed":"true"}},
+				"status":{"phase":"Failed","reason":"Evicted","containerStatuses":[{"ready":false}]}
+			}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/services/"):
+			_, _ = w.Write([]byte(`{"spec":{"ports":[{"name":"code","nodePort":32122},{"name":"preview-control","nodePort":31298}]}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	engine := &KubernetesEngine{namespace: "induforge-system", baseURL: server.URL, token: "test", client: server.Client()}
+	state, err := engine.Inspect(context.Background(), "induforge-code-project-1")
+	if err != nil {
+		t.Fatalf("读取被驱逐工作区失败: %v", err)
+	}
+	if state.Running || state.Health != "unhealthy" {
+		t.Fatalf("Evicted 工作区必须映射为不可用状态: %#v", state)
+	}
+	if state.ServicePorts["preview-control"] != "31298" {
+		t.Fatalf("工作区 Service 端口未保留: %#v", state.ServicePorts)
+	}
+}

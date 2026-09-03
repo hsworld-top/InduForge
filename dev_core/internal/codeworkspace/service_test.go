@@ -154,6 +154,26 @@ func TestStatusReportsPendingClusterWorkspaceAsStarting(t *testing.T) {
 	}
 }
 
+func TestStartReportsUnhealthyWorkspaceAsErrorWithoutRestart(t *testing.T) {
+	root := t.TempDir()
+	item := project.Project{ID: testProjectID, TenantID: "tenant", CreatedBy: "owner", Visibility: "private", WorkspacePath: filepath.Join(root, testProjectID, "workspace")}
+	engine := &fakeEngine{state: ContainerState{
+		Name: containerName(testProjectID), Health: "unhealthy",
+		Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.project-id": testProjectID, "com.induforge.role": "code-workspace"},
+	}}
+	service, err := NewService(fakeProjects{item: item}, engine, Config{Image: "image", VolumeName: "workspaces"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID)
+	if err != nil || status.Status != "error" {
+		t.Fatalf("失败工作区必须明确返回 error: %#v, %v", status, err)
+	}
+	if len(engine.started) != 0 {
+		t.Fatalf("失败工作区不得被当作可启动容器: %#v", engine.started)
+	}
+}
+
 func TestBuiltinDemoWorkspaceReceivesOfficialDefaultTemplateOnly(t *testing.T) {
 	root := t.TempDir()
 	demoID := "00000000-0000-4000-8000-000000000001"

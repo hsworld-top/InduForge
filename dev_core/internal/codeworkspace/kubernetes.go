@@ -77,6 +77,12 @@ func (k *KubernetesEngine) Inspect(ctx context.Context, name string) (ContainerS
 	if pod.Status.Phase == "Pending" {
 		state.Health = "starting"
 	}
+	// Failed（包括节点因 Evicted 驱逐的工作区）不是可重新启动的 stopped
+	// Pod。必须让控制面明确返回 error，由调用方执行受控 Rebuild；否则会把
+	// 已持久化的源码错误地引导到首次模板初始化流程。
+	if pod.Status.Phase == "Failed" {
+		state.Health = "unhealthy"
+	}
 	for _, c := range pod.Status.ContainerStatuses {
 		if c.State.Waiting != nil && (c.State.Waiting.Reason == "ImagePullBackOff" || c.State.Waiting.Reason == "ErrImagePull") {
 			state.Health = "unhealthy"

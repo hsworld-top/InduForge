@@ -114,6 +114,11 @@ func (s *Service) Start(ctx context.Context, actor auth.User, projectID string) 
 		if err := s.validateOwnership(state, projectID); err != nil {
 			return Status{}, err
 		}
+		// 不对已失败的集群 Pod 调用 Start。Kubernetes 不会启动终止 Pod，
+		// 继续调用只会掩盖错误并让前端误判成可以首次初始化的 stopped 状态。
+		if state.Health == "unhealthy" {
+			return s.inspect(ctx, projectID)
+		}
 		if !state.Running {
 			if err := s.engine.Start(ctx, name); err != nil {
 				return Status{}, err
