@@ -28,6 +28,7 @@ const (
 	maxTimeoutMS                    = 120000
 	defaultMaxConcurrentExecutions  = 4
 	defaultMaxPIDs                  = 64
+	maxConfiguredPIDs               = 8192
 	developmentRuntimeProfile       = "development"
 	runtimeRuntimeProfile           = "runtime"
 	invalidRuntimeProfile           = "invalid"
@@ -113,8 +114,8 @@ func LoadConfig() (Config, error) {
 	}
 	if configured := strings.TrimSpace(os.Getenv("COMPUTE_SANDBOX_MAX_PIDS")); configured != "" {
 		limit, err := strconv.Atoi(configured)
-		if err != nil || limit < 1 || limit > 4096 {
-			return Config{}, fmt.Errorf("COMPUTE_SANDBOX_MAX_PIDS 必须介于 1 到 4096")
+		if err != nil || limit < 1 || limit > maxConfiguredPIDs {
+			return Config{}, fmt.Errorf("COMPUTE_SANDBOX_MAX_PIDS 必须介于 1 到 %d", maxConfiguredPIDs)
 		}
 		config.MaxPIDs = limit
 	}
@@ -170,7 +171,7 @@ func normalizeHandlerConfig(config Config) Config {
 		}
 		config.MaxConcurrentExecutions = defaultMaxConcurrentExecutions
 	}
-	if config.MaxPIDs < 1 || config.MaxPIDs > 4096 {
+	if config.MaxPIDs < 1 || config.MaxPIDs > maxConfiguredPIDs {
 		if isStrictRuntimeProfile(config) {
 			config.configurationInvalid = true
 		}
@@ -265,7 +266,7 @@ func strictRuntimeConfigurationValid(config Config) bool {
 		canonicalUUID(config.ProjectID) &&
 		artifactDigestPattern.MatchString(config.ArtifactDigest) &&
 		config.MaxConcurrentExecutions >= 1 && config.MaxConcurrentExecutions <= 128 &&
-		config.MaxPIDs >= 1 && config.MaxPIDs <= 4096
+		config.MaxPIDs >= 1 && config.MaxPIDs <= maxConfiguredPIDs
 }
 
 type languageCapability struct {
@@ -837,7 +838,7 @@ func runtimeConfigurationReasons(config Config) []string {
 	if !artifactDigestPattern.MatchString(config.ArtifactDigest) {
 		reasons = append(reasons, "ARTIFACT_DIGEST_INVALID")
 	}
-	if config.MaxPIDs < 1 || config.MaxPIDs > 4096 {
+	if config.MaxPIDs < 1 || config.MaxPIDs > maxConfiguredPIDs {
 		reasons = append(reasons, "PIDS_LIMIT_UNCONFIRMED")
 	}
 	return reasons

@@ -876,7 +876,7 @@ func TestStatusUsesRuntimeHealthStatusSchemaAcrossProfiles(t *testing.T) {
 
 func TestNewHandlerNormalizesUnsafeDirectConfig(t *testing.T) {
 	runtimeConfig := normalizeHandlerConfig(Config{
-		RuntimeProfile: runtimeRuntimeProfile, SiteID: "site-a", ExecutionForm: "invalid-form", MaxConcurrentExecutions: 1000000, MaxPIDs: 5000,
+		RuntimeProfile: runtimeRuntimeProfile, SiteID: "site-a", ExecutionForm: "invalid-form", MaxConcurrentExecutions: 1000000, MaxPIDs: maxConfiguredPIDs + 1,
 		DeploymentID: "deployment-a", ProjectID: "not-a-uuid", ArtifactDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	})
 	if !runtimeConfig.configurationInvalid || runtimeConfig.MaxConcurrentExecutions != defaultMaxConcurrentExecutions || runtimeConfig.MaxPIDs != defaultMaxPIDs {

@@ -16,7 +16,7 @@
 | `COMPUTE_SANDBOX_ARTIFACT_ROOT` / `COMPUTE_SANDBOX_ARTIFACT_FILE` | runtime 只读 Project Artifact 根目录及相对文件名。 |
 | `COMPUTE_SANDBOX_EXECUTION_FORM` | 可解析 `k3s-workload`、`native-linux` 或 `native-windows`；`runtime` 仅接受前两项，未设置时默认 `k3s-workload`。 |
 | `COMPUTE_SANDBOX_MAX_CONCURRENT_EXECUTIONS` | 有界并发数，范围 `1..128`，默认 `4`；超过上限的执行立即返回 `429`。 |
-| `COMPUTE_SANDBOX_MAX_PIDS` | runtime 接受的当前 cgroup `pids.max` 上限，范围 `1..4096`，默认 `64`。 |
+| `COMPUTE_SANDBOX_MAX_PIDS` | runtime 接受的当前 cgroup `pids.max` 上限，范围 `1..8192`，默认 `64`。实际执行仍受更严格的 cgroup 上限约束。 |
 
 正式运行必须设置 `COMPUTE_SANDBOX_RUNTIME_PROFILE=runtime` 与
 `COMPUTE_SANDBOX_SITE_ID`、`COMPUTE_SANDBOX_DEPLOYMENT_ID`、`COMPUTE_SANDBOX_PROJECT_ID` 和

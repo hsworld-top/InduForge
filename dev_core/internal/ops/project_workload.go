@@ -9,12 +9,12 @@ import (
 
 const (
 	projectGatewayImage = "induforge/project-gateway:1.0.2"
-	runtimeAPIImage     = "induforge/project-runtime-api:1.0.1"
+	runtimeAPIImage     = "induforge/project-runtime-api:1.0.2"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
 	runtimeEngineImage   = "induforge/runtime-engine:1.0.29"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
-	computeSandboxImage  = "induforge/compute-sandbox:1.0.1"
+	computeSandboxImage  = "induforge/compute-sandbox:1.0.2"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
@@ -300,6 +300,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           env:
             - {name: COMPUTE_SANDBOX_TOKEN, valueFrom: {secretKeyRef: {name: %s, key: sandbox-token}}}
             - {name: COMPUTE_SANDBOX_RUNTIME_PROFILE, value: "runtime"}
+            - {name: COMPUTE_SANDBOX_MAX_PIDS, value: "8192"}
             - {name: COMPUTE_SANDBOX_SITE_ID, value: %q}
             - {name: COMPUTE_SANDBOX_NODE_ID, value: %q}
             - {name: COMPUTE_SANDBOX_EXECUTION_FORM, value: "native-linux"}
