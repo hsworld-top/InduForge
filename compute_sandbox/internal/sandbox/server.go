@@ -778,6 +778,7 @@ func runtimeDependenciesAvailable(config Config) (bool, []string) {
 	}{
 		{config.Bubblewrap, "BUBBLEWRAP_UNAVAILABLE"},
 		{config.Prlimit, "PRLIMIT_UNAVAILABLE"},
+		{"/usr/bin/unshare", "UNSHARE_UNAVAILABLE"},
 		{config.NodeBinary, "NODE_RUNTIME_UNAVAILABLE"},
 		{config.PythonBinary, "PYTHON_RUNTIME_UNAVAILABLE"},
 		{setprivPath, "SETPRIV_UNAVAILABLE"},
@@ -1026,7 +1027,7 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 	}
 	args := []string{
 		"--as=1073741824", "--nofile=64", "--fsize=4194304", "--cpu=120", "--",
-		config.Bubblewrap, "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid", "--unshare-net", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
+		"/usr/bin/unshare", "--net", "--", config.Bubblewrap, "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
 		"--ro-bind", "/usr", "/usr", "--ro-bind-try", "/bin", "/bin", "--ro-bind-try", "/lib", "/lib",
 		"--ro-bind-try", "/lib64", "/lib64", "--ro-bind-try", "/usr/local", "/usr/local",
 		// 容器已按非 root 身份运行；嵌套 user namespace 无权挂载新的 procfs，也无法映射另一个 UID。
@@ -1042,8 +1043,7 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 	}
 	args = append(args,
 		"--chdir", "/tmp", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8",
-		"--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID",
-		"/usr/bin/setpriv", "--reuid=10001", "--regid=10001", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
+		"--cap-drop", "ALL", "--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID", "--cap-add", "CAP_SETPCAP",
 		"/usr/local/bin/compute-sandbox", "internal-exec", binary, filepath.Join("/runtime", runtimeScript),
 	)
 	return args, nil

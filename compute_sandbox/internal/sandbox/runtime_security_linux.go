@@ -13,7 +13,9 @@ const (
 	runtimeUID       = 10001
 	linuxCapVersion3 = 0x20080522
 	prGetNoNewPrivs  = 39
+	prSetNoNewPrivs  = 38
 	prCapBsetRead    = 23
+	prCapBsetDrop    = 24
 )
 
 type capabilityHeader struct {
@@ -39,6 +41,9 @@ func RunVerifiedRuntime(command []string) error {
 	if len(command) == 0 {
 		return fmt.Errorf("隔离运行命令缺失")
 	}
+	if err := dropExecutionPrivileges(); err != nil {
+		return fmt.Errorf("隔离子进程降权失败: %w", err)
+	}
 	security, err := readExecutionSecurity()
 	if err != nil {
 		return fmt.Errorf("读取隔离安全状态失败: %w", err)
@@ -47,6 +52,29 @@ func RunVerifiedRuntime(command []string) error {
 		return err
 	}
 	return syscall.Exec(command[0], command, []string{"PATH=/usr/local/bin:/usr/bin:/bin", "LANG=C.UTF-8"})
+}
+
+// dropExecutionPrivileges 必须在 UID/GID 切换前清空 capability bounding set；降权后内核会清空其余能力集合。
+func dropExecutionPrivileges() error {
+	for capability := uintptr(0); capability < 64; capability++ {
+		_, _, errno := syscall.RawSyscall(syscall.SYS_PRCTL, prCapBsetDrop, capability, 0)
+		if errno != 0 && errno != syscall.EINVAL {
+			return errno
+		}
+	}
+	if err := syscall.Setgroups([]int{}); err != nil {
+		return err
+	}
+	if err := syscall.Setgid(runtimeUID); err != nil {
+		return err
+	}
+	if err := syscall.Setuid(runtimeUID); err != nil {
+		return err
+	}
+	if _, _, errno := syscall.RawSyscall(syscall.SYS_PRCTL, prSetNoNewPrivs, 1, 0); errno != 0 {
+		return errno
+	}
+	return nil
 }
 
 func readExecutionSecurity() (executionSecurity, error) {

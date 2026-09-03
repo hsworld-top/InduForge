@@ -14,7 +14,7 @@ const (
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
 	runtimeEngineImage   = "induforge/runtime-engine:1.0.29"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
-	computeSandboxImage  = "induforge/compute-sandbox:1.0.4"
+	computeSandboxImage  = "induforge/compute-sandbox:1.0.5"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
@@ -315,7 +315,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 15, periodSeconds: 10}
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
-          securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID"], drop: ["ALL"]}, seccompProfile: {type: Unconfined}}
+          securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID", "SETPCAP"], drop: ["ALL"]}, seccompProfile: {type: Unconfined}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: work, mountPath: /work, readOnly: true}

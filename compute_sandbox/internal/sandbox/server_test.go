@@ -323,7 +323,7 @@ func TestBuildSandboxArgsRequiresIsolationAndNoNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(args, " ")
-	for _, required := range []string{"--unshare-net", "--unshare-pid", "--clearenv", "--tmpfs /tmp", "--ro-bind " + tempDir + " /runtime", "--as=1073741824"} {
+	for _, required := range []string{"/usr/bin/unshare --net --", "--unshare-pid", "--clearenv", "--tmpfs /tmp", "--ro-bind " + tempDir + " /runtime", "--as=1073741824"} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("sandbox args missing %q: %s", required, joined)
 		}
@@ -342,7 +342,7 @@ func TestBuildSandboxArgsRequiresIsolationAndNoNetwork(t *testing.T) {
 			t.Fatalf("non-root sandbox must not require nested namespace privilege %q: %s", forbidden, joined)
 		}
 	}
-	for _, required := range []string{"--cap-add CAP_SETUID --cap-add CAP_SETGID", "/usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs", "/usr/local/bin/compute-sandbox internal-exec"} {
+	for _, required := range []string{"--cap-drop ALL --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP", "/usr/local/bin/compute-sandbox internal-exec"} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("sandbox must enforce child privilege boundary %q: %s", required, joined)
 		}
