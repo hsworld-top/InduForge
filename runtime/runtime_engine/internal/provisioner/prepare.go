@@ -151,6 +151,9 @@ func exposeArtifactToSandbox(path, role string) error {
 	if role != "compute" {
 		return nil
 	}
+	if err := os.Chmod(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("设置计算工件目录共享权限失败")
+	}
 	if err := os.Chmod(path, 0o640); err != nil {
 		return fmt.Errorf("设置计算工件共享权限失败")
 	}

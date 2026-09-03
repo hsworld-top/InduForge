@@ -148,16 +148,31 @@ func TestExposeArtifactToSandboxOnlyAllowsComputeGroupRead(t *testing.T) {
 		role string
 		want os.FileMode
 	}{{"compute", 0o640}, {"alarm", 0o600}} {
-		path := filepath.Join(t.TempDir(), "runtime-project-artifact.json")
+		directoryPath := t.TempDir()
+		if err := os.Chmod(directoryPath, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(directoryPath, "runtime-project-artifact.json")
 		if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if err := exposeArtifactToSandbox(path, test.role); err != nil {
 			t.Fatal(err)
 		}
+		directory, err := os.Stat(filepath.Dir(path))
+		if err != nil {
+			t.Fatal(err)
+		}
 		info, err := os.Stat(path)
 		if err != nil || info.Mode().Perm() != test.want {
 			t.Fatalf("role %s mode = %v, want %o", test.role, info.Mode().Perm(), test.want)
+		}
+		wantDirectory := os.FileMode(0o700)
+		if test.role == "compute" {
+			wantDirectory = 0o750
+		}
+		if directory.Mode().Perm() != wantDirectory {
+			t.Fatalf("role %s directory mode = %o, want %o", test.role, directory.Mode().Perm(), wantDirectory)
 		}
 	}
 }
