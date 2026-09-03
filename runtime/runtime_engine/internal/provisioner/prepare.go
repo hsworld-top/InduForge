@@ -63,11 +63,7 @@ func Prepare(in Input) error {
 		return fmt.Errorf("读取运行制品失败")
 	}
 	defer f.Close()
-	h := sha256.New()
-	if _, err = io.Copy(h, f); err != nil {
-		return fmt.Errorf("校验运行制品失败")
-	}
-	if "sha256:"+hex.EncodeToString(h.Sum(nil)) != in.RuntimeArtifactSHA256 {
+	if err = verifyArtifactChecksum(f, in.RuntimeArtifactSHA256); err != nil {
 		return fmt.Errorf("运行制品摘要不匹配")
 	}
 	if _, err = f.Seek(0, 0); err != nil {
@@ -83,8 +79,7 @@ func Prepare(in Input) error {
 			return fmt.Errorf("读取采集制品失败")
 		}
 		defer cf.Close()
-		ch := sha256.New()
-		if _, copyErr := io.Copy(ch, cf); copyErr != nil || "sha256:"+hex.EncodeToString(ch.Sum(nil)) != in.CollectorArtifactSHA256 {
+		if copyErr := verifyArtifactChecksum(cf, in.CollectorArtifactSHA256); copyErr != nil {
 			return fmt.Errorf("采集制品摘要不匹配")
 		}
 		if _, seekErr := cf.Seek(0, 0); seekErr != nil {
@@ -144,6 +139,16 @@ func Prepare(in Input) error {
 	}
 	if err := binding.WriteBundle(config, index, in.BundleDir); err != nil {
 		return fmt.Errorf("写入 bundle 失败")
+	}
+	return nil
+}
+func verifyArtifactChecksum(reader io.Reader, expected string) error {
+	h := sha256.New()
+	if _, err := io.Copy(h, reader); err != nil {
+		return err
+	}
+	if "sha256:"+hex.EncodeToString(h.Sum(nil)) != expected {
+		return fmt.Errorf("摘要不匹配")
 	}
 	return nil
 }

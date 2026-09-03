@@ -152,6 +152,12 @@ func TestInputRoundTripHasNoSecretValueFields(t *testing.T) {
 	}
 }
 
+func TestVerifyArtifactChecksumRejectsWellFormedMismatch(t *testing.T) {
+	if err := verifyArtifactChecksum(strings.NewReader("collector"), "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
+		t.Fatal("well-formed mismatched checksum accepted")
+	}
+}
+
 func validInput() Input {
 	return Input{SchemaVersion: SchemaVersion, ReleaseID: "release-a", RuntimeArtifactPath: "/opt/induforge/release/runtime-artifact.tar.zst", RuntimeArtifactSHA256: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ArtifactDir: "/work/artifact", BundleDir: "/work/bundle", Binding: binding.Input{
 		TenantID: "tenant-a", SiteID: "site-a", NodeID: "node-a", InstanceID: "runtime-engine-alarm-0", FencingEpoch: 1, ProjectID: "11111111-1111-4111-8111-111111111111", DeploymentID: "deployment-a", AccountID: "account-a", Role: "alarm",
