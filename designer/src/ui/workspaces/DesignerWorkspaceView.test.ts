@@ -12,6 +12,11 @@ const runtimeContextMock = vi.hoisted(() => ({
   projectId: 'project-1',
 }))
 
+const codeWorkspaceApiMock = vi.hoisted(() => ({
+  get: vi.fn(),
+  rebuild: vi.fn(),
+}))
+
 vi.mock('vue-router', () => ({
   useRoute: () => ({ meta: { project: { id: runtimeContextMock.projectId } } }),
 }))
@@ -29,6 +34,8 @@ vi.mock('@/runtime/wujie-context', () => ({
 }))
 
 vi.mock('./code/workspace-runtime', () => ({ resolveWorkspaceState: vi.fn() }))
+
+vi.mock('./code/code-workspace-api', () => ({ codeWorkspaceApi: codeWorkspaceApiMock }))
 
 vi.mock('./code/context-pack-api', () => ({
   contextPackApi: { refresh: vi.fn() },
@@ -80,6 +87,8 @@ describe('DesignerWorkspaceView', () => {
     ResizeObserverStub.workspace = null
     localStorage.clear()
     vi.mocked(resolveWorkspaceState).mockReset()
+    codeWorkspaceApiMock.get.mockReset()
+    codeWorkspaceApiMock.rebuild.mockReset()
     vi.mocked(contextPackApi.refresh).mockReset()
     vi.mocked(sceneContractApi.list).mockReset()
     vi.mocked(sceneContractApi.create).mockReset()
@@ -237,6 +246,7 @@ describe('DesignerWorkspaceView', () => {
     expect(wrapper.get('iframe[title="Vite 实时预览"]').attributes('src')).toBe(
       'https://preview.workspace.test/',
     )
+    expect(wrapper.find('.rebuild-workspace-button').exists()).toBe(false)
   })
 
   it('空工作区先选择官方模板，初始化完成后再创建工作台 iframe', async () => {
@@ -270,6 +280,53 @@ describe('DesignerWorkspaceView', () => {
     expect(initializeTemplateId).toBe('vite-vue-js')
     expect(wrapper.findAll('iframe')).toHaveLength(3)
     expect(wrapper.text()).not.toContain('选择工程模板')
+  })
+
+  it('仅工作区异常时显示重新构建入口，确认后轮询运行态并进入工作台', async () => {
+    const brokenWorkspace = {
+      ...workspace,
+      status: 'error' as const,
+      services: {
+        ai: { url: null, hostPort: null },
+        code: { url: null, hostPort: null },
+        preview: { url: null, hostPort: null },
+        previewControl: { url: null, hostPort: null },
+      },
+    }
+    vi.mocked(resolveWorkspaceState)
+      .mockResolvedValueOnce(brokenWorkspace)
+      .mockResolvedValue(workspace)
+    let finishRebuild: (value: typeof workspace) => void = () => {}
+    codeWorkspaceApiMock.rebuild.mockImplementation(
+      () =>
+        new Promise<typeof workspace>((resolve) => {
+          finishRebuild = resolve
+        }),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    expect(wrapper.get('.rebuild-workspace-button').text()).toBe('重新构建工作区')
+
+    const rebuildClick = wrapper.get('.rebuild-workspace-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.rebuild-workspace-button').text()).toBe('正在重新构建')
+    expect((wrapper.get('.rebuild-workspace-button').element as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    finishRebuild(workspace)
+    await rebuildClick
+    await flushPromises()
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      '重新构建开发工作区会停止并重新创建开发服务，不会删除工程设计、页面源码或已发布版本。是否继续？',
+    )
+    expect(codeWorkspaceApiMock.rebuild).toHaveBeenCalledWith('project-1')
+    expect(wrapper.find('.rebuild-workspace-button').exists()).toBe(false)
+    expect(wrapper.findAll('iframe')).toHaveLength(3)
   })
 
   it('Pi iframe 加载、READY 与 IDE 设置变化时发送严格宿主上下文', async () => {

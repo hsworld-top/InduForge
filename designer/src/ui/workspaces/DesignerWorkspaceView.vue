@@ -18,7 +18,7 @@ import {
 } from '@/runtime/wujie-context'
 import { getApiErrorMessage } from '@/utils/request'
 import { getEditorUiStore } from '@/stores/editor-ui-store'
-import type { CodeWorkspaceState } from './code/code-workspace-api'
+import { codeWorkspaceApi, type CodeWorkspaceState } from './code/code-workspace-api'
 import { contextPackApi } from './code/context-pack-api'
 import {
   previewControlApi,
@@ -64,6 +64,7 @@ const previewPanelRef = ref<InstanceType<typeof PreviewPanel> | null>(null)
 const workspace = ref<CodeWorkspaceState | null>(null)
 const workspaceLoading = ref(true)
 const workspaceError = ref('')
+const workspaceRebuilding = ref(false)
 const projectWorkspace = ref<WorkspaceInitializationState | null>(null)
 const projectWorkspaceLoading = ref(true)
 const projectWorkspaceError = ref('')
@@ -534,6 +535,48 @@ async function retryWorkspace(): Promise<void> {
   await nextTick()
   await loadWorkspace(true)
 }
+
+// 仅在控制面已明确报告 error 时允许重建。该操作只替换工作区 Pod 与四入口 Service，
+// 工程源码、设计数据和平台上下文均位于持久化目录，不能被前端当作“重置工程”。
+async function rebuildWorkspace(): Promise<void> {
+  if (!projectId.value || workspace.value?.status !== 'error' || workspaceRebuilding.value) return
+  if (
+    !window.confirm(
+      '重新构建开发工作区会停止并重新创建开发服务，不会删除工程设计、页面源码或已发布版本。是否继续？',
+    )
+  ) {
+    return
+  }
+
+  const sequence = ++workspaceRequestSequence
+  clearWorkspacePoll()
+  workspaceRebuilding.value = true
+  workspaceError.value = ''
+  projectWorkspaceError.value = ''
+  try {
+    let nextWorkspace = await codeWorkspaceApi.rebuild(projectId.value)
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (sequence !== workspaceRequestSequence) return
+      workspace.value = nextWorkspace
+      if (nextWorkspace.status === 'running') {
+        await loadWorkspace(false)
+        return
+      }
+      if (nextWorkspace.status === 'error') {
+        throw new Error('重新构建后开发工作区仍异常')
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 1500))
+      nextWorkspace = await codeWorkspaceApi.get(projectId.value)
+    }
+    throw new Error('开发工作区启动超时，请稍后重新检查')
+  } catch (error) {
+    if (sequence === workspaceRequestSequence) {
+      workspaceError.value = getApiErrorMessage(error, '重新构建开发工作区失败')
+    }
+  } finally {
+    workspaceRebuilding.value = false
+  }
+}
 </script>
 
 <template>
@@ -616,9 +659,19 @@ async function retryWorkspace(): Promise<void> {
             v-else-if="projectWorkspace?.status !== 'initializing'"
             type="button"
             class="retry-setup-button"
+            :disabled="workspaceRebuilding"
             @click="retryWorkspace"
           >
             重新检查
+          </button>
+          <button
+            v-if="workspace?.status === 'error'"
+            type="button"
+            class="rebuild-workspace-button"
+            :disabled="workspaceRebuilding"
+            @click="rebuildWorkspace"
+          >
+            {{ workspaceRebuilding ? '正在重新构建' : '重新构建工作区' }}
           </button>
         </div>
       </div>
@@ -1058,12 +1111,14 @@ async function retryWorkspace(): Promise<void> {
 .workspace-setup-actions {
   min-height: 34px;
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 16px;
 }
 
 .initialize-button,
-.retry-setup-button {
+.retry-setup-button,
+.rebuild-workspace-button {
   height: 34px;
   padding: 0 16px;
   border-radius: 5px;
@@ -1081,6 +1136,24 @@ async function retryWorkspace(): Promise<void> {
 .initialize-button:hover:not(:disabled) {
   border-color: var(--primary-hover);
   background: var(--primary-hover);
+}
+
+.rebuild-workspace-button {
+  border: 1px solid #d97706;
+  color: #9a5a08;
+  background: #fffaf0;
+}
+
+.rebuild-workspace-button:hover:not(:disabled) {
+  border-color: #b45309;
+  color: #92400e;
+  background: #fff3dc;
+}
+
+.retry-setup-button:disabled,
+.rebuild-workspace-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .initialize-button:disabled {
