@@ -2,10 +2,13 @@
 set -eu
 
 image="${1:-induforge/designer-code-server:workspace-templates-source}"
+verification_script=$(mktemp)
+trap 'rm -f "$verification_script"' EXIT HUP INT TERM
 
-for template in vite-vue-js vite-vue-ts vite-react-js vite-react-ts; do
-  echo "=== ${template} ==="
-  docker run --rm --interactive --network none --entrypoint sh -e TEMPLATE_ID="$template" "$image" <<'CONTAINER'
+# 不要在循环内直接使用 here-document。`docker run -i` 会消费调用方的标准输入，
+# 某些 shell 下第二个模板起将得到 EOF，脚本却可能只验证第一个模板。每次从临时脚本
+# 重新定向输入，确保四种模板都实际执行离线初始化与构建。
+cat >"$verification_script" <<'CONTAINER'
 set -eu
 
 for generated_path in node_modules dist .pnpm-store; do
@@ -42,7 +45,7 @@ for (let index = 0; index < 60; index += 1) {
     const response = await fetch('http://127.0.0.1:5173')
     if (response.ok) {
       const html = await response.text()
-      process.exit(html.includes('id="root"') || html.includes('id="app"') ? 0 : 2)
+      process.exit(html.includes('id=\"root\"') || html.includes('id=\"app\"') ? 0 : 2)
     }
   } catch {}
   await wait(250)
@@ -55,4 +58,8 @@ fi
 
 echo "$TEMPLATE_ID ok"
 CONTAINER
+
+for template in vite-vue-js vite-vue-ts vite-react-js vite-react-ts; do
+  echo "=== ${template} ==="
+  docker run --rm --interactive --network none --entrypoint sh -e TEMPLATE_ID="$template" "$image" -s <"$verification_script"
 done
