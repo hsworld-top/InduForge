@@ -117,6 +117,20 @@ func TestRuntimeAPIAcknowledgesActiveAlarmForOperator(t *testing.T) {
 	}
 }
 
+func TestRuntimeAPICurrentAlarmsIncludeArtifactDisplayMetadata(t *testing.T) {
+	store := &fakeStore{alarms: []runtimeview.AlarmState{{
+		AlarmItemID: "33333333-3333-4333-8333-333333333333", Revision: 1,
+		State: json.RawMessage(`{"active":true}`), Version: 4,
+		UpdatedAt: time.Date(2026, 8, 31, 9, 0, 0, 0, time.UTC),
+	}}}
+	server, _, token := newTestRuntimeAPI(t, store)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, authenticatedRequest(http.MethodGet, "/api/v1/runtime/alarms/current", token, nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"name":"高温报警"`) || !strings.Contains(response.Body.String(), `"datapointPath":"line.temperature"`) || !strings.Contains(response.Body.String(), `"sourceDatapoints":[{"datapointId":"22222222-2222-4222-8222-222222222222","path":"line.temperature"}]`) {
+		t.Fatalf("current alarms status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestRuntimeAPIRejectsAlarmAcknowledgementWithoutRoleOrFreshVersion(t *testing.T) {
 	server, _, token := newTestRuntimeAPI(t, &fakeStore{})
 	request := authenticatedRequest(http.MethodPost, "/api/v1/runtime/alarms/33333333-3333-4333-8333-333333333333/acknowledge", token, nil)
@@ -297,7 +311,7 @@ func newTestRuntimeAPIWithRoles(t *testing.T, store *fakeStore, roles []string) 
 func newTestRuntimeAPIWithRolesAndHub(t *testing.T, store *fakeStore, roles []string) (*Server, *realtime.Hub, string) {
 	t.Helper()
 	catalogPath := filepath.Join(t.TempDir(), "artifact.json")
-	catalogPayload := `{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","dataPoints":[{"id":"22222222-2222-4222-8222-222222222222","path":"line.temperature","name":"温度","dataType":"float64","sourceType":"collector.point","sourceId":"33333333-3333-4333-8333-333333333333","runtimePermissions":{"write":{"allowRoles":[],"denyRoles":[],"inherit":true}},"refreshMode":"subscription","status":"active","unit":"C","precisionNum":1,"defaultValue":null,"tags":[],"attributeDefaults":{}}],"computeUnits":[],"alarmItems":[]}`
+	catalogPayload := `{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","dataPoints":[{"id":"22222222-2222-4222-8222-222222222222","path":"line.temperature","name":"温度","dataType":"float64","sourceType":"collector.point","sourceId":"33333333-3333-4333-8333-333333333333","runtimePermissions":{"write":{"allowRoles":[],"denyRoles":[],"inherit":true}},"refreshMode":"subscription","status":"active","unit":"C","precisionNum":1,"defaultValue":null,"tags":[],"attributeDefaults":{}}],"computeUnits":[],"alarmItems":[{"id":"33333333-3333-4333-8333-333333333333","revision":1,"displayName":"高温报警","enabled":true,"mode":"point","evaluationMode":"single","inputs":[{"alias":"value","datapointId":"22222222-2222-4222-8222-222222222222","path":"line.temperature","dataType":"float64"}],"conditions":[]}]}`
 	if err := os.WriteFile(catalogPath, []byte(catalogPayload), 0o600); err != nil {
 		t.Fatal(err)
 	}

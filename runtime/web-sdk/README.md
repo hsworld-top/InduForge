@@ -131,6 +131,14 @@ const history = await points.factory.line1.temperature.history({
   limit: 100,
 })
 const activeAlarms = await alarms.current.list({ limit: 100 })
+
+// name 和来源路径由 Runtime API 从当前部署的发布工件补全；组合报警使用 sourceDatapoints。
+for (const alarm of activeAlarms.data?.items ?? []) {
+  console.log(
+    alarm.name,
+    alarm.datapointPath ?? alarm.sourceDatapoints?.map((source) => source.path),
+  )
+}
 const compute = await computes.byRef('compute-unit-uuid').describe()
 
 const live = await points.factory.line1.temperature.subscribe(

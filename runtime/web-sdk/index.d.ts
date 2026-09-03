@@ -95,6 +95,34 @@ export interface AlarmAcknowledgement {
   acknowledgedAt: string
 }
 
+export interface AlarmSourceDatapoint {
+  datapointId: string
+  path: string
+}
+
+export interface RuntimeAlarmState {
+  alarmItemId: string
+  revision: number
+  state: unknown
+  version: number
+  updatedAt: string
+  /** 来自当前 deployment 已校验发布工件的报警展示名称。 */
+  name?: string
+  /** 普通单点报警的来源路径；组合报警请使用 sourceDatapoints。 */
+  datapointPath?: string
+  sourceDatapoints?: AlarmSourceDatapoint[]
+}
+
+export interface RuntimeAlarmItem {
+  id: string
+  revision: number
+  name: string
+  displayName: string
+  enabled: boolean
+  mode: string
+  inputs: AlarmSourceDatapoint[]
+}
+
 export interface ComputeAdapter {
   run?(ref: string, input?: ComputeRunInput): unknown
   describe?(ref: string): unknown
@@ -146,7 +174,7 @@ export interface RuntimeCatalog {
   artifactDigest: string
   points: DataPointContract[]
   computes: RuntimeComputeUnit[]
-  alarms: unknown[]
+  alarms: RuntimeAlarmItem[]
 }
 
 export interface RuntimeComputeUnit {
@@ -254,7 +282,7 @@ export interface AlarmSDK {
     update(patch: unknown): Promise<SDKResult<unknown>>
   }
   current: {
-    list(query?: unknown): Promise<SDKResult<unknown>>
+    list(query?: unknown): Promise<SDKResult<{ items: RuntimeAlarmState[]; total: number }>>
     get(id: string): Promise<SDKResult<unknown>>
   }
   changes: {

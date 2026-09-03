@@ -355,7 +355,27 @@ func (s *Server) currentAlarms(writer http.ResponseWriter, request *http.Request
 		writeError(writer, request, http.StatusServiceUnavailable, 50031, "报警状态查询失败")
 		return
 	}
-	writeOK(writer, request, map[string]any{"items": items, "total": len(items)})
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		entry := map[string]any{
+			"alarmItemId": item.AlarmItemID, "revision": item.Revision, "state": item.State,
+			"version": item.Version, "updatedAt": item.UpdatedAt,
+		}
+		if alarm, ok := s.config.Catalog.AlarmByID(item.AlarmItemID); ok {
+			sources := make([]map[string]string, 0, len(alarm.Inputs))
+			for _, input := range alarm.Inputs {
+				sources = append(sources, map[string]string{"datapointId": input.DatapointID, "path": input.Path})
+			}
+			entry["name"] = alarm.DisplayName
+			entry["sourceDatapoints"] = sources
+			// 普通报警只有一个来源；保留扁平字段方便发布页面直接展示。
+			if len(alarm.Inputs) == 1 {
+				entry["datapointPath"] = alarm.Inputs[0].Path
+			}
+		}
+		result = append(result, entry)
+	}
+	writeOK(writer, request, map[string]any{"items": result, "total": len(result)})
 }
 
 // acknowledgeAlarm 只允许操作员确认当前 deployment 的活动报警，并将确认和审计写入同一事务。

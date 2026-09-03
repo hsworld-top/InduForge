@@ -59,11 +59,19 @@ type AlarmItem struct {
 	ID          string          `json:"id"`
 	Revision    int64           `json:"revision"`
 	Name        string          `json:"name"`
+	DisplayName string          `json:"displayName"`
 	Description *string         `json:"description"`
 	Enabled     bool            `json:"enabled"`
 	Mode        string          `json:"mode"`
-	Inputs      json.RawMessage `json:"inputs"`
+	Inputs      []AlarmInput    `json:"inputs"`
 	Conditions  json.RawMessage `json:"conditions"`
+}
+
+type AlarmInput struct {
+	Alias       string `json:"alias"`
+	DatapointID string `json:"datapointId"`
+	Path        string `json:"path"`
+	DataType    string `json:"dataType"`
 }
 
 type rawCatalog struct {
@@ -82,6 +90,7 @@ type Catalog struct {
 	pointsByPath  map[string]Point
 	pointsByID    map[string]Point
 	computesByID  map[string]ComputeUnit
+	alarmsByID    map[string]AlarmItem
 	alarms        []AlarmItem
 }
 
@@ -116,7 +125,7 @@ func Load(path, expectedProjectID string) (*Catalog, error) {
 		pointsByPath:  make(map[string]Point, len(raw.Points)),
 		pointsByID:    make(map[string]Point, len(raw.Points)),
 		computesByID:  make(map[string]ComputeUnit, len(raw.Computes)),
-		alarms:        append([]AlarmItem(nil), raw.Alarms...),
+		alarmsByID:    make(map[string]AlarmItem, len(raw.Alarms)),
 	}
 	for _, point := range raw.Points {
 		point.Path = strings.TrimSpace(point.Path)
@@ -145,6 +154,25 @@ func Load(path, expectedProjectID string) (*Catalog, error) {
 			return nil, fmt.Errorf("Runtime Artifact 计算单元 id 重复: %s", compute.ID)
 		}
 		catalog.computesByID[compute.ID] = compute
+	}
+	for _, alarm := range raw.Alarms {
+		alarm.DisplayName = strings.TrimSpace(alarm.DisplayName)
+		if !canonicalUUID.MatchString(alarm.ID) || alarm.Revision < 1 || alarm.DisplayName == "" || len(alarm.Inputs) == 0 {
+			return nil, errors.New("Runtime Artifact 报警项身份非法")
+		}
+		if _, exists := catalog.alarmsByID[alarm.ID]; exists {
+			return nil, fmt.Errorf("Runtime Artifact 报警项 id 重复: %s", alarm.ID)
+		}
+		for _, input := range alarm.Inputs {
+			point, exists := catalog.pointsByID[input.DatapointID]
+			if !exists || point.Path != strings.TrimSpace(input.Path) {
+				return nil, fmt.Errorf("Runtime Artifact 报警项 %s 的来源数据点非法", alarm.ID)
+			}
+		}
+		// name 是 Runtime API 的既有展示字段；其值只从已校验发布工件的 displayName 派生。
+		alarm.Name = alarm.DisplayName
+		catalog.alarmsByID[alarm.ID] = alarm
+		catalog.alarms = append(catalog.alarms, alarm)
 	}
 	return catalog, nil
 }
@@ -183,6 +211,11 @@ func (c *Catalog) Computes() []ComputeUnit {
 }
 
 func (c *Catalog) Alarms() []AlarmItem { return append([]AlarmItem(nil), c.alarms...) }
+
+func (c *Catalog) AlarmByID(id string) (AlarmItem, bool) {
+	alarm, ok := c.alarmsByID[id]
+	return alarm, ok
+}
 
 func openRegularNoFollow(path string) (*os.File, error) {
 	info, err := os.Lstat(path)

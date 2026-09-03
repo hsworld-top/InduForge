@@ -31,6 +31,12 @@ Runtime API 是发布工程的动态 HTTP/WebSocket 接口，必须只监听同�
 | `GET /ws/v1/points`                         | 经会话认证后订阅 NATS 实时点位事件                    |
 | `GET /ws/v1/alarms`                         | 经会话认证后订阅当前 deployment 的 `alarm.event` 变更 |
 
+`GET /api/v1/runtime/alarms/current` 的每个 `items[]` 在持久化状态字段
+`alarmItemId/revision/state/version/updatedAt` 外，还必须按相同 Runtime Artifact 的报警项补充
+`name` 和 `sourceDatapoints[]`（元素为 `datapointId/path`）。普通单点报警同时返回便于展示的
+`datapointPath`；组合报警不伪造单一来源，调用方应展示 `sourceDatapoints[]`。这些字段只来自已校验、
+已绑定当前 deployment/project 的发布工件，不查询平台配置，也不扩大当前会话的权限边界。
+
 `POST /api/v1/runtime/points/{path}/write` 仅适用于 `manual.input` 且当前会话角色通过 Artifact `runtimePermissions.write` 的数据点。Runtime API 在 PostgreSQL 中以 deployment binding 下发的 `manualOwner/manualEpoch` 复核 `runtime-api` producer fence 并原子分配 sequence，再只向本 deployment Account 的 `data.raw.<pointId>` 发布冻结的 `data.raw.v1` 事件；它不直接篡改 `point_current`。Engine 的 writer、compute 与 alarm 消费同一事件，浏览器只能以其后续投影/WS 观察结果。
 
 `POST /api/v1/runtime/alarms/{id}/acknowledge` 仅允许 `admin` 或 `operator` 会话角色，body 必须含 `expectedVersion`（大于 0）和不超过 2048 字符的可选 `comment`。Runtime API 在同一 PostgreSQL 事务中以 `(deployment_id, alarm_item_id)` 锁定状态、复核版本与活动实例，更新活动实例的 `ackedAt`/`acknowledgedBy` 与状态版本，并插入不可变的 `alarm_ack_audit`。版本过期或报警已清除返回 HTTP `409 / code=40001`；该接口只作用于 Gateway 已绑定的 deployment。
