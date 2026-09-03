@@ -81,10 +81,23 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// validateViewerTokenFile 只允许网关读取投影的单个 viewer token。拒绝链接、目录及
-// 其他用户可读文件，避免把运行凭据误指向 Release 或任意宿主路径。
+// validateViewerTokenFile 只允许网关读取投影的单个 viewer token。Kubernetes Secret
+// 投影会把文件实现为指向同一挂载目录的链接，因此允许这种受限链接；解析后越出
+// 挂载目录、非普通文件或其他用户可读文件仍会被拒绝。
 func validateViewerTokenFile(path string) error {
-	info, err := os.Lstat(path)
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return fmt.Errorf("读取 viewer-token-file: %w", err)
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("解析 viewer-token-file 目录: %w", err)
+	}
+	relative, err := filepath.Rel(parent, resolved)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return errors.New("viewer-token-file 不能越出挂载目录")
+	}
+	info, err := os.Stat(resolved)
 	if err != nil {
 		return fmt.Errorf("读取 viewer-token-file: %w", err)
 	}

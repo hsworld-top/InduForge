@@ -357,7 +357,8 @@ func TestConfigRejectsUnsafeViewerTokenFile(t *testing.T) {
 	}
 
 	tokenRoot := t.TempDir()
-	regular := filepath.Join(tokenRoot, "regular-token")
+	outsideRoot := t.TempDir()
+	regular := filepath.Join(outsideRoot, "regular-token")
 	if err := os.WriteFile(regular, []byte("viewer-token\n"), 0o640); err != nil {
 		t.Fatal(err)
 	}
@@ -367,8 +368,35 @@ func TestConfigRejectsUnsafeViewerTokenFile(t *testing.T) {
 	}
 	config = testConfig(root, "http://127.0.0.1:17801")
 	config.ViewerTokenFile = link
-	if _, err := New(config); err == nil || !strings.Contains(err.Error(), "普通文件") {
-		t.Fatalf("expected symlinked viewer token rejection, got %v", err)
+	if _, err := New(config); err == nil || !strings.Contains(err.Error(), "越出挂载目录") {
+		t.Fatalf("expected escaping symlinked viewer token rejection, got %v", err)
+	}
+}
+
+func TestConfigAcceptsKubernetesProjectedViewerToken(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tokenRoot := t.TempDir()
+	versionRoot := filepath.Join(tokenRoot, "..2026_09_03_06_22_40")
+	if err := os.Mkdir(versionRoot, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(versionRoot, "token"), []byte("viewer-token\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(versionRoot), filepath.Join(tokenRoot, "..data")); err != nil {
+		t.Skipf("filesystem does not support symlink: %v", err)
+	}
+	tokenPath := filepath.Join(tokenRoot, "token")
+	if err := os.Symlink("..data/token", tokenPath); err != nil {
+		t.Skipf("filesystem does not support symlink: %v", err)
+	}
+	config := testConfig(root, "http://127.0.0.1:17801")
+	config.ViewerTokenFile = tokenPath
+	if _, err := New(config); err != nil {
+		t.Fatalf("expected Kubernetes projected viewer token to be accepted, got %v", err)
 	}
 }
 
