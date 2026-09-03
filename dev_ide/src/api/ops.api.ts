@@ -429,6 +429,11 @@ export const opsAPI = {
       }),
     )
   },
+  async createProjectVersion(projectId: OpsId) {
+    return unpack<ApplicationVersion>(
+      await request.post(`/publish/${projectId}`, {}, { ...config, timeout: 120_000 }),
+    )
+  },
   async getProjectDeployment(id: OpsId) {
     return deployment(
       unpack<ProjectDeployment>(await request.get(`/ops/project-deployments/${id}`, config)),

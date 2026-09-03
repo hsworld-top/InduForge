@@ -183,6 +183,25 @@ describe('opsAPI', () => {
     })
   })
 
+  it('从当前工程快照创建服务端递增的生产版本', async () => {
+    postMock.mockResolvedValue({
+      data: { id: 'v2', projectId: 'p1', version: '1.0.22', status: 'success' },
+    })
+
+    await expect(opsAPI.createProjectVersion('p1')).resolves.toMatchObject({
+      id: 'v2',
+      version: '1.0.22',
+    })
+    expect(postMock).toHaveBeenCalledWith(
+      '/publish/p1',
+      {},
+      {
+        skipErrorToast: true,
+        timeout: 120_000,
+      },
+    )
+  })
+
   it('可按工程 ID 精确查询现有单节点部署', async () => {
     getMock.mockResolvedValue({ data: { items: [], total: 0 } })
     await opsAPI.listProjectDeployments({ page: 1, pageSize: 1, projectId: 'p1' })

@@ -28,13 +28,19 @@ describe('工程部署新契约', () => {
     expect(publishSource).not.toContain('engine.optional')
   })
 
-  it('生产仅选择 ready 版本，开发不显示版本且使用 development/production 请求值', () => {
+  it('生产仅选择构建成功版本，开发不显示版本且使用 development/production 请求值', () => {
     expect(consoleSource).toContain("item.status === 'ready'")
-    expect(publishSource).toContain("item.status === 'ready'")
+    expect(publishSource).toContain("['ready', 'success'].includes")
     expect(consoleSource).toContain("v-if=\"deployForm.mode === 'production'\"")
     expect(consoleSource).toContain("v-if=\"deployForm.mode === 'development'\"")
     expect(publishSource).toContain("mode: mode.value === 'RELEASE' ? 'production' : 'development'")
     expect(consoleSource).toContain('mode: deployForm.mode')
+  })
+
+  it('版本管理可从当前快照创建服务端递增版本且不提供手工版本配置', () => {
+    expect(publishSource).toContain('data-testid="create-project-version"')
+    expect(publishSource).toContain('opsAPI.createProjectVersion')
+    expect(publishSource).not.toContain('v-model="nextVersion"')
   })
 
   it('已有同工程同环境部署明确呈现更新语义，两个弹窗高度固定', () => {

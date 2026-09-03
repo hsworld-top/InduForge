@@ -9,10 +9,22 @@
     @update:model-value="emit('update:visible', $event)"
   >
     <div v-if="activeView === 'versions'" v-loading="versionLoading" class="version-manager">
-      <button type="button" class="version-manager-back" @click="activeView = 'publish'">
-        <el-icon><ArrowLeft /></el-icon>
-        <span>{{ t('projectManagement.backToPublish') }}</span>
-      </button>
+      <div class="version-manager-toolbar">
+        <button type="button" class="version-manager-back" @click="activeView = 'publish'">
+          <el-icon><ArrowLeft /></el-icon>
+          <span>{{ t('projectManagement.backToPublish') }}</span>
+        </button>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="versionCreating"
+          data-testid="create-project-version"
+          @click="createManagedVersion"
+        >
+          <el-icon><Plus /></el-icon>
+          {{ t('projectManagement.createReleaseVersion') }}
+        </el-button>
+      </div>
 
       <div class="version-list-header">
         <span>{{ t('projectManagement.version') }}</span>
@@ -191,7 +203,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { ArrowLeft, Delete } from '@element-plus/icons-vue'
+import { ArrowLeft, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
@@ -240,6 +252,7 @@ const mode = ref<PublishMode>('DEV')
 const activeView = ref<'publish' | 'versions'>('publish')
 const loading = ref(false)
 const versionLoading = ref(false)
+const versionCreating = ref(false)
 const environmentLoading = ref(false)
 const nodeLoading = ref(false)
 const loadError = ref('')
@@ -258,7 +271,10 @@ const placements = reactive<Record<EngineKey, string>>({
   collector: '',
 })
 
-const readyVersions = computed(() => versions.value.filter((item) => item.status === 'ready'))
+// 发布接口沿用 success 展示态，部署接口使用 ready 持久态；两者都代表制品已可部署。
+const isDeployableVersion = (version: ManagedApplicationVersion) =>
+  ['ready', 'success'].includes(String(version.status || ''))
+const readyVersions = computed(() => versions.value.filter(isDeployableVersion))
 const selectedCapabilities = computed(() => {
   if (mode.value === 'DEV') return new Set(developmentRequirements.value)
   const source = readyVersions.value.find((item) => item.id === applicationVersionId.value)
@@ -376,6 +392,28 @@ const deleteManagedVersion = async (version: ManagedApplicationVersion) => {
     ElMessage.error(getApiErrorMessage(error, t('projectManagement.deleteVersionFailed')))
   } finally {
     versionLoading.value = false
+  }
+}
+
+const createManagedVersion = async () => {
+  if (!props.project?.id || versionCreating.value) return
+  versionCreating.value = true
+  try {
+    // 版本号和制品配置由服务端基于当前工程快照生成，页面不接受人工覆盖。
+    const created = (await opsAPI.createProjectVersion(
+      props.project.id,
+    )) as ManagedApplicationVersion
+    await loadVersions()
+    applicationVersionId.value = created.id
+    activeView.value = 'publish'
+    syncPlacements()
+    ElMessage.success(
+      t('projectManagement.createReleaseVersionSuccess', { version: created.version }),
+    )
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, t('projectManagement.createReleaseVersionFailed')))
+  } finally {
+    versionCreating.value = false
   }
 }
 
@@ -580,12 +618,18 @@ watch(
   min-height: 250px;
 }
 
+.version-manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .version-manager-back {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 30px;
-  margin-bottom: 12px;
   border: 0;
   border-radius: 8px;
   padding: 0 9px;
