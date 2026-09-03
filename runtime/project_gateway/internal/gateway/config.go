@@ -15,17 +15,18 @@ import (
 // Config 只描述单工程入口所需的本地事实。节点身份和 Release 路径由
 // NodeAgent 注入，工程入口不会自行向中心查询或下载制品。
 type Config struct {
-	Listen        string
-	ClientRoot    string
-	ReleaseRoot   string
-	RuntimeAPIURL string
-	DeploymentID  string
-	AccountID     string
-	ProjectID     string
-	SiteID        string
-	NodeID        string
-	Version       string
-	ExecutionForm string
+	Listen          string
+	ClientRoot      string
+	ReleaseRoot     string
+	RuntimeAPIURL   string
+	ViewerTokenFile string
+	DeploymentID    string
+	AccountID       string
+	ProjectID       string
+	SiteID          string
+	NodeID          string
+	Version         string
+	ExecutionForm   string
 }
 
 func (c *Config) Validate() error {
@@ -66,6 +67,36 @@ func (c *Config) Validate() error {
 		return err
 	}
 	c.RuntimeAPIURL = upstream.String()
+	if strings.TrimSpace(c.ViewerTokenFile) == "" {
+		return errors.New("viewer-token-file 不能为空")
+	}
+	tokenFile, err := filepath.Abs(strings.TrimSpace(c.ViewerTokenFile))
+	if err != nil {
+		return fmt.Errorf("解析 viewer-token-file: %w", err)
+	}
+	if err := validateViewerTokenFile(tokenFile); err != nil {
+		return err
+	}
+	c.ViewerTokenFile = tokenFile
+	return nil
+}
+
+// validateViewerTokenFile 只允许网关读取投影的单个 viewer token。拒绝链接、目录及
+// 其他用户可读文件，避免把运行凭据误指向 Release 或任意宿主路径。
+func validateViewerTokenFile(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("读取 viewer-token-file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("viewer-token-file 必须是普通文件")
+	}
+	if info.Mode().Perm()&0o007 != 0 {
+		return errors.New("viewer-token-file 不能对其他用户可读")
+	}
+	if info.Size() < 1 || info.Size() > 4096 {
+		return errors.New("viewer-token-file 大小非法")
+	}
 	return nil
 }
 

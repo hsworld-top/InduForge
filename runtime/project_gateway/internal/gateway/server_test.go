@@ -52,7 +52,7 @@ func TestGatewayProxiesOnlyRuntimePathsAndPreservesNodeIdentity(t *testing.T) {
 	server, upstream := newTestServer(t)
 	defer upstream.Close()
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/points/line.temperature", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/runtime/points/line.temperature", nil)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "upstream") {
@@ -60,6 +60,68 @@ func TestGatewayProxiesOnlyRuntimePathsAndPreservesNodeIdentity(t *testing.T) {
 	}
 	if response.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("security headers must be kept on proxied responses")
+	}
+}
+
+func TestGatewayViewerProxyNeverForwardsClientCredentialsOrMutations(t *testing.T) {
+	var receivedAuthorization string
+	var receivedPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		receivedAuthorization = request.Header.Get("Authorization")
+		receivedPath = request.URL.Path
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("release-index"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(testConfig(root, upstream.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{"/api/v1/runtime/points/line.temperature/history", "/ws/v1/points", "/ws/v1/alarms"} {
+		receivedPath, receivedAuthorization = "", ""
+		read := httptest.NewRequest(http.MethodGet, path, nil)
+		read.Header.Set("Authorization", "Bearer client-token")
+		read.Header.Set("Origin", "http://example.test")
+		read.Host = "example.test"
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, read)
+		if response.Code != http.StatusOK || receivedPath != path || receivedAuthorization != "Bearer viewer-token" {
+			t.Fatalf("viewer proxy must use only the mounted token: status=%d path=%q authorization=%q", response.Code, receivedPath, receivedAuthorization)
+		}
+	}
+
+	for _, mutation := range []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/runtime/points/line.temperature/write"},
+		{http.MethodPost, "/api/v1/runtime/computes/compute-1/run"},
+		{http.MethodPost, "/api/v1/runtime/session"},
+		{http.MethodPost, "/ws/v1/points"},
+	} {
+		receivedPath, receivedAuthorization = "", ""
+		write := httptest.NewRequest(mutation.method, mutation.path, nil)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, write)
+		if response.Code != http.StatusForbidden || receivedPath != "" || strings.Contains(response.Body.String(), "viewer-token") {
+			t.Fatalf("mutation %s %s must remain local forbidden: status=%d upstream=%q body=%q", mutation.method, mutation.path, response.Code, receivedPath, response.Body.String())
+		}
+	}
+}
+
+func TestGatewayRejectsCrossOriginViewerAndWebSocketRequests(t *testing.T) {
+	server, upstream := newTestServer(t)
+	defer upstream.Close()
+	for _, path := range []string{"/api/v1/runtime/catalog", "/ws/v1/points", "/ws/v1/alarms"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Host = "project.example.test"
+		request.Header.Set("Origin", "https://other.example.test")
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("%s status=%d body=%s", path, response.Code, response.Body.String())
+		}
 	}
 }
 
@@ -233,6 +295,35 @@ func TestConfigRejectsRemoteRuntimeAPIAndSymlinkedAssets(t *testing.T) {
 	}
 }
 
+func TestConfigRejectsUnsafeViewerTokenFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := testConfig(root, "http://127.0.0.1:17801")
+	if err := os.Chmod(config.ViewerTokenFile, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(config); err == nil || !strings.Contains(err.Error(), "其他用户") {
+		t.Fatalf("expected world-readable viewer token rejection, got %v", err)
+	}
+
+	tokenRoot := t.TempDir()
+	regular := filepath.Join(tokenRoot, "regular-token")
+	if err := os.WriteFile(regular, []byte("viewer-token\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tokenRoot, "viewer-token-link")
+	if err := os.Symlink(regular, link); err != nil {
+		t.Skipf("filesystem does not support symlink: %v", err)
+	}
+	config = testConfig(root, "http://127.0.0.1:17801")
+	config.ViewerTokenFile = link
+	if _, err := New(config); err == nil || !strings.Contains(err.Error(), "普通文件") {
+		t.Fatalf("expected symlinked viewer token rejection, got %v", err)
+	}
+}
+
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	root := t.TempDir()
@@ -265,16 +356,21 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 }
 
 func testConfig(root, upstream string) Config {
+	tokenPath := filepath.Join(root, "viewer-token")
+	if err := os.WriteFile(tokenPath, []byte("viewer-token\n"), 0o640); err != nil {
+		panic(err)
+	}
 	return Config{
-		Listen:        "127.0.0.1:17800",
-		ClientRoot:    root,
-		RuntimeAPIURL: upstream,
-		DeploymentID:  "deployment-1",
-		AccountID:     "account-1",
-		ProjectID:     "11111111-1111-4111-8111-111111111111",
-		SiteID:        "site-1",
-		NodeID:        "node-1",
-		Version:       "release-1",
-		ExecutionForm: "native-linux",
+		Listen:          "127.0.0.1:17800",
+		ClientRoot:      root,
+		RuntimeAPIURL:   upstream,
+		ViewerTokenFile: tokenPath,
+		DeploymentID:    "deployment-1",
+		AccountID:       "account-1",
+		ProjectID:       "11111111-1111-4111-8111-111111111111",
+		SiteID:          "site-1",
+		NodeID:          "node-1",
+		Version:         "release-1",
+		ExecutionForm:   "native-linux",
 	}
 }

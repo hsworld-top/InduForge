@@ -14,6 +14,7 @@ exec /usr/local/bin/project-gateway \
   --release-root "$IF_RELEASE_ROOT" \
   --client-root "$IF_WORK_ROOT/client" \
   --runtime-api http://127.0.0.1:18081 \
+  --viewer-token-file /var/run/induforge/runtime-viewer/token \
   --deployment-id "$IF_DEPLOYMENT_ID" \
   --account-id "$IF_PROJECT_ID" \
   --project-id "$IF_PROJECT_ID" \

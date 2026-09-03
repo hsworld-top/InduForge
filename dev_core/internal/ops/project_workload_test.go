@@ -15,10 +15,21 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(base, "\t") {
 		t.Fatalf("base manifest must not contain YAML tab indentation: %q", base)
 	}
-	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/host-node-id", "maxUnavailable: 1, maxSurge: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", `IF_PROJECT_ID, value: "` + testProjectID + `"`, "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.0", "image: induforge/project-runtime-api:1.0.0", "image: induforge/runtime-engine:1.0.21", `"--project-id", "` + testProjectID + `"`, `"--account-id", "` + runtimeAccountID(testProjectID, "99999999-9999-4999-8999-999999999999") + `"`, `exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
+	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "hostPort: 17800", "induforge.io/host-node-id", "maxUnavailable: 1, maxSurge: 0", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", `IF_PROJECT_ID, value: "` + testProjectID + `"`, "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.1", "image: induforge/project-runtime-api:1.0.0", "image: induforge/runtime-engine:1.0.21", `"--project-id", "` + testProjectID + `"`, `"--account-id", "` + runtimeAccountID(testProjectID, "99999999-9999-4999-8999-999999999999") + `"`, `exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "name: runtime-viewer-token", "{key: runtime-api-token, path: token}", "mountPath: /var/run/induforge/runtime-viewer", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
 		if !strings.Contains(base, expected) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
+	}
+	if strings.Count(base, "mountPath: /var/run/induforge/runtime-viewer") != 1 {
+		t.Fatalf("viewer token must only be mounted once:\n%s", base)
+	}
+	apiStart := strings.Index(base, "- name: runtime-api\n")
+	if apiStart < 0 {
+		t.Fatalf("runtime-api sidecar missing:\n%s", base)
+	}
+	apiEnd := strings.Index(base[apiStart:], "\n      volumes:")
+	if apiEnd < 0 || strings.Contains(base[apiStart:apiStart+apiEnd], "runtime-viewer-token") {
+		t.Fatalf("viewer token must not be mounted by Runtime API:\n%s", base)
 	}
 	compute, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
 	if err != nil || !strings.Contains(compute, "IF_ENGINE_ROLE") || !strings.Contains(compute, `"compute"`) || strings.Contains(compute, "hostPort:") {

@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	projectGatewayImage = "induforge/project-gateway:1.0.0"
+	projectGatewayImage = "induforge/project-gateway:1.0.1"
 	runtimeAPIImage     = "induforge/project-runtime-api:1.0.0"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
@@ -155,7 +155,15 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             items:
               - {key: runtime-api-nats.json, path: nats.json}
               - {key: runtime-api-postgres.json, path: postgres.json}
-              - {key: runtime-api-tokens.json, path: tokens.json}`, bindingName, secretName, secretName, secretName)
+              - {key: runtime-api-tokens.json, path: tokens.json}
+        - name: runtime-viewer-token
+          secret:
+            secretName: %s
+            defaultMode: 0440
+            items:
+              - {key: runtime-api-token, path: token}`, bindingName, secretName, secretName, secretName, secretName)
+		runtimeMounts = `
+            - {name: runtime-viewer-token, mountPath: /var/run/induforge/runtime-viewer, readOnly: true}`
 		apiSidecar = fmt.Sprintf(`
         - name: runtime-api
           image: %s

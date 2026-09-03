@@ -19,6 +19,7 @@ func main() {
 	flag.StringVar(&config.ClientRoot, "client-root", "", "当前 Release 的 client 目录")
 	flag.StringVar(&config.ReleaseRoot, "release-root", "", "已验签且只读的 Release 根目录；指定时安全解开 client-assets")
 	flag.StringVar(&config.RuntimeAPIURL, "runtime-api", "http://127.0.0.1:17801", "本机 Runtime API URL")
+	flag.StringVar(&config.ViewerTokenFile, "viewer-token-file", "", "仅供 Gateway 上游代理使用的 deployment viewer token 文件")
 	flag.StringVar(&config.DeploymentID, "deployment-id", "", "工程部署 ID")
 	flag.StringVar(&config.AccountID, "account-id", "", "工程 NATS Account ID")
 	flag.StringVar(&config.ProjectID, "project-id", "", "工程 ID")

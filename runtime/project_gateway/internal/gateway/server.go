@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -36,10 +38,16 @@ func New(config Config) (*Server, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
+	viewerToken, err := loadViewerToken(config.ViewerTokenFile)
+	if err != nil {
+		return nil, err
+	}
 	upstream, _ := url.Parse(config.RuntimeAPIURL)
+	viewerAuth := "Bearer " + viewerToken
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 	defaultDirector := proxy.Director
 	proxy.Director = func(request *http.Request) {
+		viewerProxy := request.Header.Get("X-InduForge-Viewer-Proxy") == "1"
 		forwardedHost := request.Host
 		forwardedProto := request.Header.Get("X-Forwarded-Proto")
 		if forwardedProto == "" {
@@ -50,6 +58,11 @@ func New(config Config) (*Server, error) {
 		}
 		defaultDirector(request)
 		request.Host = upstream.Host
+		request.Header.Del("Authorization")
+		request.Header.Del("X-InduForge-Viewer-Proxy")
+		if viewerProxy {
+			request.Header.Set("Authorization", viewerAuth)
+		}
 		request.Header.Set("X-Forwarded-Host", forwardedHost)
 		request.Header.Set("X-Forwarded-Proto", forwardedProto)
 		request.Header.Set("X-InduForge-Deployment-Id", config.DeploymentID)
@@ -66,6 +79,18 @@ func New(config Config) (*Server, error) {
 	return server, nil
 }
 
+func loadViewerToken(path string) (string, error) {
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读取 viewer-token-file: %w", err)
+	}
+	token := strings.TrimSpace(string(payload))
+	if token == "" || len(token) > 4096 || strings.ContainsAny(token, "\r\n") {
+		return "", errors.New("viewer-token-file 内容非法")
+	}
+	return token, nil
+}
+
 // osDirFS 单独包一层，便于测试替换与保持 handler 只接触受限 fs.FS。
 var osDirFS = func(root string) fs.FS { return osDirFSImpl(root) }
 
@@ -75,6 +100,10 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) serveHTTP(writer http.ResponseWriter, request *http.Request) {
 	setSecurityHeaders(writer.Header())
+	if !sameOriginRequest(request) {
+		writeJSON(writer, http.StatusForbidden, envelope{Code: 40301, Msg: "工程入口来源不匹配", Data: nil, ReqID: requestID(request)})
+		return
+	}
 	switch {
 	case request.URL.Path == "/health":
 		s.handleHealth(writer, request)
@@ -84,13 +113,58 @@ func (s *Server) serveHTTP(writer http.ResponseWriter, request *http.Request) {
 		request = request.Clone(request.Context())
 		request.URL.Path = "/api/v1/status"
 		s.serveProxy(writer, request)
-	case strings.HasPrefix(request.URL.Path, "/api/v1/") || request.URL.Path == "/api/v1":
-		s.serveProxy(writer, request)
-	case request.URL.Path == "/ws" || strings.HasPrefix(request.URL.Path, "/ws/"):
-		s.serveProxy(writer, request)
+	case viewerRuntimeRequest(request):
+		s.serveViewerProxy(writer, request)
+	case runtimeMutationRequest(request):
+		writeJSON(writer, http.StatusForbidden, envelope{Code: 40301, Msg: "发布入口仅允许 viewer 只读运行能力", Data: nil, ReqID: requestID(request)})
+	case strings.HasPrefix(request.URL.Path, "/api/v1/runtime/") || strings.HasPrefix(request.URL.Path, "/ws/"):
+		http.NotFound(writer, request)
 	default:
 		s.serveAsset(writer, request)
 	}
+}
+
+// sameOriginRequest 只接受当前工程入口自身的浏览器来源；客户端不能借 Gateway
+// 覆盖部署身份或把同一 viewer token 转发给其他站点。
+func sameOriginRequest(request *http.Request) bool {
+	if strings.TrimSpace(request.Host) == "" {
+		return false
+	}
+	origin := strings.TrimSpace(request.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" && strings.EqualFold(parsed.Host, request.Host)
+}
+
+func viewerRuntimeRequest(request *http.Request) bool {
+	if request.Method != http.MethodGet {
+		return false
+	}
+	path := request.URL.Path
+	if path == "/ws/v1/points" || path == "/ws/v1/alarms" {
+		return true
+	}
+	if path == "/api/v1/runtime/catalog" || path == "/api/v1/runtime/alarms/current" || path == "/api/v1/runtime/computes" {
+		return true
+	}
+	if !strings.HasPrefix(path, "/api/v1/runtime/points/") {
+		return false
+	}
+	pointPath := strings.TrimPrefix(path, "/api/v1/runtime/points/")
+	return pointPath != "" && (!strings.Contains(pointPath, "/") || (strings.Count(pointPath, "/") == 1 && strings.HasSuffix(pointPath, "/history")))
+}
+
+func runtimeMutationRequest(request *http.Request) bool {
+	return strings.HasPrefix(request.URL.Path, "/api/v1/runtime/") || strings.HasPrefix(request.URL.Path, "/ws/")
+}
+
+func (s *Server) serveViewerProxy(writer http.ResponseWriter, request *http.Request) {
+	request = request.Clone(request.Context())
+	request.Header.Del("Authorization")
+	request.Header.Set("X-InduForge-Viewer-Proxy", "1")
+	s.serveProxy(writer, request)
 }
 
 func (s *Server) serveProxy(writer http.ResponseWriter, request *http.Request) {
