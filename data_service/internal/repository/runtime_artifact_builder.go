@@ -386,7 +386,11 @@ func buildRuntimeAlarm(alarm AlarmItemRecord, points map[string]DataPointRecord)
 		if condition.Kind == "offline" && operator == "is_offline" {
 			operator = "is"
 		}
-		conditions = append(conditions, map[string]any{"id": condition.ID, "kind": condition.Kind, "operator": operator, "params": cloneSnapshotObject(condition.Params), "severity": condition.Severity, "triggerDelayMs": condition.TriggerDelayMS, "clearDelayMs": condition.ClearDelayMS, "deadband": condition.Deadband, "_sortOrder": condition.SortOrder})
+		params := cloneSnapshotObject(condition.Params)
+		// presetLevel/levelName 只服务于开发态快捷报警编辑，运行时严格契约不接收展示元数据。
+		delete(params, "presetLevel")
+		delete(params, "levelName")
+		conditions = append(conditions, map[string]any{"id": condition.ID, "kind": condition.Kind, "operator": operator, "params": params, "severity": condition.Severity, "triggerDelayMs": condition.TriggerDelayMS, "clearDelayMs": condition.ClearDelayMS, "deadband": condition.Deadband, "_sortOrder": condition.SortOrder})
 	}
 	sort.Slice(conditions, func(i, j int) bool {
 		a, b := conditions[i].(map[string]any), conditions[j].(map[string]any)
