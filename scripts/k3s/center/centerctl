@@ -234,6 +234,31 @@ render_manifest() {
     "$SCRIPT_DIR/center-system.yaml.template"
 }
 
+persist_config() {
+  config_dir=$(dirname -- "$CONFIG_FILE")
+  install -d -m 0755 "$config_dir"
+  config_tmp="$CONFIG_FILE.tmp.$$"
+  umask 077
+  {
+    printf 'CENTER_NODE_NAME=%s\n' "$CENTER_NODE_NAME"
+    printf 'CONTROL_IMAGE=%s\n' "$CONTROL_IMAGE"
+    printf 'DATA_IMAGE=%s\n' "$DATA_IMAGE"
+    printf 'EDGE_IMAGE=%s\n' "$EDGE_IMAGE"
+    printf 'DATA_ROOT=%s\n' "$DATA_ROOT"
+    printf 'HTTP_PORT=%s\n' "$HTTP_PORT"
+    printf 'HTTPS_PORT=%s\n' "$HTTPS_PORT"
+    printf 'DOCKER_GID=%s\n' "$DOCKER_GID"
+    printf 'RELEASE_BUILDER_IMAGE=%s\n' "$RELEASE_BUILDER_IMAGE"
+    printf 'RELEASE_BUILDER_ID=%s\n' "$RELEASE_BUILDER_ID"
+    printf 'RELEASE_WORKSPACE_VOLUME=%s\n' "$RELEASE_WORKSPACE_VOLUME"
+    printf 'RELEASE_KEY_ID=%s\n' "$RELEASE_KEY_ID"
+    printf 'RELEASE_MIN_AGENT_VERSION=%s\n' "$RELEASE_MIN_AGENT_VERSION"
+    printf 'RELEASE_MIN_RUNTIME_VERSION=%s\n' "$RELEASE_MIN_RUNTIME_VERSION"
+  } > "$config_tmp"
+  chmod 0600 "$config_tmp"
+  mv -f "$config_tmp" "$CONFIG_FILE"
+}
+
 apply_center() {
   require_root apply
   validate_settings
@@ -286,6 +311,8 @@ apply_center() {
     kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
   done
   doctor
+  # 仅在工作负载和服务端点全部健康后提交配置，保证后续普通 apply 不会回退镜像。
+  persist_config
 }
 
 show_status() {

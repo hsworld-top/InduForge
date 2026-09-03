@@ -24,6 +24,10 @@ sudo IF_CENTER_NODE_NAME=<k3s-node-name> \
   /opt/induforge/center-k3s/centerctl apply /etc/induforge/center.env
 ```
 
+`apply` 只在全部中心工作负载和服务端点健康后，将本次解析后的镜像、节点、
+数据目录与入口参数原子写入 `/etc/induforge/center-k3s.conf`，后续不带环境变量的
+普通 `apply` 会继续使用已验证的版本。
+
 旧版 Docker/宿主进程中心可在确认镜像已经导入 K3s 后执行一次性迁移脚本。脚本先保存 PostgreSQL
 逻辑备份和中心资产归档，再停止旧服务、复制固定数据目录并部署 K3s 工作负载；失败会缩容新工作负载
 并尝试恢复旧服务。成功后不会删除旧 Docker Volume，需在人工验收和备份确认后另行清理。

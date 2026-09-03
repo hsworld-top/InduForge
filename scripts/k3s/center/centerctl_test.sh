@@ -91,6 +91,10 @@ if ! grep -Fq 'COPY contracts/runtime /contracts/runtime' "$SCRIPT_DIR/../../../
   echo "source-built data image must include runtime artifact schemas" >&2
   exit 1
 fi
+if ! awk '/^[[:space:]]*doctor$/ { doctor_line=NR } /^[[:space:]]*persist_config$/ { persist_line=NR } END { exit !(doctor_line > 0 && persist_line == doctor_line + 2) }' "$SCRIPT_DIR/centerctl"; then
+  echo "successful center apply must persist its resolved configuration" >&2
+  exit 1
+fi
 
 if IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DATA_ROOT=/ IF_CENTER_DOCKER_GID=998 "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
   echo "unsafe data root was accepted" >&2
