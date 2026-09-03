@@ -214,13 +214,38 @@ func (b *ProjectReleaseSourceBuilder) fetchCollectorArtifact(ctx context.Context
 	if json.Unmarshal(result.Artifact, &artifact) != nil || artifact.SchemaVersion != result.SchemaVersion || artifact.ProjectID != project.ID || artifact.ArtifactRevision != result.ArtifactRevision {
 		return nil, nil, fmt.Errorf("采集工件内容无效")
 	}
-	packed, err := packReleaseSourceArchive(map[string][]byte{"collector-runtime-artifact.json": result.Artifact})
+	// application_versions.manifest 使用 JSONB 保存。签名前必须把嵌套 artifact 与
+	// sourceSnapshot 都规范化，否则 JSONB 读回后的字段重排会让两层字节摘要失效。
+	canonicalArtifact, err := canonicalJSON(result.Artifact)
+	if err != nil {
+		return nil, nil, fmt.Errorf("规范化采集工件失败")
+	}
+	result.Artifact = canonicalArtifact
+	result.Size = int64(len(canonicalArtifact))
+	artifactSum := sha256.Sum256(canonicalArtifact)
+	result.SHA256 = "sha256:" + hex.EncodeToString(artifactSum[:])
+	snapshotJSON, err := json.Marshal(result)
+	if err != nil {
+		return nil, nil, fmt.Errorf("规范化采集工件快照失败")
+	}
+	canonicalSnapshot, err := canonicalJSON(snapshotJSON)
+	if err != nil {
+		return nil, nil, fmt.Errorf("规范化采集工件快照失败")
+	}
+	packed, err := packReleaseSourceArchive(map[string][]byte{"collector-runtime-artifact.json": canonicalArtifact})
 	if err != nil || int64(len(packed)) > b.archiveLimit {
 		return nil, nil, fmt.Errorf("归档采集工件失败")
 	}
-	// data_service 的完整响应 data 是 sourceSnapshot 本体，已验证其中 artifact 摘要。
-	// 将这份权威字节写入后续签名 manifest，绝不重建或接收客户端提供版本。
-	return packed, append([]byte(nil), envelope.Data...), nil
+	// 规范化只改变 JSON 表示并重算已验证内容的摘要，不接受客户端字段或改变采集语义。
+	return packed, canonicalSnapshot, nil
+}
+
+func canonicalJSON(raw []byte) ([]byte, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return json.Marshal(value)
 }
 
 func (b *ProjectReleaseSourceBuilder) fetchRuntimeArtifact(ctx context.Context, projectID, authorization string) (map[string]any, []byte, error) {

@@ -159,6 +159,28 @@ func TestProjectReleaseSourceBuilderIncludesTrustedCollectorArtifact(t *testing.
 	if !containsEngine(releasebuilder.DeriveEngineRequirements(source.ProjectDocument), "collector") {
 		t.Fatal("collector capability lost")
 	}
+	// 模拟 application_versions.manifest 的 JSONB 往返：嵌套对象重编码后，
+	// sourceSnapshot 及其内部 artifact 的摘要必须继续成立。
+	var snapshot map[string]any
+	if err = json.Unmarshal(source.CollectorSourceSnapshot, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	roundTripped, err := json.Marshal(snapshot)
+	if err != nil || !bytes.Equal(roundTripped, source.CollectorSourceSnapshot) {
+		t.Fatalf("collector sourceSnapshot 不是 JSONB 稳定表示: %v", err)
+	}
+	var checked struct {
+		SHA256   string          `json:"sha256"`
+		Size     int             `json:"size"`
+		Artifact json.RawMessage `json:"artifact"`
+	}
+	if err = json.Unmarshal(roundTripped, &checked); err != nil || checked.Size != len(checked.Artifact) {
+		t.Fatalf("collector sourceSnapshot 元数据失效: %v", err)
+	}
+	artifactSum := sha256.Sum256(checked.Artifact)
+	if checked.SHA256 != "sha256:"+hex.EncodeToString(artifactSum[:]) {
+		t.Fatal("collector sourceSnapshot 内部 artifact 摘要失效")
+	}
 }
 
 func TestProjectReleaseSourceBuilderRejectsUnsafeFrontendDirectory(t *testing.T) {
