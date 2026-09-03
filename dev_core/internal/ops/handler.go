@@ -583,6 +583,7 @@ func deploymentPayload(x ProjectDeployment) map[string]any {
 		"lastReadyAt":          x.LastReadyAt,
 		"updating":             updating,
 		"latestRunId":          x.LatestRunID,
+		"latestRunOperation":   x.LatestRunOperation,
 		"accessPort":           x.AccessPort,
 		"desiredStatus":        x.DesiredStatus,
 		"observedStatus":       x.ObservedStatus,

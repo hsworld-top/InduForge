@@ -100,9 +100,9 @@ func TestDeploymentInsertReturningKeepsLatestRunPlaceholder(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 新建事务尚未写入 deployment_runs，因此 Version 后必须保留空的
-	// LatestRunID 占位，确保 RETURNING 与 scanDeployment 的 21 列严格对齐。
-	if !strings.Contains(string(raw), "COALESCE(application_version_id::text,''),'','',$5") {
-		t.Fatal("部署 INSERT RETURNING 缺少 LatestRunID 占位列")
+	// LatestRunID/Operation 占位，确保 RETURNING 与 scanDeployment 的 22 列严格对齐。
+	if !strings.Contains(string(raw), "COALESCE(application_version_id::text,''),'','','',$5") {
+		t.Fatal("部署 INSERT RETURNING 缺少最新操作占位列")
 	}
 }
 
