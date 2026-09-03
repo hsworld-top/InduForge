@@ -71,6 +71,12 @@ func dropExecutionPrivileges() error {
 	if err := syscall.Setuid(runtimeUID); err != nil {
 		return err
 	}
+	// bubblewrap 为降权 helper 保留了三项能力；setuid 后仍显式 capset 归零，不能依赖 securebits 默认值。
+	header := capabilityHeader{Version: linuxCapVersion3}
+	data := [2]capabilityData{}
+	if _, _, errno := syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&header)), uintptr(unsafe.Pointer(&data[0])), 0); errno != 0 {
+		return errno
+	}
 	if _, _, errno := syscall.RawSyscall(syscall.SYS_PRCTL, prSetNoNewPrivs, 1, 0); errno != 0 {
 		return errno
 	}
