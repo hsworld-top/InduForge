@@ -47,7 +47,7 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			// RuntimeEngine 会自行从 deployment+role 推导稳定 owner，不能把 Pod
 			// instanceId（会随 generation 改变）混入 owner。
 			"fencingEpoch": workload.Generation,
-			"projectId":    context.ProjectID, "deploymentId": context.DeploymentID, "accountId": "if-" + key,
+			"projectId":    context.ProjectID, "deploymentId": context.DeploymentID, "accountId": runtimeAccountID(context.ProjectID, context.DeploymentID),
 			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/opt/induforge/release/runtime-artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, context.RuntimeEngines, key, context.Support),
 			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
@@ -93,6 +93,13 @@ func runtimeJetStreamInput(role string, enabledRoles []string, key string, suppo
 func stableRuntimeKey(values ...string) string {
 	h := sha256.Sum256([]byte(strings.Join(values, "\x00")))
 	return hex.EncodeToString(h[:])[:16]
+}
+
+// runtimeAccountID 是部署级 NATS 逻辑账户与 stream 命名的共同隔离键。它不能
+// 混入 service generation、release 或模式，否则 collector、base、compute、alarm
+// 会在同一部署中得到不一致的账户身份。
+func runtimeAccountID(projectID, deploymentID string) string {
+	return "if-" + stableRuntimeKey(projectID, deploymentID)
 }
 
 // runtimeStateDatabaseName 只以 project/environment 槽位生成数据库名；模式切换

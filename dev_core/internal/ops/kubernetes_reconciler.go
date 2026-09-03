@@ -439,7 +439,7 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if err != nil {
 			return fmt.Errorf("collector-binding Release 工件无效")
 		}
-		bundle, err := r.collectorBundle.BuildCollectorBindingBundle(ctx, dataservice.CollectorBindingBundleRequest{TenantID: runtimeContext.TenantID, ProjectID: runtimeContext.ProjectID, DeploymentID: workload.DeploymentID, EnvironmentID: workload.EnvironmentID, NodeID: workload.NodeID, ReleaseID: workload.ReleaseID, Revision: int64(runtimeContext.BindingRevision), SourceSnapshot: runtimeContext.CollectorSourceSnapshot, AccountID: "if-" + stableRuntimeKey(workload.DeploymentID), NATSEndpoint: runtimeContext.Support.NATSEndpoint, NATSResourceRef: runtimeContext.Support.NATSResourceRef, NATSCredentialSecretRef: runtimeContext.Support.NATSCredentialSecretRef})
+		bundle, err := r.collectorBundle.BuildCollectorBindingBundle(ctx, dataservice.CollectorBindingBundleRequest{TenantID: runtimeContext.TenantID, ProjectID: runtimeContext.ProjectID, DeploymentID: workload.DeploymentID, EnvironmentID: workload.EnvironmentID, NodeID: workload.NodeID, ReleaseID: workload.ReleaseID, Revision: int64(runtimeContext.BindingRevision), SourceSnapshot: runtimeContext.CollectorSourceSnapshot, AccountID: runtimeAccountID(runtimeContext.ProjectID, workload.DeploymentID), NATSEndpoint: runtimeContext.Support.NATSEndpoint, NATSResourceRef: runtimeContext.Support.NATSResourceRef, NATSCredentialSecretRef: runtimeContext.Support.NATSCredentialSecretRef})
 		if err != nil {
 			return fmt.Errorf("collector-binding 构建失败")
 		}

@@ -97,6 +97,48 @@ func TestBuildRuntimeBindingInputFreezesServiceGenerationAsFencingEpoch(t *testi
 	}
 }
 
+func TestRuntimeAccountAndStreamsStayDeploymentStableAcrossRolesAndUpdates(t *testing.T) {
+	context := validRuntimeContext()
+	context.RuntimeEngines = []string{ServiceCompute, ServiceAlarm}
+	wantAccount := runtimeAccountID(context.ProjectID, context.DeploymentID)
+	var wantStreams map[string]any
+	for _, role := range []string{ServiceBase, ServiceCollector, ServiceCompute, ServiceAlarm} {
+		if role == ServiceCollector {
+			// collector receives the same value through its bundle request; its
+			// source of truth is asserted by the reconciler test below.
+			continue
+		}
+		for _, generation := range []int64{1, 24} {
+			workload := ProjectWorkload{EnvironmentID: context.EnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: role, ReleaseID: context.Release.ID, Generation: generation}
+			for _, mode := range []string{"development", "production"} {
+				context.Mode = mode
+				raw, err := BuildRuntimeBindingInput(workload, context)
+				if err != nil {
+					t.Fatalf("%s generation=%d mode=%s: %v", role, generation, mode, err)
+				}
+				var doc map[string]any
+				if err := json.Unmarshal(raw, &doc); err != nil {
+					t.Fatal(err)
+				}
+				binding := doc["binding"].(map[string]any)
+				if binding["accountId"] != wantAccount {
+					t.Fatalf("%s generation=%d mode=%s account=%v want=%s", role, generation, mode, binding["accountId"], wantAccount)
+				}
+				streams := binding["jetStream"].(map[string]any)
+				if wantStreams == nil {
+					wantStreams = map[string]any{"dataRawStream": streams["dataRawStream"], "dataDerivedStream": streams["dataDerivedStream"], "eventStream": streams["eventStream"], "commandStream": streams["commandStream"], "deadLetterStream": streams["deadLetterStream"]}
+				} else {
+					for name, want := range wantStreams {
+						if streams[name] != want {
+							t.Fatalf("%s generation=%d mode=%s %s=%v want=%v", role, generation, mode, name, streams[name], want)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestRuntimeStateSlotUsesFixedSchemaAndStableDatabaseName(t *testing.T) {
 	context := validRuntimeContext()
 	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 1}

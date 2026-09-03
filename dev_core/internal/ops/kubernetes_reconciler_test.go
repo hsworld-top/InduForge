@@ -160,7 +160,7 @@ func TestKubernetesProjectReconcilerAppliesCollectorBindingBeforeWorkload(t *tes
 	reconciler.SetRuntimeContextLoader(runtimeContextLoaderFunc(func(context.Context, string) (ProjectRuntimeContext, error) { return contextValue, nil }))
 	reconciler.SetDeploymentSecretManager(NewDeploymentSecretManager(&memorySecretClient{values: sourceSecrets()}))
 	reconciler.SetCollectorBindingBundleClient(collectorBundleClientFunc(func(_ context.Context, input dataservice.CollectorBindingBundleRequest) (*dataservice.CollectorBindingBundle, error) {
-		if input.SourceSnapshot == nil || input.Revision != 7 || input.ProjectID != testProjectID {
+		if input.SourceSnapshot == nil || input.Revision != 7 || input.ProjectID != testProjectID || input.AccountID != runtimeAccountID(testProjectID, contextValue.DeploymentID) {
 			t.Fatalf("collector used untrusted runtime context: %+v", input)
 		}
 		return &dataservice.CollectorBindingBundle{Binding: json.RawMessage(`{"schemaVersion":"collector-runtime-binding.v1","connection":"secret://collector/only"}`), Index: json.RawMessage(`{"schemaVersion":"collector-runtime-index.v1","secrets":{"secret://collector/only":"secrets/connection-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.json"}}`), BindingSHA256: "sha256:" + strings.Repeat("a", 64), IndexSHA256: "sha256:" + strings.Repeat("b", 64), SecretFiles: map[string][]byte{"connection-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.json": []byte(`{"password":"private"}`)}}, nil

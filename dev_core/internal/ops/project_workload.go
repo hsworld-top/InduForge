@@ -168,7 +168,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: work, mountPath: /work, readOnly: true}
-            - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.ProjectID, "if-"+stableRuntimeKey(workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, strconv.Itoa(max(1, workload.BindingRevision)), workload.RuntimeNATSEndpoint)
+            - {name: runtime-api-secrets, mountPath: /var/run/induforge/runtime-api, readOnly: true}`, runtimeAPIImage, workload.DeploymentID, workload.ProjectID, runtimeAccountID(workload.ProjectID, workload.DeploymentID), workload.EnvironmentID, workload.NodeID, workload.ReleaseID, strconv.Itoa(max(1, workload.BindingRevision)), workload.RuntimeNATSEndpoint)
 	}
 	if workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		workMountReadOnly = ", readOnly: true"
