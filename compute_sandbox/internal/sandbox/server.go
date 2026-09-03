@@ -976,7 +976,7 @@ func runIsolated(ctx context.Context, config Config, language, runtimeScript str
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.Command(config.Prlimit, args...)
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = bytes.NewReader(payload)
 	cmd.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "LANG=C.UTF-8"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -1026,7 +1026,6 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 		binary = config.PythonBinary
 	}
 	args := []string{
-		"--as=1073741824", "--nofile=64", "--fsize=4194304", "--cpu=120", "--",
 		"/usr/bin/unshare", "--net", "--", config.Bubblewrap, "--die-with-parent", "--unshare-ipc", "--unshare-pid", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
 		"--ro-bind", "/usr", "/usr", "--ro-bind-try", "/bin", "/bin", "--ro-bind-try", "/lib", "/lib",
 		"--ro-bind-try", "/lib64", "/lib64", "--ro-bind-try", "/usr/local", "/usr/local",
@@ -1044,7 +1043,8 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 	args = append(args,
 		"--chdir", "/tmp", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8",
 		"--cap-drop", "ALL", "--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID", "--cap-add", "CAP_SETPCAP",
-		"/usr/local/bin/compute-sandbox", "internal-exec", binary, filepath.Join("/runtime", runtimeScript),
+		"/usr/local/bin/compute-sandbox", "internal-exec", config.Prlimit,
+		"--as=1073741824", "--nofile=64", "--fsize=4194304", "--cpu=120", "--", binary, filepath.Join("/runtime", runtimeScript),
 	)
 	return args, nil
 }

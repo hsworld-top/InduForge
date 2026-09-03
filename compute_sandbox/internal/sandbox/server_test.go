@@ -331,7 +331,7 @@ func TestBuildSandboxArgsRequiresIsolationAndNoNetwork(t *testing.T) {
 	if strings.Contains(joined, "--share-net") {
 		t.Fatalf("sandbox must not share network: %s", joined)
 	}
-	if !strings.Contains(joined, "-- "+config.Bubblewrap+" ") {
+	if !strings.Contains(joined, "/usr/bin/unshare --net -- "+config.Bubblewrap+" ") {
 		t.Fatalf("sandbox execution must invoke bubblewrap without host fallback: %s", joined)
 	}
 	if strings.Contains(joined, "--nproc") {

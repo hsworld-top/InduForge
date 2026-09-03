@@ -85,7 +85,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 		t.Fatalf("collector workload must not reuse runtime-engine init/config: %v\n%s", err, collector)
 	}
 	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
-	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.7", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
+	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.8", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
 		}
