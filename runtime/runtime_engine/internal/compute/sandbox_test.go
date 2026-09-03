@@ -48,6 +48,49 @@ func TestSandboxClientInternalDeadlineUsesStableTimeoutError(t *testing.T) {
 	}
 }
 
+func TestSandboxClientSendsReadOnlyPointSDKContext(t *testing.T) {
+	var received struct {
+		SDKContext struct {
+			PointBindings map[string]string         `json:"pointBindings"`
+			Datapoints    map[string]map[string]any `json:"datapoints"`
+		} `json:"sdkContext"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatal(err)
+		}
+		writePreflightJSON(w, map[string]any{"output": map[string]any{"result": map[string]any{"celsius": 25, "fahrenheit": 77}}, "sideEffects": []any{}, "stdout": "", "stderr": "", "durationMs": 1, "executionId": "execution", "artifactDigest": "sha256:test", "computeUnitId": "unit", "revision": 4})
+	}))
+	defer server.Close()
+	endpoint, _ := NewSandboxEndpoint(server.URL, "012345678901234567890123")
+	client, _ := NewSandboxClient(staticSandboxResolver{endpoint: endpoint}, "resource", "secret")
+	now := time.Date(2026, 9, 3, 8, 0, 0, 0, time.UTC)
+	request := ExecutionRequest{ExecutionID: "execution", DeploymentID: "dep", ProjectID: "project", ComputeUnitID: "unit", ArtifactDigest: "sha256:test", ComputeRevision: 4, Input: map[string]json.RawMessage{"temperature": json.RawMessage(`25`)}, PointBindings: map[string]string{"temperature": "collector.demo.temperature"}, Datapoints: map[string]SandboxDatapoint{"collector.demo.temperature": {ID: "point", Path: "collector.demo.temperature", Name: "温度", DataType: "uint16", SourceType: "collector.point", Value: json.RawMessage(`25`), Quality: "good", SourceTimestamp: now, ServerTimestamp: now}}, Timeout: time.Second}
+	if _, err := client.Execute(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if received.SDKContext.PointBindings["temperature"] != "collector.demo.temperature" {
+		t.Fatalf("point binding missing: %+v", received.SDKContext.PointBindings)
+	}
+	point := received.SDKContext.Datapoints["collector.demo.temperature"]
+	capabilities := point["capabilities"].(map[string]any)
+	if capabilities["get"] != true || capabilities["read"] != true || capabilities["peek"] != true || capabilities["set"] != nil {
+		t.Fatalf("capabilities are not read-only: %+v", capabilities)
+	}
+}
+
+func TestSandboxClientRejectsUndeclaredPointBinding(t *testing.T) {
+	request := validSandboxRequest(time.Second)
+	request.PointBindings = map[string]string{"temperature": "collector.demo.temperature"}
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	endpoint, _ := NewSandboxEndpoint(server.URL, "012345678901234567890123")
+	client, _ := NewSandboxClient(staticSandboxResolver{endpoint: endpoint}, "resource", "secret")
+	if _, err := client.Execute(context.Background(), request); err == nil || !strings.Contains(err.Error(), "绑定非法") {
+		t.Fatalf("Execute error=%v, want invalid binding", err)
+	}
+}
+
 func TestSandboxClientPreflightStrictlyAttestsEndpoint(t *testing.T) {
 	expected := SandboxIdentity{SiteID: "site-a", DeploymentID: "deployment-a", ProjectID: "project-a"}
 	for _, test := range []struct {

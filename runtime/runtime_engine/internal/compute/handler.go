@@ -61,13 +61,17 @@ type Handler struct {
 	executor  Executor
 	units     map[string]model.ComputeUnit
 	producers map[string]model.ProducerAssignment
+	points    map[string]model.DataPoint
 }
 
 func NewPostgresHandler(artifact model.ProjectArtifact, config model.EngineConfig, executor Executor) (*Handler, error) {
 	if executor == nil {
 		return nil, errors.New("compute executor 不能为空")
 	}
-	h := &Handler{artifact: artifact, config: config, executor: executor, units: map[string]model.ComputeUnit{}, producers: map[string]model.ProducerAssignment{}}
+	h := &Handler{artifact: artifact, config: config, executor: executor, units: map[string]model.ComputeUnit{}, producers: map[string]model.ProducerAssignment{}, points: map[string]model.DataPoint{}}
+	for _, point := range artifact.DataPoints {
+		h.points[point.ID] = point
+	}
 	for _, unit := range artifact.ComputeUnits {
 		for _, input := range unit.Inputs {
 			if input.Alias == "true" || input.Alias == "false" {
@@ -512,7 +516,22 @@ func (h *Handler) executeAndQueue(ctx context.Context, tx *postgres.BusinessTx, 
 	if !complete {
 		return nil
 	}
-	result, err := h.executor.Execute(ctx, ExecutionRequest{ExecutionID: ExecutionUUID(message.Event.EventID), DeploymentID: h.config.DeploymentID, ProjectID: h.config.ProjectID, ComputeUnitID: unit.ID, ArtifactDigest: h.config.ProjectArtifact.ArtifactDigest, ComputeRevision: unit.Revision, Input: values, Timeout: time.Duration(unit.TimeoutMS) * time.Millisecond})
+	snapshots, err := tx.ComputeInputs(ctx, unit.ID, inputDatapointIDs(unit.Inputs))
+	if err != nil {
+		return err
+	}
+	pointBindings := make(map[string]string, len(unit.Inputs))
+	datapoints := make(map[string]SandboxDatapoint, len(unit.Inputs))
+	for _, input := range unit.Inputs {
+		point, ok := h.points[input.DatapointID]
+		snapshot, snapshotOK := snapshots[input.DatapointID]
+		if !ok || !snapshotOK {
+			return errors.New("compute 输入数据点上下文不完整")
+		}
+		pointBindings[input.Alias] = point.Path
+		datapoints[point.Path] = SandboxDatapoint{ID: point.ID, Path: point.Path, Name: point.Name, DataType: point.DataType, SourceType: point.SourceType, SourceID: point.SourceID, Value: snapshot.Value, Quality: snapshot.Quality, SourceTimestamp: snapshot.SourceTimestamp, ServerTimestamp: snapshot.ServerTimestamp}
+	}
+	result, err := h.executor.Execute(ctx, ExecutionRequest{ExecutionID: ExecutionUUID(message.Event.EventID), DeploymentID: h.config.DeploymentID, ProjectID: h.config.ProjectID, ComputeUnitID: unit.ID, ArtifactDigest: h.config.ProjectArtifact.ArtifactDigest, ComputeRevision: unit.Revision, Input: values, PointBindings: pointBindings, Datapoints: datapoints, Timeout: time.Duration(unit.TimeoutMS) * time.Millisecond})
 	// Execute 返回成功后仍须检查外层生命周期，避免在取消窗口继续校验并落库。
 	if outerErr := ctx.Err(); outerErr != nil {
 		return outerErr
@@ -531,10 +550,6 @@ func (h *Handler) executeAndQueue(ctx context.Context, tx *postgres.BusinessTx, 
 		return &UnitBusinessError{ComputeID: unit.ID, Cause: err}
 	}
 	inputIDs := make([]string, 0, len(unit.Inputs))
-	snapshots, err := tx.ComputeInputs(ctx, unit.ID, inputDatapointIDs(unit.Inputs))
-	if err != nil {
-		return err
-	}
 	for _, input := range unit.Inputs {
 		snapshot, ok := snapshots[input.DatapointID]
 		if !ok {

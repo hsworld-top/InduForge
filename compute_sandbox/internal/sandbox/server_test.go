@@ -183,6 +183,39 @@ return {
 	assertRuntimeSDKOutput(t, output)
 }
 
+func TestNodeRuntimeExecutesTemperatureGetContract(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable")
+	}
+	context := runtimeSDKContextFixture()
+	context["pointBindings"] = map[string]string{"temperature": "factory.temperature"}
+	payload, _ := json.Marshal(map[string]any{
+		"script": `const reading = await temperature.get();
+if (reading.code !== 0) return reading;
+const celsius = Number(reading.data.value);
+return { result: { celsius, fahrenheit: celsius * 9 / 5 + 32 } };`,
+		"input": map[string]any{}, "sdkContext": context,
+	})
+	cmd := exec.Command(node, filepath.Join("..", "..", "runtime", "node_execute.js"))
+	cmd.Stdin = bytes.NewReader(payload)
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Output struct {
+			Result struct{ Celsius, Fahrenheit float64 } `json:"result"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Output.Result.Celsius != 26.5 || result.Output.Result.Fahrenheit != 79.7 {
+		t.Fatalf("unexpected output: %s", output)
+	}
+}
+
 func TestPythonRuntimeInjectsDataPointObjects(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {

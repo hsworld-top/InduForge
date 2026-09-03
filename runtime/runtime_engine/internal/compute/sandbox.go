@@ -55,9 +55,21 @@ type ExecutionRequest struct {
 	ExecutionID, DeploymentID, ProjectID, ComputeUnitID, ArtifactDigest string
 	ComputeRevision                                                     int64
 	Input                                                               map[string]json.RawMessage
+	PointBindings                                                       map[string]string
+	Datapoints                                                          map[string]SandboxDatapoint
 	Timeout                                                             time.Duration
 }
 type ExecutionResult struct{ Output json.RawMessage }
+
+// SandboxDatapoint is the bounded, read-only snapshot exposed to compute code.
+// Write/subscribe capabilities are deliberately omitted so an artifact cannot
+// turn a deterministic compute execution into an out-of-transaction side effect.
+type SandboxDatapoint struct {
+	ID, Path, Name, DataType, SourceType, Quality string
+	SourceID                                      *string
+	Value                                         json.RawMessage
+	SourceTimestamp, ServerTimestamp              time.Time
+}
 
 // SandboxIdentity is the Engine identity that a shared compute-sandbox must
 // attest before it can be trusted to execute project artifacts.  It is kept
@@ -324,6 +336,33 @@ func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (
 		}
 		input[alias] = value
 	}
+	datapoints := make(map[string]any, len(request.Datapoints))
+	for path, point := range request.Datapoints {
+		if path == "" || point.Path != path || point.ID == "" || len(point.Value) == 0 {
+			return ExecutionResult{}, errors.New("sandbox 数据点上下文非法")
+		}
+		var value any
+		d := json.NewDecoder(bytes.NewReader(point.Value))
+		d.UseNumber()
+		if d.Decode(&value) != nil || !finiteConditionValue(value) {
+			return ExecutionResult{}, errors.New("sandbox 数据点上下文非法")
+		}
+		datapoints[path] = map[string]any{
+			"id": point.ID, "path": point.Path, "name": point.Name, "dataType": point.DataType,
+			"sourceType": point.SourceType, "sourceId": point.SourceID, "value": value, "quality": point.Quality,
+			"sourceTimestamp": point.SourceTimestamp.UTC().Format(time.RFC3339Nano),
+			"serverTimestamp": point.ServerTimestamp.UTC().Format(time.RFC3339Nano),
+			"timestamp":       point.ServerTimestamp.UTC().Format(time.RFC3339Nano),
+			"observedAt":      point.ServerTimestamp.UTC().Format(time.RFC3339Nano),
+			"capabilities":    map[string]bool{"get": true, "read": true, "peek": true},
+		}
+	}
+	for alias, path := range request.PointBindings {
+		if alias == "" || path == "" || datapoints[path] == nil {
+			return ExecutionResult{}, errors.New("sandbox 数据点绑定非法")
+		}
+	}
+	sdkContext := map[string]any{"pointBindings": request.PointBindings, "datapoints": datapoints}
 	body, err := json.Marshal(struct {
 		ExecutionID    string         `json:"executionId"`
 		DeploymentID   string         `json:"deploymentId"`
@@ -332,7 +371,7 @@ func (c *SandboxClient) Execute(ctx context.Context, request ExecutionRequest) (
 		ArtifactDigest string         `json:"artifactDigest"`
 		Input          map[string]any `json:"input"`
 		SDKContext     map[string]any `json:"sdkContext"`
-	}{request.ExecutionID, request.DeploymentID, request.ProjectID, request.ComputeUnitID, request.ArtifactDigest, input, map[string]any{}})
+	}{request.ExecutionID, request.DeploymentID, request.ProjectID, request.ComputeUnitID, request.ArtifactDigest, input, sdkContext})
 	if err != nil || len(body) > maxSandboxRequestBytes {
 		return ExecutionResult{}, errors.New("sandbox 请求过大")
 	}
