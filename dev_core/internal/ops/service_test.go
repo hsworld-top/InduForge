@@ -387,6 +387,21 @@ func TestEngineDeploymentBindingAcceptsSignedDevelopmentArtifact(t *testing.T) {
 	}
 }
 
+func TestEngineDeploymentBindingAcceptsCollectorReleaseForNonCollectorEngine(t *testing.T) {
+	manifest := strings.Replace(validReleaseManifest(testProjectID), `"capabilities":["runtime.auth","runtime.datapoint"]`, `"capabilities":["base","compute","alarm","collector"]`, 1)
+	manifest = strings.Replace(manifest, `"requiredNodeCapabilities":["project_entry","data_runtime"]`, `"requiredNodeCapabilities":["collector","data_runtime","project_entry"]`, 1)
+	release := releaseMetadata{ID: testVersionID, Version: "1.0.24", ArtifactKey: "releases/tenant/project/release.tar.zst", ArtifactHash: strings.Repeat("a", 64), ManifestHash: strings.Repeat("b", 64), ChecksumsHash: strings.Repeat("c", 64), SigningKeyID: "induforge-release-2026-01", ArtifactSize: 1, Manifest: []byte(manifest)}
+	deploymentID := "55555555-5555-4555-8555-555555555555"
+	deployment := ProjectDeployment{ID: deploymentID, ProjectID: testProjectID, EnvironmentID: testEnvironmentID, Mode: "release", AccessPort: 20000}
+	bindingID, raw, err := newEngineDeploymentBinding(deployment, release, "66666666-6666-4666-8666-666666666666", testNodeID, ServiceCompute, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = validateInitialDeploymentBinding(raw, bindingMetadata{ID: bindingID, ProjectID: testProjectID, Revision: 1}, release, testNodeID, deploymentID); err != nil {
+		t.Fatalf("非 collector 引擎不得把整包 Release 的 collector 能力误判为不匹配: %v", err)
+	}
+}
+
 func TestAgentCommandCarriesReleaseAndBindingIdentifiers(t *testing.T) {
 	raw, err := json.Marshal(AgentCommand{DeploymentID: "deployment", ReleaseID: testVersionID, ArchiveSHA256: "sha256:" + strings.Repeat("a", 64), ManifestSHA256: "sha256:" + strings.Repeat("b", 64), ChecksumsSHA256: "sha256:" + strings.Repeat("c", 64), SigningKeyID: "induforge-release-2026-01", BindingRevision: 1})
 	if err != nil {

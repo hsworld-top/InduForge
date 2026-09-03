@@ -1780,7 +1780,9 @@ func validateEngineDeploymentBinding(raw []byte, binding bindingMetadata, releas
 		_, err := deploymentRequirementsForDevelopmentArtifact(release, binding.ProjectID)
 		return err
 	}
-	return validateReleaseMetadata(release, binding.ProjectID, document.Engine == ServiceCollector)
+	// 单个引擎 binding 只声明自身类型，不能据此推断整包 Release 是否包含 collector；
+	// 完整服务集合已由 base binding 严格校验，这里只复核签名 Manifest 自洽性。
+	return validateReleaseMetadataIntrinsic(release, binding.ProjectID)
 }
 
 func sha256Value(value string) string { return "sha256:" + strings.ToLower(value) }
