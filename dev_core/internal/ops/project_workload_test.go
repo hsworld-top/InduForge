@@ -90,7 +90,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
 		}
 	}
-	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, "COMPUTE_SANDBOX_MAX_PIDS", `value: "8192"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`, `securityContext: {runAsUser: 0, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID", "SETPCAP"], drop: ["ALL"]}`, "seccompProfile: {type: Unconfined}"} {
+	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, "COMPUTE_SANDBOX_MAX_PIDS", `value: "8192"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`, `securityContext: {runAsUser: 0, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID", "SETPCAP"], drop: ["ALL"]}`, "seccompProfile: {type: Unconfined}", "appArmorProfile: {type: Unconfined}"} {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute manifest missing sandbox runtime contract %q: %s", expected, compute)
 		}
