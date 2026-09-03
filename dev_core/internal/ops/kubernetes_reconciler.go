@@ -732,7 +732,10 @@ func (r *KubernetesProjectReconciler) DeleteDeployment(ctx context.Context, envi
 	if err != nil || !exists || strings.TrimSpace(credentialKey) == "" || strings.TrimSpace(secret[credentialKey]) == "" {
 		return fmt.Errorf("删除运行态消息读取 NATS 凭据失败")
 	}
-	nc, err := nats.Connect(runtimeContext.Support.NATSEndpoint, nats.Token(secret[credentialKey]), nats.Timeout(15*time.Second))
+	// 工程 Pod 与基础服务同 namespace，短 Service 名可正常解析；控制面位于
+	// induforge-system，删除时必须把短名定位到环境基础服务 namespace。
+	natsEndpoint := natsControlEndpoint(runtimeContext.Support.NATSEndpoint, runtimeContext.Support.NATSCredentialSource.Namespace)
+	nc, err := nats.Connect(natsEndpoint, nats.Token(secret[credentialKey]), nats.Timeout(15*time.Second))
 	if err != nil {
 		return fmt.Errorf("删除运行态消息连接 NATS 失败")
 	}
@@ -762,6 +765,21 @@ func (r *KubernetesProjectReconciler) DeleteDeployment(ctx context.Context, envi
 		}
 	}
 	return nil
+}
+
+// natsControlEndpoint 仅修正环境内短 Service 名，外部或已完整限定的 NATS 地址保持原样。
+// 这样项目工作负载仍可使用短名，中心控制面也能在跨 namespace 删除时连接同一 NATS。
+func natsControlEndpoint(endpoint, namespace string) string {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Scheme != "nats" || parsed.Hostname() != "nats" || strings.TrimSpace(namespace) == "" {
+		return endpoint
+	}
+	host := "nats." + namespace + ".svc"
+	if port := parsed.Port(); port != "" {
+		host += ":" + port
+	}
+	parsed.Host = host
+	return parsed.String()
 }
 
 func (r *KubernetesProjectReconciler) deleteProjectResource(ctx context.Context, namespace, kind, resource, name string) error {

@@ -178,6 +178,15 @@ func sourceSecrets() map[string]map[string]string {
 	return map[string]map[string]string{"runtime/nats": {"token": "test-token"}, "runtime/postgres": {"password": "test-password"}}
 }
 
+func TestNATSControlEndpointQualifiesEnvironmentShortName(t *testing.T) {
+	if got := natsControlEndpoint("nats://nats:4222", "if-env-0123456789ab"); got != "nats://nats.if-env-0123456789ab.svc:4222" {
+		t.Fatalf("控制面必须用环境 namespace 连接 NATS: %s", got)
+	}
+	if got := natsControlEndpoint("nats://nats.example.internal:4222", "if-env-0123456789ab"); got != "nats://nats.example.internal:4222" {
+		t.Fatalf("完整 NATS 地址不得被改写: %s", got)
+	}
+}
+
 func TestKubernetesProjectReconcilerAppliesCollectorBindingBeforeWorkload(t *testing.T) {
 	paths, bodies := []string{}, []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
