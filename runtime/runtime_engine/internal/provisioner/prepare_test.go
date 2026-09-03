@@ -84,6 +84,20 @@ func TestDeriveBuildInputRejectsEmptyRoleProducer(t *testing.T) {
 	}
 }
 
+func TestDeriveBuildInputAcceptsWriterWithoutRoleProducer(t *testing.T) {
+	input := validInput().Binding
+	input.Role = "writer"
+	input.InstanceID = "writer-instance"
+	input.FencingEpoch = 7
+	build, err := deriveBuildInput(input, []byte(`{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","computeUnits":[],"alarmItems":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if build.RoleOwnership.OwnerID != stableRoleOwner(input.DeploymentID, "writer") || build.RoleOwnership.Epoch != 7 || len(build.ComputeProducers) != 0 || build.AlarmOwnership.OwnerID != "" {
+		t.Fatalf("writer 派生越界: %+v", build)
+	}
+}
+
 func TestDeriveBuildInputSeparatesStableOwnerFromRolloutEpoch(t *testing.T) {
 	artifact := []byte(`{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","computeUnits":[],"alarmItems":[{"id":"44444444-4444-4444-8444-444444444444","revision":9,"enabled":true}]}`)
 	first := validInput().Binding

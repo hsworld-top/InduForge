@@ -205,6 +205,9 @@ func deriveBuildInput(input binding.Input, raw []byte, collectorRaw ...[]byte) (
 		build.ManualOwnership = model.Ownership{OwnerID: "runtime-api", Epoch: 1}
 	}
 	switch input.Role {
+	case "writer":
+		// writer 只消费已通过 collector/manual producer fence 的点位事实，
+		// 不得从项目制品伪造 compute/alarm 专属 producer。
 	case "compute":
 		for _, unit := range artifact.ComputeUnits {
 			if !unit.Enabled {
@@ -230,7 +233,7 @@ func deriveBuildInput(input binding.Input, raw []byte, collectorRaw ...[]byte) (
 		}
 		build.AlarmOwnership = ownership
 	default:
-		return binding.BuildInput{}, fmt.Errorf("RuntimeEngine role 必须为 compute 或 alarm")
+		return binding.BuildInput{}, fmt.Errorf("RuntimeEngine role 必须为 writer、compute 或 alarm")
 	}
 	return build, nil
 }
