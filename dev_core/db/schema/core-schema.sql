@@ -117,6 +117,7 @@ CREATE TABLE scene_documents (
   draft_version bigint NOT NULL DEFAULT 0 CHECK (draft_version >= 0),
   committed_draft_version bigint NOT NULL DEFAULT 0 CHECK (committed_draft_version >= 0 AND committed_draft_version <= draft_version),
   deleted_at timestamptz,
+  deletion_requested_at timestamptz,
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -747,12 +748,12 @@ CREATE TABLE project_deployments (
   last_ready_generation bigint,
   last_ready_at timestamptz,
   access_port integer NOT NULL CHECK (access_port BETWEEN 1024 AND 65532),
+  deleted_at timestamptz,
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT project_deployments_tenant_project_environment_key UNIQUE (tenant_id, project_id, environment_id),
   CONSTRAINT project_deployments_artifact_source_check CHECK (
     (mode = 'release' AND application_version_id IS NOT NULL AND artifact_descriptor = '{}'::jsonb) OR
     (mode = 'development' AND application_version_id IS NULL AND artifact_descriptor ? 'releaseId')
@@ -764,6 +765,7 @@ CREATE TABLE project_deployments (
   )
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
+CREATE UNIQUE INDEX project_deployments_tenant_project_environment_active_key ON project_deployments (tenant_id, project_id, environment_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE deployment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

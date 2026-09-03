@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/indu-forge/dev_core/internal/dataservice"
+	"github.com/nats-io/nats.go"
 )
 
 // KubernetesProjectReconciler 只使用 Pod 注入的 ServiceAccount token。构造失败即
@@ -218,6 +220,10 @@ type ProjectDeploymentStopper interface {
 	StopDeployment(context.Context, string, string) error
 }
 
+type ProjectDeploymentDeleter interface {
+	DeleteDeployment(context.Context, string, string) error
+}
+
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
@@ -278,7 +284,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 // ReconcileStoppedProjectDeployments 与运行态调和器成对工作。停止不能只更新
 // desired_status，否则 K3s 工作负载会继续运行且 deployment run 永远 pending。
 func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Context, stopper ProjectDeploymentStopper) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text FROM project_deployments d WHERE d.desired_status='stopped' AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation)) ORDER BY d.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.deletion_requested_at IS NOT NULL FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation)) ORDER BY d.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
@@ -286,10 +292,20 @@ func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Co
 	count := 0
 	for rows.Next() {
 		var deploymentID, environmentID string
-		if err = rows.Scan(&deploymentID, &environmentID); err != nil {
+		var deleting bool
+		if err = rows.Scan(&deploymentID, &environmentID, &deleting); err != nil {
 			return count, err
 		}
-		if err = stopper.StopDeployment(ctx, environmentID, deploymentID); err != nil {
+		if deleting {
+			deleter, ok := stopper.(ProjectDeploymentDeleter)
+			if !ok {
+				return count, fmt.Errorf("项目删除调和器未配置")
+			}
+			err = deleter.DeleteDeployment(ctx, environmentID, deploymentID)
+		} else {
+			err = stopper.StopDeployment(ctx, environmentID, deploymentID)
+		}
+		if err != nil {
 			message := err.Error()
 			if len(message) > 1024 {
 				message = message[:1024]
@@ -303,6 +319,13 @@ func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Co
 			}
 			continue
 		}
+		if deleting {
+			if err = r.finalizeDeletedDeployment(ctx, deploymentID); err != nil {
+				return count, err
+			}
+			count++
+			continue
+		}
 		if _, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='stopped',replicas_observed=0,observed_generation=desired_generation,last_message='Kubernetes 工作负载已停止',observed_at=now(),updated_at=now() WHERE project_deployment_id=$1 AND desired_status='stopped'`, deploymentID); err != nil {
 			return count, err
 		}
@@ -312,6 +335,24 @@ func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Co
 		count++
 	}
 	return count, rows.Err()
+}
+
+func (r *PostgreSQLRepository) finalizeDeletedDeployment(ctx context.Context, deploymentID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `DELETE FROM deployment_services WHERE project_deployment_id=$1`, deploymentID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE project_deployments SET deleted_at=now(),observed_status='stopped',updated_at=now() WHERE id=$1 AND deletion_requested_at IS NOT NULL`, deploymentID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE deployment_runs SET observed_status='stopped',progress=100,completed_at=now() WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func projectReleaseDigest(value string) string {
@@ -654,6 +695,56 @@ func (r *KubernetesProjectReconciler) StopDeployment(ctx context.Context, enviro
 		return err
 	}
 	return r.deleteProjectResource(ctx, namespace, "Secret", "secrets", collectorSecret)
+}
+
+// DeleteDeployment 仅在 K3s 资源确认停止后清理该 deployment 专属 JetStream
+// 拓扑。stream 名由 project+deployment 的稳定键派生，不能接受调用方输入。
+func (r *KubernetesProjectReconciler) DeleteDeployment(ctx context.Context, environmentID, deploymentID string) error {
+	if err := r.StopDeployment(ctx, environmentID, deploymentID); err != nil {
+		return err
+	}
+	if r.runtimeContext == nil {
+		return fmt.Errorf("删除运行态消息缺少运行上下文加载器")
+	}
+	runtimeContext, err := r.runtimeContext.LoadProjectRuntimeContext(ctx, deploymentID)
+	if err != nil {
+		return fmt.Errorf("删除运行态消息加载运行上下文失败: %w", err)
+	}
+	secret, exists, err := r.GetSecret(ctx, runtimeContext.Support.NATSCredentialSource.Namespace, runtimeContext.Support.NATSCredentialSource.Name)
+	credentialKey := runtimeContext.Support.NATSCredentialSource.Keys["credential"]
+	if err != nil || !exists || strings.TrimSpace(credentialKey) == "" || strings.TrimSpace(secret[credentialKey]) == "" {
+		return fmt.Errorf("删除运行态消息读取 NATS 凭据失败")
+	}
+	nc, err := nats.Connect(runtimeContext.Support.NATSEndpoint, nats.Token(secret[credentialKey]), nats.Timeout(15*time.Second))
+	if err != nil {
+		return fmt.Errorf("删除运行态消息连接 NATS 失败")
+	}
+	defer nc.Close()
+	js, err := nc.JetStream()
+	if err != nil {
+		return fmt.Errorf("删除运行态消息初始化 JetStream 失败")
+	}
+	key := strings.ToUpper(stableRuntimeKey(runtimeContext.ProjectID, deploymentID))
+	streams := map[string][]string{
+		"IF_" + key + "_RAW":     {"compute-raw-v1", "alarm-raw-v1"},
+		"IF_" + key + "_DERIVED": {"compute-derived-v1", "alarm-derived-v1"},
+		"IF_" + key + "_COMMAND": {"compute-command-v1"},
+		"IF_" + key + "_EVENT":   nil,
+		"IF_" + key + "_DLQ":     nil,
+	}
+	for stream, consumers := range streams {
+		for _, consumer := range consumers {
+			if err = js.DeleteConsumer(stream, consumer); err != nil && !errors.Is(err, nats.ErrConsumerNotFound) && !errors.Is(err, nats.ErrStreamNotFound) {
+				return fmt.Errorf("删除运行态消息 consumer 失败: %s", consumer)
+			}
+		}
+	}
+	for _, stream := range []string{"IF_" + key + "_DLQ", "IF_" + key + "_COMMAND", "IF_" + key + "_EVENT", "IF_" + key + "_DERIVED", "IF_" + key + "_RAW"} {
+		if err = js.DeleteStream(stream); err != nil && !errors.Is(err, nats.ErrStreamNotFound) {
+			return fmt.Errorf("删除运行态消息 stream 失败: %s", stream)
+		}
+	}
+	return nil
 }
 
 func (r *KubernetesProjectReconciler) deleteProjectResource(ctx context.Context, namespace, kind, resource, name string) error {

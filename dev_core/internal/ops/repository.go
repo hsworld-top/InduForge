@@ -936,7 +936,7 @@ func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID
 }
 
 func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant string, f PageFilter) ([]ProjectDeployment, int64, error) {
-	rows, e := r.pool.Query(ctx, deploymentSelect+` WHERE d.tenant_id=$1 AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5) ORDER BY d.updated_at DESC,d.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID)
+	rows, e := r.pool.Query(ctx, deploymentSelect+` WHERE d.tenant_id=$1 AND d.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5) ORDER BY d.updated_at DESC,d.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -1102,7 +1102,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
 	var d ProjectDeployment
-	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,artifact_descriptor,access_port,created_by) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8) ON CONFLICT (tenant_id,project_id,environment_id) DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,artifact_descriptor=EXCLUDED.artifact_descriptor,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',COALESCE(application_version_id::text,''),'','',$5,$7,desired_status,observed_status,0,COALESCE(last_ready_mode,''),COALESCE(last_ready_application_version_id::text,''),'',COALESCE(last_ready_generation,0),last_ready_at,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, descriptor, in.AccessPort, user))
+	d, e = scanDeployment(tx.QueryRow(ctx, `INSERT INTO project_deployments(tenant_id,project_id,environment_id,application_version_id,mode,artifact_descriptor,access_port,created_by) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8) ON CONFLICT (tenant_id,project_id,environment_id) WHERE deleted_at IS NULL DO UPDATE SET application_version_id=EXCLUDED.application_version_id,mode=EXCLUDED.mode,artifact_descriptor=EXCLUDED.artifact_descriptor,access_port=EXCLUDED.access_port,desired_status='running',observed_status='pending',updated_at=now() RETURNING id,tenant_id,project_id,'',$3,'',COALESCE(application_version_id::text,''),'','',$5,$7,desired_status,observed_status,0,COALESCE(last_ready_mode,''),COALESCE(last_ready_application_version_id::text,''),'',COALESCE(last_ready_generation,0),last_ready_at,created_at,updated_at`, tenant, in.ProjectID, in.EnvironmentID, in.ApplicationVersionID, in.Mode, descriptor, in.AccessPort, user))
 	if e != nil {
 		return d, DeploymentRun{}, mapDeploymentCreateError(e)
 	}
@@ -1184,7 +1184,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	return d, run, e
 }
 func (r *PostgreSQLRepository) GetDeployment(ctx context.Context, tenant, id string) (ProjectDeployment, error) {
-	d, e := scanDeployment(r.pool.QueryRow(ctx, deploymentSelect+` WHERE d.tenant_id=$1 AND d.id=$2`, tenant, id))
+	d, e := scanDeployment(r.pool.QueryRow(ctx, deploymentSelect+` WHERE d.tenant_id=$1 AND d.id=$2 AND d.deleted_at IS NULL`, tenant, id))
 	if e != nil {
 		return d, mapNotFound(e)
 	}
@@ -1306,6 +1306,46 @@ func (r *PostgreSQLRepository) OperateDeployment(ctx context.Context, tenant, di
 	}
 	d, err := r.GetDeployment(ctx, tenant, did)
 	return d, run, err
+}
+
+// DeleteDeployment 先把部署冻结为 stopped；外部 K3s/NATS 清理由调和器完成后
+// 才删除 service 租约并软删除部署，避免端口在旧 Pod 尚存时被抢占。
+func (r *PostgreSQLRepository) DeleteDeployment(ctx context.Context, tenant, did, user string) (DeploymentRun, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return DeploymentRun{}, err
+	}
+	defer tx.Rollback(ctx)
+	var id string
+	if err = tx.QueryRow(ctx, `SELECT id FROM project_deployments WHERE id=$1 AND tenant_id=$2 AND deleted_at IS NULL FOR UPDATE`, did, tenant).Scan(&id); err != nil {
+		return DeploymentRun{}, mapNotFound(err)
+	}
+	var pending string
+	err = tx.QueryRow(ctx, `SELECT id FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, did).Scan(&pending)
+	if err == nil {
+		return DeploymentRun{}, ErrDeploymentBusy
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return DeploymentRun{}, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE project_deployments SET desired_status='stopped',observed_status='pending',deletion_requested_at=now(),updated_at=now() WHERE id=$1`, did); err != nil {
+		return DeploymentRun{}, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE deployment_services SET desired_status='stopped',observed_status='pending',desired_generation=desired_generation+1,last_operation='stop',updated_at=now() WHERE project_deployment_id=$1`, did); err != nil {
+		return DeploymentRun{}, err
+	}
+	var run DeploymentRun
+	err = tx.QueryRow(ctx, `INSERT INTO deployment_runs(tenant_id,project_deployment_id,operation,desired_status,created_by) VALUES($1,$2,'stop','stopped',$3) RETURNING id,tenant_id,project_deployment_id,operation,desired_status,observed_status,progress,COALESCE(message,''),started_at,completed_at`, tenant, did, user).Scan(runScanArgs(&run)...)
+	if err != nil {
+		return run, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) VALUES($1,'queued','deployment deletion queued')`, run.ID); err != nil {
+		return run, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return run, err
+	}
+	return run, nil
 }
 
 func (r *PostgreSQLRepository) pendingServices(ctx context.Context, nodeID string) ([]DeploymentService, error) {

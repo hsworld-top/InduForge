@@ -83,6 +83,7 @@ type Repository interface {
 	ListRunEvents(context.Context, string, string) ([]DeploymentRunEvent, error)
 	OperateService(context.Context, string, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
 	OperateDeployment(context.Context, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
+	DeleteDeployment(context.Context, string, string, string) (DeploymentRun, error)
 	GetAgentDeploymentBinding(context.Context, string, string, string, string) (DeploymentBinding, error)
 	GetAgentRelease(context.Context, string, string, string, string) (AgentRelease, error)
 }
@@ -658,6 +659,12 @@ func (s *Service) OperateDeployment(ctx context.Context, actor auth.User, deploy
 		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("工程部署操作不支持")
 	}
 	return s.repository.OperateDeployment(ctx, actor.TenantID, deploymentID, operation, actor.ID)
+}
+func (s *Service) DeleteDeployment(ctx context.Context, actor auth.User, deploymentID string) (DeploymentRun, error) {
+	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentOperate); err != nil {
+		return DeploymentRun{}, err
+	}
+	return s.repository.DeleteDeployment(ctx, actor.TenantID, deploymentID, actor.ID)
 }
 func (s *Service) ListPackages() []NodePackage {
 	if s.packages == nil {

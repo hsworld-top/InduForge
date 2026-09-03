@@ -50,6 +50,7 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Get("/project-deployments/development-requirements", h.developmentEngineRequirements)
 		r.Post("/project-deployments", h.createDeployment)
 		r.Get("/project-deployments/{id}", h.getDeployment)
+		r.Delete("/project-deployments/{id}", h.deleteDeployment)
 		r.Post("/project-deployments/{id}/start", h.operateDeployment("start"))
 		r.Post("/project-deployments/{id}/stop", h.operateDeployment("stop"))
 		r.Post("/project-deployments/{id}/restart", h.operateDeployment("restart"))
@@ -63,6 +64,16 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Get("/agent/nodes/{id}/commands", h.commands)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/binding", h.agentBinding)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/release", h.agentRelease)
+	})
+}
+func (h *Handler) deleteDeployment(w http.ResponseWriter, r *http.Request) {
+	h.user(w, r, func(u auth.User) {
+		run, e := h.service.DeleteDeployment(r.Context(), u, chi.URLParam(r, "id"))
+		if e != nil {
+			h.err(w, r, e)
+			return
+		}
+		platformapi.WriteSuccess(w, r, map[string]any{"run": runPayload(run)})
 	})
 }
 func (h *Handler) actor(w http.ResponseWriter, r *http.Request) (auth.User, bool) {

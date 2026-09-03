@@ -3331,6 +3331,21 @@ paths:
                 { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
             },
         }
+    delete:
+      operationId: deleteProjectDeployment
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
   /ops/project-deployments/{id}/{action}:
     post:
       operationId: operateProjectDeployment
