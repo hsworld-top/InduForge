@@ -223,6 +223,33 @@ test('默认配置从 window.__INDUFORGE_RUNTIME__ 读取', async () => {
   }
 })
 
+test('顶层发布页在没有 Designer 宿主时回退到同源 HTTP Runtime', async () => {
+  const moduleUrl = new URL(`./index.js?published-page=${Date.now()}`, import.meta.url)
+  const publishedWindow = {}
+  publishedWindow.parent = publishedWindow
+  const previousWindow = globalThis.window
+  const previousFetch = globalThis.fetch
+  const requests = []
+  globalThis.window = publishedWindow
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), init })
+    return runtimeResponse({ path: 'line.temperature', value: 42, quality: 'good' })
+  }
+  try {
+    const browserSdk = await import(moduleUrl.href)
+    const result = await browserSdk.points.line.temperature.read()
+    assert.equal(result.code, 0)
+    assert.equal(result.data.value, 42)
+    assert.equal(requests[0].url, '/api/v1/runtime/points/line.temperature')
+    assert.equal(requests[0].init.headers.has('Authorization'), false)
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+    if (previousFetch === undefined) delete globalThis.fetch
+    else globalThis.fetch = previousFetch
+  }
+})
+
 test('预览 iframe 默认通过宿主桥接读取并订阅数据点', async () => {
   const listeners = new Map()
   const requests = []

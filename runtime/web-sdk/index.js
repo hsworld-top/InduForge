@@ -1,4 +1,5 @@
 import { createPreviewBridgeRuntime } from './preview-bridge.js'
+import { createHttpRuntime } from './http-runtime.js'
 
 export { createHttpRuntime } from './http-runtime.js'
 
@@ -40,7 +41,9 @@ let configuredRuntime = null
 
 function readBrowserRuntime() {
   if (typeof window === 'undefined') return {}
-  return window.__INDUFORGE_RUNTIME__ ?? createPreviewBridgeRuntime() ?? {}
+  // Designer 预览始终优先使用宿主桥接；发布页没有父宿主时回退到工程入口
+  // 的同源 Runtime API。Bearer 凭据只由 project-gateway 在服务端注入。
+  return window.__INDUFORGE_RUNTIME__ ?? createPreviewBridgeRuntime() ?? createHttpRuntime()
 }
 
 function resolveRuntime(runtime) {
