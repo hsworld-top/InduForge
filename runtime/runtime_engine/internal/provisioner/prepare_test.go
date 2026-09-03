@@ -89,12 +89,28 @@ func TestDeriveBuildInputAcceptsWriterWithoutRoleProducer(t *testing.T) {
 	input.Role = "writer"
 	input.InstanceID = "writer-instance"
 	input.FencingEpoch = 7
+	for index := range input.JetStream.Consumers {
+		input.JetStream.Consumers[index].Role = "writer"
+		input.JetStream.Consumers[index].ConsumerKey = strings.Replace(input.JetStream.Consumers[index].ConsumerKey, "alarm-", "writer-", 1)
+		input.JetStream.Consumers[index].DurableName = strings.Replace(input.JetStream.Consumers[index].DurableName, "alarm-", "writer-", 1)
+	}
+	input.JetStream.TopologyConsumers = append([]model.Consumer(nil), input.JetStream.Consumers...)
 	build, err := deriveBuildInput(input, []byte(`{"schemaVersion":"runtime-project-artifact.v1","projectArtifactVersion":"1.0","projectId":"11111111-1111-4111-8111-111111111111","computeUnits":[],"alarmItems":[]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if build.RoleOwnership.OwnerID != stableRoleOwner(input.DeploymentID, "writer") || build.RoleOwnership.Epoch != 7 || len(build.ComputeProducers) != 0 || build.AlarmOwnership.OwnerID != "" {
 		t.Fatalf("writer 派生越界: %+v", build)
+	}
+	config, err := binding.BuildEngineConfig(build)
+	if err != nil {
+		t.Fatalf("writer 正式配置构造失败: %v", err)
+	}
+	if _, err = binding.BuildResolverIndex(input); err != nil {
+		t.Fatalf("writer resolver index 构造失败: %v", err)
+	}
+	if len(config.Roles) != 1 || config.Roles[0] != "writer" || len(config.JetStream.Consumers) != 2 {
+		t.Fatalf("writer 端到端配置不完整: %+v", config)
 	}
 }
 

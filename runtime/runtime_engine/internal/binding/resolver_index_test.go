@@ -55,6 +55,17 @@ func TestBuildResolverIndexComputeAndAlarm(t *testing.T) {
 	}
 }
 
+func TestBuildResolverIndexSupportsWriterSecrets(t *testing.T) {
+	input := validInput(roleWriter)
+	index, err := BuildResolverIndex(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Resources) != 2 || len(index.Secrets) != 2 || index.Secrets[input.JetStream.CredentialSecretRef] != input.JetStream.CredentialSecretFile || index.Secrets[input.StateStore.CredentialSecretRef] != input.StateStore.CredentialSecretFile {
+		t.Fatalf("writer resolver index 不完整: %+v", index)
+	}
+}
+
 func TestBuildResolverIndexRejectsMissingReferenceAndContainsNoSecretValue(t *testing.T) {
 	input := validInput(roleCompute)
 	input.JetStream.CredentialSecretFile = ""

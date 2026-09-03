@@ -141,8 +141,8 @@ func validateResolverInput(input Input) error {
 		if input.ComputeSandbox == nil || strings.TrimSpace(input.ComputeSandboxEndpoint) == "" || strings.TrimSpace(input.ComputeSandboxSecretFile) == "" || !safeSecretPath(input.ComputeSandboxSecretFile) || !validSandboxEndpoint(input.ComputeSandboxEndpoint) {
 			return fmt.Errorf("compute resolver index 缺少 sandbox endpoint 或挂载 secret 文件")
 		}
-	} else if input.Role != roleAlarm {
-		return fmt.Errorf("RuntimeEngine role 必须为 compute 或 alarm")
+	} else if input.Role != roleWriter && input.Role != roleAlarm {
+		return fmt.Errorf("RuntimeEngine role 必须为 writer、compute 或 alarm")
 	}
 	if !validNATSEndpoint(input.JetStream.Endpoint) {
 		return fmt.Errorf("resolver index NATS endpoint 非法")
