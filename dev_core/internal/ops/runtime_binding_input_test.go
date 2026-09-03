@@ -72,6 +72,28 @@ func TestBuildRuntimeBindingInputRejectsMissingArtifactOrSupport(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeBindingInputIncludesCollectorProducerArtifact(t *testing.T) {
+	context := validRuntimeContext()
+	context.RuntimeEngines = []string{ServiceCompute, ServiceAlarm}
+	context.CollectorSourceSnapshot = json.RawMessage(`{"schemaVersion":"collector-runtime-artifact.v1"}`)
+	context.Release.Manifest, _ = json.Marshal(map[string]any{
+		"schemaVersion": "2.0",
+		"artifacts": map[string]any{
+			"runtime":   map[string]any{"file": runtimeArtifactFile, "checksum": "sha256:" + strings.Repeat("a", 64)},
+			"collector": map[string]any{"file": collectorArtifactFile, "checksum": "sha256:" + strings.Repeat("b", 64)},
+		},
+	})
+	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, Generation: 3}
+	raw, err := BuildRuntimeBindingInput(workload, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]any
+	if json.Unmarshal(raw, &input) != nil || input["collectorArtifactPath"] != "/opt/induforge/release/"+collectorArtifactFile || input["collectorArtifactSha256"] != "sha256:"+strings.Repeat("b", 64) {
+		t.Fatalf("采集 producer 制品未下发: %s", raw)
+	}
+}
+
 func TestBuildRuntimeBindingInputFreezesServiceGenerationAsFencingEpoch(t *testing.T) {
 	context := validRuntimeContext()
 	workload := ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: context.DeploymentID, ServiceID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", NodeID: testNodeID, Engine: ServiceAlarm, ReleaseID: testVersionID, Generation: 3}

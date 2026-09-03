@@ -24,10 +24,10 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 	if err := json.Unmarshal(context.Release.Manifest, &manifest); err != nil || manifest.Artifacts.Runtime.File != runtimeArtifactFile || !validSHA256Checksum(manifest.Artifacts.Runtime.Checksum) {
 		return nil, fmt.Errorf("运行制品描述缺失或无效")
 	}
-	collectorRequired := false
-	for _, engine := range context.RuntimeEngines {
-		collectorRequired = collectorRequired || engine == ServiceCollector
-	}
+	// RuntimeEngines 只包含共享 JetStream 的 compute/alarm 消费角色，不包含
+	// collector。Release 中已验证的采集快照才是是否需要下发 producer
+	// Artifact 与 fence 的权威依据。
+	collectorRequired := len(context.CollectorSourceSnapshot) > 0
 	if collectorRequired && (manifest.Artifacts.Collector == nil || manifest.Artifacts.Collector.File != collectorArtifactFile || !validSHA256Checksum(manifest.Artifacts.Collector.Checksum)) {
 		return nil, fmt.Errorf("采集制品描述缺失或无效")
 	}
