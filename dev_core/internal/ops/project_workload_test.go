@@ -90,7 +90,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
 		}
 	}
-	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, "COMPUTE_SANDBOX_MAX_PIDS", `value: "8192"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`, "seccompProfile: {type: Unconfined}"} {
+	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, "COMPUTE_SANDBOX_MAX_PIDS", `value: "8192"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`, `capabilities: {add: ["SYS_ADMIN"], drop: ["ALL"]}`, "seccompProfile: {type: Unconfined}"} {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute manifest missing sandbox runtime contract %q: %s", expected, compute)
 		}
