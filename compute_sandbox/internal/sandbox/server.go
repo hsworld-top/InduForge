@@ -1042,7 +1042,9 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 	}
 	args = append(args,
 		"--chdir", "/tmp", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8",
-		"/usr/bin/setpriv", "--bounding-set=-all", "--no-new-privs", binary, filepath.Join("/runtime", runtimeScript),
+		"--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID",
+		"/usr/bin/setpriv", "--reuid=10001", "--regid=10001", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
+		"/usr/local/bin/compute-sandbox", "internal-exec", binary, filepath.Join("/runtime", runtimeScript),
 	)
 	return args, nil
 }

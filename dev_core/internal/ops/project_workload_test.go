@@ -85,12 +85,12 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 		t.Fatalf("collector workload must not reuse runtime-engine init/config: %v\n%s", err, collector)
 	}
 	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
-	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.3", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
+	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.4", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
 		}
 	}
-	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, "COMPUTE_SANDBOX_MAX_PIDS", `value: "8192"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`, `capabilities: {add: ["SYS_ADMIN"], drop: ["ALL"]}`, "seccompProfile: {type: Unconfined}"} {
+	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, "COMPUTE_SANDBOX_MAX_PIDS", `value: "8192"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`, `securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID"], drop: ["ALL"]}`, "seccompProfile: {type: Unconfined}"} {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute manifest missing sandbox runtime contract %q: %s", expected, compute)
 		}

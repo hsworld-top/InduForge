@@ -14,7 +14,7 @@ const (
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
 	runtimeEngineImage   = "induforge/runtime-engine:1.0.29"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
-	computeSandboxImage  = "induforge/compute-sandbox:1.0.3"
+	computeSandboxImage  = "induforge/compute-sandbox:1.0.4"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
@@ -96,6 +96,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	workMountReadOnly := ""
 	sandbox, writerSidecar := "", ""
 	runtimeInit, runtimeArgs, runtimeMounts, runtimeVolumes, apiSidecar := "", "", "", "", ""
+	podRunAsNonRoot := "runAsNonRoot: true, "
 	if workload.Engine == ServiceBase {
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
 		if nameErr != nil {
@@ -289,6 +290,8 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		}
 	}
 	if workload.Engine == ServiceCompute {
+		// 仅沙箱 supervisor 以 root 创建命名空间；用户脚本在隔离内降权到 10001 并完成内核态自检。
+		podRunAsNonRoot = ""
 		secretName, nameErr := computeSandboxSecretName(workload.DeploymentID)
 		if nameErr != nil {
 			return "", nameErr
@@ -312,7 +315,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 15, periodSeconds: 10}
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
-          securityContext: {runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN"], drop: ["ALL"]}, seccompProfile: {type: Unconfined}}
+          securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {add: ["SYS_ADMIN", "SETUID", "SETGID"], drop: ["ALL"]}, seccompProfile: {type: Unconfined}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
             - {name: work, mountPath: /work, readOnly: true}
@@ -353,7 +356,7 @@ spec:
       annotations: {induforge.io/runtime-binding-sha256: %q, induforge.io/release-id: %q, induforge.io/generation: %q, induforge.io/binding-revision: %q}
     spec:
       nodeSelector: {induforge.io/host-node-id: %q}
-      securityContext: {runAsNonRoot: true, fsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      securityContext: {%sfsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
 %s
       containers:
         - name: %s
@@ -397,7 +400,7 @@ spec:
   type: %s
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: %d, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, rolloutStrategy, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar+writerSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, serviceType, name, servicePort), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, rolloutStrategy, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, podRunAsNonRoot, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar+writerSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, serviceType, name, servicePort), nil
 }
 
 // renderCollectorWorkloadManifest 明确以 collector CLI 消费受信 Release 子工件、

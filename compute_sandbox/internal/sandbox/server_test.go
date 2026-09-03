@@ -337,13 +337,15 @@ func TestBuildSandboxArgsRequiresIsolationAndNoNetwork(t *testing.T) {
 	if strings.Contains(joined, "--nproc") {
 		t.Fatalf("sandbox must rely on the container PID limit instead of host UID process counting: %s", joined)
 	}
-	for _, forbidden := range []string{"--proc /proc", "--ro-bind /proc /proc", "--reuid", "--regid", "--cap-add"} {
+	for _, forbidden := range []string{"--proc /proc", "--ro-bind /proc /proc"} {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("non-root sandbox must not require nested namespace privilege %q: %s", forbidden, joined)
 		}
 	}
-	if !strings.Contains(joined, "/usr/bin/setpriv --bounding-set=-all --no-new-privs") {
-		t.Fatalf("sandbox must retain no-new-privileges and an empty capability bounding set: %s", joined)
+	for _, required := range []string{"--cap-add CAP_SETUID --cap-add CAP_SETGID", "/usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all --no-new-privs", "/usr/local/bin/compute-sandbox internal-exec"} {
+		if !strings.Contains(joined, required) {
+			t.Fatalf("sandbox must enforce child privilege boundary %q: %s", required, joined)
+		}
 	}
 }
 
