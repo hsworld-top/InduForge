@@ -24,6 +24,13 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 	if err := json.Unmarshal(context.Release.Manifest, &manifest); err != nil || manifest.Artifacts.Runtime.File != runtimeArtifactFile || !validSHA256Checksum(manifest.Artifacts.Runtime.Checksum) {
 		return nil, fmt.Errorf("运行制品描述缺失或无效")
 	}
+	collectorRequired := false
+	for _, engine := range context.RuntimeEngines {
+		collectorRequired = collectorRequired || engine == ServiceCollector
+	}
+	if collectorRequired && (manifest.Artifacts.Collector == nil || manifest.Artifacts.Collector.File != collectorArtifactFile || !validSHA256Checksum(manifest.Artifacts.Collector.Checksum)) {
+		return nil, fmt.Errorf("采集制品描述缺失或无效")
+	}
 	if context.Support.NATSEndpoint == "" || context.Support.NATSResourceRef == "" || context.Support.NATSCredentialSecretRef == "" || context.Support.StateStoreResourceRef == "" || context.Support.StateStoreDSNSecretRef == "" {
 		return nil, fmt.Errorf("运行支撑引用缺失")
 	}
@@ -48,10 +55,14 @@ func BuildRuntimeBindingInput(workload ProjectWorkload, context ProjectRuntimeCo
 			// instanceId（会随 generation 改变）混入 owner。
 			"fencingEpoch": workload.Generation,
 			"projectId":    context.ProjectID, "deploymentId": context.DeploymentID, "accountId": runtimeAccountID(context.ProjectID, context.DeploymentID),
-			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/opt/induforge/release/runtime-artifact", "artifactFile": "runtime-project-artifact.json",
+			"role": role, "manualOwner": "runtime-api", "manualEpoch": manualEpoch, "artifactMountPath": "/work/artifact", "artifactFile": "runtime-project-artifact.json",
 			"jetStream":  runtimeJetStreamInput(role, context.RuntimeEngines, key, context.Support),
 			"stateStore": map[string]any{"resourceRef": context.Support.StateStoreResourceRef, "credentialSecretRef": context.Support.StateStoreDSNSecretRef, "credentialSecretFile": "secrets/postgres.json", "schema": runtimeStateSchema},
 		},
+	}
+	if collectorRequired {
+		input["collectorArtifactPath"] = "/opt/induforge/release/" + collectorArtifactFile
+		input["collectorArtifactSha256"] = manifest.Artifacts.Collector.Checksum
 	}
 	if role == ServiceCompute {
 		input["binding"].(map[string]any)["computeSandbox"] = map[string]any{"serverResourceRef": "site-resource://" + context.EnvironmentID + "/compute-sandbox", "credentialSecretRef": "secret://deployment/" + context.DeploymentID + "/compute-sandbox"}
