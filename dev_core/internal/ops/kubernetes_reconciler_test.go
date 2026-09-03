@@ -258,7 +258,7 @@ func TestKubernetesProjectReconcilerStatusRequiresObservedReady(t *testing.T) {
 	defer server.Close()
 	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
 	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase})
-	if err != nil || !status.Ready || status.Failed {
+	if err != nil || !status.Ready || status.Failed || status.ReplicasObserved != 1 {
 		t.Fatalf("ready rollout status=%+v err=%v", status, err)
 	}
 }

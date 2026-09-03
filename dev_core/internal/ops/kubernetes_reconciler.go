@@ -206,9 +206,10 @@ type ProjectWorkloadApplier interface {
 	Reconcile(context.Context, ProjectWorkload) error
 }
 type ProjectWorkloadStatus struct {
-	Ready   bool
-	Failed  bool
-	Message string
+	Ready             bool
+	Failed            bool
+	ReplicasObserved  int
+	Message           string
 }
 type ProjectWorkloadInspector interface {
 	Status(context.Context, ProjectWorkload) (ProjectWorkloadStatus, error)
@@ -265,7 +266,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 			continue
 		}
 		if status.Ready {
-			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='running',observed_generation=desired_generation,last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
+			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='running',replicas_observed=$1,observed_generation=desired_generation,last_message=$2,observed_at=now(),updated_at=now() WHERE id=$3`, status.ReplicasObserved, status.Message, serviceID)
 		} else {
 			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='pending',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
 		}
@@ -424,7 +425,7 @@ func (r *KubernetesProjectReconciler) Status(ctx context.Context, workload Proje
 		}
 	}
 	if value.Status.ObservedGeneration >= value.Metadata.Generation && value.Status.AvailableReplicas >= value.Spec.Replicas {
-		return ProjectWorkloadStatus{Ready: true, Message: "Kubernetes rollout 已就绪"}, nil
+		return ProjectWorkloadStatus{Ready: true, ReplicasObserved: value.Status.AvailableReplicas, Message: "Kubernetes rollout 已就绪"}, nil
 	}
 	podStatus, err := r.projectPodFailure(ctx, namespace, name)
 	if err != nil || podStatus.Failed {
