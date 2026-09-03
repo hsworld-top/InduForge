@@ -163,6 +163,7 @@ export interface ProjectDeployment {
   nodeNames?: string[]
   services?: DeploymentService[]
   latestRunId?: OpsId
+  latestRunOperation?: 'deploy' | 'start' | 'stop' | 'restart'
   updatedAt?: string
 }
 export interface ReleaseArtifactDescriptor {

@@ -206,8 +206,19 @@ export const runEventPresentation = (stage?: string, message?: string) => {
 export const deploymentDetailPresentation = (deployment?: {
   observedStatus?: string
   entryStatus?: string
+  latestRunOperation?: string
   services?: Array<Pick<DeploymentService, 'observedStatus'>>
 }) => {
+	if (deployment?.latestRunOperation === 'stop') {
+		const failed = deployment?.observedStatus === 'failed'
+		return {
+			active: failed ? 1 : 2,
+			processStatus: failed ? ('error' as const) : ('process' as const),
+			prepareDescription: failed ? '停止阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
+			serviceDescription: failed ? '运行资源尚未完全停止' : '等待运行资源确认停止',
+			healthDescription: '停止后保留部署配置、端口和运行态消息',
+		}
+	}
   const services = deployment?.services || []
   const failed =
     deployment?.observedStatus === 'failed' ||
