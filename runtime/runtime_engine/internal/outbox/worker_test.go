@@ -13,10 +13,15 @@ type fakeStore struct {
 	records   []Record
 	published []int64
 	retries   []string
+	claimErr  error
 	markErr   error
+	retryErr  error
 }
 
 func (s *fakeStore) ClaimOutbox(context.Context, string, string, int, time.Duration) ([]Record, error) {
+	if s.claimErr != nil {
+		return nil, s.claimErr
+	}
 	r := s.records
 	s.records = nil
 	return r, nil
@@ -27,7 +32,30 @@ func (s *fakeStore) MarkPublished(_ context.Context, id int64, _ string) error {
 }
 func (s *fakeStore) RetryOutbox(_ context.Context, _ int64, _ string, _ time.Time, code RetryCode) error {
 	s.retries = append(s.retries, string(code))
-	return nil
+	return s.retryErr
+}
+
+func TestFlushOnceClassifiesAdapterFailuresWithoutChangingErrorsIs(t *testing.T) {
+	payload := []byte("x")
+	tests := []struct {
+		name, want string
+		store      *fakeStore
+		publisher  *fakePublisher
+		is         error
+	}{
+		{name: "claim", want: "OUTBOX_CLAIM", store: &fakeStore{claimErr: errors.New("dsn=secret")}, publisher: &fakePublisher{}, is: ErrClaim},
+		{name: "mark", want: "OUTBOX_MARK", store: &fakeStore{records: []Record{{ID: 1, DedupeKey: "a", Subject: "x", Payload: payload, PayloadSHA256: transport.PayloadSHA256(payload), LeaseToken: "l"}}, markErr: errors.New("password=secret")}, publisher: &fakePublisher{}, is: ErrMark},
+		{name: "lease", want: "OUTBOX_LEASE", store: &fakeStore{records: []Record{{ID: 1, DedupeKey: "a", Subject: "x", Payload: []byte("bad"), PayloadSHA256: "bad", LeaseToken: "l"}}, retryErr: errors.New("token=secret")}, publisher: &fakePublisher{}, is: ErrLease},
+		{name: "publish", want: "OUTBOX_PUBLISH", store: &fakeStore{records: []Record{{ID: 1, DedupeKey: "a", Subject: "x", Payload: payload, PayloadSHA256: transport.PayloadSHA256(payload), LeaseToken: "l"}}}, publisher: &fakePublisher{err: transport.ErrPayloadTooLarge}, is: ErrPublish},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := newWorker(t, test.store, test.publisher).FlushOnce(context.Background())
+			if !errors.Is(err, test.is) || DiagnosticCode(err) != test.want {
+				t.Fatalf("stage=%q err=%v", DiagnosticCode(err), err)
+			}
+		})
+	}
 }
 
 type fakePublisher struct {

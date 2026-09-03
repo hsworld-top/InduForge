@@ -1,7 +1,9 @@
 package runtimeengine
 
 import (
+	"bytes"
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -67,6 +69,33 @@ func TestWorkerFatalCancelsRootAndMarksFailed(t *testing.T) {
 	h.State.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("fatal health=%d", response.Code)
+	}
+}
+
+func TestWorkerFatalRecordsOnlyFixedStageAndKeepsFailedReason(t *testing.T) {
+	h := New(Options{})
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+	h.workerFatal("OUTBOX_CLAIM")
+	if got := h.FatalCode(); got != "OUTBOX_CLAIM" {
+		t.Fatalf("fatal code=%q", got)
+	}
+	if got := logs.String(); got != "" {
+		if bytes.Contains([]byte(got), []byte("secret-value")) || !bytes.Contains([]byte(got), []byte("stage=OUTBOX_CLAIM")) {
+			t.Fatalf("worker log must contain only fixed stage: %q", got)
+		}
+	}
+	// Shutdown must release local resources but cannot transition FAILED to
+	// STOPPED, otherwise the observable reason would disappear before exit.
+	if err := h.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	h.State.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
+	if !bytes.Contains(response.Body.Bytes(), []byte(`"reasonCode":"OUTBOX_CLAIM"`)) || !bytes.Contains(response.Body.Bytes(), []byte(`"lifecycleState":"FAILED"`)) {
+		t.Fatalf("failed status=%s", response.Body.String())
 	}
 }
 

@@ -20,6 +20,27 @@ type Record struct {
 }
 type RetryCode string
 
+// 以下错误是宿主级安全阶段边界。底层数据库、NATS 和记录内容不跨出 outbox，
+// 以免被 RuntimeEngine 日志或健康接口误输出。
+var ErrClaim = errors.New("outbox claim failed")
+var ErrPublish = errors.New("outbox publish failed")
+var ErrMark = errors.New("outbox mark failed")
+var ErrLease = errors.New("outbox lease update failed")
+
+// DiagnosticCode 返回稳定的 worker 阶段码，不暴露底层错误信息。
+func DiagnosticCode(err error) string {
+	switch {
+	case errors.Is(err, ErrClaim):
+		return "OUTBOX_CLAIM"
+	case errors.Is(err, ErrPublish):
+		return "OUTBOX_PUBLISH"
+	case errors.Is(err, ErrMark):
+		return "OUTBOX_MARK"
+	default:
+		return "OUTBOX_LEASE"
+	}
+}
+
 const (
 	RetryPublishError   RetryCode = "publish-error"
 	RetryPublishTimeout RetryCode = "publish-timeout"
@@ -89,14 +110,14 @@ func (w *Worker) RunWithDrain(intake, work context.Context) error {
 func (w *Worker) FlushOnce(ctx context.Context) error {
 	records, err := w.store.ClaimOutbox(ctx, w.options.DeploymentID, w.options.LeaseOwner, w.options.BatchSize, w.options.LeaseFor)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrClaim, err)
 	}
 	for _, record := range records {
 		if err := w.publishOne(ctx, record); err != nil {
 			if errors.Is(err, ErrDeferred) {
 				w.failures[record.ID]++
 				if w.failures[record.ID] >= w.options.MaxConsecutiveFailures {
-					return ErrRetryBudgetExhausted
+					return fmt.Errorf("%w: %w", ErrLease, ErrRetryBudgetExhausted)
 				}
 				continue
 			}
@@ -112,7 +133,7 @@ func (w *Worker) publishOne(ctx context.Context, record Record) error {
 			w.options.OnIntegrityFault()
 		}
 		if err := w.retry(ctx, record, RetryPublishError); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrLease, err)
 		}
 		return ErrDeferred
 	}
@@ -121,20 +142,23 @@ func (w *Worker) publishOne(ctx context.Context, record Record) error {
 			if w.options.OnIntegrityFault != nil {
 				w.options.OnIntegrityFault()
 			}
-			return fmt.Errorf("%w: %w", ErrUnpublishableRecord, err)
+			return fmt.Errorf("%w: %w", ErrPublish, fmt.Errorf("%w: %w", ErrUnpublishableRecord, err))
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			if retryErr := w.retry(ctx, record, RetryPublishTimeout); retryErr != nil {
-				return retryErr
+				return fmt.Errorf("%w: %w", ErrLease, retryErr)
 			}
 			return ErrDeferred
 		}
 		if retryErr := w.retry(ctx, record, RetryPublishError); retryErr != nil {
-			return retryErr
+			return fmt.Errorf("%w: %w", ErrLease, retryErr)
 		}
 		return ErrDeferred
 	}
-	return w.store.MarkPublished(ctx, record.ID, record.LeaseToken)
+	if err := w.store.MarkPublished(ctx, record.ID, record.LeaseToken); err != nil {
+		return fmt.Errorf("%w: %w", ErrMark, err)
+	}
+	return nil
 }
 
 var ErrDeferred = errors.New("outbox publish deferred")

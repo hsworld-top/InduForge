@@ -51,6 +51,7 @@ type fakeMessage struct {
 	deliveries         int
 	occurred           time.Time
 	ack, nak, progress int
+	ackErr             error
 }
 
 func (m *fakeMessage) Subject() string                                   { return m.subject }
@@ -58,7 +59,7 @@ func (m *fakeMessage) Body() []byte                                      { retur
 func (m *fakeMessage) StreamPosition() int64                             { return m.position }
 func (m *fakeMessage) DeliveryCount() int                                { return m.deliveries }
 func (m *fakeMessage) OccurredAt() time.Time                             { return m.occurred }
-func (m *fakeMessage) Ack(context.Context) error                         { m.ack++; return nil }
+func (m *fakeMessage) Ack(context.Context) error                         { m.ack++; return m.ackErr }
 func (m *fakeMessage) InProgress(context.Context) error                  { m.progress++; return nil }
 func (m *fakeMessage) NakWithDelay(context.Context, time.Duration) error { m.nak++; return nil }
 
@@ -70,6 +71,15 @@ func TestRunnerValidatesRawAndAcksAfterStore(t *testing.T) {
 	}
 	if message.ack != 1 || message.nak != 0 {
 		t.Fatalf("ack/nak=%d/%d", message.ack, message.nak)
+	}
+}
+
+func TestRunnerAcknowledgementFailureHasSafeStage(t *testing.T) {
+	runner, body := testRunner(t)
+	message := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 8, deliveries: 1, occurred: time.Now(), ackErr: errors.New("token=secret-value")}
+	err := runner.Handle(context.Background(), message)
+	if !errors.Is(err, ErrAck) || DiagnosticCode(err) != "INGRESS_ACK" {
+		t.Fatalf("ack stage=%q err=%v", DiagnosticCode(err), err)
 	}
 }
 func TestRunnerDLQsPermanentFailuresAndMaxDeliver(t *testing.T) {

@@ -59,13 +59,13 @@ func main() {
 		case err := <-errs:
 			log.Print(err)
 		case <-host.Fatal():
-			log.Print("RuntimeEngine worker failed")
+			log.Printf("RuntimeEngine worker failed stage=%s", host.FatalCode())
 		case <-signals:
 		}
 	case err := <-errs:
 		log.Print(err)
 	case <-host.Fatal():
-		log.Print("RuntimeEngine worker failed")
+		log.Printf("RuntimeEngine worker failed stage=%s", host.FatalCode())
 	case <-signals:
 	}
 	// Every outer termination path aborts preflight and shares one total drain

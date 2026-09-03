@@ -45,12 +45,21 @@ type Host struct {
 	stopping       bool
 	shutdownDone   chan struct{}
 	shutdownErr    error
+	fatalCode      string
 }
 
 func New(options Options) *Host {
 	return &Host{options: options, State: httpapi.NewEngineState(options.Version, nil, nil), done: make(chan struct{}), fatal: make(chan struct{})}
 }
 func (h *Host) Fatal() <-chan struct{} { return h.fatal }
+
+// FatalCode 只返回固定阶段码，供主进程在收到 Fatal 后记录，不透传 worker 的
+// 原始错误、消息内容、地址或连接凭据。
+func (h *Host) FatalCode() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.fatalCode
+}
 
 // Start performs every mutating step only after all read-only preflight gates
 // pass.  Activation is a single Store transaction, so a failed start leaves no
@@ -311,7 +320,7 @@ func (h *Host) startWorkers(intake, work context.Context, loaded *loader.Loaded,
 	for _, runner := range plan.runners {
 		h.launch(work, func() {
 			if err := runner.RunWithDrain(intake, work, plan.nats, 32, 5*time.Second); err != nil {
-				h.workerFatal("INGRESS_FATAL")
+				h.workerFatal(ingress.DiagnosticCode(err))
 			}
 		})
 	}
@@ -325,7 +334,7 @@ func (h *Host) startWorkers(intake, work context.Context, loaded *loader.Loaded,
 	if plan.outbox != nil {
 		h.launch(work, func() {
 			if err := plan.outbox.RunWithDrain(intake, work); err != nil {
-				h.workerFatal("OUTBOX_FATAL")
+				h.workerFatal(outbox.DiagnosticCode(err))
 			}
 		})
 	}
@@ -375,16 +384,21 @@ func (h *Host) launch(ctx context.Context, fn func()) {
 	go func() { defer h.wg.Done(); fn() }()
 }
 func (h *Host) workerFatal(code string) {
-	h.State.SetState(httpapi.Failed, httpapi.Unavailable, code)
-	h.mu.Lock()
-	cancel := h.cancel
-	intakeCancel := h.intakeCancel
-	h.mu.Unlock()
-	h.fatalOnce.Do(func() { close(h.fatal) })
-	if intakeCancel != nil {
-		intakeCancel()
-	}
-	if cancel != nil {
-		cancel()
-	}
+	h.fatalOnce.Do(func() {
+		h.mu.Lock()
+		h.fatalCode = code
+		cancel := h.cancel
+		intakeCancel := h.intakeCancel
+		h.mu.Unlock()
+		// 只输出固定阶段码，所有原始 worker error 均留在其受控边界内。
+		log.Printf("RuntimeEngine worker fatal stage=%s", code)
+		h.State.SetState(httpapi.Failed, httpapi.Unavailable, code)
+		close(h.fatal)
+		if intakeCancel != nil {
+			intakeCancel()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
 }

@@ -32,6 +32,24 @@ const maxFetchRetries = 3
 var ErrPermanent = errors.New("永久入站拒绝")
 var ErrFatalPoison = errors.New("不可持久化的 transport poison")
 
+// 以下错误只作为宿主的安全诊断边界：不携带 transport、消息或数据库错误文本，
+// 也不改变已有的 Fetch、处理或 Ack/Nak 重试语义。
+var ErrFetchExhausted = errors.New("ingress fetch retries exhausted")
+var ErrProcess = errors.New("ingress process failed")
+var ErrAck = errors.New("ingress acknowledgement failed")
+
+// DiagnosticCode 将内部错误归一为可安全写入 RuntimeEngine 日志和状态的阶段码。
+func DiagnosticCode(err error) string {
+	switch {
+	case errors.Is(err, ErrFetchExhausted):
+		return "INGRESS_FETCH_EXHAUSTED"
+	case errors.Is(err, ErrAck):
+		return "INGRESS_ACK"
+	default:
+		return "INGRESS_PROCESS"
+	}
+}
+
 // ErrRetryableBusiness is the narrow marker for a handler-declared isolated
 // business failure. Store, fence and context failures must never use it.
 var ErrRetryableBusiness = errors.New("可重试业务失败")
@@ -217,14 +235,14 @@ func (r *Runner) Handle(ctx context.Context, message Message) error {
 	// Collision 的 Store 实现必须在同一事务内写 processing_failure、DLQ outbox 和 checkpoint；
 	// 此处不得再按新的 deliveryCount 重建 DLQ payload。
 	if result == Collision {
-		return message.Ack(ctx)
+		return acknowledge(ctx, message)
 	}
 	if result == Processed {
 		if health, ok := r.health.(businessSuccessSignal); ok {
 			health.RecordBusinessSuccess(time.Now().UTC())
 		}
 	}
-	return message.Ack(ctx)
+	return acknowledge(ctx, message)
 }
 
 func (r *Runner) processWithProgress(ctx context.Context, message Message, validated ValidatedMessage) (ProcessResult, error) {
@@ -274,7 +292,7 @@ func (r *Runner) RunWithDrain(intake, work context.Context, client PullClient, b
 			}
 			failures++
 			if failures > maxFetchRetries {
-				return err
+				return fmt.Errorf("%w: %w", ErrFetchExhausted, err)
 			}
 			if !waitIntake(intake, time.Duration(failures)*100*time.Millisecond) {
 				return nil
@@ -284,13 +302,16 @@ func (r *Runner) RunWithDrain(intake, work context.Context, client PullClient, b
 		failures = 0
 		for _, delivered := range messages {
 			if delivered.StreamSequence > uint64(math.MaxInt64) || delivered.DeliveryCount > uint64(math.MaxInt) {
-				return errors.New("JetStream metadata 超出本机整数范围")
+				return fmt.Errorf("%w: JetStream metadata 超出本机整数范围", ErrProcess)
 			}
 			if err := r.Handle(work, transportMessage{delivered}); err != nil {
 				if work.Err() != nil {
 					return nil
 				}
-				return err
+				if errors.Is(err, ErrAck) {
+					return err
+				}
+				return fmt.Errorf("%w: %w", ErrProcess, err)
 			}
 		}
 	}
@@ -320,7 +341,14 @@ func (r *Runner) permanent(ctx context.Context, message Message, eventID *string
 	if report {
 		r.report(code)
 	}
-	return message.Ack(ctx)
+	return acknowledge(ctx, message)
+}
+
+func acknowledge(ctx context.Context, message Message) error {
+	if err := message.Ack(ctx); err != nil {
+		return fmt.Errorf("%w: %w", ErrAck, err)
+	}
+	return nil
 }
 func retryableBusinessError(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, postgres.ErrFenceStale) || errors.Is(err, postgres.ErrFenceRejected) || errors.Is(err, postgres.ErrInvalidInput) {
