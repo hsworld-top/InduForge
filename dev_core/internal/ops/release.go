@@ -148,7 +148,11 @@ func validCollectorSourceSnapshot(raw []byte, digest, projectID string) bool {
 	if len(raw) == 0 || len(raw) > 16<<20 || !validSHA256Checksum(digest) {
 		return false
 	}
-	sum := sha256.Sum256(raw)
+	canonicalSnapshot, ok := canonicalJSONBytes(raw)
+	if !ok {
+		return false
+	}
+	sum := sha256.Sum256(canonicalSnapshot)
 	if digest != "sha256:"+hex.EncodeToString(sum[:]) {
 		return false
 	}
@@ -160,7 +164,20 @@ func validCollectorSourceSnapshot(raw []byte, digest, projectID string) bool {
 		Size             int             `json:"size"`
 		Artifact         json.RawMessage `json:"artifact"`
 	}
-	return json.Unmarshal(raw, &source) == nil && source.SchemaVersion == "collector-runtime-artifact.v1" && source.ProjectID == projectID && source.ArtifactRevision > 0 && source.Size == len(source.Artifact) && source.SHA256 == "sha256:"+sha256Hex(source.Artifact) && len(source.Artifact) > 0 && json.Valid(source.Artifact)
+	if json.Unmarshal(canonicalSnapshot, &source) != nil {
+		return false
+	}
+	canonicalArtifact, artifactOK := canonicalJSONBytes(source.Artifact)
+	return artifactOK && source.SchemaVersion == "collector-runtime-artifact.v1" && source.ProjectID == projectID && source.ArtifactRevision > 0 && source.Size == len(canonicalArtifact) && source.SHA256 == "sha256:"+sha256Hex(canonicalArtifact)
+}
+
+func canonicalJSONBytes(raw []byte) ([]byte, bool) {
+	var value any
+	if json.Unmarshal(raw, &value) != nil {
+		return nil, false
+	}
+	canonical, err := json.Marshal(value)
+	return canonical, err == nil
 }
 
 func sha256Hex(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToString(sum[:]) }

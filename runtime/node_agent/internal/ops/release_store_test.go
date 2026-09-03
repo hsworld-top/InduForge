@@ -102,11 +102,19 @@ func TestReleaseInstallerVerifiesAndAtomicallyActivates(t *testing.T) {
 }
 
 func TestCollectorSourceSnapshotRequiresBoundedSignedStructure(t *testing.T) {
-	payload := []byte(`{}`)
-	snapshot := []byte(`{"schemaVersion":"collector-runtime-artifact.v1","projectId":"` + testReleaseProjectID + `","artifactRevision":1,"sha256":"` + sha256Digest(payload) + `","size":2,"artifact":` + string(payload) + `}`)
+	payload, _ := canonicalJSONBytes([]byte(`{}`))
+	snapshot, _ := canonicalJSONBytes([]byte(`{"schemaVersion":"collector-runtime-artifact.v1","projectId":"` + testReleaseProjectID + `","artifactRevision":1,"sha256":"` + sha256Digest(payload) + `","size":2,"artifact":` + string(payload) + `}`))
 	artifact := releaseArtifactForVerification{SourceSnapshot: snapshot, SourceSnapshotSHA256: sha256Digest(snapshot)}
 	if err := verifyCollectorSourceSnapshot(artifact, testReleaseProjectID); err != nil {
 		t.Fatalf("有效采集快照被拒绝: %v", err)
+	}
+	var formatted bytes.Buffer
+	if err := json.Indent(&formatted, snapshot, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	artifact.SourceSnapshot = formatted.Bytes()
+	if err := verifyCollectorSourceSnapshot(artifact, testReleaseProjectID); err != nil {
+		t.Fatalf("JSONB 格式化后的采集快照被拒绝: %v", err)
 	}
 	artifact.SourceSnapshotSHA256 = sha256Digest([]byte("tampered"))
 	if err := verifyCollectorSourceSnapshot(artifact, testReleaseProjectID); err == nil {

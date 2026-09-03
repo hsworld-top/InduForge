@@ -606,19 +606,28 @@ func verifyCollectorSourceSnapshot(artifact releaseArtifactForVerification, proj
 	if len(artifact.SourceSnapshot) == 0 || len(artifact.SourceSnapshot) > 16<<20 || !validSHA256(artifact.SourceSnapshotSHA256) {
 		return errors.New("Release collector sourceSnapshot 无效")
 	}
-	if digestBytes(artifact.SourceSnapshot) != artifact.SourceSnapshotSHA256 {
+	canonicalSnapshot, err := canonicalJSONBytes(artifact.SourceSnapshot)
+	if err != nil || digestBytes(canonicalSnapshot) != artifact.SourceSnapshotSHA256 {
 		return errors.New("Release collector sourceSnapshot 摘要不匹配")
 	}
 	var snapshot collectorSourceSnapshotForVerification
 	if err := strictDecodeJSON(artifact.SourceSnapshot, &snapshot); err != nil {
 		return fmt.Errorf("Release collector sourceSnapshot 格式无效: %w", err)
 	}
-	if snapshot.SchemaVersion != "collector-runtime-artifact.v1" || snapshot.ProjectID != projectID || snapshot.ArtifactRevision < 1 ||
-		snapshot.Size != len(snapshot.Artifact) || len(snapshot.Artifact) == 0 || !json.Valid(snapshot.Artifact) ||
-		snapshot.SHA256 != digestBytes(snapshot.Artifact) {
+	canonicalArtifact, err := canonicalJSONBytes(snapshot.Artifact)
+	if snapshot.SchemaVersion != "collector-runtime-artifact.v1" || snapshot.ProjectID != projectID || snapshot.ArtifactRevision < 1 || err != nil ||
+		snapshot.Size != len(canonicalArtifact) || len(canonicalArtifact) == 0 || snapshot.SHA256 != digestBytes(canonicalArtifact) {
 		return errors.New("Release collector sourceSnapshot 内容无效")
 	}
 	return nil
+}
+
+func canonicalJSONBytes(raw []byte) ([]byte, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return json.Marshal(value)
 }
 
 func parseReleaseChecksums(raw []byte) (releaseChecksums, error) {

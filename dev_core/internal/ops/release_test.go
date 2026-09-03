@@ -210,8 +210,25 @@ func validReleaseManifest(projectID string) string {
 }
 
 func collectorSourceSnapshotForManifest(projectID string) []byte {
-	artifact := []byte(`{"schemaVersion":"collector-runtime-artifact.v1","artifactId":"collector-a","artifactRevision":1,"projectId":"` + projectID + `"}`)
+	artifact, _ := canonicalJSONBytes([]byte(`{"schemaVersion":"collector-runtime-artifact.v1","artifactId":"collector-a","artifactRevision":1,"projectId":"` + projectID + `"}`))
 	sum := sha256.Sum256(artifact)
 	raw, _ := json.Marshal(map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "projectId": projectID, "artifactRevision": 1, "sha256": "sha256:" + hex.EncodeToString(sum[:]), "size": len(artifact), "artifact": json.RawMessage(artifact)})
 	return raw
+}
+
+func TestValidateDeployableReleaseAcceptsPostgreSQLJSONBFormatting(t *testing.T) {
+	manifest := validReleaseManifest(testProjectID)
+	var document any
+	if err := json.Unmarshal([]byte(manifest), &document); err != nil {
+		t.Fatal(err)
+	}
+	// PostgreSQL JSONB 输出会在分隔符后插入空格；完整性校验必须以规范化 JSON
+	// 为准，同时继续拒绝内容和摘要篡改。
+	jsonbFormatted, err := json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = validateDeployableRelease(testProjectID, testVersionID, "releases/tenant/project/release.tar.zst", strings.Repeat("a", 64), strings.Repeat("e", 64), strings.Repeat("f", 64), "induforge-release-2026-01", jsonbFormatted); err != nil {
+		t.Fatalf("JSONB 格式化后的正式 Release 被拒绝: %v", err)
+	}
 }

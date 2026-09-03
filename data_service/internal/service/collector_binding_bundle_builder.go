@@ -202,7 +202,11 @@ func validateArtifactSnapshot(s TenantProjectSnapshot, raw []byte) (checkedArtif
 		Size             int             `json:"size"`
 		Artifact         json.RawMessage `json:"artifact"`
 	}
-	if strictUnmarshal(raw, &source) != nil || source.SchemaVersion != "collector-runtime-artifact.v1" || source.ProjectID != s.ProjectID || source.ArtifactRevision < 1 || len(source.Artifact) == 0 || source.Size != len(source.Artifact) || source.SHA256 != sha256Text(source.Artifact) {
+	if strictUnmarshal(raw, &source) != nil {
+		return checkedArtifact{}, fmt.Errorf("采集器 sourceSnapshot 无效或已变化")
+	}
+	canonicalArtifact, err := canonicalJSONBytes(source.Artifact)
+	if err != nil || source.SchemaVersion != "collector-runtime-artifact.v1" || source.ProjectID != s.ProjectID || source.ArtifactRevision < 1 || len(canonicalArtifact) == 0 || source.Size != len(canonicalArtifact) || source.SHA256 != sha256Text(canonicalArtifact) {
 		return checkedArtifact{}, fmt.Errorf("采集器 sourceSnapshot 无效或已变化")
 	}
 	var artifact struct {
@@ -260,7 +264,15 @@ func validateArtifactSnapshot(s TenantProjectSnapshot, raw []byte) (checkedArtif
 			return checkedArtifact{}, fmt.Errorf("采集器 sourceSnapshot 与权威快照不一致")
 		}
 	}
-	return checkedArtifact{Ref: artifactReference{artifact.ArtifactID, artifact.ArtifactRevision, sha256Text(source.Artifact)}, ConnectionIDs: got}, nil
+	return checkedArtifact{Ref: artifactReference{artifact.ArtifactID, artifact.ArtifactRevision, sha256Text(canonicalArtifact)}, ConnectionIDs: got}, nil
+}
+
+func canonicalJSONBytes(raw []byte) ([]byte, error) {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return json.Marshal(value)
 }
 
 func (b *CollectorBindingBundleBuilder) connectionBundle(s TenantProjectSnapshot, in DeploymentBindingInput, ids map[string]struct{}) ([]bindingConnection, map[string]json.RawMessage, map[string][]byte, error) {

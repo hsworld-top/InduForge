@@ -26,7 +26,13 @@ func TestCollectorBindingBundleBuildsModbusAndOPCUAWithoutSecretLeak(t *testing.
 		{ID: bundleModbusID, DriverID: "modbus.tcp", Config: map[string]any{"host": "10.0.0.8", "port": 502}, IsEnabled: true},
 		{ID: bundleOPCUAID, DriverID: "opcua.standard", Config: map[string]any{"host": "opc.example", "port": 4840, "endpointPath": "/ua", "securityMode": "None", "securityPolicy": "None", "authenticationType": "anonymous"}, IsEnabled: true},
 	}, []repository.SnapshotCollectorSecretRecord{{ConnectionID: bundleModbusID, SecretKey: "password", EncryptedValue: secret, EncryptionKeyVersion: "v1"}})
-	bundle, err := mustBuilder(t, cipher).Build(snapshot, bundleInput(t, snapshot))
+	input := bundleInput(t, snapshot)
+	var jsonbFormatted bytes.Buffer
+	if err := json.Indent(&jsonbFormatted, input.SourceSnapshot, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	input.SourceSnapshot = jsonbFormatted.Bytes()
+	bundle, err := mustBuilder(t, cipher).Build(snapshot, input)
 	if err != nil {
 		t.Fatal(err)
 	}
