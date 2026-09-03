@@ -123,6 +123,21 @@ const previewControlUrl = computed(() =>
   workspace.value?.status === 'running' ? workspace.value.services.previewControl.url : null,
 )
 const workspaceInitialized = computed(() => projectWorkspace.value?.status === 'initialized')
+// 工程模板只能在工作区已运行且预览控制服务可达时选择。工作区异常时，
+// 源码可能仍完整保存在持久化目录；此处绝不能把恢复动作伪装成重新选模板。
+const workspaceRecoveryRequired = computed(
+  () =>
+    workspace.value?.status === 'error' ||
+    (workspace.value?.status === 'running' && !previewControlUrl.value),
+)
+const canInitializeProjectWorkspace = computed(
+  () =>
+    !workspaceRecoveryRequired.value &&
+    workspace.value?.status === 'running' &&
+    Boolean(previewControlUrl.value) &&
+    projectWorkspace.value?.status === 'uninitialized' &&
+    workspaceTemplates.value.length > 0,
+)
 const workspaceSetupMessage = computed(() => {
   if (projectWorkspaceError.value) return projectWorkspaceError.value
   if (projectWorkspace.value?.status === 'error') {
@@ -539,7 +554,7 @@ async function retryWorkspace(): Promise<void> {
 // 仅在控制面已明确报告 error 时允许重建。该操作只替换工作区 Pod 与四入口 Service，
 // 工程源码、设计数据和平台上下文均位于持久化目录，不能被前端当作“重置工程”。
 async function rebuildWorkspace(): Promise<void> {
-  if (!projectId.value || workspace.value?.status !== 'error' || workspaceRebuilding.value) return
+  if (!projectId.value || !workspaceRecoveryRequired.value || workspaceRebuilding.value) return
   if (
     !window.confirm(
       '重新构建开发工作区会停止并重新创建开发服务，不会删除工程设计、页面源码或已发布版本。是否继续？',
@@ -592,14 +607,20 @@ async function rebuildWorkspace(): Promise<void> {
 
     <section v-else-if="!workspaceInitialized" class="workspace-setup">
       <div class="workspace-setup-content">
-        <span class="workspace-setup-kicker">PROJECT TEMPLATE</span>
-        <h1>选择工程技术栈</h1>
+        <span class="workspace-setup-kicker">
+          {{ workspaceRecoveryRequired ? 'DEVELOPMENT WORKSPACE' : 'PROJECT TEMPLATE' }}
+        </span>
+        <h1>{{ workspaceRecoveryRequired ? '开发工作区不可用' : '选择工程技术栈' }}</h1>
         <p class="workspace-setup-description">
-          工程只在首次创建时选择模板，初始化完成后由 AI 和编辑器共同维护源码。
+          {{
+            workspaceRecoveryRequired
+              ? '重新构建只恢复开发服务，不会覆盖已有工程源码、设计数据或已发布版本。'
+              : '工程只在首次创建时选择模板，初始化完成后由 AI 和编辑器共同维护源码。'
+          }}
         </p>
 
         <div
-          v-if="projectWorkspace?.status === 'uninitialized' && workspaceTemplates.length > 0"
+          v-if="canInitializeProjectWorkspace"
           class="template-grid"
           role="radiogroup"
           aria-label="工程模板"
@@ -634,6 +655,8 @@ async function rebuildWorkspace(): Promise<void> {
             {{
               projectWorkspace?.status === 'initializing'
                 ? '正在创建工程'
+                : workspaceRecoveryRequired
+                  ? '开发工作区异常'
                 : workspaceError
                   ? '开发环境连接失败'
                   : '工程工作区不可初始化'
@@ -647,7 +670,7 @@ async function rebuildWorkspace(): Promise<void> {
         </p>
         <div class="workspace-setup-actions">
           <button
-            v-if="projectWorkspace?.status === 'uninitialized' && workspaceTemplates.length > 0"
+            v-if="canInitializeProjectWorkspace"
             type="button"
             class="initialize-button"
             :disabled="!selectedTemplateId || templateInitializing"
@@ -656,7 +679,7 @@ async function rebuildWorkspace(): Promise<void> {
             {{ templateInitializing ? '正在初始化' : '创建工程' }}
           </button>
           <button
-            v-else-if="projectWorkspace?.status !== 'initializing'"
+            v-else-if="!workspaceRecoveryRequired && projectWorkspace?.status !== 'initializing'"
             type="button"
             class="retry-setup-button"
             :disabled="workspaceRebuilding"
@@ -665,7 +688,7 @@ async function rebuildWorkspace(): Promise<void> {
             重新检查
           </button>
           <button
-            v-if="workspace?.status === 'error'"
+            v-if="workspaceRecoveryRequired"
             type="button"
             class="rebuild-workspace-button"
             :disabled="workspaceRebuilding"

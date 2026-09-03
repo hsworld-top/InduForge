@@ -282,7 +282,7 @@ describe('DesignerWorkspaceView', () => {
     expect(wrapper.text()).not.toContain('选择工程模板')
   })
 
-  it('仅工作区异常时显示重新构建入口，确认后轮询运行态并进入工作台', async () => {
+  it('工作区异常时只显示恢复入口，不把已有源码当作待选模板', async () => {
     const brokenWorkspace = {
       ...workspace,
       status: 'error' as const,
@@ -308,6 +308,12 @@ describe('DesignerWorkspaceView', () => {
     const wrapper = mount(DesignerWorkspaceView)
     await flushPromises()
 
+    expect(wrapper.text()).toContain('开发工作区不可用')
+    expect(wrapper.text()).not.toContain('选择工程技术栈')
+    expect(wrapper.findAll('.template-option')).toHaveLength(0)
+    expect(wrapper.find('.initialize-button').exists()).toBe(false)
+    expect(wrapper.find('.retry-setup-button').exists()).toBe(false)
+    expect(initializeTemplateId).toBeNull()
     expect(wrapper.get('.rebuild-workspace-button').text()).toBe('重新构建工作区')
 
     const rebuildClick = wrapper.get('.rebuild-workspace-button').trigger('click')
@@ -327,6 +333,26 @@ describe('DesignerWorkspaceView', () => {
     expect(codeWorkspaceApiMock.rebuild).toHaveBeenCalledWith('project-1')
     expect(wrapper.find('.rebuild-workspace-button').exists()).toBe(false)
     expect(wrapper.findAll('iframe')).toHaveLength(3)
+  })
+
+  it('运行态缺少预览控制入口时不显示模板或无效重新检查', async () => {
+    const unavailableControlWorkspace = {
+      ...workspace,
+      services: {
+        ...workspace.services,
+        previewControl: { url: null, hostPort: null },
+      },
+    }
+    vi.mocked(resolveWorkspaceState).mockResolvedValue(unavailableControlWorkspace)
+
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('开发工作区不可用')
+    expect(wrapper.findAll('.template-option')).toHaveLength(0)
+    expect(wrapper.find('.retry-setup-button').exists()).toBe(false)
+    expect(wrapper.get('.rebuild-workspace-button').text()).toBe('重新构建工作区')
+    expect(initializeTemplateId).toBeNull()
   })
 
   it('Pi iframe 加载、READY 与 IDE 设置变化时发送严格宿主上下文', async () => {
