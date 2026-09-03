@@ -99,9 +99,8 @@ func ValidateEngineConfig(config EngineConfig) error {
 			collectorArtifacts[artifactKey] = struct{}{}
 			collectorProducers[producer.CollectorID] = struct{}{}
 		case "compute":
-			if _, enabled := roles["compute"]; !enabled {
-				return fmt.Errorf("compute producer %q 引用未启用 compute role", producer.ComputeID)
-			}
+			// producerAssignments 描述部署级可信来源拓扑；writer/alarm 即使不执行
+			// compute role，也必须保留该远端 producer 身份以验证 DERIVED。
 			if producer.Role != "compute" {
 				return fmt.Errorf("compute producer %q 必须使用 compute role", producer.ComputeID)
 			}
@@ -459,7 +458,7 @@ func ValidateProjectArtifact(artifact ProjectArtifact, config EngineConfig) erro
 			if !unit.Enabled && assigned {
 				return fmt.Errorf("disabled compute %q 不得保留 producer assignment", unit.ID)
 			}
-	}
+		}
 	}
 	if err := validateComputeDAG(computes, computeOutputOwner); err != nil {
 		return err

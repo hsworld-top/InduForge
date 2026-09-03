@@ -152,6 +152,16 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 	for _, producer := range input.CollectorProducers {
 		config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{ProducerType: "collector", CollectorID: producer.CollectorID, CollectorArtifact: &producer.Artifact, Ownership: producer.Ownership})
 	}
+	// writer、alarm 与 compute 都会消费 DERIVED；三者必须共享同一组 compute producer
+	// 身份，入口才能在不放宽 output/revision/fence 校验的前提下验证派生事件。
+	for _, producer := range input.ComputeProducers {
+		config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{
+			ProducerType: "compute",
+			ComputeID:    producer.ComputeID,
+			Role:         roleCompute,
+			Ownership:    producer.Ownership,
+		})
+	}
 
 	switch input.Role {
 	case roleWriter:
@@ -159,17 +169,6 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 		config.ComputeSandbox = &model.ComputeSandbox{
 			ServerResourceRef:   input.ComputeSandbox.ServerResourceRef,
 			CredentialSecretRef: input.ComputeSandbox.CredentialSecretRef,
-		}
-		// 人工命令由 Runtime API producer fence 保护；compute 输出仍使用各单元
-		// 自己的 producer fence。两者必须同时下发，不能以 append 覆盖 manual。
-		config.ProducerAssignments = append([]model.ProducerAssignment(nil), config.ProducerAssignments...)
-		for _, producer := range input.ComputeProducers {
-			config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{
-				ProducerType: "compute",
-				ComputeID:    producer.ComputeID,
-				Role:         roleCompute,
-				Ownership:    producer.Ownership,
-			})
 		}
 	case roleAlarm:
 		config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{
@@ -239,8 +238,8 @@ func validateInput(input BuildInput) error {
 
 	switch input.Role {
 	case roleWriter:
-		if len(input.ComputeProducers) != 0 || input.ComputeSandbox != nil || input.AlarmOwnership.OwnerID != "" || input.AlarmOwnership.Epoch != 0 {
-			return fmt.Errorf("writer 配置不得声明 compute/alarm 专属资源")
+		if input.ComputeSandbox != nil || input.AlarmOwnership.OwnerID != "" || input.AlarmOwnership.Epoch != 0 {
+			return fmt.Errorf("writer 配置不得声明 compute sandbox/alarm 专属资源")
 		}
 	case roleCompute:
 		if input.ComputeSandbox == nil || strings.TrimSpace(input.ComputeSandbox.ServerResourceRef) == "" || strings.TrimSpace(input.ComputeSandbox.CredentialSecretRef) == "" {
@@ -258,14 +257,19 @@ func validateInput(input BuildInput) error {
 			return fmt.Errorf("compute 配置不得声明 alarm producer ownership")
 		}
 	case roleAlarm:
-		if len(input.ComputeProducers) != 0 || input.ComputeSandbox != nil {
-			return fmt.Errorf("alarm 配置不得声明 compute producer 或 sandbox")
+		if input.ComputeSandbox != nil {
+			return fmt.Errorf("alarm 配置不得声明 compute sandbox")
 		}
 		if strings.TrimSpace(input.AlarmOwnership.OwnerID) == "" || input.AlarmOwnership.Epoch < 1 {
 			return fmt.Errorf("alarm 配置缺少 producer ownership")
 		}
 	default:
 		return fmt.Errorf("RuntimeEngine role 必须为 writer、compute 或 alarm")
+	}
+	for _, producer := range input.ComputeProducers {
+		if strings.TrimSpace(producer.ComputeID) == "" || strings.TrimSpace(producer.Ownership.OwnerID) == "" || producer.Ownership.Epoch < 1 {
+			return fmt.Errorf("compute producer assignment 不完整")
+		}
 	}
 	return nil
 }

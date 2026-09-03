@@ -221,20 +221,20 @@ func deriveBuildInput(input binding.Input, raw []byte, collectorRaw ...[]byte) (
 		// 仅保留旧 binding 的本地测试兼容；控制面一旦发布该字段必须原样传递。
 		build.ManualOwnership = model.Ownership{OwnerID: "runtime-api", Epoch: 1}
 	}
+	// 所有 DERIVED 消费者都从同一项目制品派生 compute producer 身份；身份固定为
+	// compute 角色而非当前消费者角色，避免 writer/alarm 误接受或误拒绝派生事实。
+	for _, unit := range artifact.ComputeUnits {
+		if !unit.Enabled {
+			continue
+		}
+		if unit.Revision < 1 {
+			return binding.BuildInput{}, fmt.Errorf("compute %q revision 非法", unit.ID)
+		}
+		build.ComputeProducers = append(build.ComputeProducers, binding.ComputeProducer{ComputeID: unit.ID, Ownership: model.Ownership{OwnerID: stableRoleOwner(input.DeploymentID, "compute"), Epoch: input.FencingEpoch}})
+	}
 	switch input.Role {
 	case "writer":
-		// writer 只消费已通过 collector/manual producer fence 的点位事实，
-		// 不得从项目制品伪造 compute/alarm 专属 producer。
 	case "compute":
-		for _, unit := range artifact.ComputeUnits {
-			if !unit.Enabled {
-				continue
-			}
-			if unit.Revision < 1 {
-				return binding.BuildInput{}, fmt.Errorf("compute %q revision 非法", unit.ID)
-			}
-			build.ComputeProducers = append(build.ComputeProducers, binding.ComputeProducer{ComputeID: unit.ID, Ownership: ownership})
-		}
 		if len(build.ComputeProducers) == 0 {
 			return binding.BuildInput{}, fmt.Errorf("compute 角色缺少可用 producer")
 		}

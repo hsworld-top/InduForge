@@ -54,7 +54,7 @@ func TestBuildEngineConfigAlarmBuildsSingleAlarmProducer(t *testing.T) {
 	if err := model.ValidateEngineConfig(config); err != nil {
 		t.Fatalf("built alarm config failed formal validation: %v", err)
 	}
-	if config.ComputeSandbox != nil || len(config.ProducerAssignments) != 2 || config.ProducerAssignments[0].ProducerType != "manual" || config.ProducerAssignments[1].ProducerType != "alarm" || config.ProducerAssignments[1].Role != roleAlarm {
+	if config.ComputeSandbox != nil || len(config.ProducerAssignments) != 3 || config.ProducerAssignments[0].ProducerType != "manual" || config.ProducerAssignments[1].ProducerType != "compute" || config.ProducerAssignments[2].ProducerType != "alarm" || config.ProducerAssignments[2].Role != roleAlarm {
 		t.Fatalf("alarm binding did not remain isolated: %+v", config)
 	}
 }
@@ -71,6 +71,31 @@ func TestBuildEngineConfigWriterBuildsStateProjectionRole(t *testing.T) {
 	}
 	if err = model.ValidateRawProducerFence(config, "collector-a", model.Ownership{OwnerID: "collector-owner-a", Epoch: 1}); err != nil {
 		t.Fatalf("writer 采集生产者绑定失效: %v", err)
+	}
+	if got := config.ProducerAssignments[len(config.ProducerAssignments)-1]; got.ProducerType != "compute" || got.ComputeID != "44444444-4444-4444-8444-444444444444" || got.Ownership.OwnerID != "compute-owner" {
+		t.Fatalf("writer 缺少严格派生生产者绑定: %+v", config.ProducerAssignments)
+	}
+}
+
+func TestBuildEngineConfigDerivedConsumersRejectForeignComputeProducer(t *testing.T) {
+	for _, role := range []string{roleWriter, roleAlarm} {
+		config, err := BuildEngineConfig(buildInput(validInput(role)))
+		if err != nil {
+			t.Fatalf("%s binding: %v", role, err)
+		}
+		var assignment *model.ProducerAssignment
+		for index := range config.ProducerAssignments {
+			candidate := &config.ProducerAssignments[index]
+			if candidate.ProducerType == "compute" && candidate.ComputeID == "44444444-4444-4444-8444-444444444444" {
+				assignment = candidate
+			}
+		}
+		if assignment == nil || assignment.Ownership != (model.Ownership{OwnerID: "compute-owner", Epoch: 1}) {
+			t.Fatalf("%s 未冻结合法 compute producer: %+v", role, assignment)
+		}
+		if assignment.Ownership == (model.Ownership{OwnerID: "foreign", Epoch: 1}) {
+			t.Fatalf("%s 接受了越权 compute producer", role)
+		}
 	}
 }
 
@@ -170,9 +195,8 @@ func validInput(role string) Input {
 
 func buildInput(input Input) BuildInput {
 	build := BuildInput{Input: input, ProjectArtifact: model.ArtifactRef{ArtifactID: "11111111-1111-4111-8111-111111111111", ArtifactRevision: 1, ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, RoleOwnership: model.Ownership{OwnerID: "runtime-engine-" + input.Role + "-0", Epoch: 1}}
-	if input.Role == roleCompute {
-		build.ComputeProducers = []ComputeProducer{{ComputeID: "44444444-4444-4444-8444-444444444444", Ownership: model.Ownership{OwnerID: "runtime-engine-compute-0", Epoch: 1}}}
-	} else if input.Role == roleAlarm {
+	build.ComputeProducers = []ComputeProducer{{ComputeID: "44444444-4444-4444-8444-444444444444", Ownership: model.Ownership{OwnerID: "compute-owner", Epoch: 1}}}
+	if input.Role == roleAlarm {
 		build.AlarmOwnership = model.Ownership{OwnerID: "runtime-engine-alarm-0", Epoch: 1}
 	}
 	return build
