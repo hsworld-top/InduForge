@@ -128,6 +128,28 @@ func TestDeleteDeploymentUsesDedicatedOperation(t *testing.T) {
 	}
 }
 
+func TestDeploymentListAndTotalShareVisibleFilters(t *testing.T) {
+	if !contains(deploymentListFilter, "d.deleted_at IS NULL") {
+		t.Fatal("软删除部署不得进入列表或总数")
+	}
+	for _, predicate := range []string{"p.name ILIKE", "d.project_id::text=$5"} {
+		if !contains(deploymentListFilter, predicate) {
+			t.Fatalf("列表与总数必须共同覆盖搜索和工程环境范围: %s", predicate)
+		}
+	}
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("无法定位仓储实现文件")
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "repository.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(raw), "deploymentListFilter") < 3 {
+		t.Fatal("列表记录与 total 查询必须复用同一可见范围")
+	}
+}
+
 func TestMapDeploymentCreateErrorPreservesProjectAndPortIsolation(t *testing.T) {
 	if err := mapDeploymentCreateError(errors.New("duplicate key violates unique constraint project_deployments_tenant_project_environment_key")); !errors.Is(err, ErrDeploymentExists) {
 		t.Fatalf("same project conflict=%v", err)
