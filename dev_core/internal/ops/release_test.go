@@ -92,6 +92,18 @@ func TestValidateDeployableReleaseRequiresCollectorWhenDeploymentEnablesIt(t *te
 	}
 }
 
+func TestValidateDeployableReleaseIntrinsicInfersCollectorFromManifest(t *testing.T) {
+	manifest := strings.Replace(validReleaseManifest(testProjectID), `"capabilities":["runtime.auth","runtime.datapoint"]`, `"capabilities":["base","compute","alarm","collector"]`, 1)
+	manifest = strings.Replace(manifest, `"requiredNodeCapabilities":["project_entry","data_runtime"]`, `"requiredNodeCapabilities":["collector","data_runtime","project_entry"]`, 1)
+	err := validateDeployableReleaseIntrinsic(testProjectID, testVersionID, "releases/tenant/project/release.tar.zst", strings.Repeat("a", 64), strings.Repeat("e", 64), strings.Repeat("f", 64), "induforge-release-2026-01", []byte(manifest))
+	if err != nil {
+		t.Fatalf("包含 collector 的合法生产 Release 在加载服务集合前被拒绝: %v", err)
+	}
+	if err = validateDeployableReleaseForDeployment(testProjectID, testVersionID, "releases/tenant/project/release.tar.zst", strings.Repeat("a", 64), strings.Repeat("e", 64), strings.Repeat("f", 64), "induforge-release-2026-01", false, []byte(manifest)); !errors.Is(err, ErrReleaseNotDeployable) {
+		t.Fatalf("明确不含 collector 的 binding 必须继续拒绝 collector Release: %v", err)
+	}
+}
+
 func TestDeploymentRequirementsRequireCollectorArtifactFromManifest(t *testing.T) {
 	var manifest map[string]any
 	if err := json.Unmarshal([]byte(validReleaseManifest(testProjectID)), &manifest); err != nil {

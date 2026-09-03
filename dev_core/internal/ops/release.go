@@ -70,6 +70,23 @@ func validateDeployableReleaseForDeployment(projectID, releaseID, artifactKey, a
 	return validateDeployableArtifactForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID, requireCollector, true, manifestJSON)
 }
 
+// validateDeployableReleaseIntrinsic 用于尚未加载 DeploymentBinding 服务集合的早期读取。
+// collector 需求只能从签名 Manifest 自身推导；服务级严格一致性仍在 binding 校验阶段执行。
+func validateDeployableReleaseIntrinsic(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID string, manifestJSON []byte) error {
+	var manifest deployableReleaseManifest
+	if json.Unmarshal(manifestJSON, &manifest) != nil {
+		return fmt.Errorf("%w: Release Manifest 无效", ErrReleaseNotDeployable)
+	}
+	requireCollector := false
+	for _, capability := range manifest.Capabilities {
+		if capability == ServiceCollector {
+			requireCollector = true
+			break
+		}
+	}
+	return validateDeployableArtifactForDeployment(projectID, releaseID, artifactKey, artifactHash, manifestHash, checksumsHash, signingKeyID, requireCollector, true, manifestJSON)
+}
+
 // validateDeployableDevelopmentArtifactForDeployment 校验服务端构建并写入开发绑定
 // 的临时制品。它仍校验制品身份、摘要、工件和兼容性，但不把生产 Release 冻结
 // sourceSnapshot 的字段约束套用到开发快照；开发采集绑定随后由数据域按当前权威

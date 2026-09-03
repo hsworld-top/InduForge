@@ -235,7 +235,7 @@ func TestKubernetesProjectReconcilerCollectorBindingFailureDoesNotApply(t *testi
 		return nil, fmt.Errorf("bad bundle")
 	}))
 	err := reconciler.Reconcile(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: contextValue.DeploymentID, ServiceID: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", NodeID: testNodeID, Engine: ServiceCollector, ReleaseID: testVersionID, ReleaseDigest: "sha256:" + strings.Repeat("a", 64), Generation: 1})
-	if err == nil || !strings.Contains(err.Error(), "collector-binding") || workloadFailureStage(err.Error()) != "collector-binding" || applies != 0 {
+	if err == nil || !strings.Contains(err.Error(), "collector-binding") || workloadFailureStage(err.Error()) != "failed" || applies != 0 {
 		t.Fatalf("collector binding failure must preserve previous workload: err=%v applies=%d", err, applies)
 	}
 }
@@ -308,7 +308,7 @@ func TestKubernetesProjectReconcilerStatusReportsInitPhase(t *testing.T) {
 	defer server.Close()
 	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
 	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceCompute})
-	if err != nil || !status.Failed || !strings.Contains(status.Message, "runtime-provision-state") || workloadFailureStage(status.Message) != "provision-state" {
+	if err != nil || !status.Failed || !strings.Contains(status.Message, "runtime-provision-state") || workloadFailureStage(status.Message) != "failed" {
 		t.Fatalf("init failure status=%+v err=%v", status, err)
 	}
 }

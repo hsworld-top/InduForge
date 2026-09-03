@@ -52,7 +52,7 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 		if releaseID == "" {
 			return ProjectRuntimeContext{}, fmt.Errorf("生产版本未就绪")
 		}
-		if e := validateReleaseMetadata(out.Release, out.ProjectID, false); e != nil {
+		if e := validateReleaseMetadataIntrinsic(out.Release, out.ProjectID); e != nil {
 			return ProjectRuntimeContext{}, e
 		}
 	} else {

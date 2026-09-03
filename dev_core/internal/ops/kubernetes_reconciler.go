@@ -535,15 +535,9 @@ func (r *KubernetesProjectReconciler) projectPodFailure(ctx context.Context, nam
 }
 
 func workloadFailureStage(message string) string {
-	if strings.Contains(message, "collector-binding") {
-		return "collector-binding"
-	}
-	for name, stage := range map[string]string{"runtime-provision-nats": "provision-nats", "runtime-provision-state": "provision-state", "runtime-binding-prepare": "prepare"} {
-		if strings.Contains(message, name) {
-			return stage
-		}
-	}
-	return "rollout"
+	// deployment_run_events.stage 是稳定生命周期枚举；具体失败阶段留在安全 message，
+	// 不得把容器名或调和子阶段写入受约束列而丢失整条运维事件。
+	return "failed"
 }
 
 func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {

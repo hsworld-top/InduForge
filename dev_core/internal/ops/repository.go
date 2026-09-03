@@ -930,7 +930,7 @@ func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID
 		}
 		metadata, err = developmentReleaseMetadata(&artifact, binding.ProjectID)
 	} else {
-		err = validateReleaseMetadata(metadata, binding.ProjectID, false)
+		err = validateReleaseMetadataIntrinsic(metadata, binding.ProjectID)
 	}
 	if err != nil {
 		return releaseMetadata{}, bindingMetadata{}, err
@@ -1562,6 +1562,13 @@ func validateReleaseMetadata(metadata releaseMetadata, projectID string, require
 		return fmt.Errorf("%w: Release 归档大小缺失或无效", ErrReleaseNotDeployable)
 	}
 	return validateDeployableReleaseForDeployment(projectID, metadata.ID, metadata.ArtifactKey, metadata.ArtifactHash, metadata.ManifestHash, metadata.ChecksumsHash, metadata.SigningKeyID, requireCollector, metadata.Manifest)
+}
+
+func validateReleaseMetadataIntrinsic(metadata releaseMetadata, projectID string) error {
+	if metadata.ArtifactSize <= 0 {
+		return fmt.Errorf("%w: Release 归档大小缺失或无效", ErrReleaseNotDeployable)
+	}
+	return validateDeployableReleaseIntrinsic(projectID, metadata.ID, metadata.ArtifactKey, metadata.ArtifactHash, metadata.ManifestHash, metadata.ChecksumsHash, metadata.SigningKeyID, metadata.Manifest)
 }
 
 // deploymentRequirementsForRelease 只信任不可变、已签名 Release manifest 推导引擎。
