@@ -129,8 +129,8 @@ func TestDeleteDeploymentUsesDedicatedOperation(t *testing.T) {
 }
 
 func TestDeploymentListAndTotalShareVisibleFilters(t *testing.T) {
-	if !contains(deploymentListFilter, "d.deleted_at IS NULL") {
-		t.Fatal("软删除部署不得进入列表或总数")
+	if !contains(deploymentListFilter, "d.deleted_at IS NULL") || !contains(deploymentListFilter, "e.deleted_at IS NULL") {
+		t.Fatal("软删除部署或运行环境不得进入列表或总数")
 	}
 	for _, predicate := range []string{"p.name ILIKE", "d.project_id::text=$5"} {
 		if !contains(deploymentListFilter, predicate) {

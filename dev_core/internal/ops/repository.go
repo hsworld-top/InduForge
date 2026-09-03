@@ -29,7 +29,7 @@ const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environm
 
 // deploymentListFilter 是列表与总数共用的可见范围。软删除部署不得参与任一
 // 查询，否则空列表会携带错误 total，分页会显示不存在的记录范围。
-const deploymentListFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5)`
+const deploymentListFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5)`
 
 type releaseMetadata struct {
 	ID, Version, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
@@ -955,7 +955,7 @@ func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant strin
 		out = append(out, d)
 	}
 	var total int64
-	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id WHERE `+deploymentListFilter, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID).Scan(&total)
+	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id WHERE `+deploymentListFilter, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID).Scan(&total)
 	return out, total, e
 }
 func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, tenant string, in CreateDeploymentInput) error {
