@@ -54,8 +54,25 @@ func TestBuildEngineConfigAlarmBuildsSingleAlarmProducer(t *testing.T) {
 	if err := model.ValidateEngineConfig(config); err != nil {
 		t.Fatalf("built alarm config failed formal validation: %v", err)
 	}
-	if config.ComputeSandbox != nil || len(config.ProducerAssignments) != 1 || config.ProducerAssignments[0].ProducerType != "alarm" || config.ProducerAssignments[0].Role != roleAlarm {
+	if config.ComputeSandbox != nil || len(config.ProducerAssignments) != 2 || config.ProducerAssignments[0].ProducerType != "manual" || config.ProducerAssignments[1].ProducerType != "alarm" || config.ProducerAssignments[1].Role != roleAlarm {
 		t.Fatalf("alarm binding did not remain isolated: %+v", config)
+	}
+}
+
+func TestBuildEngineConfigCarriesTrustedCollectorProducerForBothRoles(t *testing.T) {
+	for _, role := range []string{roleCompute, roleAlarm} {
+		build := buildInput(validInput(role))
+		build.CollectorProducers = []CollectorProducer{{CollectorID: "collector-a", Artifact: model.CollectorArtifactBinding{Artifact: model.ArtifactRef{ArtifactID: "collector-artifact-a", ArtifactRevision: 1, ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, ArtifactFile: "collector/collector-runtime-artifact.json"}, Ownership: model.Ownership{OwnerID: "collector-owner-a", Epoch: 1}}}
+		config, err := BuildEngineConfig(build)
+		if err != nil {
+			t.Fatalf("%s collector binding: %v", role, err)
+		}
+		if err = model.ValidateRawProducerFence(config, "collector-a", model.Ownership{OwnerID: "collector-owner-a", Epoch: 1}); err != nil {
+			t.Fatalf("%s valid collector rejected: %v", role, err)
+		}
+		if err = model.ValidateRawProducerFence(config, "foreign-collector", model.Ownership{OwnerID: "collector-owner-a", Epoch: 1}); err == nil {
+			t.Fatalf("%s foreign collector accepted", role)
+		}
 	}
 }
 

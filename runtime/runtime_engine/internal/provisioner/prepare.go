@@ -253,7 +253,7 @@ func artifactRevision(version string) int64 {
 }
 
 func validateInput(in Input) error {
-	if strings.TrimSpace(in.ReleaseID) == "" || strings.TrimSpace(in.Binding.InstanceID) == "" || in.Binding.FencingEpoch < 1 || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !strings.HasPrefix(in.RuntimeArtifactSHA256, "sha256:") {
+	if strings.TrimSpace(in.ReleaseID) == "" || strings.TrimSpace(in.Binding.InstanceID) == "" || in.Binding.FencingEpoch < 1 || !under(in.RuntimeArtifactPath, "/opt/induforge/release") || !under(in.ArtifactDir, WorkRoot) || !under(in.BundleDir, WorkRoot) || !validSHA256(in.RuntimeArtifactSHA256) || (in.CollectorArtifactPath != "" && (!under(in.CollectorArtifactPath, "/opt/induforge/release") || !validSHA256(in.CollectorArtifactSHA256))) {
 		return fmt.Errorf("输入路径或 Release 身份非法")
 	}
 	for _, p := range []string{in.Binding.JetStream.CredentialSecretFile, in.Binding.StateStore.CredentialSecretFile, in.Binding.ComputeSandboxSecretFile} {
@@ -262,6 +262,17 @@ func validateInput(in Input) error {
 		}
 	}
 	return nil
+}
+func validSHA256(value string) bool {
+	if len(value) != 71 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, r := range value[7:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 func under(path, root string) bool {
 	return filepath.IsAbs(path) && filepath.Clean(path) == path && (path == root || strings.HasPrefix(path, root+"/"))

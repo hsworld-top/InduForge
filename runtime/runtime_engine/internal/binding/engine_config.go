@@ -170,11 +170,11 @@ func BuildEngineConfig(input BuildInput) (model.EngineConfig, error) {
 			})
 		}
 	case roleAlarm:
-		config.ProducerAssignments = []model.ProducerAssignment{{
+		config.ProducerAssignments = append(config.ProducerAssignments, model.ProducerAssignment{
 			ProducerType: "alarm",
 			Role:         roleAlarm,
 			Ownership:    input.AlarmOwnership,
-		}}
+		})
 	}
 
 	if err := model.ValidateEngineConfig(config); err != nil {

@@ -115,7 +115,7 @@ func TestDeriveBuildInputSeparatesStableOwnerFromRolloutEpoch(t *testing.T) {
 func TestPrepareRejectsIdentityAndPathBoundariesBeforeIO(t *testing.T) {
 	in := validInput()
 	in.ArtifactDir = "/tmp/artifact"
-	if err := Prepare(in); err == nil || !strings.Contains(err.Error(), "路径") {
+	if err := validateInput(in); err == nil || !strings.Contains(err.Error(), "路径") {
 		t.Fatalf("expected work-root rejection, got %v", err)
 	}
 	in = validInput()
@@ -127,6 +127,16 @@ func TestPrepareRejectsIdentityAndPathBoundariesBeforeIO(t *testing.T) {
 	in.Binding.ArtifactMountPath = "/work/other"
 	if err := Prepare(in); err == nil || !strings.Contains(err.Error(), "目标") {
 		t.Fatalf("expected artifact identity rejection, got %v", err)
+	}
+	in = validInput()
+	in.CollectorArtifactPath, in.CollectorArtifactSHA256 = "/tmp/escape.tar.zst", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if err := validateInput(in); err == nil || !strings.Contains(err.Error(), "路径") {
+		t.Fatalf("collector archive path traversal accepted: %v", err)
+	}
+	in = validInput()
+	in.CollectorArtifactPath, in.CollectorArtifactSHA256 = "/opt/induforge/release/collector-artifact.tar.zst", "sha256:bad"
+	if err := validateInput(in); err == nil || !strings.Contains(err.Error(), "路径") {
+		t.Fatalf("collector checksum malformed accepted: %v", err)
 	}
 }
 
