@@ -162,6 +162,7 @@ type Message interface {
 	DeliveryCount() int
 	OccurredAt() time.Time
 	Ack(context.Context) error
+	Terminate(context.Context) error
 	InProgress(context.Context) error
 	NakWithDelay(context.Context, time.Duration) error
 }
@@ -235,7 +236,7 @@ func (r *Runner) Handle(ctx context.Context, message Message) error {
 	// Collision 的 Store 实现必须在同一事务内写 processing_failure、DLQ outbox 和 checkpoint；
 	// 此处不得再按新的 deliveryCount 重建 DLQ payload。
 	if result == Collision {
-		return acknowledge(ctx, message)
+		return terminate(ctx, message)
 	}
 	if result == Processed {
 		if health, ok := r.health.(businessSuccessSignal); ok {
@@ -341,11 +342,17 @@ func (r *Runner) permanent(ctx context.Context, message Message, eventID *string
 	if report {
 		r.report(code)
 	}
-	return acknowledge(ctx, message)
+	return terminate(ctx, message)
 }
 
 func acknowledge(ctx context.Context, message Message) error {
 	if err := message.Ack(ctx); err != nil {
+		return fmt.Errorf("%w: %w", ErrAck, err)
+	}
+	return nil
+}
+func terminate(ctx context.Context, message Message) error {
+	if err := message.Terminate(ctx); err != nil {
 		return fmt.Errorf("%w: %w", ErrAck, err)
 	}
 	return nil

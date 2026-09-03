@@ -18,6 +18,7 @@ import (
 
 type fakeStore struct {
 	processed    int
+	positions    []int64
 	permanent    []PermanentFailure
 	result       ProcessResult
 	processErr   error
@@ -30,6 +31,7 @@ func (h *fakeHealth) ReportIngressFailure(code string) { h.codes = append(h.code
 
 func (s *fakeStore) Process(ctx context.Context, message ValidatedMessage) (ProcessResult, error) {
 	s.processed++
+	s.positions = append(s.positions, message.StreamPosition)
 	if s.delay > 0 {
 		time.Sleep(s.delay)
 	}
@@ -39,19 +41,41 @@ func (s *fakeStore) Process(ctx context.Context, message ValidatedMessage) (Proc
 	return s.result, nil
 }
 
+func TestRunnerTerminatesMaxDeliverAndContinuesWithNextEvent(t *testing.T) {
+	runner, body := testRunner(t)
+	store := runner.processor.(*fakeStore)
+	runner.consumer.MaxDeliver = 2
+	store.processErr = ErrRetryableBusiness
+	poison := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 40, deliveries: 2, occurred: time.Now()}
+	if err := runner.Handle(context.Background(), poison); err != nil {
+		t.Fatal(err)
+	}
+	if poison.term != 1 || poison.ack != 0 || len(store.permanent) != 1 || store.permanent[0].StreamPosition != 40 {
+		t.Fatalf("poison isolation term/ack=%d/%d failure=%+v", poison.term, poison.ack, store.permanent)
+	}
+	store.processErr = nil
+	next := &fakeMessage{subject: poison.subject, body: body, position: 41, deliveries: 1, occurred: time.Now()}
+	if err := runner.Handle(context.Background(), next); err != nil {
+		t.Fatal(err)
+	}
+	if next.ack != 1 || next.term != 0 || store.processed != 2 || len(store.positions) != 2 || store.positions[1] != 41 || len(store.permanent) != 1 {
+		t.Fatalf("next event did not advance: ack/term=%d/%d processed=%d positions=%v failures=%d", next.ack, next.term, store.processed, store.positions, len(store.permanent))
+	}
+}
+
 func (s *fakeStore) ProcessPermanentFailure(_ context.Context, failure PermanentFailure) (PermanentResult, error) {
 	s.permanent = append(s.permanent, failure)
 	return PermanentStored, s.permanentErr
 }
 
 type fakeMessage struct {
-	subject            string
-	body               []byte
-	position           int64
-	deliveries         int
-	occurred           time.Time
-	ack, nak, progress int
-	ackErr             error
+	subject                  string
+	body                     []byte
+	position                 int64
+	deliveries               int
+	occurred                 time.Time
+	ack, term, nak, progress int
+	ackErr                   error
 }
 
 func (m *fakeMessage) Subject() string                                   { return m.subject }
@@ -60,6 +84,7 @@ func (m *fakeMessage) StreamPosition() int64                             { retur
 func (m *fakeMessage) DeliveryCount() int                                { return m.deliveries }
 func (m *fakeMessage) OccurredAt() time.Time                             { return m.occurred }
 func (m *fakeMessage) Ack(context.Context) error                         { m.ack++; return m.ackErr }
+func (m *fakeMessage) Terminate(context.Context) error                   { m.term++; return m.ackErr }
 func (m *fakeMessage) InProgress(context.Context) error                  { m.progress++; return nil }
 func (m *fakeMessage) NakWithDelay(context.Context, time.Duration) error { m.nak++; return nil }
 
@@ -89,8 +114,8 @@ func TestRunnerDLQsPermanentFailuresAndMaxDeliver(t *testing.T) {
 	if err := runner.Handle(context.Background(), message); err != nil {
 		t.Fatal(err)
 	}
-	if message.ack != 1 || len(store.permanent) != 1 || store.permanent[0].EventID != nil {
-		t.Fatalf("permanent=%+v ack=%d", store.permanent, message.ack)
+	if message.term != 1 || message.ack != 0 || len(store.permanent) != 1 || store.permanent[0].EventID != nil {
+		t.Fatalf("permanent=%+v term/ack=%d/%d", store.permanent, message.term, message.ack)
 	}
 	if len(store.permanent[0].BodySHA256) != 71 || store.permanent[0].BodySHA256[:7] != "sha256:" {
 		t.Fatal("DLQ body digest must use contract sha256: prefix")
@@ -109,8 +134,8 @@ func TestRunnerDLQsPermanentFailuresAndMaxDeliver(t *testing.T) {
 	if err := runner.Handle(context.Background(), message); err != nil {
 		t.Fatal(err)
 	}
-	if len(store.permanent) != 1 || store.permanent[0].ReasonCode != "max-deliver" || message.ack != 1 {
-		t.Fatal("max deliver must durable-DLQ then ack")
+	if len(store.permanent) != 1 || store.permanent[0].ReasonCode != "max-deliver" || message.term != 1 || message.ack != 0 {
+		t.Fatal("max deliver must durable-DLQ then terminate")
 	}
 	runner, _ = testRunner(t)
 	message = &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 11, deliveries: 5, occurred: time.Now()}
@@ -125,8 +150,8 @@ func TestRunnerBusinessThresholdAndDLQRecovery(t *testing.T) {
 	store.processErr = ErrRetryableBusiness
 	// The threshold delivery performs the final business attempt, then writes DLQ.
 	last := &fakeMessage{subject: "data.raw.22222222-2222-4222-8222-222222222222", body: body, position: 2, deliveries: 2, occurred: time.Now()}
-	if err := runner.Handle(context.Background(), last); err != nil || store.processed != 1 || len(store.permanent) != 1 || last.ack != 1 {
-		t.Fatalf("threshold disposition processed=%d permanent=%d ack=%d err=%v", store.processed, len(store.permanent), last.ack, err)
+	if err := runner.Handle(context.Background(), last); err != nil || store.processed != 1 || len(store.permanent) != 1 || last.term != 1 {
+		t.Fatalf("threshold disposition processed=%d permanent=%d term=%d err=%v", store.processed, len(store.permanent), last.term, err)
 	}
 	// A retry after threshold must not execute the business handler again.
 	store.permanentErr = ErrRetryableBusiness
@@ -135,8 +160,8 @@ func TestRunnerBusinessThresholdAndDLQRecovery(t *testing.T) {
 		t.Fatalf("post-threshold must retry DLQ only: processed=%d nak=%d err=%v", store.processed, retry.nak, err)
 	}
 	store.permanentErr = nil
-	if err := runner.Handle(context.Background(), retry); err != nil || store.processed != 1 || retry.ack != 1 {
-		t.Fatalf("DLQ recovery must Ack without handler: processed=%d ack=%d err=%v", store.processed, retry.ack, err)
+	if err := runner.Handle(context.Background(), retry); err != nil || store.processed != 1 || retry.term != 1 {
+		t.Fatalf("DLQ recovery must terminate without handler: processed=%d term=%d err=%v", store.processed, retry.term, err)
 	}
 }
 
@@ -152,8 +177,8 @@ func TestRunnerBusinessFailureReportsImmediatelyAndCarriesProducerFenceToDLQ(t *
 		t.Fatalf("首次业务失败必须立即退化并 NAK: err=%v nak=%d health=%v", err, first.nak, health.codes)
 	}
 	last := &fakeMessage{subject: first.subject, body: body, position: 2, deliveries: 2, occurred: time.Now()}
-	if err := runner.Handle(context.Background(), last); err != nil || last.ack != 1 || len(store.permanent) != 1 {
-		t.Fatalf("阈值业务失败必须写入 DLQ 后 Ack: err=%v ack=%d permanent=%d", err, last.ack, len(store.permanent))
+	if err := runner.Handle(context.Background(), last); err != nil || last.term != 1 || len(store.permanent) != 1 {
+		t.Fatalf("阈值业务失败必须写入 DLQ 后终止确认: err=%v term=%d permanent=%d", err, last.term, len(store.permanent))
 	}
 	failure := store.permanent[0]
 	if failure.ReasonCode != "max-deliver" || !failure.RequireProducerFence || failure.ProducerKey == "" || failure.ProducerToken.OwnerID == "" || failure.ProducerToken.Epoch < 1 {
@@ -188,8 +213,8 @@ func TestMalformed513ByteSubjectIsPersistedToDLQAndAcked(t *testing.T) {
 	runner, _ := testRunner(t)
 	store := runner.processor.(*fakeStore)
 	message := &fakeMessage{subject: strings.Repeat("x", 513), body: []byte(`{"schemaVersion":"bad"}`), deliveries: 1, occurred: time.Now()}
-	if err := runner.Handle(context.Background(), message); err != nil || message.ack != 1 || message.nak != 0 || len(store.permanent) != 1 {
-		t.Fatalf("513 byte malformed event must DLQ/Ack: err=%v ack=%d nak=%d permanent=%d", err, message.ack, message.nak, len(store.permanent))
+	if err := runner.Handle(context.Background(), message); err != nil || message.term != 1 || message.ack != 0 || message.nak != 0 || len(store.permanent) != 1 {
+		t.Fatalf("513 byte malformed event must DLQ/terminate: err=%v term=%d nak=%d permanent=%d", err, message.term, message.nak, len(store.permanent))
 	}
 	if len(store.permanent[0].OriginalSubject) != 513 {
 		t.Fatal("DLQ original subject truncated")
@@ -225,8 +250,8 @@ func TestRunnerRejectsProducerFenceAndNaksFailureStore(t *testing.T) {
 	if err := runner.Handle(context.Background(), message); err != nil {
 		t.Fatal(err)
 	}
-	if message.ack != 1 {
-		t.Fatal("permanent producer fence must ack only after fake durable failure")
+	if message.term != 1 {
+		t.Fatal("permanent producer fence must terminate only after fake durable failure")
 	}
 	runner, body = testRunner(t)
 	runner.processor.(*fakeStore).processErr = ErrRetryableBusiness

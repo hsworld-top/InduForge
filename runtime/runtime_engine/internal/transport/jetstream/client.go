@@ -349,11 +349,13 @@ type DeliveredMessage struct {
 	DeliveryCount  uint64
 	OccurredAt     time.Time
 	ack            func(context.Context) error
+	term           func(context.Context) error
 	inProgress     func(context.Context) error
 	nak            func(context.Context, time.Duration) error
 }
 
 func (m DeliveredMessage) Ack(ctx context.Context) error        { return m.ack(ctx) }
+func (m DeliveredMessage) Terminate(ctx context.Context) error  { return m.term(ctx) }
 func (m DeliveredMessage) InProgress(ctx context.Context) error { return m.inProgress(ctx) }
 func (m DeliveredMessage) NakWithDelay(ctx context.Context, delay time.Duration) error {
 	return m.nak(ctx, delay)
@@ -389,7 +391,12 @@ func (c *Client) Fetch(ctx context.Context, streamName, durable string, batch in
 		}
 		body := append([]byte(nil), message.Data()...)
 		m := message
-		result = append(result, DeliveredMessage{Subject: m.Subject(), Body: body, StreamSequence: metadata.Sequence.Stream, DeliveryCount: metadata.NumDelivered, OccurredAt: metadata.Timestamp.UTC(), ack: func(ctx context.Context) error { return m.Ack() }, inProgress: func(ctx context.Context) error { return m.InProgress() }, nak: func(ctx context.Context, d time.Duration) error { return m.NakWithDelay(d) }})
+		result = append(result, DeliveredMessage{Subject: m.Subject(), Body: body, StreamSequence: metadata.Sequence.Stream, DeliveryCount: metadata.NumDelivered, OccurredAt: metadata.Timestamp.UTC(), ack: func(ctx context.Context) error { return m.Ack() }, term: func(ctx context.Context) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return m.Term()
+		}, inProgress: func(ctx context.Context) error { return m.InProgress() }, nak: func(ctx context.Context, d time.Duration) error { return m.NakWithDelay(d) }})
 	}
 	if err := messages.Error(); err != nil && !errors.Is(err, js.ErrNoMessages) {
 		return nil, errors.New("JetStream fetch 消息失败")
