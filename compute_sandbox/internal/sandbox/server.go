@@ -1029,7 +1029,9 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 		config.Bubblewrap, "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid", "--unshare-net", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
 		"--ro-bind", "/usr", "/usr", "--ro-bind-try", "/bin", "/bin", "--ro-bind-try", "/lib", "/lib",
 		"--ro-bind-try", "/lib64", "/lib64", "--ro-bind-try", "/usr/local", "/usr/local",
-		"--ro-bind", config.RuntimeDir, "/runtime", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+		// 容器已按非 root 身份运行；嵌套 user namespace 无权挂载新的 procfs，也无法映射另一个 UID。
+		// 脚本运行不依赖 /proc，因此不把外层 procfs 暴露给隔离进程，并保持调用者 UID。
+		"--ro-bind", config.RuntimeDir, "/runtime", "--dev", "/dev", "--tmpfs", "/tmp",
 	}
 	if isStrictRuntimeProfile(config) {
 		// 运行态依赖根由部署层按 Release/Artifact 精确只读挂载，不从开发缓存按请求 projectId 选择目录。
@@ -1040,8 +1042,7 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 	}
 	args = append(args,
 		"--chdir", "/tmp", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8",
-		"--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID",
-		"/usr/bin/setpriv", "--reuid=10001", "--regid=10001", "--clear-groups", "--bounding-set=-all", "--no-new-privs", binary, filepath.Join("/runtime", runtimeScript),
+		"/usr/bin/setpriv", "--bounding-set=-all", "--no-new-privs", binary, filepath.Join("/runtime", runtimeScript),
 	)
 	return args, nil
 }

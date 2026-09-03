@@ -337,6 +337,14 @@ func TestBuildSandboxArgsRequiresIsolationAndNoNetwork(t *testing.T) {
 	if strings.Contains(joined, "--nproc") {
 		t.Fatalf("sandbox must rely on the container PID limit instead of host UID process counting: %s", joined)
 	}
+	for _, forbidden := range []string{"--proc /proc", "--ro-bind /proc /proc", "--reuid", "--regid", "--cap-add"} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("non-root sandbox must not require nested namespace privilege %q: %s", forbidden, joined)
+		}
+	}
+	if !strings.Contains(joined, "/usr/bin/setpriv --bounding-set=-all --no-new-privs") {
+		t.Fatalf("sandbox must retain no-new-privileges and an empty capability bounding set: %s", joined)
+	}
 }
 
 func TestValidateLanguageAndScript(t *testing.T) {
