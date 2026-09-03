@@ -3,6 +3,7 @@
     class="wujie-micro-app"
     :name="instanceName"
     :url="appUrl"
+    :fetch="microAppFetch"
     :props="contextProps"
     :alive="true"
     :sync="false"
@@ -19,6 +20,7 @@ import WujieVue from 'wujie-vue3'
 import { useAppStore, useAuthStore } from '@/store'
 import { refreshSession } from '@/utils/request'
 import { Storage } from '@/utils/storage'
+import { createMicroAppEntryFetch } from '@/utils/micro-app-entry-fetch'
 import type { MicroAppType, MicroAppProjectContext } from '@/types/micro-app'
 import type { WorkspaceCloseRequest, WorkspaceOpenRequest } from '@/types/workspace-tool'
 
@@ -38,6 +40,7 @@ const authStore = useAuthStore()
 
 const instanceName = computed(() => `${props.appType}-${props.project.id}`)
 const appUrl = computed(() => `/${props.appType}/`)
+const microAppFetch = computed(() => createMicroAppEntryFetch(props.appType))
 const contextEventName = computed(() => `micro-app:${instanceName.value}:context`)
 const contextReadyEventName = computed(() => `micro-app:${instanceName.value}:context-ready`)
 
