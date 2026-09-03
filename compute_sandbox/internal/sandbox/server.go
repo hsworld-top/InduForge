@@ -1027,7 +1027,7 @@ func buildSandboxArgs(config Config, language, runtimeScript, projectID string) 
 	}
 	args := []string{
 		"--as=1073741824", "--nofile=64", "--fsize=4194304", "--cpu=120", "--",
-		"/usr/bin/unshare", "--net", "--", config.Bubblewrap, "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
+		"/usr/bin/unshare", "--net", "--", config.Bubblewrap, "--die-with-parent", "--unshare-ipc", "--unshare-pid", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
 		"--ro-bind", "/usr", "/usr", "--ro-bind-try", "/bin", "/bin", "--ro-bind-try", "/lib", "/lib",
 		"--ro-bind-try", "/lib64", "/lib64", "--ro-bind-try", "/usr/local", "/usr/local",
 		// 容器已按非 root 身份运行；嵌套 user namespace 无权挂载新的 procfs，也无法映射另一个 UID。

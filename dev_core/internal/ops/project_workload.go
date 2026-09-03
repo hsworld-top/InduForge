@@ -14,7 +14,7 @@ const (
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
 	runtimeEngineImage   = "induforge/runtime-engine:1.0.29"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
-	computeSandboxImage  = "induforge/compute-sandbox:1.0.6"
+	computeSandboxImage  = "induforge/compute-sandbox:1.0.7"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
