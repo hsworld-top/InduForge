@@ -3,6 +3,7 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -98,6 +99,15 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 	config.RuntimeProfile = profile
+	if config.RuntimeProfile == runtimeRuntimeProfile && config.ArtifactDigest == "" {
+		path, pathErr := secureArtifactFilePath(config.ArtifactRoot, config.ArtifactFile)
+		raw, readErr := os.ReadFile(path)
+		if pathErr != nil || readErr != nil {
+			return Config{}, fmt.Errorf("COMPUTE_SANDBOX_ARTIFACT_FILE 不可用")
+		}
+		digest := sha256.Sum256(raw)
+		config.ArtifactDigest = fmt.Sprintf("sha256:%x", digest[:])
+	}
 	if err := normalizeRuntimeIdentity(&config); err != nil {
 		return Config{}, err
 	}

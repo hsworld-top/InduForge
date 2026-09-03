@@ -12,9 +12,9 @@ const (
 	runtimeAPIImage     = "induforge/project-runtime-api:1.0.0"
 	// 运行镜像使用离线基线的不可变版本标签，禁止复用 1.0.0 触发 IfNotPresent 漂移。
 	// 运行镜像采用构建基线的不可变版本，避免同标签重导入被 IfNotPresent 缓存。
-	runtimeEngineImage   = "induforge/runtime-engine:1.0.28"
+	runtimeEngineImage   = "induforge/runtime-engine:1.0.29"
 	collectorEngineImage = "induforge/collector-engine:1.0.7"
-	computeSandboxImage  = "induforge/compute-sandbox:1.0.0"
+	computeSandboxImage  = "induforge/compute-sandbox:1.0.1"
 )
 
 // ProjectWorkload 是中心控制面唯一可调和的固定 K3s 工作负载输入。它不接收
@@ -299,13 +299,14 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           imagePullPolicy: IfNotPresent
           env:
             - {name: COMPUTE_SANDBOX_TOKEN, valueFrom: {secretKeyRef: {name: %s, key: sandbox-token}}}
+            - {name: COMPUTE_SANDBOX_RUNTIME_PROFILE, value: "runtime"}
             - {name: COMPUTE_SANDBOX_SITE_ID, value: %q}
             - {name: COMPUTE_SANDBOX_NODE_ID, value: %q}
             - {name: COMPUTE_SANDBOX_EXECUTION_FORM, value: "native-linux"}
             - {name: COMPUTE_SANDBOX_DEPLOYMENT_ID, value: %q}
             - {name: COMPUTE_SANDBOX_PROJECT_ID, value: %q}
-            - {name: COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/opt/induforge/release"}
-            - {name: COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-artifact.tar.zst"}
+            - {name: COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"}
+            - {name: COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"}
           ports: [{name: sandbox, containerPort: 18103}]
           readinessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: sandbox}, initialDelaySeconds: 15, periodSeconds: 10}
@@ -313,6 +314,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
           securityContext: {runAsUser: 65532, runAsGroup: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
           volumeMounts:
             - {name: release, mountPath: /opt/induforge/release, readOnly: true}
+            - {name: work, mountPath: /work, readOnly: true}
             - {name: sandbox-secret, mountPath: /var/run/induforge/secrets, readOnly: true}`, computeSandboxImage, secretName, workload.EnvironmentID, workload.NodeID, workload.DeploymentID, workload.ProjectID)
 	}
 	if workload.Engine == ServiceBase {

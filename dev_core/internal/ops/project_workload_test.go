@@ -15,7 +15,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(base, "\t") {
 		t.Fatalf("base manifest must not contain YAML tab indentation: %q", base)
 	}
-	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "type: LoadBalancer", "port: 17800", "induforge.io/host-node-id", "maxUnavailable: 0, maxSurge: 1", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", `IF_PROJECT_ID, value: "` + testProjectID + `"`, "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.2", "image: induforge/project-runtime-api:1.0.0", "image: induforge/runtime-engine:1.0.28", "name: runtime-writer", `"--project-id", "` + testProjectID + `"`, `"--account-id", "` + runtimeAccountID(testProjectID, "99999999-9999-4999-8999-999999999999") + `"`, `exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-binding-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "name: runtime-viewer-token", "{key: runtime-api-token, path: token}", "mountPath: /var/run/induforge/runtime-viewer", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
+	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "type: LoadBalancer", "port: 17800", "induforge.io/host-node-id", "maxUnavailable: 0, maxSurge: 1", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", `IF_PROJECT_ID, value: "` + testProjectID + `"`, "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.2", "image: induforge/project-runtime-api:1.0.0", "image: induforge/runtime-engine:1.0.29", "name: runtime-writer", `"--project-id", "` + testProjectID + `"`, `"--account-id", "` + runtimeAccountID(testProjectID, "99999999-9999-4999-8999-999999999999") + `"`, `exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-binding-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "name: runtime-viewer-token", "{key: runtime-api-token, path: token}", "mountPath: /var/run/induforge/runtime-viewer", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
 		if !strings.Contains(base, expected) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
@@ -85,9 +85,14 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 		t.Fatalf("collector workload must not reuse runtime-engine init/config: %v\n%s", err, collector)
 	}
 	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
-	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.0", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
+	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.1", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
 			t.Fatalf("compute sandbox missing %q: %v\n%s", expected, err, compute)
+		}
+	}
+	for _, expected := range []string{"COMPUTE_SANDBOX_RUNTIME_PROFILE", `value: "runtime"`, `COMPUTE_SANDBOX_ARTIFACT_ROOT, value: "/work/artifact"`, `COMPUTE_SANDBOX_ARTIFACT_FILE, value: "runtime-project-artifact.json"`} {
+		if !strings.Contains(compute, expected) {
+			t.Fatalf("compute manifest missing sandbox runtime contract %q: %s", expected, compute)
 		}
 	}
 }

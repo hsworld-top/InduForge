@@ -34,8 +34,8 @@ REQUIRED_IMAGES=(
   "induforge/object-store:latest"
   "induforge/project-gateway:1.0.2"
   "induforge/project-runtime-api:1.0.0"
-  "induforge/runtime-engine:1.0.28"
-  "induforge/compute-sandbox:1.0.0"
+  "induforge/runtime-engine:1.0.29"
+  "induforge/compute-sandbox:1.0.1"
   "induforge/collector-engine:1.0.0"
 )
 
