@@ -37,6 +37,41 @@ func TestKubernetesApplyPathUsesCoreGroupForService(t *testing.T) {
 	}
 }
 
+func TestKubernetesProjectReconcilerStopsOnlyStableDeploymentResources(t *testing.T) {
+	paths := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		paths = append(paths, request.Method+" "+request.URL.Path)
+		if request.Method == http.MethodGet && strings.Contains(request.URL.Path, "/deployments/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if request.Method != http.MethodDelete {
+			t.Fatalf("unexpected request %s %s", request.Method, request.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	if err := reconciler.StopDeployment(context.Background(), testEnvironmentID, "99999999-9999-4999-8999-999999999999"); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(paths, "\n")
+	for _, expected := range []string{
+		"DELETE /apis/apps/v1/namespaces/if-env-666666666666/deployments/if-project-999999999999-base",
+		"DELETE /api/v1/namespaces/if-env-666666666666/services/if-project-999999999999-compute",
+		"DELETE /api/v1/namespaces/if-env-666666666666/configmaps/if-project-999999999999-collector-collector-binding",
+		"DELETE /api/v1/namespaces/if-env-666666666666/secrets/if-project-999999999999-compute-sandbox",
+		"DELETE /api/v1/namespaces/if-env-666666666666/secrets/if-project-999999999999-collector-secrets",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing exact cleanup resource %q:\n%s", expected, joined)
+		}
+	}
+	if strings.Contains(joined, "other-project") {
+		t.Fatalf("cleanup must not use a broad selector: %s", joined)
+	}
+}
+
 func TestKubernetesProjectReconcilerLabelsHistoricalK3sNodeByInternalIP(t *testing.T) {
 	patches := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

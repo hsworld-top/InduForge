@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/indu-forge/dev_core/internal/dataservice"
 )
@@ -211,6 +212,12 @@ type ProjectWorkloadInspector interface {
 	Status(context.Context, ProjectWorkload) (ProjectWorkloadStatus, error)
 }
 
+// ProjectDeploymentStopper 删除某个工程部署的 K3s 运行资源。停止语义只影响
+// 编排资源；部署配置、端口租约和运行消息仍由中心数据库保留。
+type ProjectDeploymentStopper interface {
+	StopDeployment(context.Context, string, string) error
+}
+
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
@@ -260,6 +267,45 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 			return count, err
 		}
 		_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'dispatched','Kubernetes 工作负载已提交' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
+		if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
+			return count, err
+		}
+		count++
+	}
+	return count, rows.Err()
+}
+
+// ReconcileStoppedProjectDeployments 与运行态调和器成对工作。停止不能只更新
+// desired_status，否则 K3s 工作负载会继续运行且 deployment run 永远 pending。
+func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Context, stopper ProjectDeploymentStopper) (int, error) {
+	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text FROM project_deployments d WHERE d.desired_status='stopped' AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation)) ORDER BY d.updated_at LIMIT 100`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var deploymentID, environmentID string
+		if err = rows.Scan(&deploymentID, &environmentID); err != nil {
+			return count, err
+		}
+		if err = stopper.StopDeployment(ctx, environmentID, deploymentID); err != nil {
+			message := err.Error()
+			if len(message) > 1024 {
+				message = message[:1024]
+			}
+			if _, updateErr := r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE project_deployment_id=$2 AND desired_status='stopped'`, message, deploymentID); updateErr != nil {
+				return count, updateErr
+			}
+			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, message, deploymentID)
+			if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
+				return count, err
+			}
+			continue
+		}
+		if _, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='stopped',replicas_observed=0,observed_generation=desired_generation,last_message='Kubernetes 工作负载已停止',observed_at=now(),updated_at=now() WHERE project_deployment_id=$1 AND desired_status='stopped'`, deploymentID); err != nil {
+			return count, err
+		}
 		if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
 			return count, err
 		}
@@ -549,6 +595,119 @@ func kubernetesApplyPath(kind, namespace, resource, name string) string {
 		prefix = "/api/v1"
 	}
 	return prefix + "/namespaces/" + namespace + "/" + resource + "/" + name
+}
+
+// StopDeployment 只删除由稳定 deployment ID 派生的工程资源。不得按宽泛标签
+// 批量删除，避免同一运行环境内误伤其他工程。
+func (r *KubernetesProjectReconciler) StopDeployment(ctx context.Context, environmentID, deploymentID string) error {
+	namespace, err := projectNamespace(environmentID)
+	if err != nil {
+		return err
+	}
+	roles := []string{ServiceBase, ServiceCompute, ServiceAlarm, ServiceCollector}
+	for _, role := range roles {
+		name, nameErr := projectWorkloadName(deploymentID, role)
+		if nameErr != nil {
+			return nameErr
+		}
+		if err = r.deleteProjectResource(ctx, namespace, "Deployment", "deployments", name); err != nil {
+			return err
+		}
+	}
+	for _, role := range roles {
+		name, nameErr := projectWorkloadName(deploymentID, role)
+		if nameErr != nil {
+			return nameErr
+		}
+		if err = r.waitProjectDeploymentDeleted(ctx, namespace, name); err != nil {
+			return err
+		}
+	}
+	for _, role := range roles {
+		name, nameErr := projectWorkloadName(deploymentID, role)
+		if nameErr != nil {
+			return nameErr
+		}
+		if err = r.deleteProjectResource(ctx, namespace, "Service", "services", name); err != nil {
+			return err
+		}
+		if err = r.deleteProjectResource(ctx, namespace, "ConfigMap", "configmaps", name+"-config"); err != nil {
+			return err
+		}
+		binding := name + "-runtime-binding"
+		if role == ServiceCollector {
+			binding = name + "-collector-binding"
+		}
+		if err = r.deleteProjectResource(ctx, namespace, "ConfigMap", "configmaps", binding); err != nil {
+			return err
+		}
+	}
+	secretName, err := computeSandboxSecretName(deploymentID)
+	if err != nil {
+		return err
+	}
+	if err = r.deleteProjectResource(ctx, namespace, "Secret", "secrets", secretName); err != nil {
+		return err
+	}
+	collectorSecret, err := collectorBundleSecretName(deploymentID)
+	if err != nil {
+		return err
+	}
+	return r.deleteProjectResource(ctx, namespace, "Secret", "secrets", collectorSecret)
+}
+
+func (r *KubernetesProjectReconciler) deleteProjectResource(ctx context.Context, namespace, kind, resource, name string) error {
+	prefix := "/api/v1"
+	if kind == "Deployment" {
+		prefix = "/apis/apps/v1"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, r.endpoint+prefix+"/namespaces/"+namespace+"/"+resource+"/"+name, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.token)
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound && resp.StatusCode/100 != 2 {
+		return fmt.Errorf("删除 Kubernetes %s %s 失败: HTTP %d", kind, name, resp.StatusCode)
+	}
+	return nil
+}
+
+func (r *KubernetesProjectReconciler) waitProjectDeploymentDeleted(ctx context.Context, namespace, name string) error {
+	deadline := time.NewTimer(90 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint+"/apis/apps/v1/namespaces/"+namespace+"/deployments/"+name, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+r.token)
+		resp, err := r.client.Do(req)
+		if err != nil {
+			return err
+		}
+		status := resp.StatusCode
+		resp.Body.Close()
+		if status == http.StatusNotFound {
+			return nil
+		}
+		if status/100 != 2 {
+			return fmt.Errorf("读取 Kubernetes Deployment %s 状态失败: HTTP %d", name, status)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("等待 Kubernetes Deployment %s 停止超时", name)
+		case <-ticker.C:
+		}
+	}
 }
 
 func collectorArtifactPath(raw []byte) (string, error) {

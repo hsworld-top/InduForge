@@ -299,6 +299,9 @@ func runProjectWorkloadReconciler(ctx context.Context, repository *ops.PostgreSQ
 			if _, err := repository.ReconcilePendingProjectWorkloads(ctx, reconciler); err != nil {
 				logger.Warn("调和项目 K3s 工作负载失败", "error", err)
 			}
+			if _, err := repository.ReconcileStoppedProjectDeployments(ctx, reconciler); err != nil {
+				logger.Warn("停止项目 K3s 工作负载失败", "error", err)
+			}
 		}
 	}
 }
