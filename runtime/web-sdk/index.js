@@ -40,6 +40,12 @@ const POINT_METADATA = new Set([
 let configuredRuntime = null
 
 function readBrowserRuntime() {
+  return createBrowserRuntime()
+}
+
+// createBrowserRuntime 为模板提供显式初始化入口：Designer 嵌入态优先父级桥接，
+// 只有发布页没有预览宿主时才连接同源 Runtime API。
+export function createBrowserRuntime() {
   if (typeof window === 'undefined') return {}
   // Designer 预览始终优先使用宿主桥接；发布页没有父宿主时回退到工程入口
   // 的同源 Runtime API。Bearer 凭据只由 project-gateway 在服务端注入。

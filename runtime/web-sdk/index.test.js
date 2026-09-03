@@ -216,6 +216,7 @@ test('默认配置从 window.__INDUFORGE_RUNTIME__ 读取', async () => {
   }
   try {
     const browserSdk = await import(moduleUrl.href)
+    browserSdk.configureRuntime(browserSdk.createBrowserRuntime())
     assert.equal(browserSdk.access.hasRole('browser-role'), true)
     assert.equal((await browserSdk.points.browser.value.get()).data, 'browser.value')
   } finally {
@@ -237,6 +238,7 @@ test('顶层发布页在没有 Designer 宿主时回退到同源 HTTP Runtime', 
   }
   try {
     const browserSdk = await import(moduleUrl.href)
+    browserSdk.configureRuntime(browserSdk.createBrowserRuntime())
     const result = await browserSdk.points.line.temperature.read()
     assert.equal(result.code, 0)
     assert.equal(result.data.value, 42)
@@ -292,6 +294,7 @@ test('预览 iframe 默认通过宿主桥接读取并订阅数据点', async () 
   try {
     const moduleUrl = new URL(`./index.js?preview-bridge=${Date.now()}`, import.meta.url)
     const browserSdk = await import(moduleUrl.href)
+    browserSdk.configureRuntime(browserSdk.createBrowserRuntime())
     const point = browserSdk.points.byPath('db.IF关系库.demo.temperature')
 
     assert.deepEqual(await point.read(), {

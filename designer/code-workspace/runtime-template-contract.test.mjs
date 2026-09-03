@@ -15,7 +15,7 @@ test('四类新工程模板显式配置同源 HTTP Runtime', async () => {
   ]
   for (const entry of entries) {
     const source = await readFile(path.join(workspaceRoot, 'contracts/project-templates', entry), 'utf8')
-    assert.match(source, /import \{ configureRuntime, createHttpRuntime \} from '@induforge\/runtime-sdk'/)
-    assert.match(source, /configureRuntime\(createHttpRuntime\(\)\)/)
+    assert.match(source, /import \{ configureRuntime, createBrowserRuntime \} from '@induforge\/runtime-sdk'/)
+	assert.match(source, /configureRuntime\(createBrowserRuntime\(\)\)/)
   }
 })

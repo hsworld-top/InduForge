@@ -5,6 +5,8 @@ export interface SDKResult<T> {
   reqId?: string
 }
 
+export function createBrowserRuntime(): RuntimeConfiguration
+
 export interface DataPointSample<T = unknown> {
   path: string
   value: T
