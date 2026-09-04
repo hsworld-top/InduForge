@@ -122,6 +122,39 @@ test('已初始化工作区拒绝再次选择模板', async () => {
   )
 })
 
+test('已初始化工作区会按锁文件补齐依赖，供恢复后的预览重新启动', async () => {
+  const { initializer, workspaceRoot, commands } = await fixture()
+  await initializer.initialize('vite-vue-js')
+  commands.length = 0
+
+  await initializer.ensureDependencies()
+
+  assert.deepEqual(commands, [[
+    'pnpm',
+    'install',
+    '--offline',
+    '--frozen-lockfile',
+    '--ignore-workspace',
+    '--config.trust-lockfile=true',
+    '--store-dir',
+    path.join(path.dirname(workspaceRoot), 'store'),
+  ]])
+})
+
+test('依赖恢复要求完整的源码与锁文件', async () => {
+  const { initializer, workspaceRoot } = await fixture()
+  await mkdir(path.join(workspaceRoot, '.induforge'), { recursive: true })
+  await writeFile(
+    path.join(workspaceRoot, '.induforge', 'project.json'),
+    JSON.stringify({ version: 1, templateId: 'vite-vue-js', initializedAt: '2026-09-04T00:00:00.000Z' }),
+  )
+
+  await assert.rejects(
+    () => initializer.ensureDependencies(),
+    (error) => error instanceof WorkspaceInitializationError && /pnpm-lock/.test(error.message),
+  )
+})
+
 test('仅有平台上下文挂载时仍可初始化，并保留上下文目录', async () => {
   const { initializer, workspaceRoot } = await fixture()
   const contextRoot = path.join(workspaceRoot, '.induforge', 'context')

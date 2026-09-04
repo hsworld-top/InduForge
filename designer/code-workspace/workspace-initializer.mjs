@@ -96,6 +96,7 @@ export function createWorkspaceInitializer(options = {}) {
   const storeDir = path.resolve(options.storeDir || '/cache/pnpm-store')
   const commandRunner = options.runCommand || defaultRunCommand
   let initialization = null
+  let dependencyInstallation = null
   let lastError = null
 
   async function runCommand(command, args, commandOptions = {}) {
@@ -296,5 +297,43 @@ export function createWorkspaceInitializer(options = {}) {
     }
   }
 
-  return { status, templates, initialize }
+  // authoring-snapshot 有意不保存 node_modules。恢复后的工作区仍带有初始化标记，
+  // 因此不能把“已初始化”误当成“依赖已就绪”；每次启动 Vite 前按锁文件补齐依赖。
+  // pnpm 的 frozen 模式不会改写 package.json 或锁文件，只重建 node_modules 中缺失或损坏的依赖。
+  async function ensureDependencies() {
+    if (dependencyInstallation) return dependencyInstallation
+    const task = (async () => {
+      const current = await status()
+      if (current.status !== 'initialized') {
+        throw new WorkspaceInitializationError(current.message || '工程尚未初始化', 409)
+      }
+      try {
+        await readFile(path.join(workspaceRoot, 'package.json'), 'utf8')
+        await readFile(path.join(workspaceRoot, 'pnpm-lock.yaml'), 'utf8')
+      } catch {
+        throw new WorkspaceInitializationError('工程源码缺少 package.json 或 pnpm-lock.yaml，无法恢复依赖', 409)
+      }
+      await runCommand(
+        'pnpm',
+        [
+          'install',
+          '--offline',
+          '--frozen-lockfile',
+          '--ignore-workspace',
+          '--config.trust-lockfile=true',
+          '--store-dir',
+          storeDir,
+        ],
+        { cwd: workspaceRoot, env: { ...process.env, CI: 'true' } },
+      )
+    })()
+    dependencyInstallation = task
+    try {
+      await task
+    } finally {
+      dependencyInstallation = null
+    }
+  }
+
+  return { status, templates, initialize, ensureDependencies }
 }

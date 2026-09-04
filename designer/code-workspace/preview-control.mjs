@@ -214,6 +214,9 @@ async function startManagedProcess() {
   if (pids.length > 0) {
     return updateState('running', (await isManagedListener(pids)) ? 'managed' : 'external')
   }
+  // 完整源码快照不包含 node_modules；恢复后必须先依据工作区锁文件从镜像内
+  // 离线 store 安装依赖，避免 vite-runner 直接导入不存在的 Vite 模块。
+  await workspaceInitializer.ensureDependencies()
 
   updateState('starting', 'managed')
   const child = spawn('node', ['/opt/induforge/vite-runner.mjs'], {
