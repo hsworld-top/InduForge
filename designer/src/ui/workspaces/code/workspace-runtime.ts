@@ -2,11 +2,20 @@ import { codeWorkspaceApi, type CodeWorkspaceState } from './code-workspace-api'
 
 interface WorkspaceRuntimeEnvironment {
   DEV: boolean
+  MODE?: string
   VITE_DESIGNER_AI_URL?: string
   VITE_DESIGNER_CODE_URL?: string
   VITE_DESIGNER_PREVIEW_URL?: string
   VITE_DESIGNER_PREVIEW_CONTROL_URL?: string
   VITE_DESIGNER_WORKSPACE_INSTANCE_ID?: string
+}
+
+/**
+ * `frontend-linux` 仍属于 Vite 开发态，但浏览器必须通过中心 API 访问实际工程工作区，
+ * 不能使用 Mac 的 WSL/127.0.0.1 映射地址。
+ */
+function usesLocalDevelopmentWorkspace(environment: WorkspaceRuntimeEnvironment): boolean {
+  return environment.DEV && environment.MODE !== 'frontend-linux'
 }
 
 interface WorkspaceRuntimeDependencies {
@@ -71,7 +80,7 @@ export async function resolveWorkspaceState(
   environment: WorkspaceRuntimeEnvironment = import.meta.env,
   dependencies: WorkspaceRuntimeDependencies = codeWorkspaceApi,
 ): Promise<CodeWorkspaceState> {
-  if (environment.DEV) return createDevelopmentWorkspaceState(environment)
+  if (usesLocalDevelopmentWorkspace(environment)) return createDevelopmentWorkspaceState(environment)
 
   let workspace = await dependencies.get(projectId)
   if (autoStart && ['missing', 'stopped'].includes(workspace.status)) {

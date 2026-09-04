@@ -1,3 +1,5 @@
+import { validateFrontendLinuxProxyTarget } from './frontend-linux-env.mjs'
+
 /**
  * 前端开发服务器的后端代理约定。
  *
@@ -7,13 +9,21 @@
 const DEFAULT_CONTROL_TARGET = 'http://localhost:18101'
 const DEFAULT_DATA_TARGET = 'http://localhost:18102'
 
-export function resolveFrontendProxyTargets(env = {}) {
+export function resolveFrontendProxyTargets(env = {}, { requireCenterTarget = false } = {}) {
   const centerTarget = String(env.IF_FRONTEND_PROXY_TARGET || '').trim()
   if (centerTarget) {
-    return {
-      control: centerTarget,
-      data: centerTarget,
+    const validation = validateFrontendLinuxProxyTarget(centerTarget)
+    if (!validation.valid) {
+      throw new Error(`前端 Linux 中心代理配置无效：${validation.message}`)
     }
+    return {
+      control: validation.target,
+      data: validation.target,
+    }
+  }
+
+  if (requireCenterTarget) {
+    throw new Error('frontend-linux 模式必须配置 IF_FRONTEND_PROXY_TARGET。')
   }
 
   return {
@@ -22,8 +32,8 @@ export function resolveFrontendProxyTargets(env = {}) {
   }
 }
 
-export function createFrontendProxy(env = {}) {
-  const targets = resolveFrontendProxyTargets(env)
+export function createFrontendProxy(env = {}, options = {}) {
+  const targets = resolveFrontendProxyTargets(env, options)
   const httpProxy = (target) => ({
     target,
     changeOrigin: true,

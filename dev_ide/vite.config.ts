@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
       port: Number(env.VITE_IDE_PORT),
       host: true,
       proxy: {
-        ...createFrontendProxy(env),
+        ...createFrontendProxy(env, { requireCenterTarget: mode === 'frontend-linux' }),
         // Wujie 子应用通过 IDE 同源路径加载，浏览器只携带 HttpOnly Cookie。
         '/datacenter': {
           target: `http://localhost:${env.VITE_DATACENTER_PORT || 18602}`,

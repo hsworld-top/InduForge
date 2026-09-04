@@ -35,6 +35,7 @@ describe('Designer 工作空间运行模式', () => {
         true,
         {
           DEV: true,
+          MODE: 'development',
           VITE_DESIGNER_AI_URL: 'http://127.0.0.1:33141',
           VITE_DESIGNER_CODE_URL: 'http://127.0.0.1:33000',
           VITE_DESIGNER_PREVIEW_URL: 'http://127.0.0.1:35173',
@@ -64,6 +65,27 @@ describe('Designer 工作空间运行模式', () => {
 
     await expect(
       resolveWorkspaceState('project-1', true, { DEV: false }, { get, start }),
+    ).resolves.toEqual(runningWorkspace)
+    expect(get).toHaveBeenCalledWith('project-1')
+    expect(start).toHaveBeenCalledWith('project-1')
+  })
+
+  it('frontend-linux 即使是 Vite 开发态也通过中心 API 查询并启动工程工作空间', async () => {
+    const get = vi.fn().mockResolvedValue(stoppedWorkspace)
+    const start = vi.fn().mockResolvedValue(runningWorkspace)
+
+    await expect(
+      resolveWorkspaceState(
+        'project-1',
+        true,
+        {
+          DEV: true,
+          MODE: 'frontend-linux',
+          // 这些本机地址即使存在，也不能在 Linux 中心模式使用。
+          VITE_DESIGNER_AI_URL: 'http://127.0.0.1:33141',
+        },
+        { get, start },
+      ),
     ).resolves.toEqual(runningWorkspace)
     expect(get).toHaveBeenCalledWith('project-1')
     expect(start).toHaveBeenCalledWith('project-1')

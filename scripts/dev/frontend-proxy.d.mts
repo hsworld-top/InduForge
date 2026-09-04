@@ -11,10 +11,16 @@ export interface FrontendProxyOption {
   rewriteWsOrigin?: boolean
 }
 
+export interface ResolveFrontendProxyOptions {
+  requireCenterTarget?: boolean
+}
+
 export function resolveFrontendProxyTargets(
   env?: Record<string, string | undefined>,
+  options?: ResolveFrontendProxyOptions,
 ): FrontendProxyTargets
 
 export function createFrontendProxy(
   env?: Record<string, string | undefined>,
+  options?: ResolveFrontendProxyOptions,
 ): Record<string, FrontendProxyOption>

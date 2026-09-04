@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.VITE_DATACENTER_PORT),
       host: true,
-      proxy: createFrontendProxy(env),
+      proxy: createFrontendProxy(env, { requireCenterTarget: mode === 'frontend-linux' }),
       fs: {
         allow: ['..'],
       },
