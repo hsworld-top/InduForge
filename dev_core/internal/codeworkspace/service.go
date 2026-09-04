@@ -31,6 +31,7 @@ type Config struct {
 	BindHost                      string
 	AllowedOrigins                string
 	WorkspacePublicOriginTemplate string
+	AllowInsecureHTTPDev          bool
 	VolumeName                    string
 	DefaultTemplateProjectID      string
 	DefaultTemplateID             string
@@ -89,7 +90,7 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	if (config.DefaultTemplateProjectID == "") != (config.DefaultTemplateID == "") {
 		return nil, fmt.Errorf("默认工程模板配置不完整")
 	}
-	if _, err := workspacePublicHosts(config.WorkspacePublicOriginTemplate, "00000000-0000-0000-0000-000000000000"); err != nil {
+	if _, err := workspacePublicHosts(config.WorkspacePublicOriginTemplate, "00000000-0000-0000-0000-000000000000", config.AllowInsecureHTTPDev); err != nil {
 		return nil, err
 	}
 	return &Service{projects: projects, engine: engine, config: config, now: time.Now}, nil
@@ -395,7 +396,7 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		}
 	}
 	environment := []string{"PNPM_HOME=/cache/pnpm", "npm_config_store_dir=/cache/pnpm-store", "XDG_CACHE_HOME=/cache"}
-	publicHosts, err := workspacePublicHosts(s.config.WorkspacePublicOriginTemplate, item.ID)
+	publicHosts, err := workspacePublicHosts(s.config.WorkspacePublicOriginTemplate, item.ID, s.config.AllowInsecureHTTPDev)
 	if err != nil {
 		return ContainerSpec{}, err
 	}
@@ -437,7 +438,7 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 
 // workspacePublicHosts 从受控公开 Origin 模板为一个工程生成服务自身的 Hostname。
 // URL 的端口属于网关/浏览器 Origin，不应传给 Pi Web 或 Vite 的 allowedHosts 配置。
-func workspacePublicHosts(template, projectID string) (map[string]string, error) {
+func workspacePublicHosts(template, projectID string, allowInsecureHTTPDev bool) (map[string]string, error) {
 	template = strings.TrimSpace(template)
 	if template == "" {
 		return nil, nil
@@ -452,7 +453,11 @@ func workspacePublicHosts(template, projectID string) (map[string]string, error)
 	for _, serviceName := range []string{"ai", "preview"} {
 		origin := strings.NewReplacer("{projectId}", strings.ToLower(projectID), "{service}", serviceName).Replace(template)
 		parsed, err := url.Parse(origin)
-		if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		expectedScheme := "https"
+		if allowInsecureHTTPDev {
+			expectedScheme = "http"
+		}
+		if err != nil || parsed.Scheme != expectedScheme || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
 			return nil, fmt.Errorf("工作区公开 Origin 模板无效")
 		}
 		host := strings.ToLower(parsed.Hostname())

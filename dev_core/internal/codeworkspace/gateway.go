@@ -21,14 +21,15 @@ import (
 )
 
 const (
-	workspaceTicketParameter = "__if_workspace_ticket"
-	workspaceSessionCookie   = "__Host-if_workspace_session"
-	defaultTicketTTL         = 45 * time.Second
-	defaultSessionTTL        = 15 * time.Minute
-	maxPendingTickets        = 4096
-	maxActiveSessions        = 4096
-	maxSessionsPerActor      = 64
-	cleanupInterval          = 15 * time.Second
+	workspaceTicketParameter      = "__if_workspace_ticket"
+	workspaceSessionCookie        = "__Host-if_workspace_session"
+	workspaceInsecureCookiePrefix = "if_workspace_session_"
+	defaultTicketTTL              = 45 * time.Second
+	defaultSessionTTL             = 15 * time.Minute
+	maxPendingTickets             = 4096
+	maxActiveSessions             = 4096
+	maxSessionsPerActor           = 64
+	cleanupInterval               = 15 * time.Second
 )
 
 var (
@@ -45,6 +46,7 @@ type GatewayConfig struct {
 	CenterPublicOrigin   string
 	Namespace            string
 	AllowedOrigins       string
+	AllowInsecureHTTPDev bool
 	TicketTTL            time.Duration
 	SessionTTL           time.Duration
 	Now                  func() time.Time
@@ -76,24 +78,28 @@ type grantValidationFlight struct {
 // Gateway 是工作区唯一外部入口。公开 Host 只映射到服务端生成的工程 Service，
 // 请求中的路径、查询参数和 Header 均不能改变上游工程或端口。
 type Gateway struct {
-	service       *Service
-	template      string
-	namespace     string
-	allowedOrigin map[string]struct{}
-	ticketTTL     time.Duration
-	sessionTTL    time.Duration
-	now           func() time.Time
-	transport     http.RoundTripper
-	resolveUser   func(context.Context, string) (auth.User, error)
-	mu            sync.Mutex
-	tickets       map[string]gatewayGrant
-	ticketByScope map[string]string
-	sessions      map[string]gatewayGrant
-	lastCleanup   time.Time
-	hostPattern   *regexp.Regexp
-	validationMu  sync.Mutex
-	validations   map[string]grantValidation
-	flights       map[string]*grantValidationFlight
+	service              *Service
+	template             string
+	scheme               string
+	allowInsecureHTTPDev bool
+	namespace            string
+	allowedOrigin        map[string]struct{}
+	ticketTTL            time.Duration
+	sessionTTL           time.Duration
+	now                  func() time.Time
+	transport            http.RoundTripper
+	resolveUser          func(context.Context, string) (auth.User, error)
+	mu                   sync.Mutex
+	tickets              map[string]gatewayGrant
+	ticketByScope        map[string]string
+	sessions             map[string]gatewayGrant
+	lastCleanup          time.Time
+	hostPattern          *regexp.Regexp
+	fullHostPattern      *regexp.Regexp
+	serviceHostPatterns  map[string]*regexp.Regexp
+	validationMu         sync.Mutex
+	validations          map[string]grantValidation
+	flights              map[string]*grantValidationFlight
 }
 
 func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
@@ -108,13 +114,17 @@ func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
 		return nil, fmt.Errorf("%w: 必须包含 {projectId} 和 {service}", ErrInvalidOriginTemplate)
 	}
 	probe, err := url.Parse(strings.NewReplacer("{projectId}", "00000000-0000-0000-0000-000000000000", "{service}", "code").Replace(template))
-	if err != nil || probe.Scheme != "https" || probe.Hostname() == "" || probe.User != nil || probe.RawQuery != "" || probe.Fragment != "" || (probe.Path != "" && probe.Path != "/") {
-		return nil, fmt.Errorf("%w: 必须为无路径的 HTTPS Origin", ErrInvalidOriginTemplate)
+	expectedScheme := "https"
+	if config.AllowInsecureHTTPDev {
+		expectedScheme = "http"
+	}
+	if err != nil || probe.Scheme != expectedScheme || probe.Hostname() == "" || probe.User != nil || probe.RawQuery != "" || probe.Fragment != "" || (probe.Path != "" && probe.Path != "/") {
+		return nil, fmt.Errorf("%w: 必须为无路径的 %s Origin", ErrInvalidOriginTemplate, strings.ToUpper(expectedScheme))
 	}
 	center := strings.TrimSpace(config.CenterPublicOrigin)
 	centerURL, parseErr := url.Parse(center)
-	if center == "" || parseErr != nil || centerURL.Scheme != "https" || centerURL.Host == "" || centerURL.Path != "" || centerURL.User != nil || centerURL.RawQuery != "" || centerURL.Fragment != "" {
-		return nil, fmt.Errorf("启用工作区网关时中心公开 Origin 必须为 HTTPS Origin")
+	if center == "" || parseErr != nil || centerURL.Scheme != expectedScheme || centerURL.Host == "" || centerURL.Path != "" || centerURL.User != nil || centerURL.RawQuery != "" || centerURL.Fragment != "" {
+		return nil, fmt.Errorf("启用工作区网关时中心公开 Origin 必须为 %s Origin", strings.ToUpper(expectedScheme))
 	}
 	if strings.EqualFold(centerURL.Host, probe.Host) {
 		return nil, fmt.Errorf("%w: 工作区不得与中心同 Origin", ErrInvalidOriginTemplate)
@@ -125,12 +135,28 @@ func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
 		return nil, fmt.Errorf("%w: 中心与工作区必须同站点且不同 Origin", ErrInvalidOriginTemplate)
 	}
 	patternURL, _ := url.Parse(strings.NewReplacer("{projectId}", "ifprojectplaceholder", "{service}", "ifserviceplaceholder").Replace(template))
-	hostExpression := regexp.QuoteMeta(strings.ToLower(patternURL.Host))
+	fullHostExpression := regexp.QuoteMeta(strings.ToLower(patternURL.Host))
+	fullHostExpression = strings.Replace(fullHostExpression, "ifprojectplaceholder", `[0-9a-f-]{36}`, 1)
+	fullHostExpression = strings.Replace(fullHostExpression, "ifserviceplaceholder", `(?:ai|code|preview|preview-control)`, 1)
+	fullHostPattern, err := regexp.Compile("^" + fullHostExpression + "$")
+	if err != nil {
+		return nil, fmt.Errorf("%w: Host 模式无法编译", ErrInvalidOriginTemplate)
+	}
+	hostExpression := regexp.QuoteMeta(strings.ToLower(patternURL.Hostname()))
 	hostExpression = strings.Replace(hostExpression, "ifprojectplaceholder", `[0-9a-f-]{36}`, 1)
 	hostExpression = strings.Replace(hostExpression, "ifserviceplaceholder", `(?:ai|code|preview|preview-control)`, 1)
 	hostPattern, err := regexp.Compile("^" + hostExpression + "$")
 	if err != nil {
-		return nil, fmt.Errorf("%w: Host 模式无法编译", ErrInvalidOriginTemplate)
+		return nil, fmt.Errorf("%w: Hostname 模式无法编译", ErrInvalidOriginTemplate)
+	}
+	serviceHostPatterns := make(map[string]*regexp.Regexp, len(workspaceServicePorts))
+	for serviceName := range workspaceServicePorts {
+		serviceURL, _ := url.Parse(strings.NewReplacer("{projectId}", "ifprojectplaceholder", "{service}", serviceName).Replace(template))
+		expression := strings.Replace(regexp.QuoteMeta(strings.ToLower(serviceURL.Host)), "ifprojectplaceholder", `[0-9a-f-]{36}`, 1)
+		serviceHostPatterns[serviceName], err = regexp.Compile("^" + expression + "$")
+		if err != nil {
+			return nil, fmt.Errorf("%w: 服务 Host 模式无法编译", ErrInvalidOriginTemplate)
+		}
 	}
 	namespace := strings.TrimSpace(config.Namespace)
 	if namespace == "" {
@@ -167,7 +193,7 @@ func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
 	if config.ResolveUser == nil {
 		return nil, fmt.Errorf("工作区网关用户状态解析器不能为空")
 	}
-	return &Gateway{service: service, template: template, namespace: namespace, allowedOrigin: allowed, ticketTTL: config.TicketTTL, sessionTTL: config.SessionTTL, now: config.Now, transport: config.Transport, resolveUser: config.ResolveUser, tickets: map[string]gatewayGrant{}, ticketByScope: map[string]string{}, sessions: map[string]gatewayGrant{}, hostPattern: hostPattern, validations: map[string]grantValidation{}, flights: map[string]*grantValidationFlight{}}, nil
+	return &Gateway{service: service, template: template, scheme: expectedScheme, allowInsecureHTTPDev: config.AllowInsecureHTTPDev, namespace: namespace, allowedOrigin: allowed, ticketTTL: config.TicketTTL, sessionTTL: config.SessionTTL, now: config.Now, transport: config.Transport, resolveUser: config.ResolveUser, tickets: map[string]gatewayGrant{}, ticketByScope: map[string]string{}, sessions: map[string]gatewayGrant{}, hostPattern: hostPattern, fullHostPattern: fullHostPattern, serviceHostPatterns: serviceHostPatterns, validations: map[string]grantValidation{}, flights: map[string]*grantValidationFlight{}}, nil
 }
 
 func (g *Gateway) PublicURL(actor auth.User, projectID, epoch, serviceName string) (string, error) {
@@ -234,7 +260,7 @@ func (g *Gateway) PublicURL(actor auth.User, projectID, epoch, serviceName strin
 // Wrap 根据 Host 分流工作区流量，中心 Host 继续进入原控制面 Handler。
 func (g *Gateway) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := strings.ToLower(r.Host)
+		host := workspaceRequestHostname(r.Host)
 		if !g.hostPattern.MatchString(host) {
 			next.ServeHTTP(w, r)
 			return
@@ -245,6 +271,10 @@ func (g *Gateway) Wrap(next http.Handler) http.Handler {
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := strings.ToLower(r.Host)
+	if !g.fullHostPattern.MatchString(host) || !g.requestSchemeMatches(r) {
+		http.Error(w, "工作区访问协议或 Host 无效", http.StatusBadRequest)
+		return
+	}
 	if !g.applyCORS(w, r) {
 		return
 	}
@@ -256,7 +286,12 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.exchangeTicket(w, r, host, ticket)
 		return
 	}
-	cookie, err := r.Cookie(workspaceSessionCookie)
+	cookieName, ok := g.sessionCookieName(host)
+	if !ok {
+		http.Error(w, "工作区服务无效", http.StatusBadRequest)
+		return
+	}
+	cookie, err := r.Cookie(cookieName)
 	if err != nil {
 		http.Error(w, "工作区会话已失效", http.StatusUnauthorized)
 		return
@@ -265,7 +300,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	grant, err = g.authorizeGrant(r.Context(), grant)
 	if !ok || err != nil {
 		g.deleteSession(cookie.Value)
-		http.SetCookie(w, expiredWorkspaceCookie())
+		http.SetCookie(w, g.expiredWorkspaceCookie(cookieName))
 		http.Error(w, "工作区会话已失效，请重新打开", http.StatusUnauthorized)
 		return
 	}
@@ -282,9 +317,10 @@ func (g *Gateway) exchangeTicket(w http.ResponseWriter, r *http.Request, host, t
 	if !ok || grant.Host != host || !now.Before(grant.ExpiresAt) || err != nil {
 		// iframe 刷新会重新访问浏览器保存的原始 ticket URL。票据仍然不可
 		// 重放；只有同一 Host 已有的有效 HttpOnly 会话可跳过交换并清理 URL。
-		cookie, cookieErr := r.Cookie(workspaceSessionCookie)
+		cookieName, cookieNameOK := g.sessionCookieName(host)
+		cookie, cookieErr := r.Cookie(cookieName)
 		existing, sessionOK := gatewayGrant{}, false
-		if cookieErr == nil {
+		if cookieNameOK && cookieErr == nil {
 			existing, sessionOK = g.session(cookie.Value, host)
 			existing, cookieErr = g.authorizeGrant(r.Context(), existing)
 		}
@@ -315,7 +351,12 @@ func (g *Gateway) exchangeTicket(w http.ResponseWriter, r *http.Request, host, t
 	}
 	g.sessions[sessionID] = grant
 	g.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: workspaceSessionCookie, Value: sessionID, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: int(g.sessionTTL.Seconds())})
+	cookieName, cookieNameOK := g.sessionCookieName(host)
+	if !cookieNameOK {
+		http.Error(w, "工作区服务无效", http.StatusBadRequest)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: sessionID, Path: "/", HttpOnly: true, Secure: !g.allowInsecureHTTPDev, SameSite: http.SameSiteLaxMode, MaxAge: int(g.sessionTTL.Seconds())})
 	g.redirectWithoutTicket(w, r)
 }
 
@@ -369,9 +410,13 @@ func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGra
 func (g *Gateway) applyCORS(w http.ResponseWriter, r *http.Request) bool {
 	origin := strings.TrimRight(strings.TrimSpace(r.Header.Get("Origin")), "/")
 	if origin == "" {
+		if g.allowInsecureHTTPDev {
+			http.Error(w, "HTTP 开发工作区必须提供明确 Origin", http.StatusForbidden)
+			return false
+		}
 		return true
 	}
-	selfOrigin := "https://" + strings.ToLower(r.Host)
+	selfOrigin := g.scheme + "://" + strings.ToLower(r.Host)
 	_, explicitlyAllowed := g.allowedOrigin[origin]
 	if !explicitlyAllowed && !strings.EqualFold(origin, selfOrigin) {
 		http.Error(w, "不允许的工作区来源", http.StatusForbidden)
@@ -541,8 +586,41 @@ func stripWorkspaceCredentials(header http.Header) {
 	}
 }
 
-func expiredWorkspaceCookie() *http.Cookie {
-	return &http.Cookie{Name: workspaceSessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: -1}
+func (g *Gateway) expiredWorkspaceCookie(name string) *http.Cookie {
+	return &http.Cookie{Name: name, Value: "", Path: "/", HttpOnly: true, Secure: !g.allowInsecureHTTPDev, SameSite: http.SameSiteLaxMode, MaxAge: -1}
+}
+
+func workspaceRequestHostname(host string) string {
+	parsed, err := url.Parse("//" + host)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
+func (g *Gateway) sessionCookieName(host string) (string, bool) {
+	if !g.allowInsecureHTTPDev {
+		return workspaceSessionCookie, true
+	}
+	for serviceName, pattern := range g.serviceHostPatterns {
+		if pattern.MatchString(host) {
+			return workspaceInsecureCookiePrefix + serviceName, true
+		}
+	}
+	return "", false
+}
+
+// requestSchemeMatches 只接受 TLS 或受控反向代理明确标注的协议，避免 HTTP 请求借
+// X-Forwarded-Proto 混入生产工作区。边缘代理固定覆盖该 Header，应用不猜测原始协议。
+func (g *Gateway) requestSchemeMatches(r *http.Request) bool {
+	forwarded := strings.TrimSpace(strings.ToLower(r.Header.Get("X-Forwarded-Proto")))
+	if forwarded != "" && forwarded != "http" && forwarded != "https" {
+		return false
+	}
+	if r.TLS != nil {
+		return g.scheme == "https" && (forwarded == "" || forwarded == "https")
+	}
+	return forwarded == g.scheme
 }
 
 func secureValue() (string, error) {

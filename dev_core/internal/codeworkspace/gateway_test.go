@@ -57,19 +57,24 @@ func (t *recordingTransport) RoundTrip(request *http.Request) (*http.Response, e
 }
 
 func newGatewayForTest(t *testing.T, transport http.RoundTripper) (*Gateway, *gatewayEpochGuard, auth.User) {
+	return newGatewayForTestMode(t, transport, "https://{service}-{projectId}.workspace.induforge.test:18443", "https://center.induforge.test", false)
+}
+
+func newGatewayForTestMode(t *testing.T, transport http.RoundTripper, template, center string, allowInsecureHTTPDev bool) (*Gateway, *gatewayEpochGuard, auth.User) {
 	t.Helper()
 	item := project.Project{ID: testProjectID, TenantID: "tenant", CreatedBy: "owner", Visibility: "private", AuthoringEpoch: 7, WorkspacePath: t.TempDir()}
-	service, err := NewService(fakeProjects{item: item}, &fakeEngine{}, Config{Image: "workspace:test", VolumeName: "workspaces"})
+	service, err := NewService(fakeProjects{item: item}, &fakeEngine{}, Config{Image: "workspace:test", VolumeName: "workspaces", WorkspacePublicOriginTemplate: template, AllowInsecureHTTPDev: allowInsecureHTTPDev})
 	if err != nil {
 		t.Fatal(err)
 	}
 	guard := &gatewayEpochGuard{current: "epoch-7"}
 	service.SetAuthoringEpochGuard(guard)
 	gateway, err := NewGateway(service, GatewayConfig{
-		PublicOriginTemplate: "https://{service}-{projectId}.workspace.induforge.test:18443",
-		CenterPublicOrigin:   "https://center.induforge.test",
+		PublicOriginTemplate: template,
+		CenterPublicOrigin:   center,
 		Namespace:            "induforge-system",
 		AllowedOrigins:       "https://center.induforge.test",
+		AllowInsecureHTTPDev: allowInsecureHTTPDev,
 		Transport:            transport,
 		ResolveUser: func(_ context.Context, _ string) (auth.User, error) {
 			return auth.User{ID: "owner", TenantID: "tenant", Username: "developer", Role: "DEVELOPER", Status: "active", TenantStatus: "active"}, nil
@@ -79,6 +84,87 @@ func newGatewayForTest(t *testing.T, transport http.RoundTripper) (*Gateway, *ga
 		t.Fatal(err)
 	}
 	return gateway, guard, auth.User{ID: "owner", TenantID: "tenant", Username: "developer", Role: "DEVELOPER"}
+}
+
+func TestGatewayInsecureHTTPDevelopmentMode(t *testing.T) {
+	transport := &recordingTransport{}
+	gateway, _, actor := newGatewayForTestMode(t, transport, "http://{service}-{projectId}.workspace.induforge.test:18080", "http://center.induforge.test:18080", true)
+	publicURL, err := gateway.PublicURL(actor, testProjectID, "epoch-7", "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse(publicURL)
+	if parsed.Scheme != "http" || parsed.Host != "code-"+testProjectID+".workspace.induforge.test:18080" {
+		t.Fatalf("HTTP 开发 URL 错误: %s", publicURL)
+	}
+
+	wrongScheme := httptest.NewRequest(http.MethodGet, publicURL, nil)
+	wrongScheme.Host = parsed.Host
+	wrongScheme.Header.Set("X-Forwarded-Proto", "https")
+	wrongScheme.Header.Set("Origin", "http://center.induforge.test:18080")
+	wrongResult := httptest.NewRecorder()
+	gateway.ServeHTTP(wrongResult, wrongScheme)
+	if wrongResult.Code != http.StatusBadRequest {
+		t.Fatalf("HTTP 模式接受了 HTTPS 协议头: %d", wrongResult.Code)
+	}
+	missingOrigin := httptest.NewRequest(http.MethodGet, publicURL, nil)
+	missingOrigin.Host = parsed.Host
+	missingOrigin.Header.Set("X-Forwarded-Proto", "http")
+	missingOriginResult := httptest.NewRecorder()
+	gateway.ServeHTTP(missingOriginResult, missingOrigin)
+	if missingOriginResult.Code != http.StatusForbidden {
+		t.Fatalf("HTTP 开发模式接受了缺少 Origin 的请求: %d", missingOriginResult.Code)
+	}
+	// 协议错配必须在票据读取前返回，随后正确协议仍可完成交换。
+	exchange := httptest.NewRequest(http.MethodGet, publicURL, nil)
+	exchange.Host = parsed.Host
+	exchange.Header.Set("X-Forwarded-Proto", "http")
+	exchange.Header.Set("Origin", "http://center.induforge.test:18080")
+	goodResult := httptest.NewRecorder()
+	gateway.ServeHTTP(goodResult, exchange)
+	if goodResult.Code != http.StatusSeeOther {
+		t.Fatalf("协议错配错误消费了票据: %d", goodResult.Code)
+	}
+	cookies := goodResult.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != workspaceInsecureCookiePrefix+"code" || cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].Domain != "" {
+		t.Fatalf("HTTP 开发 Cookie 属性错误: %#v", cookies)
+	}
+
+	proxyRequest := httptest.NewRequest(http.MethodGet, "http://"+parsed.Host+"/", nil)
+	proxyRequest.Host = parsed.Host
+	proxyRequest.Header.Set("X-Forwarded-Proto", "http")
+	proxyRequest.Header.Set("Origin", "http://center.induforge.test:18080")
+	proxyRequest.AddCookie(cookies[0])
+	proxyResult := httptest.NewRecorder()
+	gateway.ServeHTTP(proxyResult, proxyRequest)
+	if proxyResult.Code != http.StatusOK || transport.calls != 1 {
+		t.Fatalf("HTTP 开发会话未代理: code=%d calls=%d", proxyResult.Code, transport.calls)
+	}
+}
+
+func TestGatewayProductionRejectsHTTPWithoutConsumingTicket(t *testing.T) {
+	gateway, _, actor := newGatewayForTest(t, &recordingTransport{})
+	publicURL, err := gateway.PublicURL(actor, testProjectID, "epoch-7", "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse(publicURL)
+	request := httptest.NewRequest(http.MethodGet, "http://"+parsed.Host+parsed.RequestURI(), nil)
+	request.Host = parsed.Host
+	request.Header.Set("X-Forwarded-Proto", "http")
+	result := httptest.NewRecorder()
+	gateway.ServeHTTP(result, request)
+	if result.Code != http.StatusBadRequest {
+		t.Fatalf("生产模式接受 HTTP: %d", result.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, publicURL, nil)
+	request.Host = parsed.Host
+	result = httptest.NewRecorder()
+	gateway.ServeHTTP(result, request)
+	if result.Code != http.StatusSeeOther {
+		t.Fatalf("协议错配消耗了票据: %d", result.Code)
+	}
 }
 
 func TestGatewayExchangesOneTimeTicketAndStripsCredentials(t *testing.T) {
@@ -325,6 +411,22 @@ func TestGatewayRejectsSameOriginOrPathTemplate(t *testing.T) {
 	} {
 		if _, err := NewGateway(service, GatewayConfig{PublicOriginTemplate: template, CenterPublicOrigin: "https://center.induforge.test", Namespace: "default", ResolveUser: func(context.Context, string) (auth.User, error) { return auth.User{}, nil }}); err == nil {
 			t.Fatalf("不安全模板被接受: %s", template)
+		}
+	}
+}
+
+func TestGatewayInsecureDevelopmentRejectsHTTPSMixing(t *testing.T) {
+	service, err := NewService(fakeProjects{}, &fakeEngine{}, Config{Image: "workspace:test", VolumeName: "workspaces"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := func(context.Context, string) (auth.User, error) { return auth.User{}, nil }
+	for _, config := range []GatewayConfig{
+		{PublicOriginTemplate: "https://{service}-{projectId}.workspace.induforge.test", CenterPublicOrigin: "https://center.induforge.test", Namespace: "default", AllowInsecureHTTPDev: true, ResolveUser: resolver},
+		{PublicOriginTemplate: "http://{service}-{projectId}.workspace.induforge.test", CenterPublicOrigin: "https://center.induforge.test", Namespace: "default", AllowInsecureHTTPDev: true, ResolveUser: resolver},
+	} {
+		if _, err := NewGateway(service, config); err == nil {
+			t.Fatalf("HTTP 开发模式接受了 HTTPS 混配: %#v", config)
 		}
 	}
 }

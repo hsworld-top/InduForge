@@ -200,10 +200,10 @@ EOF
 
   docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
     wget -qO- --header='Host: kubelet-probe.invalid' http://center-edge/health >/dev/null
-  workspace_headers=$(docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
-    sh -c "wget -S -O /dev/null --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test' http://center-edge/ 2>&1 || true")
-  if ! printf '%s\n' "$workspace_headers" | grep -Fq 'HTTP/1.1 308 Permanent Redirect'; then
-    echo "workspace HTTP host must redirect to HTTPS" >&2
+  workspace_http_body=$(docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
+    wget -qO- --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test:18080' http://center-edge/)
+  if [ "$workspace_http_body" != 'workspace-gateway:code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test:18080' ]; then
+    echo "workspace HTTP proxy did not preserve the non-default Host port for the authenticated center gateway" >&2
     exit 1
   fi
   for center_host in center.induforge.test kubelet-probe.invalid; do

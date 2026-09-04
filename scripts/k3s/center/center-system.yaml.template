@@ -650,6 +650,13 @@ spec:
                 secretKeyRef:
                   name: center-env
                   key: WORKSPACE_PUBLIC_ORIGIN_TEMPLATE
+            # 仅开发环境显式开启；Secret 未设置时 Go 配置默认 false，保持 HTTPS 契约。
+            - name: WORKSPACE_ALLOW_INSECURE_HTTP_DEV
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: WORKSPACE_ALLOW_INSECURE_HTTP_DEV
+                  optional: true
             - name: CODE_WORKSPACE_ALLOWED_ORIGINS
               valueFrom:
                 secretKeyRef:

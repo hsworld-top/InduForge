@@ -54,6 +54,7 @@ type Config struct {
 	CodeWorkspaceHostPath         string
 	WorkspacePublicOriginTemplate string
 	CenterPublicOrigin            string
+	WorkspaceAllowInsecureHTTPDev bool
 	DataServiceURL                string
 	DataServiceInternalToken      string
 	CacheAddress                  string
@@ -132,6 +133,10 @@ func Load() (Config, error) {
 	workspaceEngine := strings.ToLower(strings.TrimSpace(firstEnv("CODE_WORKSPACE_ENGINE")))
 	workspaceOriginTemplate := strings.TrimSpace(firstEnv("WORKSPACE_PUBLIC_ORIGIN_TEMPLATE"))
 	centerPublicOrigin := strings.TrimRight(strings.TrimSpace(firstEnv("CENTER_PUBLIC_ORIGIN")), "/")
+	workspaceAllowInsecureHTTPDev, err := strconv.ParseBool(firstEnvWithDefault("WORKSPACE_ALLOW_INSECURE_HTTP_DEV", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("WORKSPACE_ALLOW_INSECURE_HTTP_DEV 无效: %w", err)
+	}
 	if workspaceEngine == "kubernetes" && (workspaceOriginTemplate == "" || centerPublicOrigin == "") {
 		return Config{}, fmt.Errorf("Kubernetes 代码工作区必须配置 WORKSPACE_PUBLIC_ORIGIN_TEMPLATE 和 CENTER_PUBLIC_ORIGIN")
 	}
@@ -166,6 +171,7 @@ func Load() (Config, error) {
 		CodeWorkspaceHostPath:         firstEnvWithDefault("CODE_WORKSPACE_HOST_PATH", workspaceRoot),
 		WorkspacePublicOriginTemplate: workspaceOriginTemplate,
 		CenterPublicOrigin:            centerPublicOrigin,
+		WorkspaceAllowInsecureHTTPDev: workspaceAllowInsecureHTTPDev,
 		DataServiceURL:                strings.TrimRight(firstEnv("DATA_SERVICE_URL"), "/"),
 		DataServiceInternalToken:      dataServiceInternalToken,
 		CacheAddress:                  net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),
