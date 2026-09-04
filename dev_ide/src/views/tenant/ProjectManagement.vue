@@ -1,27 +1,56 @@
 <template>
   <div class="project-management">
     <!-- ═══ 区域一：工具栏 ═══ -->
-    <ProjectOverviewToolbar data-testid="project-overview-toolbar" :search="filters.search"
-      :search-placeholder="t('projectManagement.searchPlaceholder')" :view-mode="viewMode" :sort-by="filters.sortBy"
-      :sort-order="filters.sortOrder" :composite-filters="filters.composite" :tag-ids="filters.tagIds"
-      :tag-options="projectTagOptions" :tag-max-selected="projectTagLimit" :runtime-mode-options="runtimeModeOptions"
-      :deploy-status-options="deployStatusOptions" :sort-field-options="sortFieldOptions"
-      :sort-order-options="sortOrderOptions" :selected-count="selectedProjects.length"
-      :can-manage-projects="canManageProjects" :can-export-projects="canExportProjects"
-      :can-delete-projects="canDeleteProjects" @update:search="handleOverviewSearchInput"
-      @update:view-mode="handleViewModeChange" @update:sort-by="handleSortByChange"
-      @update:sort-order="handleSortOrderChange" @update:composite-filters="handleCompositeFiltersChange"
-      @update:tag-ids="handleTagIdsChange" @delete-tag="handleDeleteProjectTag" @tag-limit="handleProjectTagLimit"
-      @create-project="showCreateDialog = true" @refresh="resetSearch"
-      @open-group-manager="showGroupManageDialog = true" @import-project="handleImportProject"
-      @batch-export="batchExportProjects" @batch-delete="batchDeleteProjects" @open-settings="handleReservedSettings" />
+    <ProjectOverviewToolbar
+      data-testid="project-overview-toolbar"
+      :search="filters.search"
+      :search-placeholder="t('projectManagement.searchPlaceholder')"
+      :view-mode="viewMode"
+      :sort-by="filters.sortBy"
+      :sort-order="filters.sortOrder"
+      :composite-filters="filters.composite"
+      :tag-ids="filters.tagIds"
+      :tag-options="projectTagOptions"
+      :tag-max-selected="projectTagLimit"
+      :runtime-mode-options="runtimeModeOptions"
+      :deploy-status-options="deployStatusOptions"
+      :sort-field-options="sortFieldOptions"
+      :sort-order-options="sortOrderOptions"
+      :selected-count="selectedProjects.length"
+      :can-manage-projects="canManageProjects"
+      :can-export-projects="canExportProjects"
+      :can-delete-projects="canDeleteProjects"
+      @update:search="handleOverviewSearchInput"
+      @update:view-mode="handleViewModeChange"
+      @update:sort-by="handleSortByChange"
+      @update:sort-order="handleSortOrderChange"
+      @update:composite-filters="handleCompositeFiltersChange"
+      @update:tag-ids="handleTagIdsChange"
+      @delete-tag="handleDeleteProjectTag"
+      @tag-limit="handleProjectTagLimit"
+      @create-project="showCreateDialog = true"
+      @refresh="resetSearch"
+      @open-group-manager="showGroupManageDialog = true"
+      @import-project="handleImportProject"
+      @batch-export="batchExportProjects"
+      @batch-delete="batchDeleteProjects"
+      @open-settings="handleReservedSettings"
+    />
 
     <!-- ═══ 区域二：内容区域（撑满剩余高度） ═══ -->
     <div class="project-content-area" data-testid="project-overview-shell">
       <!-- 面包屑（进入分组后显示） -->
-      <div v-if="groupContext.groupId" class="project-group-breadcrumb" data-testid="project-group-breadcrumb">
-        <button type="button" class="project-group-breadcrumb__link" data-testid="project-group-breadcrumb-all"
-          @click="handleGroupBreadcrumbAll">
+      <div
+        v-if="groupContext.groupId"
+        class="project-group-breadcrumb"
+        data-testid="project-group-breadcrumb"
+      >
+        <button
+          type="button"
+          class="project-group-breadcrumb__link"
+          data-testid="project-group-breadcrumb-all"
+          @click="handleGroupBreadcrumbAll"
+        >
           <el-icon style="margin-right: 4px">
             <FolderOpened />
           </el-icon>
@@ -34,38 +63,73 @@
           {{ groupContext.groupName }}
           <span class="project-group-breadcrumb__count">({{ pagination.total }})</span>
         </span>
-        <el-button v-if="canManageProjects" size="small" type="primary" plain data-testid="project-group-add-project"
-          class="project-group-breadcrumb__action" @click="
+        <el-button
+          v-if="canManageProjects"
+          size="small"
+          type="primary"
+          plain
+          data-testid="project-group-add-project"
+          class="project-group-breadcrumb__action"
+          @click="
             openGroupProjectPicker({ id: groupContext.groupId, name: groupContext.groupName })
-            ">
+          "
+        >
           {{ t('projectManagement.addProjectToGroup') }}
         </el-button>
       </div>
 
       <!-- 可滚动卡片/表格区域 -->
       <div class="project-content-scroll">
-        <ProjectOverviewGrid v-if="viewMode === 'card'" :projects="projectList" :loading="loading"
-          :empty-description="t('projectManagement.emptyProjects')" :selected-ids="selectedProjects"
-          :show-selection="true" :show-member-action="canManageProjects" :show-deploy-action="canPerformOps"
-          :show-export-action="canExportProjects" :show-delete-action="canDeleteProjects"
-          :can-toggle-visibility="canManageProjects" :current-user-id="currentUser?.id || ''" :group-cards="!groupContext.groupId && viewMode === 'card' ? resolvedProjectGroupCards : []
-            " :grouped="!groupContext.groupId" :show-grouped-project-items="false" @open-project="handleOpenProject"
-          @selection-change="handleProjectSelectionChange" @open-runtime-access="openRuntimeAccessDialog"
-          @deploy="openDeployDialog" @export="handleExportProject" @delete="deleteProject"
-          @visibility-toggle="toggleProjectVisibility" @group-select="handleGroupCardSelect"
-          @group-add-project="openGroupProjectPicker" @group-edit="openProjectGroupEditDialog"
-          @group-delete="deleteProjectGroup" @group-remove-project="removeProjectFromGroup">
+        <ProjectOverviewGrid
+          v-if="viewMode === 'card'"
+          :projects="projectList"
+          :loading="loading"
+          :empty-description="t('projectManagement.emptyProjects')"
+          :selected-ids="selectedProjects"
+          :show-selection="true"
+          :show-member-action="canManageProjects"
+          :show-deploy-action="canPerformOps"
+          :show-export-action="canExportProjects"
+          :show-delete-action="canDeleteProjects"
+          :can-toggle-visibility="canManageProjects"
+          :current-user-id="currentUser?.id || ''"
+          :group-cards="
+            !groupContext.groupId && viewMode === 'card' ? resolvedProjectGroupCards : []
+          "
+          :grouped="!groupContext.groupId"
+          :show-grouped-project-items="false"
+          @open-project="handleOpenProject"
+          @selection-change="handleProjectSelectionChange"
+          @open-runtime-access="openRuntimeAccessDialog"
+          @deploy="openDeployDialog"
+          @export="handleExportProject"
+          @delete="deleteProject"
+          @visibility-toggle="toggleProjectVisibility"
+          @group-select="handleGroupCardSelect"
+          @group-add-project="openGroupProjectPicker"
+          @group-edit="openProjectGroupEditDialog"
+          @group-delete="deleteProjectGroup"
+          @group-remove-project="removeProjectFromGroup"
+        >
           <template #entry-actions="{ project }">
             <div class="project-entry-actions project-entry-actions--card">
-              <el-button data-testid="project-ai-workbench-action" size="small"
-                class="project-entry-button project-entry-button--designer" @click.stop="openDesignCenter(project)">
+              <el-button
+                data-testid="project-ai-workbench-action"
+                size="small"
+                class="project-entry-button project-entry-button--designer"
+                @click.stop="openDesignCenter(project)"
+              >
                 <el-icon>
                   <EditPen />
                 </el-icon>
                 <span>{{ t('projectManagement.designCenter') }}</span>
               </el-button>
-              <el-button data-testid="project-data-center-action" size="small"
-                class="project-entry-button project-entry-button--datacenter" @click.stop="openDataCenter(project)">
+              <el-button
+                data-testid="project-data-center-action"
+                size="small"
+                class="project-entry-button project-entry-button--datacenter"
+                @click.stop="openDataCenter(project)"
+              >
                 <el-icon>
                   <DataAnalysis />
                 </el-icon>
@@ -75,50 +139,96 @@
           </template>
           <template #actions="{ project }">
             <div class="project-management-actions project-management-actions--card">
-              <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editProject')" placement="top">
-                <el-button data-testid="project-edit-action" size="small" text circle class="project-action-button"
-                  @click.stop="editProject(project)">
+              <el-tooltip
+                v-if="canManageProjects"
+                :content="t('projectManagement.editProject')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-edit-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="editProject(project)"
+                >
                   <el-icon>
                     <Edit />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')"
-                placement="top">
-                <el-button data-testid="project-runtime-access-action" size="small" text circle
-                  class="project-action-button" @click.stop="openRuntimeAccessDialog(project)">
+              <el-tooltip
+                v-if="canManageProjects"
+                :content="t('projectManagement.memberAndPermission')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-runtime-access-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="openRuntimeAccessDialog(project)"
+                >
                   <el-icon>
                     <User />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editTags')" placement="top">
-                <el-button data-testid="project-edit-tags-action" size="small" text circle class="project-action-button"
-                  @click.stop="openProjectTagDialog(project)">
+              <el-tooltip
+                v-if="canManageProjects"
+                :content="t('projectManagement.editTags')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-edit-tags-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="openProjectTagDialog(project)"
+                >
                   <el-icon>
                     <PriceTag />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canPerformOps" :content="t('projectManagement.openFormalDeployment')" placement="top">
-                <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button"
-                  @click.stop="openDeployDialog(project)">
-                  <el-icon>
-                    <UploadFilled />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
-                <el-button data-testid="project-export-action" size="small" text circle class="project-action-button"
-                  @click.stop="handleExportProject(project)">
+              <ProjectDeploymentButton
+                v-if="canPerformOps"
+                :summary="project.deploymentSummary"
+                @click="openDeployDialog(project)"
+              />
+              <el-tooltip
+                v-if="canExportProjects"
+                :content="t('projectManagement.export')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-export-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="handleExportProject(project)"
+                >
                   <el-icon>
                     <Upload />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
-                <el-button data-testid="project-delete-action" size="small" text circle
-                  class="project-action-button project-action-button--danger" @click.stop="deleteProject(project)">
+              <el-tooltip
+                v-if="canDeleteProjects"
+                :content="t('projectManagement.delete')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-delete-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button project-action-button--danger"
+                  @click.stop="deleteProject(project)"
+                >
                   <el-icon>
                     <Delete />
                   </el-icon>
@@ -128,31 +238,55 @@
           </template>
         </ProjectOverviewGrid>
 
-        <ProjectOverviewTable v-else :projects="projectList"
-          :group-cards="!groupContext.groupId ? resolvedProjectGroupCards : []" :loading="loading"
-          :grouped="!groupContext.groupId" :show-grouped-project-items="false"
-          :empty-description="t('projectManagement.emptyProjects')" :selected-ids="selectedProjects"
-          :show-selection="true" :show-tag-column="false" :show-member-action="canManageProjects"
-          :show-deploy-action="canPerformOps" :show-export-action="canExportProjects"
-          :show-delete-action="canDeleteProjects" @open-project="handleOpenProject"
-          @selection-change="handleProjectSelectionChange" @open-runtime-access="openRuntimeAccessDialog"
-          @deploy="openDeployDialog" @export="handleExportProject" @delete="deleteProject"
-          @group-select="handleGroupCardSelect" @group-add-project="
+        <ProjectOverviewTable
+          v-else
+          :projects="projectList"
+          :group-cards="!groupContext.groupId ? resolvedProjectGroupCards : []"
+          :loading="loading"
+          :grouped="!groupContext.groupId"
+          :show-grouped-project-items="false"
+          :empty-description="t('projectManagement.emptyProjects')"
+          :selected-ids="selectedProjects"
+          :show-selection="true"
+          :show-tag-column="false"
+          :show-member-action="canManageProjects"
+          :show-deploy-action="canPerformOps"
+          :show-export-action="canExportProjects"
+          :show-delete-action="canDeleteProjects"
+          @open-project="handleOpenProject"
+          @selection-change="handleProjectSelectionChange"
+          @open-runtime-access="openRuntimeAccessDialog"
+          @deploy="openDeployDialog"
+          @export="handleExportProject"
+          @delete="deleteProject"
+          @group-select="handleGroupCardSelect"
+          @group-add-project="
             (row) => openGroupProjectPicker({ id: row.groupId, name: row.groupName })
-          " @group-edit="
+          "
+          @group-edit="
             (row) => openProjectGroupEditDialog({ id: row.groupId, name: row.groupName })
-          " @group-delete="(row) => deleteProjectGroup({ id: row.groupId, name: row.groupName })">
+          "
+          @group-delete="(row) => deleteProjectGroup({ id: row.groupId, name: row.groupName })"
+        >
           <template #actions="{ project }">
             <div class="project-entry-actions project-entry-actions--table">
-              <el-button data-testid="project-ai-workbench-action" size="small"
-                class="project-entry-button project-entry-button--designer" @click.stop="openDesignCenter(project)">
+              <el-button
+                data-testid="project-ai-workbench-action"
+                size="small"
+                class="project-entry-button project-entry-button--designer"
+                @click.stop="openDesignCenter(project)"
+              >
                 <el-icon>
                   <EditPen />
                 </el-icon>
                 <span>{{ t('projectManagement.designCenter') }}</span>
               </el-button>
-              <el-button data-testid="project-data-center-action" size="small"
-                class="project-entry-button project-entry-button--datacenter" @click.stop="openDataCenter(project)">
+              <el-button
+                data-testid="project-data-center-action"
+                size="small"
+                class="project-entry-button project-entry-button--datacenter"
+                @click.stop="openDataCenter(project)"
+              >
                 <el-icon>
                   <DataAnalysis />
                 </el-icon>
@@ -160,50 +294,96 @@
               </el-button>
             </div>
             <div class="project-management-actions project-management-actions--table">
-              <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editProject')" placement="top">
-                <el-button data-testid="project-edit-action" size="small" text circle class="project-action-button"
-                  @click.stop="editProject(project)">
+              <el-tooltip
+                v-if="canManageProjects"
+                :content="t('projectManagement.editProject')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-edit-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="editProject(project)"
+                >
                   <el-icon>
                     <Edit />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')"
-                placement="top">
-                <el-button data-testid="project-runtime-access-action" size="small" text circle
-                  class="project-action-button" @click.stop="openRuntimeAccessDialog(project)">
+              <el-tooltip
+                v-if="canManageProjects"
+                :content="t('projectManagement.memberAndPermission')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-runtime-access-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="openRuntimeAccessDialog(project)"
+                >
                   <el-icon>
                     <User />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editTags')" placement="top">
-                <el-button data-testid="project-edit-tags-action" size="small" text circle class="project-action-button"
-                  @click.stop="openProjectTagDialog(project)">
+              <el-tooltip
+                v-if="canManageProjects"
+                :content="t('projectManagement.editTags')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-edit-tags-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="openProjectTagDialog(project)"
+                >
                   <el-icon>
                     <PriceTag />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canPerformOps" :content="t('projectManagement.openFormalDeployment')" placement="top">
-                <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button"
-                  @click.stop="openDeployDialog(project)">
-                  <el-icon>
-                    <UploadFilled />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
-                <el-button data-testid="project-export-action" size="small" text circle class="project-action-button"
-                  @click.stop="handleExportProject(project)">
+              <ProjectDeploymentButton
+                v-if="canPerformOps"
+                :summary="project.deploymentSummary"
+                @click="openDeployDialog(project)"
+              />
+              <el-tooltip
+                v-if="canExportProjects"
+                :content="t('projectManagement.export')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-export-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button"
+                  @click.stop="handleExportProject(project)"
+                >
                   <el-icon>
                     <Upload />
                   </el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
-                <el-button data-testid="project-delete-action" size="small" text circle
-                  class="project-action-button project-action-button--danger" @click.stop="deleteProject(project)">
+              <el-tooltip
+                v-if="canDeleteProjects"
+                :content="t('projectManagement.delete')"
+                placement="top"
+              >
+                <el-button
+                  data-testid="project-delete-action"
+                  size="small"
+                  text
+                  circle
+                  class="project-action-button project-action-button--danger"
+                  @click.stop="deleteProject(project)"
+                >
                   <el-icon>
                     <Delete />
                   </el-icon>
@@ -215,22 +395,43 @@
       </div>
 
       <!-- 分页固定底部 -->
-      <div v-if="pagination.total > 0" class="pagination-bar" data-testid="project-overview-pagination">
-        <ProjectOverviewPagination :page="pagination.page" :limit="pagination.limit" :total="pagination.total"
-          :total-pages="pagination.totalPages" :summary="pagination.summary" @change="handleOverviewPaginationChange" />
+      <div
+        v-if="pagination.total > 0"
+        class="pagination-bar"
+        data-testid="project-overview-pagination"
+      >
+        <ProjectOverviewPagination
+          :page="pagination.page"
+          :limit="pagination.limit"
+          :total="pagination.total"
+          :total-pages="pagination.totalPages"
+          :summary="pagination.summary"
+          @change="handleOverviewPaginationChange"
+        />
       </div>
     </div>
 
     <!-- 创建工程对话框 -->
-    <el-dialog v-model="showCreateDialog" :title="t('projectManagement.createDialog')" width="600px"
-      :close-on-click-modal="true">
+    <el-dialog
+      v-model="showCreateDialog"
+      :title="t('projectManagement.createDialog')"
+      width="600px"
+      :close-on-click-modal="true"
+    >
       <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
         <el-form-item :label="t('projectManagement.projectName')" prop="name">
-          <el-input v-model="createForm.name" :placeholder="t('projectManagement.inputProjectName')" />
+          <el-input
+            v-model="createForm.name"
+            :placeholder="t('projectManagement.inputProjectName')"
+          />
         </el-form-item>
         <el-form-item :label="t('projectManagement.description')">
-          <el-input v-model="createForm.description" type="textarea"
-            :placeholder="t('projectManagement.inputProjectDescription')" :rows="3" />
+          <el-input
+            v-model="createForm.description"
+            type="textarea"
+            :placeholder="t('projectManagement.inputProjectDescription')"
+            :rows="3"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -248,15 +449,26 @@
     </el-dialog>
 
     <!-- 编辑工程对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('projectManagement.editDialog')" width="600px"
-      :close-on-click-modal="true">
+    <el-dialog
+      v-model="showEditDialog"
+      :title="t('projectManagement.editDialog')"
+      width="600px"
+      :close-on-click-modal="true"
+    >
       <el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px">
         <el-form-item :label="t('projectManagement.projectName')" prop="name">
-          <el-input v-model="editForm.name" :placeholder="t('projectManagement.inputProjectName')" />
+          <el-input
+            v-model="editForm.name"
+            :placeholder="t('projectManagement.inputProjectName')"
+          />
         </el-form-item>
         <el-form-item :label="t('projectManagement.description')">
-          <el-input v-model="editForm.description" type="textarea"
-            :placeholder="t('projectManagement.inputProjectDescription')" :rows="3" />
+          <el-input
+            v-model="editForm.description"
+            type="textarea"
+            :placeholder="t('projectManagement.inputProjectDescription')"
+            :rows="3"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -268,18 +480,36 @@
     </el-dialog>
 
     <!-- 编辑工程标签对话框 -->
-    <el-dialog v-model="showTagEditDialog" :title="`${t('projectManagement.editTags')} - ${tagEditProject?.name || ''}`"
-      width="520px" :close-on-click-modal="true">
+    <el-dialog
+      v-model="showTagEditDialog"
+      :title="`${t('projectManagement.editTags')} - ${tagEditProject?.name || ''}`"
+      width="520px"
+      :close-on-click-modal="true"
+    >
       <el-form label-width="96px">
         <el-form-item :label="t('projectManagement.createTag')">
           <div class="project-tag-creator">
-            <el-input v-model="tagCreateName" data-testid="project-tag-name-input"
-              :placeholder="t('projectManagement.inputTagName')" clearable @keyup.enter="handleCreateProjectTag" />
-            <el-tooltip :disabled="projectTagOptions.length < projectTagLimit"
-              :content="t('projectManagement.tagLimitReached', { count: projectTagLimit })" placement="top">
+            <el-input
+              v-model="tagCreateName"
+              data-testid="project-tag-name-input"
+              :placeholder="t('projectManagement.inputTagName')"
+              clearable
+              @keyup.enter="handleCreateProjectTag"
+            />
+            <el-tooltip
+              :disabled="projectTagOptions.length < projectTagLimit"
+              :content="t('projectManagement.tagLimitReached', { count: projectTagLimit })"
+              placement="top"
+            >
               <span class="project-tag-creator__create-wrapper">
-                <el-button type="primary" plain data-testid="project-tag-create-trigger" :loading="tagCreateLoading"
-                  :disabled="projectTagOptions.length >= projectTagLimit" @click="handleCreateProjectTag">
+                <el-button
+                  type="primary"
+                  plain
+                  data-testid="project-tag-create-trigger"
+                  :loading="tagCreateLoading"
+                  :disabled="projectTagOptions.length >= projectTagLimit"
+                  @click="handleCreateProjectTag"
+                >
                   {{ t('projectManagement.createTag') }}
                 </el-button>
               </span>
@@ -287,15 +517,31 @@
           </div>
         </el-form-item>
         <el-form-item :label="t('projectManagement.tagFilter')">
-          <el-select v-model="tagEditIds" class="project-tag-editor__select" multiple filterable clearable
-            :placeholder="t('projectManagement.tagSearchPlaceholder')" :multiple-limit="projectTagLimit"
-            style="width: 100%" @change="handleTagEditIdsChange">
-            <el-option v-for="tag in projectTagOptions" :key="tag.id" :label="tag.name" :value="tag.id">
+          <el-select
+            v-model="tagEditIds"
+            class="project-tag-editor__select"
+            multiple
+            filterable
+            clearable
+            :placeholder="t('projectManagement.tagSearchPlaceholder')"
+            :multiple-limit="projectTagLimit"
+            style="width: 100%"
+            @change="handleTagEditIdsChange"
+          >
+            <el-option
+              v-for="tag in projectTagOptions"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
+            >
               <div class="project-tag-option">
                 <span class="project-tag-option__name">{{ tag.name }}</span>
-                <button type="button" class="project-tag-option__delete"
+                <button
+                  type="button"
+                  class="project-tag-option__delete"
                   :aria-label="`${t('projectManagement.deleteTag')} ${tag.name}`"
-                  @click.stop.prevent="handleDeleteProjectTag(tag)">
+                  @click.stop.prevent="handleDeleteProjectTag(tag)"
+                >
                   <el-icon>
                     <Delete />
                   </el-icon>
@@ -311,28 +557,43 @@
       <template #footer>
         <el-button @click="showTagEditDialog = false">{{
           t('projectManagement.cancel')
-          }}</el-button>
+        }}</el-button>
         <el-button type="primary" :loading="tagEditLoading" @click="handleUpdateProjectTags">
           {{ t('projectManagement.save') }}
         </el-button>
       </template>
     </el-dialog>
 
-    <ProjectPublishDialog v-model:visible="showDeployDialog" :project="deployForm.project"
-      @confirm="handlePublishConfirm" />
+    <ProjectPublishDialog
+      v-model:visible="showDeployDialog"
+      :project="deployForm.project"
+      :initial-deployment="deployForm.project?.deploymentSummary?.primaryDeployment || null"
+      :initial-action="deployForm.project ? deploymentAction(deployForm.project) : null"
+      :submitting="deployLoading"
+      @confirm="handlePublishConfirm"
+      @restore-complete="handleDevelopmentRestoreComplete"
+      @open-restored-workspace="handleOpenRestoredWorkspace"
+    />
 
     <!-- 设计中心和数据中心通过工程卡片/表格行的直接入口打开。 -->
     <template v-if="false">
       <!-- 设计中心卡片 -->
       <div
         class="function-card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-shadow duration-200"
-        @click="openDesignCenter(selectedProject)">
+        @click="openDesignCenter(selectedProject)"
+      >
         <div class="text-center">
           <!-- 图标 -->
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4">
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4"
+          >
             <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"
+              />
             </svg>
           </div>
 
@@ -350,8 +611,12 @@
           <div class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
             <span class="flex items-center">
               <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
               </svg>
               {{
                 t('projectManagement.pageCount', {
@@ -361,8 +626,12 @@
             </span>
             <span class="flex items-center">
               <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z"
+                />
               </svg>
               {{
                 t('projectManagement.componentCount', {
@@ -382,13 +651,20 @@
       <!-- 数据中心卡片 -->
       <div
         class="function-card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-200 dark:border-green-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-green-300 dark:hover:border-green-600 transition-shadow duration-200"
-        @click="openDataCenter(selectedProject)">
+        @click="openDataCenter(selectedProject)"
+      >
         <div class="text-center">
           <!-- 图标 -->
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4">
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4"
+          >
             <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+              />
             </svg>
           </div>
 
@@ -406,8 +682,12 @@
           <div class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
             <span class="flex items-center">
               <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4"
+                />
               </svg>
               {{
                 t('projectManagement.dataSourceCount', {
@@ -417,8 +697,12 @@
             </span>
             <span class="flex items-center">
               <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                />
               </svg>
               {{
                 t('projectManagement.scriptCount', {
@@ -436,41 +720,69 @@
       </div>
     </template>
 
-    <ProjectRuntimeAccessDialog v-model:visible="runtimeAccessDialogVisible" :project="runtimeAccessProject" />
+    <ProjectRuntimeAccessDialog
+      v-model:visible="runtimeAccessDialogVisible"
+      :project="runtimeAccessProject"
+    />
 
-    <el-dialog v-model="showGroupEditDialog" :title="t('projectManagement.editGroup')" width="480px"
-      :close-on-click-modal="true">
+    <el-dialog
+      v-model="showGroupEditDialog"
+      :title="t('projectManagement.editGroup')"
+      width="480px"
+      :close-on-click-modal="true"
+    >
       <el-form :model="groupEditForm" label-width="92px">
         <el-form-item :label="t('projectManagement.groupName')">
-          <el-input v-model="groupEditForm.name" data-testid="project-group-edit-dialog-name-input"
-            :placeholder="t('projectManagement.inputGroupName')" clearable @keyup.enter="submitProjectGroupEdit" />
+          <el-input
+            v-model="groupEditForm.name"
+            data-testid="project-group-edit-dialog-name-input"
+            :placeholder="t('projectManagement.inputGroupName')"
+            clearable
+            @keyup.enter="submitProjectGroupEdit"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showGroupEditDialog = false">{{
           t('projectManagement.cancel')
-          }}</el-button>
-        <el-button type="primary" data-testid="project-group-edit-dialog-save" :loading="groupEditLoading"
-          @click="submitProjectGroupEdit">
+        }}</el-button>
+        <el-button
+          type="primary"
+          data-testid="project-group-edit-dialog-save"
+          :loading="groupEditLoading"
+          @click="submitProjectGroupEdit"
+        >
           {{ t('projectManagement.save') }}
         </el-button>
       </template>
     </el-dialog>
 
-    <ProjectGroupManageDialog v-model:visible="showGroupManageDialog" :groups="resolvedProjectGroupCards"
-      @create="createProjectGroup" @edit="openProjectGroupEditDialog" @delete="deleteProjectGroup" />
+    <ProjectGroupManageDialog
+      v-model:visible="showGroupManageDialog"
+      :groups="resolvedProjectGroupCards"
+      @create="createProjectGroup"
+      @edit="openProjectGroupEditDialog"
+      @delete="deleteProjectGroup"
+    />
 
-    <ProjectGroupProjectPickerDialog v-model:visible="groupProjectPickerVisible"
-      :group-id="targetGroupForProjectPicker?.id || ''" :group-name="targetGroupForProjectPicker?.name || ''"
-      :projects="groupProjectCandidates" :tag-options="projectTagOptions" :runtime-mode-options="runtimeModeOptions"
-      :deploy-status-options="deployStatusOptions" :loading="groupProjectCandidatesLoading" @select="addProjectToGroup"
-      @query-change="handleGroupProjectCandidateQueryChange" />
+    <ProjectGroupProjectPickerDialog
+      v-model:visible="groupProjectPickerVisible"
+      :group-id="targetGroupForProjectPicker?.id || ''"
+      :group-name="targetGroupForProjectPicker?.name || ''"
+      :projects="groupProjectCandidates"
+      :tag-options="projectTagOptions"
+      :runtime-mode-options="runtimeModeOptions"
+      :deploy-status-options="deployStatusOptions"
+      :loading="groupProjectCandidatesLoading"
+      @select="addProjectToGroup"
+      @query-change="handleGroupProjectCandidateQueryChange"
+    />
   </div>
 </template>
 
 <script lang="ts">
 // @ts-nocheck
-import { ref, reactive, computed, onMounted, onUnmounted, getCurrentInstance } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, getCurrentInstance, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import JSZip from 'jszip'
@@ -479,29 +791,33 @@ import { can } from '@/permissions'
 import request, { getApiErrorMessage as resolveApiErrorMessage } from '@/utils/request'
 import { projectAPI } from '@/api/project.api'
 import { opsAPI } from '@/api/ops.api'
+import { deploymentReplacementMessage } from './utils/deployment-interaction'
 import { formatDateTime, formatDate, formatCurrency } from '@/utils'
-import { initSocket, getSocket } from '@/utils/socket'
-import { Storage } from '@/utils/storage'
+import { createOpsRealtimeMonitor } from '@/utils/ops-realtime'
 import ProjectRuntimeAccessDialog from './components/ProjectRuntimeAccessDialog.vue'
 import ProjectOverviewToolbar from './project-management/ProjectOverviewToolbar.vue'
 import ProjectOverviewGrid from './project-management/ProjectOverviewGrid.vue'
 import ProjectOverviewTable from './project-management/ProjectOverviewTable.vue'
 import ProjectOverviewPagination from './project-management/ProjectOverviewPagination.vue'
 import ProjectPublishDialog from './project-management/ProjectPublishDialog.vue'
+import ProjectDeploymentButton from './project-management/ProjectDeploymentButton.vue'
 import ProjectGroupCards from './project-management/ProjectGroupCards.vue'
 import ProjectGroupManageDialog from './project-management/ProjectGroupManageDialog.vue'
 import ProjectGroupProjectPickerDialog from './project-management/ProjectGroupProjectPickerDialog.vue'
 import { buildProjectGroupCardItems } from './project-management/project-group-utils'
 import { buildProjectOverviewQueryParams } from './project-management/use-project-filters'
 import {
-  applyOpsDeploymentRuntimeSummaries,
+  applyProjectDeploymentSummaries,
   useProjectOverviewState,
 } from './project-management/use-project-overview'
+import { projectDeploymentAction, publishAccessPort } from './project-management/project-deployment-action'
+import { requestDeploymentNavigation } from './project-management/project-deployment-navigation'
 
 const PROJECT_TAG_LIMIT = 10
 
 export default {
   name: 'ProjectManagement',
+  props: { isActive: { type: Boolean, default: true } },
   components: {
     ProjectRuntimeAccessDialog,
     ProjectOverviewToolbar,
@@ -509,11 +825,12 @@ export default {
     ProjectOverviewTable,
     ProjectOverviewPagination,
     ProjectPublishDialog,
+    ProjectDeploymentButton,
     ProjectGroupCards,
     ProjectGroupManageDialog,
     ProjectGroupProjectPickerDialog,
   },
-  setup() {
+  setup(props) {
     const { t } = useI18n()
     const { emit } = getCurrentInstance()
     const authStore = useAuthStore()
@@ -562,7 +879,7 @@ export default {
 
     // 选择状态
     const selectedProjects = ref([]) // 选中的工程ID列表
-    const deployStateRefreshTimer = ref(null)
+    const pageVisible = ref(document.visibilityState !== 'hidden')
     const searchTimer = ref(null)
     const projectTagOptions = ref([])
     const projectTagLimit = PROJECT_TAG_LIMIT
@@ -863,27 +1180,28 @@ export default {
     }
 
     // 获取工程列表（统一通过状态层构建查询参数）。
-    const fetchProjects = async () => {
+    let activeProjectFetch = null
+    const fetchProjects = (background = false) => {
+      if (background && activeProjectFetch) return activeProjectFetch
+      const operation = (async () => {
       try {
         await fetchProjectOverview()
-        // 卡片的部署态只接受 ops 单槽摘要，不从工程资料或 K3s 细节推断。
-        const deploymentResults = await Promise.all(
-          projectList.value.map((project) =>
-            opsAPI.listProjectDeployments({ page: 1, pageSize: 1, projectId: String(project.id) }),
-          ),
-        )
-        projectList.value = applyOpsDeploymentRuntimeSummaries(
-          projectList.value,
-          deploymentResults.flatMap((result) => result.items),
-        )
+        projectList.value = applyProjectDeploymentSummaries(projectList.value)
         syncSelectionWithProjectList()
       } catch (error) {
+        if (background) throw error
         ElMessage.error(
           t('projectManagement.fetchFailed', {
             message: getApiErrorMessage(error, t('projectManagement.fetchFailed')),
           }),
         )
       }
+      })()
+      activeProjectFetch = operation
+      void operation.finally(() => {
+        if (activeProjectFetch === operation) activeProjectFetch = null
+      }).catch(() => {})
+      return operation
     }
 
     const executeSearch = () => {
@@ -1955,6 +2273,30 @@ export default {
       })
     }
 
+    const restoredProject = async (projectId) => {
+      let project = projectList.value.find((item) => String(item?.id || '') === String(projectId))
+      if (!project) {
+        await fetchProjects()
+        project = projectList.value.find((item) => String(item?.id || '') === String(projectId))
+      }
+      return project
+    }
+
+    const handleDevelopmentRestoreComplete = async ({ projectId }) => {
+      await fetchProjects()
+      emit('project-development-restored', { projectId: String(projectId) })
+    }
+
+    const handleOpenRestoredWorkspace = async ({ projectId, target }) => {
+      const project = await restoredProject(projectId)
+      if (!project) {
+        ElMessage.warning(t('projectManagement.restoredProjectUnavailable'))
+        return
+      }
+      if (target === 'datacenter') openDataCenter(project)
+      else if (target === 'designer') openDesignCenter(project)
+    }
+
     // 获取节点当前模式
     const getNodeMode = (nodeId) => {
       return nodeModes[nodeId] || null
@@ -2036,50 +2378,69 @@ export default {
       )
     }
 
-    const scheduleDeployStateRefresh = () => {
-      if (deployStateRefreshTimer.value) {
-        window.clearTimeout(deployStateRefreshTimer.value)
-      }
-      deployStateRefreshTimer.value = window.setTimeout(() => {
-        fetchProjects()
-      }, 120)
+    const realtime = createOpsRealtimeMonitor({
+      status() {},
+      async snapshot() { await fetchProjects(true) },
+    })
+    const updateRealtimeScope = () => realtime.setScope(
+      props.isActive && pageVisible.value ? { topics: ['deployments'] } : null,
+    )
+    const handleVisibilityChange = () => {
+      pageVisible.value = document.visibilityState !== 'hidden'
+      updateRealtimeScope()
     }
-
-    const setupRealtimeUpdates = () => {
-      const tenantId = Storage.getTenantId() || 'default'
-      const socket = initSocket(tenantId)
-      socket.on('ops:deploy:status', (data = {}) => {
-        if (!data?.projectId) {
-          return
-        }
-        scheduleDeployStateRefresh()
-      })
-    }
+    watch(() => props.isActive, updateRealtimeScope)
 
     // 发布入口留在工程卡片内；运行环境和运行引擎分布在同一弹窗完成选择。
     const openDeployDialog = (project) => {
+      const action = projectDeploymentAction(project.deploymentSummary)
+      if (action.disabled) return
+      if (!['publish', 'resume'].includes(action.kind)) {
+        requestDeploymentNavigation(
+          String(project.id),
+          action.kind === 'manage' ? undefined : project.deploymentSummary?.primaryDeployment?.id,
+          project.name,
+        )
+        return
+      }
       deployForm.project = project
       showDeployDialog.value = true
     }
+    const deploymentAction = (project) => projectDeploymentAction(project.deploymentSummary)
 
     const handlePublishConfirm = async (payload) => {
+      if (deployLoading.value) return
       deployLoading.value = true
       try {
+        const current = await opsAPI.listProjectDeployments({
+          projectId: payload.projectId,
+          environmentId: payload.environmentId,
+          page: 1,
+          pageSize: 1,
+        })
+        if (current.items[0]) {
+          await ElMessageBox.confirm(
+            deploymentReplacementMessage(current.items[0], payload.mode),
+            '确认替换当前部署',
+            { type: 'warning', confirmButtonText: '替换当前部署' },
+          )
+        }
         await opsAPI.createProjectDeployment({
           projectId: payload.projectId,
           environmentId: payload.environmentId,
           mode: payload.mode,
           applicationVersionId: payload.applicationVersionId || undefined,
-          accessPort: 17800,
+          accessPort: publishAccessPort(current.items[0]),
           placements: Object.fromEntries(
             Object.entries(payload.placements).filter(([, nodeId]) => Boolean(nodeId)),
           ),
         })
-        ElMessage.success(t('projectManagement.deploySuccess', { count: 1 }))
+        ElMessage.success('部署请求已提交，运行状态将自动更新')
         showDeployDialog.value = false
         await fetchProjectOverview()
       } catch (error) {
-        ElMessage.error(getApiErrorMessage(error, t('projectManagement.deployFailed')))
+        if (error !== 'cancel' && error !== 'close')
+          ElMessage.error(getApiErrorMessage(error, t('projectManagement.deployFailed')))
       } finally {
         deployLoading.value = false
       }
@@ -2234,23 +2595,18 @@ export default {
 
     // 组件挂载时获取数据
     onMounted(() => {
-      fetchProjects()
+      void fetchProjects()
       fetchProjectOverviewMeta()
-      setupRealtimeUpdates()
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      updateRealtimeScope()
     })
 
     onUnmounted(() => {
       if (searchTimer.value) {
         window.clearTimeout(searchTimer.value)
       }
-      if (deployStateRefreshTimer.value) {
-        window.clearTimeout(deployStateRefreshTimer.value)
-        deployStateRefreshTimer.value = null
-      }
-      const socket = getSocket()
-      if (socket) {
-        socket.off('ops:deploy:status')
-      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      realtime.dispose()
     })
 
     return {
@@ -2373,7 +2729,10 @@ export default {
       openRuntimeAccessDialog,
       openDesignCenter,
       openDataCenter,
+      handleDevelopmentRestoreComplete,
+      handleOpenRestoredWorkspace,
       openDeployDialog,
+      deploymentAction,
       handlePublishConfirm,
       exportProject,
       batchExportProjects,
@@ -2501,6 +2860,8 @@ export default {
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .project-entry-actions--card {
@@ -2532,12 +2893,13 @@ export default {
 }
 
 .project-entry-actions--table {
-  padding-right: 8px;
-  margin-right: 6px;
-  border-right: 1px solid var(--ck-border-light);
+  width: 100%;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--ck-border-light);
 }
 
 .project-management-actions--table {
+  width: 100%;
   justify-content: flex-start;
 }
 

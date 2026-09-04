@@ -1,6 +1,18 @@
 <template>
   <section class="ops-console ck-workbench-page" data-testid="ops-management-console">
-    <main class="ops-workspace">
+    <main
+      v-if="!initialSnapshotComplete"
+      class="ops-workspace ops-initial-loading"
+      aria-busy="true"
+    >
+      <div class="ops-toolbar__actions">
+        <OpsRealtimeIndicator :status="realtimeStatus" /><el-button @click="loadDashboard"
+          >刷新</el-button
+        >
+      </div>
+      <el-skeleton :rows="8" animated />
+    </main>
+    <main v-else class="ops-workspace">
       <div v-if="canAdministerOperations && activeTab === 'environments'" class="ops-view">
         <div v-if="environmentManagementMode" class="ops-page">
           <h2 class="sr-only">{{ $t('opsConsole.sections.environments') }}</h2>
@@ -28,6 +40,7 @@
               </el-select>
             </div>
             <div class="ops-toolbar__actions">
+              <OpsRealtimeIndicator :status="realtimeStatus" />
               <span class="ops-count">{{
                 $t('opsConsole.environments.total', { count: environmentPage.total })
               }}</span>
@@ -170,31 +183,27 @@
                     :value="environment.id"
                   />
                 </el-select>
-                <div class="ops-detail-heading__meta">
-                  <div class="ops-detail-title">
-                    <h2>{{ environmentHeading }}</h2>
-                    <span class="ops-status" :class="`is-${selectedEnvironment.status}`">
-                      {{ environmentStatusLabel(selectedEnvironment.status) }}
-                    </span>
-                  </div>
-                  <small>{{
-                    $t('opsConsole.environments.lastSync', { time: selectedEnvironment.recentAt })
-                  }}</small>
+                <div class="ops-toolbar-summaries">
+                  <button type="button" @click="openOverviewNodes">
+                    节点 <strong>{{ overview ? `${overview.nodes.online}/${overview.nodes.total} 在线` : '—' }}</strong>
+                  </button>
+                  <button type="button" @click="environmentDetailTab = 'services'">
+                    基础服务 <strong>{{ selectedEnvironment.foundationTotal ? `${selectedEnvironment.foundationHealthy}/${selectedEnvironment.foundationTotal} 健康` : '未部署' }}</strong>
+                  </button>
+                  <button type="button" @click="openOverviewDeployments">
+                    工程 <strong>{{ overview ? `${overview.deployments.running}/${overview.deployments.total} 运行中` : '—' }}</strong>
+                  </button>
                 </div>
               </div>
+              <div class="ops-toolbar-statuses">
+                <span class="ops-status" :class="overallEnvironmentState.className">{{ overallEnvironmentState.label }}</span>
+                <OpsRealtimeIndicator :status="realtimeStatus" />
+              </div>
               <div class="ops-detail-actions">
-                <el-button :loading="refreshing" @click="runEnvironmentCheck">{{
-                  $t('opsConsole.environments.recheck')
-                }}</el-button>
-                <el-button
-                  :disabled="selectedEnvironment.status === 'deleting'"
-                  @click="openEnvironmentNodeDialog"
-                  >{{ $t('opsConsole.environments.addNode') }}</el-button
-                >
+                <el-button :loading="refreshing" @click="runEnvironmentCheck">刷新</el-button>
                 <el-dropdown @command="handleEnvironmentCommand">
-                  <el-button :aria-label="$t('opsConsole.environments.more')"
-                    >{{ $t('opsConsole.environments.more')
-                    }}<el-icon class="el-icon--right"><ArrowDown /></el-icon
+                  <el-button aria-label="环境设置"
+                    >环境设置 <el-icon class="el-icon--right"><ArrowDown /></el-icon
                   ></el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
@@ -223,40 +232,6 @@
               </div>
             </div>
 
-            <div class="ops-summary-strip">
-              <div>
-                <span>{{ $t('opsConsole.environments.nodes') }}</span
-                ><strong
-                  >{{ selectedEnvironment.onlineNodes }} / {{ selectedEnvironment.nodeCount }}
-                  {{ $t('opsConsole.common.online') }}</strong
-                >
-              </div>
-              <div>
-                <span>{{ $t('opsConsole.environments.foundations') }}</span>
-                <strong v-if="selectedEnvironment.foundationTotal"
-                  >{{ selectedEnvironment.foundationHealthy }} /
-                  {{ selectedEnvironment.foundationTotal }}
-                  {{ $t('opsConsole.common.healthy') }}</strong
-                >
-                <strong v-else>{{ $t('opsConsole.common.undeployed') }}</strong>
-              </div>
-              <div>
-                <span>{{ $t('opsConsole.environments.deployments') }}</span
-                ><strong>{{
-                  $t('opsConsole.environments.runningCount', {
-                    count: selectedEnvironment.projectCount,
-                  })
-                }}</strong>
-              </div>
-              <div>
-                <span>{{ $t('opsConsole.environments.nodeDisk') }}</span
-                ><strong v-if="selectedEnvironment.nodeCount">{{
-                  $t('opsConsole.environments.maxDisk', { value: environmentMaxDiskUsage })
-                }}</strong
-                ><strong v-else>{{ $t('opsConsole.environments.noNodes') }}</strong>
-              </div>
-            </div>
-
             <div
               class="ops-detail-switcher"
               :aria-label="$t('opsConsole.environments.environment')"
@@ -278,200 +253,229 @@
               v-if="environmentDetailTab === 'overview'"
               class="ops-detail-pane ops-detail-pane--overview"
             >
-              <section
-                v-if="selectedEnvironment.status === 'deleting'"
-                class="ops-guidance ops-guidance--warning"
-              >
-                <div>
-                  <span class="ops-guidance__eyebrow">{{ $t('opsConsole.common.deleting') }}</span>
-                  <h3>{{ $t('opsConsole.environments.deletingTitle') }}</h3>
-                  <p>{{ $t('opsConsole.environments.deletingDescription') }}</p>
+              <p v-if="overviewError" class="overview-stale" role="status">
+                概览更新中断，以下为最近一次已取得的数据。
+              </p>
+              <el-skeleton v-if="!overview && !overviewError" :rows="6" animated />
+              <template v-if="overview">
+                <div v-if="selectedEnvironment.status === 'deleting'" class="overview-notice">
+                  正在删除环境，等待运行资源安全停止。
                 </div>
-                <el-button :loading="refreshing" @click="runEnvironmentCheck">{{
-                  $t('opsConsole.environments.recheck')
-                }}</el-button>
-              </section>
-              <section
-                v-else-if="selectedEnvironment.status === 'uninitialized'"
-                class="ops-guidance ops-guidance--setup"
-              >
-                <div class="ops-guidance__heading">
-                  <div>
-                    <span class="ops-guidance__eyebrow">{{
-                      $t('opsConsole.environments.setup')
-                    }}</span>
-                    <h3>{{ environmentSetupTitle }}</h3>
-                  </div>
-                  <el-button type="primary" @click="continueEnvironmentSetup">{{
+                <div
+                  v-else-if="selectedEnvironment.status === 'uninitialized'"
+                  class="overview-notice"
+                >
+                  <span>{{ environmentSetupTitle }}</span
+                  ><el-button size="small" type="primary" @click="continueEnvironmentSetup">{{
                     environmentSetupAction
                   }}</el-button>
                 </div>
-                <ol class="ops-setup-steps">
-                  <li :class="selectedEnvironment.nodeCount ? 'is-complete' : 'is-current'">
-                    <span>1</span><strong>{{ $t('opsConsole.environments.associateNodes') }}</strong
-                    ><small>{{
-                      selectedEnvironment.nodeCount
-                        ? $t('opsConsole.environments.completed')
-                        : $t('opsConsole.environments.pending')
-                    }}</small>
-                  </li>
-                  <li
-                    :class="{
-                      'is-current':
-                        selectedEnvironment.nodeCount && !selectedEnvironment.foundationHealthy,
-                      'is-complete':
-                        selectedEnvironment.foundationHealthy === foundationDefinitions.length,
-                    }"
+                <section
+                  v-if="
+                    overview.nodes.offline ||
+                    overview.nodes.fault ||
+                    overview.deployments.failed ||
+                    foundationFaultCount
+                  "
+                  class="overview-notice is-fault"
+                >
+                  <strong>运行故障</strong>
+                  <el-button
+                    v-if="overview.nodes.offline || overview.nodes.fault"
+                    link
+                    type="danger"
+                    @click="openOverviewNodes"
+                    >节点：{{ overview.nodes.offline }} 未连接 /
+                    {{ overview.nodes.fault }} 运行异常</el-button
                   >
-                    <span>2</span
-                    ><strong>{{ $t('opsConsole.environments.deployFoundation') }}</strong
-                    ><small>{{
-                      selectedEnvironment.foundationTotal
-                        ? $t('opsConsole.environments.inProgress')
-                        : $t('opsConsole.environments.pending')
-                    }}</small>
-                  </li>
-                  <li>
-                    <span>3</span><strong>{{ $t('opsConsole.environments.executeCheck') }}</strong
-                    ><small>{{ $t('opsConsole.environments.notStarted') }}</small>
-                  </li>
-                  <li>
-                    <span>4</span
-                    ><strong>{{ $t('opsConsole.environments.environmentAvailable') }}</strong
-                    ><small>{{ $t('opsConsole.environments.notStarted') }}</small>
-                  </li>
-                </ol>
-              </section>
-
-              <section
-                v-else-if="selectedEnvironment.status === 'attention' && foundationDeploying"
-                class="ops-guidance"
-              >
-                <div>
-                  <span class="ops-guidance__eyebrow">{{
-                    $t('opsConsole.environments.deploymentProgress', {
-                      healthy: selectedEnvironment.foundationHealthy,
-                      total: selectedEnvironment.foundationTotal,
-                    })
-                  }}</span>
-                  <h3>{{ $t('opsConsole.environments.deploymentInProgressTitle') }}</h3>
-                  <p>{{ $t('opsConsole.environments.deploymentInProgressDesc') }}</p>
+                  <el-button
+                    v-if="foundationFaultCount"
+                    link
+                    type="danger"
+                    @click="environmentDetailTab = 'services'"
+                    >基础服务：{{ foundationFaultCount }} 项异常</el-button
+                  >
+                  <el-button
+                    v-if="overview.deployments.failed"
+                    link
+                    type="danger"
+                    @click="openOverviewDeployments"
+                    >工程：{{ overview.deployments.failed }} 个异常</el-button
+                  >
+                </section>
+                <section
+                  v-if="overview.nodes.capacityAttention || overview.nodes.capacityCritical"
+                  class="overview-notice is-capacity"
+                >
+                  <strong>容量提醒</strong
+                  ><span
+                    >{{
+                      overview.nodes.capacityCritical
+                        ? `${overview.nodes.capacityCritical} 个节点磁盘容量紧张`
+                        : `${overview.nodes.capacityAttention} 个节点磁盘需要关注`
+                    }}
+                    · 最高
+                    {{
+                      overview.nodes.maxDiskUsagePercent == null
+                        ? '—'
+                        : `${overviewDiskPercent(overview.nodes.maxDiskUsagePercent)}%`
+                    }}</span
+                  ><el-button link @click="openOverviewNodes">查看节点</el-button>
+                </section>
+                <p
+                  v-if="
+                    overview.nodes.staleMetrics ||
+                    overview.nodes.unknownMetrics ||
+                    overview.deployments.stale ||
+                    overview.deployments.unknown
+                  "
+                  class="overview-pending"
+                >
+                  待确认：{{ overview.nodes.staleMetrics }} 个节点指标过期，{{
+                    overview.nodes.unknownMetrics
+                  }}
+                  个节点未上报指标；{{ overview.deployments.stale + overview.deployments.unknown }}
+                  个工程等待有效观测。
+                </p>
+                <div class="overview-main-grid">
+                  <section class="overview-section">
+                    <header>
+                      <h3>运行状态</h3>
+                      <el-button link @click="environmentDetailTab = 'services'"
+                        >基础服务详情</el-button
+                      >
+                    </header>
+                    <div
+                      v-for="group in foundationServiceGroups"
+                      :key="group.name"
+                      class="overview-service-row"
+                    >
+                      <span>{{ group.name }}</span
+                      ><span class="overview-secondary">{{ group.description }}</span
+                      ><span class="ops-status" :class="`is-${group.state}`">{{
+                        group.label
+                      }}</span>
+                    </div>
+                    <div class="overview-project-row">
+                      <span>工程部署</span>
+                      <div>
+                        <span>{{ overview.deployments.running }} 运行</span
+                        ><span>{{ overview.deployments.stopped }} 停止</span
+                        ><span :class="{ 'record-status-failed': overview.deployments.failed }"
+                          >{{ overview.deployments.failed }} 异常</span
+                        ><span v-if="overview.deployments.pending" class="overview-secondary"
+                          >{{ overview.deployments.pending }} 执行中</span
+                        >
+                      </div>
+                      <el-button link @click="openOverviewDeployments">查看工程</el-button>
+                    </div>
+                  </section>
+                  <section class="overview-section">
+                    <header>
+                      <h3>
+                        节点资源
+                        <small
+                          >异常与容量优先 · {{ overview.riskNodes.length }} /
+                          {{ overview.nodes.total }}</small
+                        >
+                      </h3>
+                      <el-button link @click="openOverviewNodes">查看全部</el-button>
+                    </header>
+                    <table class="overview-node-table">
+                      <thead>
+                        <tr>
+                          <th>节点</th>
+                          <th>连接 / 状态</th>
+                          <th>CPU</th>
+                          <th>内存</th>
+                          <th>
+                            <el-tooltip content="节点代理所在分区"
+                              ><span>节点磁盘</span></el-tooltip
+                            >
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="node in overview.riskNodes" :key="node.id">
+                          <td>
+                            <el-tooltip content="查看节点记录"
+                              ><el-button link @click="openNodeRecords(node)">{{
+                                node.name
+                              }}</el-button></el-tooltip
+                            >
+                          </td>
+                          <td>
+                            <span :class="`overview-health-${node.health}`">{{
+                              overviewNodeHealth(node)
+                            }}</span>
+                          </td>
+                          <td
+                            v-for="metric in [
+                              'cpuPercent',
+                              'memoryPercent',
+                              'diskPercent',
+                            ] as const"
+                            :key="metric"
+                          >
+                            <span class="overview-meter"
+                              ><i
+                                v-if="overviewMetric(node, metric) != null"
+                                :style="{ width: `${overviewMetric(node, metric)}%` }"
+                                :class="{
+                                  'is-capacity':
+                                    metric === 'diskPercent' && node.health.startsWith('capacity'),
+                                }" /></span
+                            ><small>{{
+                              overviewMetric(node, metric) == null
+                                ? '—'
+                                : `${overviewMetric(node, metric)}%`
+                            }}</small>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p v-if="!overview.riskNodes.length" class="overview-secondary">尚未关联节点</p>
+                  </section>
                 </div>
-                <el-button type="primary" @click="environmentDetailTab = 'services'">{{
-                  $t('opsConsole.environments.viewFoundation')
-                }}</el-button>
-              </section>
-
-              <section
-                v-else-if="selectedEnvironment.status === 'attention'"
-                class="ops-guidance ops-guidance--warning"
-              >
-                <div>
-                  <span class="ops-guidance__eyebrow">{{
-                    $t('opsConsole.environments.issueCount', { count: environmentProblems.length })
-                  }}</span>
-                  <h3>{{ environmentProblemTitle }}</h3>
-                  <p>{{ environmentProblemDescription }}</p>
-                </div>
-                <div class="ops-guidance__actions">
-                  <el-button @click="environmentDetailTab = 'events'">{{
-                    $t('opsConsole.environments.viewEvents')
-                  }}</el-button>
-                  <el-button type="primary" @click="environmentDetailTab = 'services'">{{
-                    $t('opsConsole.environments.handleAbnormal')
-                  }}</el-button>
-                </div>
-              </section>
-
-              <div class="ops-overview-layout">
-                <section class="ops-section">
+                <section class="overview-section">
                   <header>
-                    <h3>{{ $t('opsConsole.environments.foundationStatus') }}</h3>
-                    <el-button link @click="environmentDetailTab = 'services'">{{
-                      $t('opsConsole.environments.viewDistribution')
+                    <h3>{{ $t('opsConsole.environments.recentEvents') }}</h3>
+                    <el-button link @click="openEnvironmentRecords">{{
+                      $t('opsConsole.environments.allEvents')
                     }}</el-button>
                   </header>
                   <div
-                    v-for="group in foundationServiceGroups"
-                    :key="group.name"
-                    class="ops-health-row"
+                    v-for="event in selectedEnvironmentEvents"
+                    :key="event.time + event.name"
+                    class="overview-event-row"
                   >
-                    <span
-                      ><strong>{{ group.name }}</strong
-                      ><small>{{ group.description }}</small></span
-                    >
-                    <span class="ops-muted">{{ group.location }}</span>
-                    <span class="ops-status" :class="`is-${group.state}`">{{ group.label }}</span>
+                    <div>
+                      <strong>{{ opsBusinessText(event.name) }}</strong
+                      ><small>{{ event.target }}</small>
+                    </div>
+                    <span :class="`record-status-${event.result}`">{{
+                      recordResultLabel(event.result)
+                    }}</span
+                    ><time>{{ event.time }}</time>
                   </div>
+                  <p v-if="!selectedEnvironmentEvents.length" class="overview-secondary">
+                    暂无最近动态
+                  </p>
                 </section>
-                <div class="ops-overview-secondary">
-                  <section class="ops-section ops-node-section">
-                    <header>
-                      <h3>{{ $t('opsConsole.environments.nodeLoad') }}</h3>
-                      <el-button link @click="environmentDetailTab = 'nodes'">{{
-                        $t('opsConsole.environments.viewAllNodes')
-                      }}</el-button>
-                    </header>
-                    <div class="ops-node-grid">
-                      <article v-for="node in environmentNodeRows" :key="node.name">
-                        <div>
-                          <strong>{{ node.name }}</strong
-                          ><span
-                            class="ops-status"
-                            :class="
-                              node.observedStatus === 'online' ? 'is-available' : 'is-uninitialized'
-                            "
-                            >{{
-                              node.observedStatus === 'online'
-                                ? $t('opsConsole.common.online')
-                                : $t('opsConsole.common.offline')
-                            }}</span
-                          >
-                        </div>
-                        <dl class="ops-node-metrics">
-                          <div>
-                            <dt>CPU</dt>
-                            <dd>{{ node.cpu }}%</dd>
-                          </div>
-                          <div>
-                            <dt>{{ $t('opsManagement.memory') }}</dt>
-                            <dd>{{ node.memory }}%</dd>
-                          </div>
-                          <div>
-                            <dt>{{ $t('opsConsole.nodes.disk') }}</dt>
-                            <dd>{{ node.diskUsage }}%</dd>
-                          </div>
-                        </dl>
-                      </article>
-                    </div>
-                  </section>
-                  <section class="ops-section ops-recent-section">
-                    <header>
-                      <h3>{{ $t('opsConsole.environments.recentEvents') }}</h3>
-                      <el-button link @click="environmentDetailTab = 'events'">{{
-                        $t('opsConsole.environments.allEvents')
-                      }}</el-button>
-                    </header>
-                    <div
-                      v-for="event in selectedEnvironmentEvents.slice(0, 3)"
-                      :key="event.time + event.name"
-                      class="ops-event-row"
-                    >
-                      <span class="ops-event-dot" :class="{ 'is-warning': !event.success }" />
-                      <span
-                        ><strong>{{ event.name }}</strong
-                        ><small>{{ event.target }}</small></span
-                      >
-                      <small>{{ event.time }}</small>
-                    </div>
-                  </section>
-                </div>
-              </div>
+              </template>
             </section>
             <section
               v-else-if="environmentDetailTab === 'nodes'"
-              class="ops-detail-pane ops-detail-pane--table"
+              class="ops-detail-pane ops-detail-pane--table ops-dense-view"
             >
+              <div class="overview-node-toolbar">
+                <el-button
+                  size="small"
+                  :disabled="selectedEnvironment.status === 'deleting'"
+                  @click="openEnvironmentNodeDialog"
+                  >关联节点</el-button
+                >
+              </div>
               <div class="ops-detail-list ck-content-area">
                 <div class="ck-content-scroll">
                   <div class="ck-table-shell">
@@ -483,74 +487,46 @@
                         <template #default="{ row }"
                           ><div class="ops-primary-cell">
                             <strong>{{ row.name }}</strong
-                            ><small>{{ row.address }}</small>
+                            ><small>{{ row.address }}</small
+                            ><small>{{ row.roleLabel }} · 版本 {{ row.agentVersion }}</small>
                           </div></template
                         >
                       </el-table-column>
-                      <el-table-column label="CPU" width="100"
-                        ><template #default="{ row }">{{ row.cpu }}%</template></el-table-column
-                      >
-                      <el-table-column :label="$t('opsManagement.memory')" width="100"
-                        ><template #default="{ row }">{{ row.memory }}%</template></el-table-column
-                      >
-                      <el-table-column :label="$t('opsConsole.nodes.disk')" min-width="150"
-                        ><template #default="{ row }">{{
-                          $t('opsConsole.nodes.diskUsed', { value: `${row.diskUsage}%` })
-                        }}</template></el-table-column
-                      >
-                      <el-table-column
-                        :label="$t('opsConsole.nodes.agentVersion')"
-                        width="130"
-                        prop="agentVersion"
-                      />
-                      <el-table-column :label="$t('opsConsole.nodes.type')" width="130">
-                        <template #default="{ row }">{{ row.roleLabel }}</template>
-                      </el-table-column>
-                      <el-table-column :label="$t('opsConsole.nodes.foundation')" width="120">
-                        <template #default="{ row }">
-                          <span class="ops-status" :class="row.clusterStatusClass">{{
-                            row.clusterStatusLabel
-                          }}</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column :label="$t('opsConsole.nodes.timeSync')" width="150">
-                        <template #default="{ row }">
-                          <el-tooltip :content="row.timeSyncDetail" placement="top">
-                            <span class="ops-status" :class="row.timeSyncClass">{{
-                              row.timeSyncLabel
-                            }}</span>
-                          </el-tooltip>
-                        </template>
-                      </el-table-column>
-                      <el-table-column :label="$t('opsConsole.nodes.stateDetail')" min-width="190">
-                        <template #default="{ row }">{{ row.clusterMessage || '—' }}</template>
-                      </el-table-column>
-                      <el-table-column
-                        :label="$t('opsConsole.nodes.lastHeartbeat')"
-                        width="160"
-                        prop="lastHeartbeatAt"
-                      />
-                      <el-table-column :label="$t('opsConsole.common.status')" width="110"
+                      <el-table-column label="连接与运行状态" min-width="180"
                         ><template #default="{ row }"
-                          ><span
-                            class="ops-status"
-                            :class="
-                              row.observedStatus === 'online' ? 'is-available' : 'is-attention'
-                            "
-                            >{{
-                              row.observedStatus === 'online'
-                                ? $t('opsConsole.common.online')
-                                : $t('opsConsole.common.offline')
-                            }}</span
-                          ></template
-                        ></el-table-column
-                      >
+                          ><div class="ops-node-state">
+                            <span class="ops-status" :class="row.clusterStatusClass"
+                              >{{ row.observedStatus === 'online' ? '在线 · ' : ''
+                              }}{{ row.clusterStatusLabel }}</span
+                            >
+                            <el-tooltip :content="row.timeSyncDetail"
+                              ><small :class="row.timeSyncClass">{{
+                                row.timeSyncLabel
+                              }}</small></el-tooltip
+                            >
+                            <OpsMessage
+                              v-if="
+                                row.clusterStatusClass === 'is-attention' &&
+                                row.observedStatus === 'online'
+                              "
+                              :text="row.clusterMessage"
+                              kind="error"
+                            /></div></template
+                      ></el-table-column>
+                      <el-table-column label="资源 · 最近上报" min-width="210"
+                        ><template #default="{ row }"
+                          ><OpsNodeResources :node="row.node" /></template
+                      ></el-table-column>
+                      <el-table-column label="最后上报" width="160" prop="lastHeartbeatAt" />
                       <el-table-column
                         :label="$t('opsConsole.common.actions')"
-                        width="90"
+                        width="130"
                         fixed="right"
                       >
                         <template #default="{ row }">
+                          <el-button link type="primary" @click="openNodeRecords(row)"
+                            >记录</el-button
+                          >
                           <el-tooltip
                             :content="row.unassignReason"
                             :disabled="!row.unassignDisabled"
@@ -586,10 +562,10 @@
             </section>
             <section
               v-else-if="environmentDetailTab === 'services'"
-              class="ops-detail-pane ops-detail-pane--services"
+              class="ops-detail-pane ops-detail-pane--services ops-dense-view"
             >
               <div class="ops-sub-toolbar">
-                <span class="ops-muted">{{ $t('opsConsole.foundation.strategy') }}</span>
+                <span class="ops-muted">{{ foundationRows.length }} 项基础服务</span>
                 <div class="ops-toolbar__actions">
                   <template v-if="foundationAdjusting">
                     <span class="ops-muted">{{
@@ -629,7 +605,7 @@
                 <el-table :data="foundationRows" :empty-text="$t('opsConsole.foundation.empty')">
                   <el-table-column
                     :label="$t('opsConsole.foundation.service')"
-                    min-width="230"
+                    min-width="180"
                     prop="name"
                   />
                   <el-table-column
@@ -659,80 +635,25 @@
                       row.instances ? $t('opsConsole.foundation.single') : '—'
                     }}</template>
                   </el-table-column>
-                  <el-table-column :label="$t('opsConsole.common.status')" width="120">
-                    <template #default="{ row }">
-                      <span class="ops-status" :class="`is-${row.state}`">{{ row.label }}</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="$t('opsConsole.foundation.stateDetail')" min-width="220">
-                    <template #default="{ row }">
-                      <span :class="row.message ? 'ops-error-detail' : 'ops-muted'">{{
-                        row.message || '—'
-                      }}</span>
-                    </template>
-                  </el-table-column>
+                  <el-table-column :label="$t('opsConsole.common.status')" min-width="220"
+                    ><template #default="{ row }">
+                      <span
+                        class="ops-status"
+                        :class="[`is-${row.state}`, { 'is-working': row.state === 'running' }]"
+                        >{{ row.label }}</span
+                      >
+                      <OpsMessage
+                        v-if="row.state !== 'available'"
+                        :text="row.message"
+                        :kind="row.state === 'attention' ? 'error' : 'progress'"
+                      /> </template
+                  ></el-table-column>
                   <el-table-column
                     :label="$t('opsConsole.foundation.lastCheck')"
-                    width="150"
+                    width="165"
                     prop="checkedAt"
                   />
                 </el-table>
-              </div>
-            </section>
-            <section v-else class="ops-detail-pane ops-detail-pane--table">
-              <div class="ops-detail-list ck-content-area">
-                <div class="ck-content-scroll">
-                  <div class="ck-table-shell">
-                    <el-table
-                      :data="pagedEnvironmentEvents"
-                      :empty-text="$t('opsConsole.events.empty')"
-                    >
-                      <el-table-column
-                        :label="$t('opsConsole.events.time')"
-                        width="160"
-                        prop="time"
-                      />
-                      <el-table-column
-                        :label="$t('opsConsole.events.event')"
-                        min-width="220"
-                        prop="name"
-                      />
-                      <el-table-column
-                        :label="$t('opsConsole.events.target')"
-                        min-width="220"
-                        prop="target"
-                      />
-                      <el-table-column :label="$t('opsConsole.events.detail')" min-width="260">
-                        <template #default="{ row }">{{ row.message || '—' }}</template>
-                      </el-table-column>
-                      <el-table-column :label="$t('opsConsole.events.result')" width="120">
-                        <template #default="{ row }">
-                          <span
-                            class="ops-status"
-                            :class="row.success ? 'is-available' : 'is-attention'"
-                            >{{ row.result }}</span
-                          >
-                        </template>
-                      </el-table-column>
-                      <el-table-column
-                        :label="$t('opsConsole.events.operator')"
-                        width="130"
-                        prop="operator"
-                      />
-                    </el-table>
-                  </div>
-                </div>
-                <div class="ck-pagination-bar">
-                  <WorkbenchPagination
-                    :page-size-label="$t('opsConsole.pagination.perPage')"
-                    v-model:page="environmentEventPage.page"
-                    v-model:limit="environmentEventPage.limit"
-                    :total="environmentEventPage.total"
-                    :total-pages="environmentEventTotalPages"
-                    :summary="environmentEventPaginationSummary"
-                    :page-indicator="environmentEventPaginationIndicator"
-                  />
-                </div>
               </div>
             </section>
           </div>
@@ -754,7 +675,10 @@
         </div>
       </div>
 
-      <div v-else-if="canAdministerOperations && activeTab === 'nodes'" class="ops-view">
+      <div
+        v-else-if="canAdministerOperations && activeTab === 'nodes'"
+        class="ops-view ops-dense-view"
+      >
         <div class="ops-page">
           <h2 class="sr-only">{{ $t('opsConsole.sections.nodes') }}</h2>
           <div class="ops-toolbar">
@@ -779,10 +703,11 @@
               </el-select>
             </div>
             <div class="ops-toolbar__actions">
-              <span class="ops-count">{{
-                $t('opsConsole.nodes.total', { count: nodePage.total })
-              }}</span>
-              <el-button @click="packageDialog = true">{{
+              <OpsRealtimeIndicator :status="realtimeStatus" />
+              <el-button :icon="Refresh" :loading="loading.nodes" @click="loadNodes()"
+                >刷新</el-button
+              >
+              <el-button link @click="packageDialog = true">{{
                 $t('opsConsole.nodes.packages')
               }}</el-button>
               <el-button @click="enrollmentDrawer = true">{{
@@ -798,81 +723,71 @@
               <div class="ck-table-shell">
                 <el-table
                   :data="filteredNodes"
-                  v-loading="loading.nodes"
+                  v-loading="loading.nodes && !nodes.length"
                   :empty-text="$t('opsConsole.nodes.empty')"
                 >
                   <el-table-column :label="$t('opsConsole.nodes.node')" min-width="220"
                     ><template #default="{ row }"
                       ><div class="ops-primary-cell">
                         <strong>{{ row.name }}</strong
-                        ><small>{{ row.hostname || $t('opsConsole.nodes.hostPending') }}</small>
+                        ><small>{{
+                          row.ipAddress || row.hostname || $t('opsConsole.nodes.hostPending')
+                        }}</small
+                        ><small
+                          >{{ nodeTypeLabel(row) }} · 版本 {{ row.agentVersion || '—' }}</small
+                        >
                       </div></template
                     ></el-table-column
                   >
-                  <el-table-column :label="$t('opsConsole.nodes.type')" min-width="150"
-                    ><template #default="{ row }">{{
-                      nodeTypeLabel(row)
-                    }}</template></el-table-column
-                  >
-                  <el-table-column :label="$t('opsConsole.nodes.environment')" min-width="180"
+                  <el-table-column :label="$t('opsConsole.nodes.environment')" min-width="130"
                     ><template #default="{ row, $index }">{{
                       nodeEnvironmentName(row, $index)
                     }}</template></el-table-column
                   >
-                  <el-table-column :label="$t('opsConsole.nodes.resource')" min-width="210"
+                  <el-table-column label="连接与运行状态" min-width="170"
                     ><template #default="{ row }"
-                      >CPU {{ resourcePercent(row, 'cpu') }} · {{ $t('opsManagement.memory') }}
-                      {{ resourcePercent(row, 'memory') }}</template
-                    ></el-table-column
-                  >
-                  <el-table-column :label="$t('opsConsole.nodes.disk')" min-width="170"
-                    ><template #default="{ row }"
-                      ><div class="ops-primary-cell">
-                        <strong>{{
-                          $t('opsConsole.nodes.diskUsed', { value: resourcePercent(row, 'disk') })
-                        }}</strong
-                        ><small>{{ $t('opsConsole.nodes.diskHint') }}</small>
+                      ><div class="ops-node-state">
+                        <span
+                          class="ops-status"
+                          :class="
+                            row.observedStatus === 'online' ? 'is-available' : 'is-uninitialized'
+                          "
+                          >{{ lifecyclePresentation(row.observedStatus) }}</span
+                        >
+                        <small>{{
+                          row.observedStatus !== 'online'
+                            ? '运行组件待确认'
+                            : row.clusterStatus === 'ready'
+                              ? '运行组件可用'
+                              : row.clusterStatus === 'failed'
+                                ? '运行组件异常'
+                                : '运行组件待就绪'
+                        }}</small>
+                        <el-tooltip :content="timeSyncPresentation(row).detail"
+                          ><small :class="timeSyncPresentation(row).className">{{
+                            timeSyncPresentation(row).label
+                          }}</small></el-tooltip
+                        >
                       </div></template
                     ></el-table-column
                   >
-                  <el-table-column :label="$t('opsConsole.nodes.agentVersion')" width="130"
+                  <el-table-column label="资源 · 最近上报" min-width="210"
+                    ><template #default="{ row }"><OpsNodeResources :node="row" /></template
+                  ></el-table-column>
+                  <el-table-column label="最后上报" width="160"
                     ><template #default="{ row }">{{
-                      row.agentVersion || $t('opsConsole.common.notReported')
-                    }}</template></el-table-column
-                  >
-                  <el-table-column :label="$t('opsConsole.nodes.connection')" width="120"
-                    ><template #default="{ row }"
-                      ><span
-                        class="ops-status"
-                        :class="
-                          row.observedStatus === 'online' ? 'is-available' : 'is-uninitialized'
-                        "
-                        >{{ lifecyclePresentation(row.observedStatus) }}</span
-                      ></template
-                    ></el-table-column
-                  >
-                  <el-table-column :label="$t('opsConsole.nodes.timeSync')" width="150">
-                    <template #default="{ row }">
-                      <el-tooltip :content="timeSyncPresentation(row).detail" placement="top">
-                        <span class="ops-status" :class="timeSyncPresentation(row).className">{{
-                          timeSyncPresentation(row).label
-                        }}</span>
-                      </el-tooltip>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="$t('opsConsole.nodes.lastHeartbeat')" min-width="165">
-                    <template #default="{ row }">{{
                       row.lastHeartbeatAt
                         ? formatTime(row.lastHeartbeatAt)
                         : $t('opsConsole.common.notReported')
-                    }}</template>
-                  </el-table-column>
+                    }}</template></el-table-column
+                  >
                   <el-table-column
                     :label="$t('opsConsole.common.actions')"
-                    width="110"
+                    width="150"
                     fixed="right"
                   >
                     <template #default="{ row }">
+                      <el-button link type="primary" @click="openNodeRecords(row)">记录</el-button>
                       <span v-if="row.nodeKind === 'center'" class="ops-muted">{{
                         $t('opsConsole.nodes.builtIn')
                       }}</span>
@@ -880,6 +795,7 @@
                         v-else-if="row.platform === 'linux'"
                         link
                         type="danger"
+                        :loading="row.clusterDesiredAction === 'removing'"
                         :disabled="row.clusterDesiredAction === 'removing'"
                         @click="removePhysicalNode(row)"
                         >{{
@@ -902,14 +818,14 @@
                 :total-pages="pageTotal(nodePage.total, nodePage.limit)"
                 :summary="paginationSummary(nodePage.page, nodePage.limit, nodePage.total)"
                 :page-indicator="paginationIndicator(nodePage.page, nodePage.limit, nodePage.total)"
-                @change="loadNodes"
+                @change="loadNodes()"
               />
             </div>
           </div>
         </div>
       </div>
 
-      <div v-else-if="activeTab === 'deployments'" class="ops-view">
+      <div v-else-if="activeTab === 'deployments'" class="ops-view ops-dense-view">
         <div class="ops-page">
           <h2 class="sr-only">{{ $t('opsConsole.sections.deployments') }}</h2>
           <div class="ops-toolbar">
@@ -927,10 +843,15 @@
                 @keyup.enter="searchDeployments"
                 @clear="searchDeployments"
               />
-              <el-select v-model="deploymentEnvironmentFilter">
+              <el-tag
+                v-if="deploymentProjectFilter"
+                closable
+                @close="clearDeploymentProjectFilter"
+              >工程：{{ deploymentProjectFilterName || deploymentProjectFilter }}</el-tag>
+              <el-select v-if="environmentOptionTotal > 1" v-model="deploymentEnvironmentFilter">
                 <el-option :label="$t('opsConsole.deployments.allEnvironments')" value="all" />
                 <el-option
-                  v-for="environment in environments"
+                  v-for="environment in environmentOptions"
                   :key="environment.id"
                   :label="environment.name"
                   :value="environment.id"
@@ -938,10 +859,17 @@
               </el-select>
             </div>
             <div class="ops-toolbar__actions">
+              <OpsRealtimeIndicator :status="realtimeStatus" />
               <span class="ops-count">{{
                 $t('opsConsole.deployments.total', { count: deploymentDisplayTotal })
               }}</span>
-              <el-button type="primary" @click="openDeployDialog()">{{
+              <span v-if="deploymentStale" class="ops-status is-attention" role="status"
+                >状态已过期</span
+              >
+              <el-button :icon="Refresh" :loading="loading.deployments" @click="loadDeployments"
+                >刷新</el-button
+              >
+              <el-button type="primary" :disabled="!canDeploy" @click="openDeployDialog()">{{
                 $t('opsConsole.deployments.create')
               }}</el-button>
             </div>
@@ -950,63 +878,113 @@
             <div class="ck-content-scroll">
               <div class="ck-table-shell">
                 <el-table
-                  :data="filteredDeploymentRows"
-                  v-loading="loading.deployments"
+                  :data="deploymentRows"
+                  v-loading="loading.deployments && !deployments.length"
+                  row-key="id"
                   :empty-text="$t('opsConsole.deployments.empty')"
                 >
                   <el-table-column
-                    :label="$t('opsConsole.deployments.projectVersion')"
-                    min-width="230"
-                    ><template #default="{ row }"
-                      ><div class="ops-primary-cell">
-                        <strong>{{ row.projectName }}</strong
-                        ><small>{{ row.version }}</small>
-                      </div></template
-                    ></el-table-column
+                    :label="$t('opsConsole.deployments.project')"
+                    min-width="150"
+                    prop="projectName"
+                    show-overflow-tooltip
+                  />
+                  <el-table-column label="模式" width="72"
+                    ><template #default="{ row }">{{
+                      deploymentMode(row.deployment) === 'development' ? '开发' : '生产'
+                    }}</template></el-table-column
                   >
                   <el-table-column
-                    :label="$t('opsConsole.deployments.environment')"
-                    min-width="180"
-                    prop="environmentName"
+                    label="发布版本"
+                    min-width="100"
+                    prop="version"
+                    show-overflow-tooltip
                   />
                   <el-table-column
-                    :label="$t('opsConsole.deployments.runtimeEngines')"
-                    min-width="280"
+                    v-if="environmentOptionTotal > 1"
+                    :label="$t('opsConsole.deployments.environment')"
+                    min-width="120"
+                    prop="environmentName"
+                  />
+                  <el-table-column :label="$t('opsConsole.deployments.state')" min-width="160"
                     ><template #default="{ row }"
-                      ><div class="ops-engine-tags">
-                        <el-tag
-                          v-for="service in row.services"
-                          :key="service"
-                          size="small"
-                          effect="plain"
-                          >{{ service }}</el-tag
-                        >
-                      </div></template
+                      ><span
+                        class="ops-status"
+                        :class="[row.statusClass, { 'is-working': deploymentBusy(row.deployment) }]"
+                        >{{ row.status }}</span
+                      ></template
                     ></el-table-column
                   >
-                  <el-table-column :label="$t('opsConsole.deployments.state')" width="130"
-                    ><template #default="{ row }"
-                      ><span class="ops-status" :class="row.statusClass">{{
-                        row.status
-                      }}</span></template
-                    ></el-table-column
-                  >
-                  <el-table-column :label="$t('opsConsole.deployments.latest')" min-width="190"
+                  <el-table-column label="端口" width="95"
+                    ><template #default="{ row }">
+                      {{ row.deployment.accessPort || '--' }}
+                      <a
+                        v-if="deploymentAccessUrl(row.deployment)"
+                        :href="deploymentAccessUrl(row.deployment)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        :aria-label="`打开${row.projectName}`"
+                        title="打开工程"
+                        class="ops-access-link"
+                        ><el-icon><TopRight /></el-icon
+                      ></a> </template
+                  ></el-table-column>
+                  <el-table-column label="更新时间" width="165"
                     ><template #default="{ row }"
                       ><div class="ops-primary-cell">
-                        <strong>{{ row.updatedAt }}</strong
-                        ><small>{{ row.status }}</small>
+                        <span>{{ row.updatedAt }}</span>
                       </div></template
                     ></el-table-column
                   >
                   <el-table-column
                     :label="$t('opsConsole.common.actions')"
-                    width="100"
+                    width="236"
                     fixed="right"
                     ><template #default="{ row }"
-                      ><el-button link type="primary" @click="openDeploymentRow(row)">{{
-                        $t('opsConsole.common.details')
-                      }}</el-button></template
+                      ><div class="ops-row-actions">
+                        <el-button
+                          link
+                          type="primary"
+                          :loading="
+                            deploymentOperations[row.id] ===
+                            (row.deployment.observedStatus === 'running' ? 'stop' : 'start')
+                          "
+                          :disabled="
+                            !canRunAction(
+                              row,
+                              row.deployment.observedStatus === 'running' ? 'stop' : 'start',
+                            )
+                          "
+                          @click="
+                            operateDeploymentRow(
+                              row,
+                              row.deployment.observedStatus === 'running' ? 'stop' : 'start',
+                            )
+                          "
+                          >{{
+                            row.deployment.observedStatus === 'running' ? '停止' : '启动'
+                          }}</el-button
+                        >
+                        <el-button
+                          link
+                          type="primary"
+                          :loading="deploymentOperations[row.id] === 'restart'"
+                          :disabled="!canRunAction(row, 'restart')"
+                          @click="operateDeploymentRow(row, 'restart')"
+                          >重启</el-button
+                        >
+                        <el-button
+                          link
+                          type="primary"
+                          :loading="deploymentOperations[row.id] === 'redeploy'"
+                          :disabled="!canRunAction(row, 'redeploy')"
+                          @click="operateDeploymentRow(row, 'redeploy')"
+                          >重新部署</el-button
+                        >
+                        <el-button link type="primary" @click="openDeploymentRow(row)">{{
+                          $t('opsConsole.common.details')
+                        }}</el-button>
+                      </div></template
                     ></el-table-column
                   >
                 </el-table>
@@ -1041,117 +1019,21 @@
       </div>
 
       <div v-else class="ops-view">
-        <div class="ops-page">
-          <h2 class="sr-only">{{ $t('opsConsole.sections.tasks') }}</h2>
-          <div class="ops-toolbar">
-            <div class="ops-toolbar__filters">
-              <OpsSectionSwitcher
-                :model-value="activeTab"
-                :can-administer-operations="canAdministerOperations"
-                @update:model-value="switchSection"
-              />
-              <span class="ops-toolbar__divider" />
-              <el-input
-                v-model="taskKeyword"
-                clearable
-                :placeholder="$t('opsConsole.tasks.searchPlaceholder')"
-              />
-              <el-select v-model="taskTypeFilter">
-                <el-option :label="$t('opsConsole.tasks.allTypes')" value="all" />
-                <el-option
-                  :label="$t('opsConsole.tasks.environmentInit')"
-                  value="environment-init"
-                />
-                <el-option
-                  :label="$t('opsConsole.tasks.foundationDeploy')"
-                  value="foundation-deploy"
-                />
-                <el-option :label="$t('opsConsole.tasks.projectDeploy')" value="project-deploy" />
-              </el-select>
-            </div>
-            <div class="ops-toolbar__actions">
-              <span class="ops-count">{{
-                $t('opsConsole.tasks.summary', { active: activeTaskCount, failed: failedTaskCount })
-              }}</span
-              ><el-button @click="loadDashboard">{{ $t('opsConsole.common.refresh') }}</el-button>
-            </div>
-          </div>
-          <div class="ops-list-panel ck-content-area">
-            <div class="ck-content-scroll">
-              <div class="ck-table-shell">
-                <el-table :data="pagedTasks" :empty-text="$t('opsConsole.tasks.empty')">
-                  <el-table-column :label="$t('opsConsole.tasks.task')" min-width="240"
-                    ><template #default="{ row }"
-                      ><div class="ops-primary-cell">
-                        <strong>{{ row.name }}</strong
-                        ><small>{{ taskTypeLabel(row.type) }}</small>
-                      </div></template
-                    ></el-table-column
-                  >
-                  <el-table-column
-                    :label="$t('opsConsole.tasks.target')"
-                    min-width="200"
-                    prop="target"
-                  />
-                  <el-table-column :label="$t('opsConsole.tasks.currentStep')" min-width="250"
-                    ><template #default="{ row }"
-                      ><el-progress
-                        v-if="row.status === 'active'"
-                        :percentage="row.progress"
-                      /><span v-else>{{ row.step }}</span></template
-                    ></el-table-column
-                  >
-                  <el-table-column :label="$t('opsConsole.common.status')" width="120"
-                    ><template #default="{ row }"
-                      ><span
-                        class="ops-status"
-                        :class="
-                          row.status === 'completed'
-                            ? 'is-available'
-                            : row.status === 'failed'
-                              ? 'is-attention'
-                              : 'is-running'
-                        "
-                        >{{ taskStatusLabel(row.status) }}</span
-                      ></template
-                    ></el-table-column
-                  >
-                  <el-table-column
-                    :label="$t('opsConsole.tasks.initiator')"
-                    width="130"
-                    prop="operator"
-                  />
-                  <el-table-column
-                    :label="$t('opsConsole.tasks.startedAt')"
-                    width="150"
-                    prop="startedAt"
-                  />
-                  <el-table-column
-                    :label="$t('opsConsole.common.actions')"
-                    width="120"
-                    fixed="right"
-                    ><template #default
-                      ><el-button link type="primary">{{
-                        $t('opsConsole.tasks.viewRecord')
-                      }}</el-button></template
-                    ></el-table-column
-                  >
-                </el-table>
-              </div>
-            </div>
-            <div class="ck-pagination-bar">
-              <WorkbenchPagination
-                :page-size-label="$t('opsConsole.pagination.perPage')"
-                v-model:page="taskPage.page"
-                v-model:limit="taskPage.limit"
-                :total="filteredTasks.length"
-                :total-pages="taskTotalPages"
-                :summary="taskPaginationSummary"
-                :page-indicator="taskPaginationIndicator"
-              />
-            </div>
-          </div>
-        </div>
+        <OpsRecords
+          :active="props.isActive && pageVisible && activeTab === 'records'"
+          :environment-id="recordEnvironmentId"
+          :object-id="recordObject.id"
+          :object-type="recordObject.type"
+          :object-name="recordObject.name"
+          :environments="environmentOptions"
+        >
+          <template #switcher
+            ><OpsSectionSwitcher
+              :model-value="activeTab"
+              :can-administer-operations="canAdministerOperations"
+              @update:model-value="switchSection"
+          /></template>
+        </OpsRecords>
       </div>
     </main>
 
@@ -1465,7 +1347,7 @@
     >
       <el-table
         :data="enrollments"
-        v-loading="loading.enrollments"
+        v-loading="loading.enrollments && !enrollments.length"
         :empty-text="$t('opsConsole.nodes.noRequests')"
       >
         <el-table-column :label="$t('opsConsole.nodes.node')" min-width="180"
@@ -1510,7 +1392,7 @@
         v-model:page="enrollmentPage.page"
         v-model:limit="enrollmentPage.limit"
         :total="enrollmentPage.total"
-        @change="loadEnrollments"
+        @change="loadEnrollments()"
       />
     </el-drawer>
 
@@ -1572,7 +1454,7 @@
           /></el-select>
         </div>
         <p v-if="deployForm.mode === 'development'" class="ops-deployment-mode-hint">
-          开发模式使用服务端固定的开发快照，不需要选择版本。
+          使用当前工程内容构建开发快照，不需要选择发布版本；提交后将替换该工程在所选环境的当前部署。
         </p>
         <div v-if="deployForm.mode === 'production'" class="ops-deployment-field">
           <label>{{ $t('opsConsole.deployments.releasedVersion') }}</label>
@@ -1673,76 +1555,153 @@
 
     <el-drawer
       v-model="deploymentDrawer"
-      :title="$t('opsConsole.deployments.detailTitle')"
-      size="min(640px, 92vw)"
+      append-to-body
+      :title="selectedDeploymentRow?.projectName || '部署详情'"
+      size="min(720px, 94vw)"
+      class="ops-deployment-drawer"
     >
       <template v-if="selectedDeploymentRow">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item :label="$t('opsConsole.deployments.project')">{{
-            selectedDeploymentRow.projectName
-          }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('opsConsole.deployments.version')">{{
-            selectedDeploymentRow.version
-          }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('opsConsole.deployments.environment')">{{
-            selectedDeploymentRow.environmentName
-          }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('opsConsole.common.status')"
-            ><span class="ops-status" :class="selectedDeploymentRow.statusClass">{{
-              selectedDeploymentRow.status
-            }}</span></el-descriptions-item
-          >
-          <el-descriptions-item :label="$t('opsConsole.deployments.runtimeEngines')" :span="2">{{
-            selectedDeploymentRow.services.join('、')
-          }}</el-descriptions-item>
-        </el-descriptions>
+        <dl class="deployment-meta">
+          <div>
+            <dt>状态</dt>
+            <dd>
+              <span class="ops-status" :class="selectedDeploymentRow.statusClass">{{
+                deploymentBusy(selectedDeploymentRow.deployment)
+                  ? selectedDeploymentRow.deployment.desiredStatus === 'stopped'
+                    ? '停止中'
+                    : '执行中'
+                  : selectedDeploymentRow.status
+              }}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>模式 / 版本</dt>
+            <dd>
+              {{
+                deploymentMode(selectedDeploymentRow.deployment) === 'development' ? '开发' : '生产'
+              }}
+              · {{ selectedDeploymentRow.version }}
+            </dd>
+          </div>
+          <div>
+            <dt>运行环境</dt>
+            <dd>{{ selectedDeploymentRow.environmentName }}</dd>
+          </div>
+          <div>
+            <dt>访问端口</dt>
+            <dd>
+              {{ selectedDeploymentRow.deployment.accessPort || '—'
+              }}<a
+                v-if="deploymentAccessUrl(selectedDeploymentRow.deployment)"
+                :href="deploymentAccessUrl(selectedDeploymentRow.deployment)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="ops-access-link"
+                >打开工程 <el-icon><TopRight /></el-icon></a
+              ><span v-else class="ops-muted"> · 入口尚未就绪</span>
+            </dd>
+          </div>
+        </dl>
         <div class="ops-drawer-actions">
           <el-button
             size="small"
-            :loading="deploymentOperation === 'start'"
-            :disabled="Boolean(deploymentOperation) || !canStartDeployment"
-            @click="operateSelectedDeployment('start')"
-            >启动</el-button
+            :loading="['start', 'stop'].includes(deploymentOperations[selectedDeploymentRow.id])"
+            :disabled="
+              !canRunAction(
+                selectedDeploymentRow,
+                selectedDeploymentRow.deployment.observedStatus === 'running' ? 'stop' : 'start',
+              )
+            "
+            @click="
+              operateDeploymentRow(
+                selectedDeploymentRow,
+                selectedDeploymentRow.deployment.observedStatus === 'running' ? 'stop' : 'start',
+              )
+            "
+            >{{
+              selectedDeploymentRow.deployment.observedStatus === 'running' ? '停止' : '启动'
+            }}</el-button
           >
           <el-button
             size="small"
-            :loading="deploymentOperation === 'restart'"
-            :disabled="Boolean(deploymentOperation) || !deploymentRunning"
-            @click="operateSelectedDeployment('restart')"
-            >重新启动</el-button
+            :loading="deploymentOperations[selectedDeploymentRow.id] === 'restart'"
+            :disabled="!canRunAction(selectedDeploymentRow, 'restart')"
+            @click="operateDeploymentRow(selectedDeploymentRow, 'restart')"
+            >重启</el-button
           >
           <el-button
             size="small"
-            type="danger"
-            plain
-            :loading="deploymentOperation === 'stop'"
-            :disabled="Boolean(deploymentOperation) || !deploymentRunning"
-            @click="operateSelectedDeployment('stop')"
-            >停止</el-button
+            :loading="deploymentOperations[selectedDeploymentRow.id] === 'redeploy'"
+            :disabled="!canRunAction(selectedDeploymentRow, 'redeploy')"
+            @click="operateDeploymentRow(selectedDeploymentRow, 'redeploy')"
+            >重新部署</el-button
           >
           <el-button
             size="small"
-            type="danger"
-            :loading="deploymentOperation === 'delete'"
-            :disabled="Boolean(deploymentOperation)"
-            @click="deleteSelectedDeployment"
-            >删除部署</el-button
+            type="primary"
+            :disabled="!canRunAction(selectedDeploymentRow, 'redeploy')"
+            @click="openUpdateDeployment(selectedDeploymentRow)"
+            >更新部署</el-button
+          >
+          <span class="deployment-danger-action"
+            ><el-button
+              size="small"
+              link
+              type="danger"
+              :loading="deploymentOperations[selectedDeploymentRow.id] === 'delete'"
+              :disabled="!canRunAction(selectedDeploymentRow, 'delete')"
+              @click="deleteSelectedDeployment"
+              >删除部署</el-button
+            ></span
           >
         </div>
-        <h3 class="ops-drawer-heading">{{ $t('opsConsole.deployments.latestDeployment') }}</h3>
-        <el-steps
-          direction="vertical"
-          :active="selectedDeploymentDetail.active"
-          finish-status="success"
-          :process-status="selectedDeploymentDetail.processStatus"
+        <el-alert
+          v-if="deploymentStale"
+          title="状态已过期，正在等待重新同步"
+          type="warning"
+          :closable="false"
+        />
+        <p
+          v-if="deploymentBusy(selectedDeploymentRow.deployment)"
+          class="deployment-current-phase"
+          role="status"
         >
-          <el-step
-            v-for="step in selectedDeploymentDetail.steps"
-            :key="step.title"
-            :title="step.title"
-            :description="step.description"
-          />
-        </el-steps>
+          {{ deploymentProgressLabel(selectedDeploymentRow.deployment) }}
+        </p>
+        <h3 class="ops-drawer-heading">运行引擎</h3>
+        <el-table :data="selectedDeploymentRow.deployment.services || []" size="small">
+          <el-table-column label="引擎" width="90"
+            ><template #default="{ row }">{{
+              engineName(row.serviceType)
+            }}</template></el-table-column
+          >
+          <el-table-column label="节点" min-width="100"
+            ><template #default="{ row }">{{
+              row.nodeName || row.nodeId || '—'
+            }}</template></el-table-column
+          >
+          <el-table-column label="状态" width="85"
+            ><template #default="{ row }"
+              ><span :class="'deployment-engine-' + deploymentEnginePresentation(row).state">{{
+                deploymentEnginePresentation(row).label
+              }}</span></template
+            ></el-table-column
+          >
+          <el-table-column label="状态说明" min-width="190"
+            ><template #default="{ row }">
+              <OpsMessage
+                :text="deploymentEnginePresentation(row).technical"
+                :summary="deploymentEnginePresentation(row).summary"
+              /> </template
+          ></el-table-column>
+        </el-table>
+        <DeploymentRunHistory
+          :key="selectedDeploymentRow.id"
+          :deployment-id="selectedDeploymentRow.id"
+          :latest-run-id="selectedDeploymentRow.deployment.latestRunId"
+          :revision="deploymentHistoryRevision"
+          :active="deploymentDrawer && props.isActive && pageVisible"
+        />
       </template>
     </el-drawer>
   </section>
@@ -1750,8 +1709,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { deploymentNavigation } from './project-management/project-deployment-navigation'
 import { useI18n } from 'vue-i18n'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, Refresh, TopRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import WorkbenchPagination from '@/components/WorkbenchPagination.vue'
 import { projectAPI } from '@/api/project.api'
@@ -1765,22 +1725,39 @@ import {
   type NodePackage,
   type OpsNode,
   type ProjectDeployment,
+  type OpsDeploymentAction,
   type RuntimeEnvironment as ApiRuntimeEnvironment,
-  type RuntimeEnvironmentEvent as ApiRuntimeEnvironmentEvent,
+  type RuntimeEnvironmentOverview,
   type RuntimeEnvironmentService,
   type FoundationServiceType,
 } from '@/api/ops.api'
 import { formatDateTime } from '@/utils/date'
+import OpsRealtimeIndicator from './components/OpsRealtimeIndicator.vue'
+import OpsRecords from './components/OpsRecords.vue'
+import OpsMessage from './components/OpsMessage.vue'
+import OpsNodeResources from './components/OpsNodeResources.vue'
+import { nodeResourcePercent } from '@/utils/node-resources'
+import { opsBusinessText, opsMessageSummary } from './utils/ops-business'
+import DeploymentRunHistory from './components/DeploymentRunHistory.vue'
+import { deploymentEnginePresentation } from './utils/deployment-details'
+import { createOpsRealtimeMonitor, type OpsTopic } from '@/utils/ops-realtime'
+import {
+  canOperateDeployment,
+  deploymentAccessUrl,
+  deploymentBusy,
+  deploymentProgressLabel,
+  deploymentMode,
+  deploymentReplacementMessage,
+} from './utils/deployment-interaction'
 import {
   enrollmentCapabilities,
   enrollmentInstallCommand,
-  deploymentDetailPresentation,
   lifecyclePresentation,
   validateEnrollmentServerUrl,
 } from './utils/ops-presentation'
 
 type EnvironmentStatus = 'available' | 'attention' | 'uninitialized' | 'deleting'
-type EnvironmentDetailSection = 'overview' | 'nodes' | 'services' | 'events'
+type EnvironmentDetailSection = 'overview' | 'nodes' | 'services'
 interface RuntimeEnvironment {
   id: string
   name: string
@@ -1793,6 +1770,7 @@ interface RuntimeEnvironment {
   foundationHealthy: number
   foundationTotal: number
   projectCount: number
+  runningDeploymentCount: number
   recentChange: string
   recentAt: string
   recentBy: string
@@ -1806,17 +1784,6 @@ interface EnvironmentEvent {
   result: string
   success: boolean
   message: string
-}
-interface TaskRow {
-  id: string
-  name: string
-  type: string
-  target: string
-  step: string
-  progress: number
-  status: 'active' | 'failed' | 'completed'
-  operator: string
-  startedAt: string
 }
 interface DeploymentRow {
   id: string
@@ -1844,7 +1811,9 @@ interface PageState {
 
 const createPageState = (): PageState => ({ page: 1, limit: 10, total: 0, keyword: '' })
 const { t, locale } = useI18n()
+const props = withDefaults(defineProps<{ isActive?: boolean }>(), { isActive: true })
 const authStore = useAuthStore()
+const canDeploy = computed(() => can(authStore.userInfo?.role, 'deploy:execute'))
 const canAdministerOperations = computed(() => can(authStore.userInfo?.role, 'runtime:operate'))
 const activeTab = ref<OpsSection>(canAdministerOperations.value ? 'environments' : 'deployments')
 const environmentDetailTab = ref<EnvironmentDetailSection>('overview')
@@ -1857,14 +1826,15 @@ const environmentDetailSections = computed<
   { label: t('opsConsole.environments.overview'), value: 'overview' },
   { label: t('opsConsole.sections.nodes'), value: 'nodes' },
   { label: t('opsConsole.environments.foundations'), value: 'services' },
-  { label: t('opsConsole.environments.events'), value: 'events' },
 ])
 const environmentKeyword = ref('')
 const environmentStatus = ref<'all' | EnvironmentStatus>('all')
 const nodeTypeFilter = ref<'all' | 'linux' | 'windows'>('all')
 const deploymentEnvironmentFilter = ref('all')
-const taskKeyword = ref('')
-const taskTypeFilter = ref('all')
+const deploymentProjectFilter = ref('')
+const deploymentProjectFilterName = ref('')
+const recordEnvironmentId = ref('')
+const recordObject = reactive({ id: '', type: '', name: '' })
 const selectedEnvironmentId = ref('')
 const environmentManagementMode = ref(false)
 const environmentDialog = ref(false)
@@ -1885,25 +1855,26 @@ const deployDialog = ref(false)
 const deploymentDrawer = ref(false)
 const submittingEnrollment = ref(false)
 const submittingDeployment = ref(false)
-const deploymentOperation = ref<'start' | 'restart' | 'stop' | 'delete' | ''>('')
+const deploymentOperations = reactive<Record<string, OpsDeploymentAction | 'delete'>>({})
+const submittedDeploymentRuns = new Map<string, string>()
+const deploymentStale = ref(false)
+const realtimeStatus = ref<'connecting' | 'online' | 'offline' | 'stale' | 'forbidden'>(
+  'connecting',
+)
+const initialSnapshotComplete = ref(false)
+const deploymentHistoryRevision = ref(0)
+let deploymentRevision = 0
+const pageVisible = ref(document.visibilityState !== 'hidden')
 const downloadingPackageId = ref('')
 const enrollmentCode = ref('')
 const enrollmentServerUrl = ref('')
 const createdEnrollment = ref<NodeEnrollment | null>(null)
 const selectedDeploymentRow = ref<DeploymentRow | null>(null)
-const deploymentRunning = computed(
-  () => selectedDeploymentRow.value?.deployment.observedStatus === 'running',
-)
-const canStartDeployment = computed(() =>
-  ['stopped', 'failed'].includes(selectedDeploymentRow.value?.deployment.observedStatus || ''),
-)
 const nodePage = reactive(createPageState())
 const deploymentPage = reactive(createPageState())
 const enrollmentPage = reactive(createPageState())
 const environmentPage = reactive(createPageState())
 const environmentNodePage = reactive(createPageState())
-const environmentEventPage = reactive(createPageState())
-const taskPage = reactive({ page: 1, limit: 10 })
 const loading = reactive({
   environments: false,
   environmentNodes: false,
@@ -1915,6 +1886,14 @@ const loading = reactive({
 })
 const nodes = ref<OpsNode[]>([])
 const environmentNodes = ref<OpsNode[]>([])
+const overview = ref<RuntimeEnvironmentOverview | null>(null)
+const overviewError = ref(false)
+watch(selectedEnvironmentId, (id) => {
+  if (overview.value?.environmentId !== id) {
+    overview.value = null
+    overviewError.value = false
+  }
+})
 const deployments = ref<ProjectDeployment[]>([])
 const enrollments = ref<NodeEnrollment[]>([])
 const packages = ref<NodePackage[]>([])
@@ -1927,14 +1906,10 @@ const projectLoading = ref(false)
 const versionLoading = ref(false)
 let disposed = false
 let lastExternalDeployRequestId = ''
-let environmentReconcileTimer: number | undefined
 
 const environments = ref<RuntimeEnvironment[]>([])
 const environmentOptions = ref<RuntimeEnvironment[]>([])
 const environmentOptionTotal = ref(0)
-// 运维任务只展示后端产生的真实任务。环境初始化当前通过环境事件审计，工程
-// 按运行环境部署尚未交付，因此不能用前端定时器或静态行伪造执行进度。
-const tasks = ref<TaskRow[]>([])
 const foundationDefinitions: Array<{ type: FoundationServiceType; name: string }> = [
   { type: 'if_realtime', name: '' },
   { type: 'if_history', name: '' },
@@ -1995,11 +1970,6 @@ const selectedEnvironment = computed(
     environments.value.find((item) => item.id === selectedEnvironmentId.value) ||
     null,
 )
-const environmentHeading = computed(() =>
-  environmentOptionTotal.value > 1
-    ? selectedEnvironment.value?.name || ''
-    : t('opsConsole.environments.defaultOverview'),
-)
 const availableEnvironments = computed(() =>
   environmentOptions.value.filter((item) => item.status === 'available'),
 )
@@ -2050,6 +2020,7 @@ const environmentNodeRows = computed(() =>
               })
             : ''
     return {
+      node,
       id: node.id,
       name: node.name,
       address: `${node.ipAddress || t('opsConsole.nodes.addressPending')} · ${node.platform} ${node.architecture || ''}`,
@@ -2100,7 +2071,8 @@ const foundationRows = computed(() => {
     const name = t(`opsConsole.foundation.services.${type}`)
     const service = foundationServices.value.find((item) => item.serviceType === type)
     const deployed = Boolean(service)
-    const isHealthy = service?.observedStatus === 'running'
+    const isStale = service?.observedStatus === 'running' && service.observedStale
+    const isHealthy = service?.observedStatus === 'running' && service.observedStale === false
     const isUnhealthy = deployed && !isHealthy && service?.observedStatus !== 'pending'
     const isDeploying = deployed && service?.observedStatus === 'pending'
     return {
@@ -2121,15 +2093,19 @@ const foundationRows = computed(() => {
         ? t('opsConsole.common.undeployed')
         : isDeploying
           ? t('opsConsole.common.deploying')
-          : isUnhealthy
-            ? t('opsConsole.common.abnormal')
-            : t('opsConsole.common.healthy'),
+          : isStale
+            ? '观测已过期'
+            : isUnhealthy
+              ? t('opsConsole.common.abnormal')
+              : t('opsConsole.common.healthy'),
       checkedAt: service?.observedAt
         ? formatDateTime(service.observedAt)
         : deployed
           ? t('opsConsole.foundation.firstCheck')
           : '—',
-      message: service?.lastMessage || '',
+      message: isStale
+        ? '中心尚未收到有效的新观测，当前运行状态不能确认。'
+        : service?.lastMessage || '',
     }
   })
 })
@@ -2137,22 +2113,22 @@ const foundationServiceGroups = computed(() => {
   const groups = [
     {
       name: t('opsConsole.foundation.storage'),
-      description: serviceNames.value.slice(0, 5).join(' / '),
-      names: serviceNames.value.slice(0, 5),
+      description: '实时、历史、时序、消息与对象数据',
+      types: ['if_realtime', 'if_history', 'if_timeseries', 'if_message', 'if_object'],
     },
     {
       name: t('opsConsole.foundation.bus'),
-      description: 'NATS JetStream',
-      names: ['NATS JetStream'],
+      description: '服务间消息传递',
+      types: ['nats_jetstream'],
     },
     {
       name: t('opsConsole.foundation.entry'),
-      description: 'Nginx / Traefik',
-      names: ['Nginx', 'Traefik'],
+      description: '页面服务 / 访问路由',
+      types: ['nginx', 'traefik'],
     },
   ]
   return groups.map((group) => {
-    const rows = foundationRows.value.filter((item) => group.names.includes(item.name))
+    const rows = foundationRows.value.filter((item) => group.types.includes(item.type))
     const healthy = rows.filter((item) => item.state === 'available').length
     const deployed = rows.filter((item) => item.state !== 'uninitialized').length
     const deploying = rows.some((item) => item.state === 'running')
@@ -2184,11 +2160,6 @@ const foundationServiceGroups = computed(() => {
     }
   })
 })
-const environmentMaxDiskUsage = computed(() =>
-  environmentNodeRows.value.length
-    ? Math.max(...environmentNodeRows.value.map((item) => item.diskUsage))
-    : 0,
-)
 const environmentSetupTitle = computed(() =>
   selectedEnvironment.value?.nodeCount
     ? t('opsConsole.environments.setupWithNodes')
@@ -2201,42 +2172,110 @@ const environmentSetupAction = computed(() => {
     ? t('opsConsole.environments.viewFoundation')
     : t('opsConsole.environments.deployFoundation')
 })
-const environmentProblems = computed(() => {
-  const offlineNodes = environmentNodeRows.value
-    .filter(
-      (node) => node.observedStatus !== 'online' || node.clusterStatusClass === 'is-attention',
-    )
-    .map((node) => ({
-      name: node.name,
-      message: node.clusterMessage || t('opsConsole.nodes.offlineOrFoundation'),
-    }))
-  const failedServices = foundationRows.value
-    .filter((service) => service.state === 'attention')
-    .map((service) => ({
-      name: service.name,
-      message: service.message || t('opsConsole.foundation.healthFailed'),
-    }))
-  return [...offlineNodes, ...failedServices]
-})
-const foundationDeploying = computed(
-  () =>
-    foundationServices.value.length > 0 &&
-    foundationServices.value.some((service) => service.observedStatus === 'pending'),
+const foundationFaultCount = computed(
+  () => foundationRows.value.filter((row) => row.state === 'attention').length,
 )
-const environmentProblemTitle = computed(
-  () => environmentProblems.value[0]?.name || t('opsConsole.environments.genericIssue'),
-)
-const environmentProblemDescription = computed(() => {
-  const first = environmentProblems.value[0]
-  if (!first) return t('opsConsole.environments.retryAfterRefresh')
-  const more =
-    environmentProblems.value.length > 1
-      ? t('opsConsole.environments.additionalIssues', {
-          count: environmentProblems.value.length - 1,
-        })
-      : ''
-  return t('opsConsole.environments.issueBlock', { message: `${first.message}${more}` })
+type OverviewNode = RuntimeEnvironmentOverview['riskNodes'][number]
+const overallEnvironmentState = computed(() => {
+  if (overviewError.value || realtimeStatus.value !== 'online')
+    return { label: overviewError.value ? '数据更新中断' : '待同步', className: 'is-uninitialized' }
+  const environment = selectedEnvironment.value
+  if (!environment) return { label: '待确认', className: 'is-uninitialized' }
+  if (['deleting', 'uninitialized'].includes(environment.status))
+    return {
+      label: environmentStatusLabel(environment.status),
+      className: `is-${environment.status}`,
+    }
+  const snapshot = environmentDetailTab.value === 'overview' ? overview.value : null
+  if (
+    snapshot &&
+    (snapshot.nodes.offline ||
+      snapshot.nodes.fault ||
+      snapshot.deployments.failed ||
+      foundationFaultCount.value)
+  )
+    return { label: '存在运行异常', className: 'is-attention' }
+  if (
+    snapshot &&
+    (snapshot.nodes.staleMetrics ||
+      snapshot.nodes.unknownMetrics ||
+      snapshot.deployments.stale ||
+      snapshot.deployments.unknown)
+  )
+    return { label: '状态待确认', className: 'is-uninitialized' }
+  if (snapshot?.riskNodes.some((node) => node.health === 'pending'))
+    return { label: '准备运行组件', className: 'is-running' }
+  return {
+    label: environmentStatusLabel(environment.status),
+    className: `is-${environment.status}`,
+  }
 })
+function overviewMetric(
+  node: OverviewNode,
+  metric: 'cpuPercent' | 'memoryPercent' | 'diskPercent',
+) {
+  const value = node[metric]
+  return node.metricsStale || node.observedStatus !== 'online' || value == null
+    ? null
+    : metric === 'diskPercent'
+      ? overviewDiskPercent(value)
+      : Math.round(Math.max(0, Math.min(100, value)))
+}
+function overviewDiskPercent(value: number) {
+  // 磁盘显示截取两位，避免向上舍入跨过容量阈值，与后端风险状态冲突。
+  return Math.trunc(Math.max(0, Math.min(100, value)) * 100) / 100
+}
+function overviewNodeHealth(node: OverviewNode) {
+  return {
+    offline: '未连接',
+    failed: '运行异常',
+    stale: '指标过期',
+    capacity_critical: '容量紧张',
+    capacity_attention: '容量关注',
+    unknown: '状态待确认',
+    pending: '准备运行组件',
+    healthy: '在线',
+  }[node.health]
+}
+function recordResultLabel(status: string) {
+  return (
+    (
+      {
+        accepted: '已受理',
+        running: '执行中',
+        success: '成功',
+        failed: '失败',
+        warning: '异常',
+        recovered: '已恢复',
+        info: '记录',
+      } as Record<string, string>
+    )[status] || '待确认'
+  )
+}
+function openOverviewNodes() {
+  environmentNodePage.page = 1
+  environmentDetailTab.value = 'nodes'
+  void loadEnvironmentNodes(selectedEnvironmentId.value)
+}
+function openOverviewDeployments() {
+  deploymentEnvironmentFilter.value = selectedEnvironmentId.value
+  deploymentPage.page = 1
+  activeTab.value = 'deployments'
+  void loadDeployments()
+}
+async function loadOverview(environmentId: string, signal?: AbortSignal) {
+  const current = snapshotGuard('overview', signal, () => selectedEnvironmentId.value)
+  try {
+    const result = await opsAPI.getRuntimeEnvironmentOverview(environmentId, signal)
+    if (current() && selectedEnvironmentId.value === environmentId) {
+      overview.value = result
+      overviewError.value = false
+    }
+  } catch (error) {
+    if (current()) overviewError.value = true
+    throw error
+  }
+}
 const selectedEnvironmentEvents = computed(() =>
   environmentEvents.value.filter((item) => item.environmentId === selectedEnvironment.value?.id),
 )
@@ -2252,24 +2291,6 @@ const environmentNodePaginationIndicator = computed(() =>
     environmentNodePage.page,
     environmentNodePage.limit,
     environmentNodePage.total,
-  ),
-)
-const pagedEnvironmentEvents = computed(() => selectedEnvironmentEvents.value)
-const environmentEventTotalPages = computed(() =>
-  pageTotal(environmentEventPage.total, environmentEventPage.limit),
-)
-const environmentEventPaginationSummary = computed(() =>
-  paginationSummary(
-    environmentEventPage.page,
-    environmentEventPage.limit,
-    environmentEventPage.total,
-  ),
-)
-const environmentEventPaginationIndicator = computed(() =>
-  paginationIndicator(
-    environmentEventPage.page,
-    environmentEventPage.limit,
-    environmentEventPage.total,
   ),
 )
 const foundationDistribution = computed(() => {
@@ -2302,82 +2323,39 @@ const foundationDeployDisabled = computed(
     ),
 )
 const isFoundationRepair = computed(() => (selectedEnvironment.value?.foundationTotal || 0) > 0)
-const selectedDeploymentDetail = computed(() =>
-  deploymentDetailPresentation(selectedDeploymentRow.value?.deployment),
-)
-const deploymentRows = computed<DeploymentRow[]>(() =>
-  deployments.value.map((item) => {
-    const failed = item.observedStatus === 'failed' || item.entryStatus === 'failed'
-    const running = item.observedStatus === 'running' && !failed
-    return {
-      id: item.id,
-      projectName: item.projectName,
-      version: item.version || item.applicationVersionId || '--',
-      environmentId: item.environmentId || '',
-      environmentName:
-        item.environmentName ||
-        t('opsConsole.deployments.legacyNode', { name: item.nodeName || item.nodeId || '--' }),
-      services: item.services?.map((service) => {
-        const labels: Record<string, string> = {
-          base: t('opsConsole.deployments.baseEngine'),
-          compute: t('opsConsole.deployments.computeEngine'),
-          alarm: t('opsConsole.deployments.alarmEngine'),
-          collector: t('opsConsole.deployments.collectionEngine'),
-        }
-        return labels[service.serviceType] || service.serviceType
-      }) || [t('opsConsole.deployments.baseEngine')],
-      status: running
-        ? t('opsConsole.common.running')
-        : failed
-          ? t('opsConsole.common.failed')
-          : item.observedStatus === 'stopped'
-            ? t('opsConsole.common.stopped')
-            : t('opsConsole.common.pending'),
-      statusClass: running ? 'is-available' : failed ? 'is-attention' : 'is-uninitialized',
-      updatedAt: item.updatedAt
-        ? formatDateTime(item.updatedAt)
-        : t('opsConsole.common.statePending'),
-      deployment: item,
-    }
-  }),
-)
-const filteredDeploymentRows = computed(() =>
-  deploymentRows.value.filter(
-    (item) =>
-      deploymentEnvironmentFilter.value === 'all' ||
-      item.environmentId === deploymentEnvironmentFilter.value,
-  ),
-)
-const deploymentDisplayTotal = computed(() =>
-  deploymentEnvironmentFilter.value === 'all'
-    ? deploymentPage.total
-    : filteredDeploymentRows.value.length,
-)
-const filteredTasks = computed(() => {
-  const keyword = taskKeyword.value.trim().toLowerCase()
-  const visibleTasks = canAdministerOperations.value
-    ? tasks.value
-    : tasks.value.filter((item) => item.type === 'project-deploy')
-  return visibleTasks.filter(
-    (item) =>
-      (taskTypeFilter.value === 'all' || item.type === taskTypeFilter.value) &&
-      (!keyword || `${item.name} ${item.target}`.toLowerCase().includes(keyword)),
-  )
-})
-const pagedTasks = computed(() => paginateRows(filteredTasks.value, taskPage.page, taskPage.limit))
-const taskTotalPages = computed(() => pageTotal(filteredTasks.value.length, taskPage.limit))
-const taskPaginationSummary = computed(() =>
-  paginationSummary(taskPage.page, taskPage.limit, filteredTasks.value.length),
-)
-const taskPaginationIndicator = computed(() =>
-  paginationIndicator(taskPage.page, taskPage.limit, filteredTasks.value.length),
-)
-const activeTaskCount = computed(
-  () => tasks.value.filter((item) => item.status === 'active').length,
-)
-const failedTaskCount = computed(
-  () => tasks.value.filter((item) => item.status === 'failed').length,
-)
+function toDeploymentRow(item: ProjectDeployment): DeploymentRow {
+  const failed = item.observedStatus === 'failed' || item.entryStatus === 'failed'
+  const running = item.observedStatus === 'running' && !failed
+  return {
+    id: item.id,
+    projectName: item.projectName,
+    version:
+      deploymentMode(item) === 'development'
+        ? 'dev'
+        : item.version || item.applicationVersionId || '--',
+    environmentId: item.environmentId || '',
+    environmentName:
+      item.environmentName ||
+      t('opsConsole.deployments.legacyNode', { name: item.nodeName || item.nodeId || '--' }),
+    services: item.services?.map((service) => {
+      const labels: Record<string, string> = {
+        base: t('opsConsole.deployments.baseEngine'),
+        compute: t('opsConsole.deployments.computeEngine'),
+        alarm: t('opsConsole.deployments.alarmEngine'),
+        collector: t('opsConsole.deployments.collectionEngine'),
+      }
+      return labels[service.serviceType] || service.serviceType
+    }) || [t('opsConsole.deployments.baseEngine')],
+    status: deploymentProgressLabel(item),
+    statusClass: running ? 'is-available' : failed ? 'is-attention' : 'is-uninitialized',
+    updatedAt: item.updatedAt
+      ? formatDateTime(item.updatedAt)
+      : t('opsConsole.common.statePending'),
+    deployment: item,
+  }
+}
+const deploymentRows = computed<DeploymentRow[]>(() => deployments.value.map(toDeploymentRow))
+const deploymentDisplayTotal = computed(() => deploymentPage.total)
 const selectedProject = computed(() =>
   projects.value.find((item) => item.id === deployForm.projectId),
 )
@@ -2462,26 +2440,13 @@ watch(
     if (selectedEnvironmentId.value) void loadEnvironmentNodes(selectedEnvironmentId.value)
   },
 )
-watch(
-  () => [environmentEventPage.page, environmentEventPage.limit],
-  () => {
-    if (selectedEnvironmentId.value) void loadEnvironmentEvents(selectedEnvironmentId.value)
-  },
-)
-watch([taskKeyword, taskTypeFilter], () => {
-  taskPage.page = 1
-})
 watch(deploymentEnvironmentFilter, () => {
   deploymentPage.page = 1
+  void loadDeployments()
 })
 
 function pageTotal(total: number, limit: number) {
   return total > 0 ? Math.ceil(total / limit) : 0
-}
-function paginateRows<T>(items: T[], page: number, limit: number) {
-  const safePage = Math.min(Math.max(page, 1), Math.max(pageTotal(items.length, limit), 1))
-  const start = (safePage - 1) * limit
-  return items.slice(start, start + limit)
 }
 function paginationSummary(page: number, limit: number, total: number) {
   if (total <= 0) return t('opsConsole.pagination.summary', { start: 0, end: 0, total: 0 })
@@ -2504,22 +2469,6 @@ function environmentStatusLabel(status: EnvironmentStatus) {
     deleting: t('opsConsole.common.deleting'),
   }[status]
 }
-function taskTypeLabel(type: string) {
-  return (
-    {
-      'environment-init': t('opsConsole.tasks.environmentInit'),
-      'foundation-deploy': t('opsConsole.tasks.foundationDeploy'),
-      'project-deploy': t('opsConsole.tasks.projectDeploy'),
-    }[type] || type
-  )
-}
-function taskStatusLabel(status: TaskRow['status']) {
-  return status === 'active'
-    ? t('opsConsole.tasks.active')
-    : status === 'completed'
-      ? t('opsConsole.tasks.completed')
-      : t('opsConsole.common.failed')
-}
 function environmentActionLabel(status: EnvironmentStatus) {
   return {
     available: t('opsConsole.common.view'),
@@ -2528,7 +2477,25 @@ function environmentActionLabel(status: EnvironmentStatus) {
     deleting: t('opsConsole.common.view'),
   }[status]
 }
+function openEnvironmentRecords() {
+  Object.assign(recordObject, { id: '', type: '', name: '' })
+  recordEnvironmentId.value = selectedEnvironmentId.value
+  activeTab.value = 'records'
+}
+function openNodeRecords(node: { id: string; name?: string; displayName?: string }) {
+  recordEnvironmentId.value = ''
+  Object.assign(recordObject, {
+    id: node.id,
+    type: 'node',
+    name: node.displayName || node.name || node.id,
+  })
+  activeTab.value = 'records'
+}
 function switchSection(section: OpsSection) {
+  if (section === 'records') {
+    recordEnvironmentId.value = ''
+    Object.assign(recordObject, { id: '', type: '', name: '' })
+  }
   activeTab.value = section
   if (section !== 'environments') return
   environmentManagementMode.value = false
@@ -2537,13 +2504,17 @@ function switchSection(section: OpsSection) {
 }
 async function openEnvironment(item: RuntimeEnvironment) {
   environmentManagementMode.value = false
+  if (selectedEnvironmentId.value !== item.id) {
+    overview.value = null
+    overviewError.value = false
+  }
   selectedEnvironmentId.value = item.id
   environmentDetailTab.value = 'overview'
   environmentNodePage.page = 1
-  environmentEventPage.page = 1
   try {
     const [detail] = await Promise.all([
       opsAPI.getRuntimeEnvironment(item.id),
+      loadOverview(item.id),
       loadEnvironmentNodes(item.id),
       loadEnvironmentEvents(item.id),
       loadEnvironmentServices(item.id),
@@ -2876,15 +2847,8 @@ function nodeTypeLabel(node: OpsNode) {
     ? t('opsConsole.nodes.standard')
     : t('opsConsole.nodes.collectorOnly')
 }
-function resourcePercent(node: OpsNode, key: 'cpu' | 'memory' | 'disk') {
-  const value = node.resourceSummary?.[key]
-  if (!value || typeof value !== 'object') return '—'
-  const percent = Number((value as Record<string, unknown>).usedPercent)
-  return Number.isFinite(percent) ? `${Math.round(percent)}%` : '—'
-}
 function resourcePercentNumber(node: OpsNode, key: 'cpu' | 'memory' | 'disk') {
-  const value = resourcePercent(node, key)
-  return value === '—' ? 0 : Number(value.replace('%', ''))
+  return nodeResourcePercent(node, key)
 }
 
 function timeSyncPresentation(node: OpsNode) {
@@ -2900,7 +2864,10 @@ function timeSyncPresentation(node: OpsNode) {
   const status = String(state.status || 'unconfigured')
   const role = String(state.role || '')
   const offset = Number(state.offsetMillis)
-  const message = String(state.message || '')
+  const message = opsMessageSummary(
+    String(state.message || ''),
+    status === 'adjusting' ? 'progress' : 'error',
+  )
   if (status === 'synchronized') {
     return {
       label:
@@ -2943,6 +2910,7 @@ function toEnvironmentView(item: ApiRuntimeEnvironment): RuntimeEnvironment {
     foundationHealthy: item.foundationHealthy,
     foundationTotal: item.foundationTotal,
     projectCount: item.projectCount,
+    runningDeploymentCount: item.runningDeploymentCount,
     recentChange: localizeRecentChange(item.recentChange),
     recentAt: item.recentAt ? formatDateTime(item.recentAt) : t('opsConsole.common.notReported'),
     recentBy: item.recentBy === '系统' ? t('opsConsole.common.system') : item.recentBy,
@@ -2976,54 +2944,38 @@ function localizeRecentChange(value: string) {
   return key ? t(`opsConsole.events.${key}`) : value
 }
 
-function toEnvironmentEvent(item: ApiRuntimeEnvironmentEvent): EnvironmentEvent {
-  const eventKey = `opsConsole.events.${item.eventType}`
-  const translatedName = t(eventKey)
-  let message = item.message || ''
-  if (item.eventType === 'node_offline') message = t('opsConsole.events.offlineMessage')
-  if (item.eventType === 'node_online') message = t('opsConsole.events.onlineMessage')
-  const knownMessages: Record<string, string> = {
-    基础服务正在启动或等待健康检查: 'foundationWaiting',
-    '已记录 8 项基础服务的单实例多节点分配，等待节点执行': 'foundationRequested',
-    '保持现有节点分配并重新应用固定清单，用于修复异常或升级内置配置': 'foundationRepairRequested',
-  }
-  if (knownMessages[message]) message = t(`opsConsole.events.${knownMessages[message]}`)
-  const target =
-    item.target === '全部基础服务'
-      ? t('opsConsole.events.allFoundation')
-      : item.target === '运行环境'
-        ? t('opsConsole.events.runtimeEnvironment')
-        : item.target
-  return {
-    environmentId: item.environmentId,
-    time: formatDateTime(item.createdAt),
-    name: translatedName === eventKey ? item.name : translatedName,
-    target,
-    operator: item.operator === '系统' ? t('opsConsole.common.system') : item.operator,
-    result:
-      item.result === 'success' ? t('opsConsole.common.success') : t('opsConsole.common.failed'),
-    success: item.result === 'success',
-    message,
-  }
-}
-
 function apiErrorMessage(error: unknown, fallback: string) {
   return error &&
     typeof error === 'object' &&
     'message' in error &&
     String((error as { message?: unknown }).message || '').trim()
-    ? String((error as { message?: unknown }).message)
+    ? opsMessageSummary(String((error as { message?: unknown }).message), 'error')
     : fallback
 }
-async function loadNodes() {
+const snapshotVersions = new Map<string, number>()
+function snapshotGuard(key: string, signal?: AbortSignal, query: () => string = () => '') {
+  const version = (snapshotVersions.get(key) || 0) + 1
+  const initialQuery = query()
+  snapshotVersions.set(key, version)
+  return () =>
+    !disposed &&
+    !signal?.aborted &&
+    version === snapshotVersions.get(key) &&
+    initialQuery === query()
+}
+async function loadNodes(signal?: AbortSignal) {
+  const current = snapshotGuard('nodes', signal, () => JSON.stringify(nodePage))
   loading.nodes = true
   try {
-    const result = await opsAPI.listNodes({
-      page: nodePage.page,
-      pageSize: nodePage.limit,
-      keyword: nodePage.keyword.trim() || undefined,
-    })
-    if (!disposed) {
+    const result = await opsAPI.listNodes(
+      {
+        page: nodePage.page,
+        pageSize: nodePage.limit,
+        keyword: nodePage.keyword.trim() || undefined,
+      },
+      signal,
+    )
+    if (current()) {
       nodes.value = result.items
       nodePage.total = result.total
     }
@@ -3031,16 +2983,27 @@ async function loadNodes() {
     if (!disposed) loading.nodes = false
   }
 }
-async function loadEnvironments() {
+async function loadEnvironments(signal?: AbortSignal) {
+  const current = snapshotGuard('environments', signal, () =>
+    JSON.stringify([
+      environmentPage.page,
+      environmentPage.limit,
+      environmentKeyword.value,
+      environmentStatus.value,
+    ]),
+  )
   loading.environments = true
   try {
-    const result = await opsAPI.listRuntimeEnvironments({
-      page: environmentPage.page,
-      pageSize: environmentPage.limit,
-      keyword: environmentKeyword.value.trim() || undefined,
-      status: environmentStatus.value === 'all' ? undefined : environmentStatus.value,
-    })
-    if (!disposed) {
+    const result = await opsAPI.listRuntimeEnvironments(
+      {
+        page: environmentPage.page,
+        pageSize: environmentPage.limit,
+        keyword: environmentKeyword.value.trim() || undefined,
+        status: environmentStatus.value === 'all' ? undefined : environmentStatus.value,
+      },
+      signal,
+    )
+    if (current()) {
       environments.value = result.items.map(toEnvironmentView)
       environmentPage.total = result.total
     }
@@ -3048,23 +3011,35 @@ async function loadEnvironments() {
     if (!disposed) loading.environments = false
   }
 }
-async function loadEnvironmentOptions() {
-  const result = await opsAPI.listRuntimeEnvironments({ page: 1, pageSize: 200 })
-  if (disposed) return
+async function loadEnvironmentOptions(signal?: AbortSignal) {
+  const current = snapshotGuard('environmentOptions', signal)
+  const result = await opsAPI.listRuntimeEnvironments({ page: 1, pageSize: 200 }, signal)
+  if (!current()) return
   environmentOptions.value = result.items.map(toEnvironmentView)
   environmentOptionTotal.value = result.total
   if (!environmentOptions.value.some((item) => item.id === selectedEnvironmentId.value)) {
     selectedEnvironmentId.value = defaultEnvironmentOption()?.id || ''
   }
 }
-async function loadEnvironmentNodes(environmentId: string) {
+async function loadEnvironmentNodes(environmentId: string, signal?: AbortSignal) {
+  const current = snapshotGuard('environmentNodes', signal, () =>
+    JSON.stringify([
+      selectedEnvironmentId.value,
+      environmentNodePage.page,
+      environmentNodePage.limit,
+    ]),
+  )
   loading.environmentNodes = true
   try {
-    const result = await opsAPI.listRuntimeEnvironmentNodes(environmentId, {
-      page: environmentNodePage.page,
-      pageSize: environmentNodePage.limit,
-    })
-    if (!disposed && selectedEnvironmentId.value === environmentId) {
+    const result = await opsAPI.listRuntimeEnvironmentNodes(
+      environmentId,
+      {
+        page: environmentNodePage.page,
+        pageSize: environmentNodePage.limit,
+      },
+      signal,
+    )
+    if (current() && selectedEnvironmentId.value === environmentId) {
       environmentNodes.value = result.items
       environmentNodePage.total = result.total
       const environment = environments.value.find((item) => item.id === environmentId)
@@ -3074,50 +3049,113 @@ async function loadEnvironmentNodes(environmentId: string) {
     if (!disposed) loading.environmentNodes = false
   }
 }
-async function loadEnvironmentEvents(environmentId: string) {
+async function loadEnvironmentEvents(environmentId: string, signal?: AbortSignal) {
+  const current = snapshotGuard('environmentEvents', signal, () => selectedEnvironmentId.value)
   loading.environmentEvents = true
   try {
-    const result = await opsAPI.listRuntimeEnvironmentEvents(environmentId, {
-      page: environmentEventPage.page,
-      pageSize: environmentEventPage.limit,
-    })
-    if (!disposed && selectedEnvironmentId.value === environmentId) {
-      environmentEvents.value = result.items.map(toEnvironmentEvent)
-      environmentEventPage.total = result.total
+    const result = await opsAPI.listRecords(
+      { page: 1, limit: 3, environmentId, sort: 'time_desc' },
+      signal,
+    )
+    if (current() && selectedEnvironmentId.value === environmentId) {
+      environmentEvents.value = result.items.map((item) => ({
+        environmentId,
+        time: formatTime(item.time),
+        name: item.title,
+        target: item.objectName,
+        operator: item.actorDisplayName,
+        result: item.status,
+        success: !['failed', 'warning'].includes(item.status),
+        message: item.message,
+      }))
     }
   } finally {
     if (!disposed) loading.environmentEvents = false
   }
 }
-async function loadEnvironmentServices(environmentId: string) {
-  const result = await opsAPI.listRuntimeEnvironmentServices(environmentId)
-  if (!disposed && selectedEnvironmentId.value === environmentId)
+async function loadEnvironmentServices(environmentId: string, signal?: AbortSignal) {
+  const current = snapshotGuard('environmentServices', signal)
+  const result = await opsAPI.listRuntimeEnvironmentServices(environmentId, signal)
+  if (current() && selectedEnvironmentId.value === environmentId)
     foundationServices.value = result.items
 }
-async function loadDeployments() {
+const deploymentQueryKey = () =>
+  JSON.stringify([
+    deploymentPage.page,
+    deploymentPage.limit,
+    deploymentPage.keyword.trim(),
+    deploymentEnvironmentFilter.value,
+    deploymentProjectFilter.value,
+  ])
+async function refreshDeploymentSnapshot(signal: AbortSignal) {
+  const queryKey = deploymentQueryKey()
+  const revision = deploymentRevision
+  const selectedId = deploymentDrawer.value ? selectedDeploymentRow.value?.id : undefined
   loading.deployments = true
   try {
-    const result = await opsAPI.listProjectDeployments({
-      page: deploymentPage.page,
-      pageSize: deploymentPage.limit,
-      keyword: deploymentPage.keyword.trim() || undefined,
-    })
-    if (!disposed) {
+    const result = await opsAPI.listProjectDeployments(
+      {
+        page: deploymentPage.page,
+        pageSize: deploymentPage.limit,
+        keyword: deploymentPage.keyword.trim() || undefined,
+        projectId: deploymentProjectFilter.value || undefined,
+        environmentId:
+          deploymentEnvironmentFilter.value === 'all'
+            ? undefined
+            : deploymentEnvironmentFilter.value,
+      },
+      signal,
+    )
+    if (
+      !disposed &&
+      !signal.aborted &&
+      revision === deploymentRevision &&
+      queryKey === deploymentQueryKey()
+    ) {
       deployments.value = result.items
       deploymentPage.total = result.total
+      deploymentStale.value = false
+      reconcileDeploymentActions(result.items)
+    }
+    if (selectedId) {
+      const detail = await opsAPI.getProjectDeployment(selectedId, signal)
+      if (
+        !disposed &&
+        !signal.aborted &&
+        revision === deploymentRevision &&
+        deploymentDrawer.value &&
+        selectedDeploymentRow.value?.id === selectedId
+      ) {
+        selectedDeploymentRow.value = toDeploymentRow(detail)
+        reconcileDeploymentActions([detail])
+        deploymentHistoryRevision.value++
+      }
     }
   } finally {
     if (!disposed) loading.deployments = false
   }
 }
-async function loadEnrollments() {
+function handlePageVisibility() {
+  pageVisible.value = document.visibilityState !== 'hidden'
+}
+async function loadDeployments() {
+  updateRealtimeScope()
+  await realtime.refresh(['deployments', 'events'])
+}
+async function loadEnrollments(signal?: AbortSignal) {
+  const current = snapshotGuard('enrollments', signal, () =>
+    JSON.stringify([enrollmentPage.page, enrollmentPage.limit]),
+  )
   loading.enrollments = true
   try {
-    const result = await opsAPI.listEnrollments({
-      page: enrollmentPage.page,
-      pageSize: enrollmentPage.limit,
-    })
-    if (!disposed) {
+    const result = await opsAPI.listEnrollments(
+      {
+        page: enrollmentPage.page,
+        pageSize: enrollmentPage.limit,
+      },
+      signal,
+    )
+    if (current()) {
       enrollments.value = result.items
       enrollmentPage.total = result.total
     }
@@ -3135,17 +3173,131 @@ async function loadPackages() {
   }
 }
 async function loadDashboard() {
-  const results = await Promise.allSettled([
-    loadEnvironments(),
-    loadEnvironmentOptions(),
-    loadNodes(),
-    loadDeployments(),
-    loadEnrollments(),
-    loadPackages(),
-  ])
-  if (!disposed && results.every((item) => item.status === 'rejected'))
-    ElMessage.error(t('opsConsole.environments.loadAllFailed'))
+  updateRealtimeScope()
+  await realtime.refresh()
 }
+async function refreshEnvironmentDetail(signal: AbortSignal) {
+  const id = selectedEnvironmentId.value
+  if (!id) return
+  const current = snapshotGuard('environmentDetail', signal)
+  const detail = await opsAPI.getRuntimeEnvironment(id, signal)
+  if (!current() || selectedEnvironmentId.value !== id) return
+  const view = toEnvironmentView(detail)
+  view.nodeNames = environmentNodes.value.map((node) => node.name)
+  for (const list of [environments.value, environmentOptions.value]) {
+    const index = list.findIndex((item) => item.id === id)
+    if (index >= 0) list[index] = view
+  }
+}
+const realtime = createOpsRealtimeMonitor({
+  status(state) {
+    realtimeStatus.value = state
+    deploymentStale.value = state === 'stale'
+  },
+  async snapshot(topics, signal, hint) {
+    const has = (...values: OpsTopic[]) => values.some((value) => topics.includes(value))
+    const jobs: Promise<unknown>[] = []
+    if (
+      has('environments') &&
+      (hint.full || !environmentOptions.value.length) &&
+      (canAdministerOperations.value || activeTab.value === 'deployments' || deployDialog.value)
+    )
+      await loadEnvironmentOptions(signal)
+    if (signal.aborted) return
+    if (activeTab.value === 'nodes' && has('nodes')) jobs.push(loadNodes(signal))
+    if (enrollmentDrawer.value && has('nodes') && hint.full) jobs.push(loadEnrollments(signal))
+    if (
+      (activeTab.value === 'deployments' || deploymentDrawer.value) &&
+      has('deployments', 'events') &&
+      (hint.full ||
+        deployments.value.some((item) => hint.entityIds.includes(item.id)) ||
+        Boolean(
+          selectedDeploymentRow.value && hint.entityIds.includes(selectedDeploymentRow.value.id),
+        ))
+    )
+      jobs.push(refreshDeploymentSnapshot(signal))
+    if (activeTab.value === 'environments') {
+      if (
+        !environmentManagementMode.value &&
+        environmentDetailTab.value === 'overview' &&
+        selectedEnvironmentId.value &&
+        has('nodes', 'environments', 'deployments')
+      )
+        jobs.push(loadOverview(selectedEnvironmentId.value, signal))
+      if (environmentManagementMode.value && has('environments', 'nodes', 'deployments'))
+        jobs.push(loadEnvironments(signal))
+      else if (
+        selectedEnvironmentId.value &&
+        (hint.full ||
+          hint.entityIds.includes(selectedEnvironmentId.value) ||
+          environmentNodes.value.some((node) => hint.entityIds.includes(node.id)))
+      ) {
+        const id = selectedEnvironmentId.value
+        if (has('environments', 'nodes', 'deployments')) jobs.push(refreshEnvironmentDetail(signal))
+        // 基础服务操作也依赖节点就绪状态；概览独立汇总不能代替这份受控依赖。
+        if (has('nodes') && ['nodes', 'services'].includes(environmentDetailTab.value))
+          jobs.push(loadEnvironmentNodes(id, signal))
+        if (has('environments') && ['overview', 'services'].includes(environmentDetailTab.value))
+          jobs.push(loadEnvironmentServices(id, signal))
+        if (has('events', 'deployments') && environmentDetailTab.value === 'overview')
+          jobs.push(loadEnvironmentEvents(id, signal))
+      } else if (!selectedEnvironmentId.value) environmentManagementMode.value = true
+    }
+    if (deployDialog.value && has('nodes', 'environments') && deployForm.environmentId)
+      jobs.push(loadDeploymentNodes(deployForm.environmentId, signal))
+    await Promise.all(jobs)
+    if (!signal.aborted) initialSnapshotComplete.value = true
+  },
+})
+function updateRealtimeScope() {
+  if (disposed || !props.isActive || !pageVisible.value) {
+    realtime.setScope(null)
+    return
+  }
+  const topics = new Set<OpsTopic>()
+  if (activeTab.value === 'environments') {
+    topics.add('environments')
+    topics.add('nodes')
+    topics.add('deployments')
+    if (environmentDetailTab.value === 'overview') topics.add('events')
+  }
+  if (activeTab.value === 'nodes') topics.add('nodes')
+  if (activeTab.value === 'deployments' || deploymentDrawer.value) {
+    topics.add('deployments')
+    topics.add('environments')
+    if (deploymentDrawer.value) topics.add('events')
+  }
+  if (deployDialog.value) {
+    topics.add('nodes')
+    topics.add('environments')
+  }
+  realtime.setScope(topics.size ? { topics: [...topics].sort() } : null)
+}
+watch(
+  [
+    () => props.isActive,
+    pageVisible,
+    activeTab,
+    deploymentDrawer,
+    deployDialog,
+    environmentDetailTab,
+    environmentManagementMode,
+    enrollmentDrawer,
+  ],
+  updateRealtimeScope,
+)
+watch(enrollmentDrawer, (open) => {
+  if (open) void realtime.refresh(['nodes'])
+})
+watch(selectedEnvironmentId, () => {
+  if (props.isActive && pageVisible.value) void realtime.refresh()
+})
+watch(environmentDetailTab, () => {
+  if (props.isActive && pageVisible.value) void realtime.refresh()
+})
+watch(packageDialog, (open) => {
+  if (open) void loadPackages()
+})
 async function refreshEnvironmentReconciliation() {
   const environment = selectedEnvironment.value
   if (
@@ -3269,22 +3421,29 @@ function setDefaultDeploymentPlacements() {
   })
 }
 
-async function loadDeploymentNodes(environmentId: string) {
-  deploymentNodes.value = []
+async function loadDeploymentNodes(environmentId: string, signal?: AbortSignal) {
+  const current = snapshotGuard('deploymentNodes', signal, () => deployForm.environmentId)
   if (!environmentId) {
     setDefaultDeploymentPlacements()
     return
   }
   deploymentNodeLoading.value = true
   try {
-    const result = await opsAPI.listRuntimeEnvironmentNodes(environmentId, {
-      page: 1,
-      pageSize: 200,
-    })
+    const result = await opsAPI.listRuntimeEnvironmentNodes(
+      environmentId,
+      {
+        page: 1,
+        pageSize: 200,
+      },
+      signal,
+    )
+    if (!current()) return
     deploymentNodes.value = result.items
     setDefaultDeploymentPlacements()
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.nodesFailed')))
+    if (signal) {
+      if (!signal.aborted) throw error
+    } else ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.nodesFailed')))
   } finally {
     deploymentNodeLoading.value = false
   }
@@ -3317,6 +3476,7 @@ async function openDeployDialog(initialProjectId = '') {
   }
 }
 async function createDeployment() {
+  if (submittingDeployment.value || !canDeploy.value || realtimeStatus.value === 'forbidden') return
   if (
     !canCreateDeployment.value ||
     !selectedProject.value ||
@@ -3326,23 +3486,41 @@ async function createDeployment() {
     return
   }
   submittingDeployment.value = true
+  const payload = {
+    projectId: deployForm.projectId,
+    environmentId: deployForm.environmentId,
+    mode: deployForm.mode,
+    applicationVersionId:
+      deployForm.mode === 'production' ? deployForm.applicationVersionId : undefined,
+    accessPort: deployForm.accessPort ?? undefined,
+    placements: Object.fromEntries(
+      deploymentEngineRows.value.map(({ key }) => [key, deployForm.placements[key]]),
+    ),
+  }
   try {
-    await opsAPI.createProjectDeployment({
-      projectId: deployForm.projectId,
-      environmentId: deployForm.environmentId,
-      mode: deployForm.mode,
-      applicationVersionId:
-        deployForm.mode === 'production' ? deployForm.applicationVersionId : undefined,
-      accessPort: deployForm.accessPort ?? undefined,
-      placements: Object.fromEntries(
-        deploymentEngineRows.value.map(({ key }) => [key, deployForm.placements[key]]),
-      ),
+    // 当前分页不保证包含目标部署，提交前用服务端条件核实唯一部署槽。
+    const current = await opsAPI.listProjectDeployments({
+      projectId: payload.projectId,
+      environmentId: payload.environmentId,
+      page: 1,
+      pageSize: 1,
     })
+    if (current.items[0]) {
+      await ElMessageBox.confirm(
+        deploymentReplacementMessage(current.items[0], payload.mode),
+        '确认替换当前部署',
+        { type: 'warning', confirmButtonText: '替换当前部署' },
+      )
+    }
+    deploymentRevision++
+    await opsAPI.createProjectDeployment(payload)
+    deploymentRevision++
     deployDialog.value = false
-    ElMessage.success(t('opsConsole.deployments.deployCreated'))
+    ElMessage.success('部署请求已提交，运行状态将自动更新')
     await loadDeployments()
   } catch (error) {
-    ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.createFailed')))
+    if (error !== 'cancel' && error !== 'close')
+      ElMessage.error(apiErrorMessage(error, t('opsConsole.deployments.createFailed')))
   } finally {
     submittingDeployment.value = false
   }
@@ -3356,39 +3534,112 @@ function handleOpenDeployEvent(event: Event) {
   void openDeployDialog(projectId)
 }
 function openDeploymentRow(row: DeploymentRow) {
+  deploymentRevision++
   selectedDeploymentRow.value = row
   deploymentDrawer.value = true
+  void loadDeployments()
 }
 
-async function operateSelectedDeployment(action: 'start' | 'restart' | 'stop') {
-  const row = selectedDeploymentRow.value
-  if (!row || deploymentOperation.value) return
+function engineName(type: string) {
+  return (
+    (
+      { base: '基础引擎', compute: '计算引擎', alarm: '报警引擎', collector: '采集引擎' } as Record<
+        string,
+        string
+      >
+    )[type] || type
+  )
+}
+function canRunAction(row: DeploymentRow, action: OpsDeploymentAction | 'delete') {
+  return canOperateDeployment(
+    row.deployment,
+    action,
+    canDeploy.value && realtimeStatus.value !== 'forbidden',
+    Boolean(deploymentOperations[row.id]),
+  )
+}
+function reconcileDeploymentActions(items: ProjectDeployment[]) {
+  for (const item of items) {
+    const runId = submittedDeploymentRuns.get(item.id)
+    // 最新权威终态也能结束已被其他操作者后续任务替代的本地loading。
+    if (!runId || !item.latestRunId || deploymentBusy(item)) continue
+    submittedDeploymentRuns.delete(item.id)
+    delete deploymentOperations[item.id]
+  }
+}
+async function operateDeploymentRow(row: DeploymentRow, action: OpsDeploymentAction) {
+  if (!canRunAction(row, action)) return
+  deploymentOperations[row.id] = action
+  let submitted = false
   try {
-    if (action !== 'start') {
-      await ElMessageBox.confirm(`确定${action === 'stop' ? '停止' : '重新启动'}工程“${row.projectName}”吗？`, '确认操作', { type: 'warning' })
+    if (action === 'stop' || action === 'redeploy') {
+      await ElMessageBox.confirm(
+        action === 'redeploy'
+          ? `重新部署“${row.projectName}”将重下发当前制品，不构建最新开发快照，也不升级发布版本；期间可能暂时不可用。是否继续？`
+          : `停止“${row.projectName}”后工程将不可访问，是否继续？`,
+        action === 'redeploy' ? '确认重新部署' : '确认停止',
+        { type: 'warning' },
+      )
     }
-    deploymentOperation.value = action
-    await opsAPI.operateProjectDeployment(row.deployment.id, action)
-    ElMessage.success('工程部署操作已下发')
+    deploymentRevision++
+    const result = await opsAPI.operateProjectDeployment(row.id, action)
+    submitted = true
+    submittedDeploymentRuns.set(row.id, result.run.id)
+    deploymentRevision++
+    const index = deployments.value.findIndex((item) => item.id === row.id)
+    if (index >= 0) deployments.value[index] = result.deployment
+    if (selectedDeploymentRow.value?.id === row.id)
+      selectedDeploymentRow.value = toDeploymentRow(result.deployment)
+    ElMessage.success('操作请求已提交，运行状态将自动更新')
     await loadDeployments()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(apiErrorMessage(error, '工程部署操作失败，请等待当前任务完成后重试'))
-  } finally { deploymentOperation.value = '' }
+    if (error !== 'cancel' && error !== 'close')
+      ElMessage.error(apiErrorMessage(error, '工程部署操作失败，请等待当前任务完成后重试'))
+  } finally {
+    if (!submitted) delete deploymentOperations[row.id]
+  }
 }
 
 async function deleteSelectedDeployment() {
   const row = selectedDeploymentRow.value
-  if (!row || deploymentOperation.value) return
+  if (!row || !canRunAction(row, 'delete')) return
+  deploymentOperations[row.id] = 'delete'
   try {
-    await ElMessageBox.confirm(`删除部署将清理运行资源和运行态消息，并释放端口；工程设计和发布版本不会删除。确定删除“${row.projectName}”的部署吗？`, '确认删除部署', { type: 'warning', confirmButtonText: '删除部署' })
-    deploymentOperation.value = 'delete'
+    await ElMessageBox.confirm(
+      `删除部署将清理运行资源和运行态消息，并释放端口；工程设计和发布版本不会删除。确定删除“${row.projectName}”的部署吗？`,
+      '确认删除部署',
+      { type: 'warning', confirmButtonText: '删除部署' },
+    )
+    deploymentRevision++
     await opsAPI.deleteProjectDeployment(row.deployment.id)
-    ElMessage.success('删除部署任务已下发')
+    deploymentRevision++
+    ElMessage.success('删除部署请求已提交')
     deploymentDrawer.value = false
     await loadDeployments()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(apiErrorMessage(error, '删除部署失败，请等待当前任务完成后重试'))
-  } finally { deploymentOperation.value = '' }
+    if (error !== 'cancel' && error !== 'close')
+      ElMessage.error(apiErrorMessage(error, '删除部署失败，请等待当前任务完成后重试'))
+  } finally {
+    delete deploymentOperations[row.id]
+  }
+}
+
+async function openUpdateDeployment(row: DeploymentRow) {
+  await openDeployDialog(row.deployment.projectId)
+  // 当前工程可能不在工程选择器的第一页，详情更新入口仍保留准确目标。
+  if (!deployForm.projectId) {
+    projects.value.push({ id: row.deployment.projectId, name: row.projectName })
+    deployForm.projectId = row.deployment.projectId
+    await onProjectChange(row.deployment.projectId)
+  }
+  deployForm.mode = deploymentMode(row.deployment)
+  deployForm.environmentId = row.environmentId
+  deployForm.accessPort = row.deployment.accessPort
+  deployForm.applicationVersionId = row.deployment.applicationVersionId || ''
+  await loadDeploymentNodes(row.environmentId)
+  row.deployment.services?.forEach((service) => {
+    if (service.nodeId) deployForm.placements[service.serviceType] = service.nodeId
+  })
 }
 
 function openEnrollmentDialog() {
@@ -3507,28 +3758,360 @@ async function downloadPackage(item: NodePackage) {
   }
 }
 const formatTime = (value?: string) => (value ? formatDateTime(value) : '')
+function clearDeploymentProjectFilter() {
+  deploymentProjectFilter.value = ''
+  deploymentProjectFilterName.value = ''
+  deploymentPage.page = 1
+  void loadDeployments()
+}
+
+watch(
+  [deploymentNavigation, () => props.isActive],
+  async ([target, active]) => {
+    if (!target || !active) return
+    const requestId = target.requestId
+    activeTab.value = 'deployments'
+    deploymentProjectFilter.value = target.projectId
+    deploymentProjectFilterName.value = target.projectName || ''
+    deploymentEnvironmentFilter.value = 'all'
+    deploymentPage.keyword = ''
+    deploymentPage.page = 1
+    updateRealtimeScope()
+    await loadDeployments()
+    if (disposed || deploymentNavigation.value?.requestId !== requestId || !props.isActive) return
+    if (target.deploymentId) {
+      try {
+        const detail = await opsAPI.getProjectDeployment(target.deploymentId)
+        if (disposed || deploymentNavigation.value?.requestId !== requestId || !props.isActive)
+          return
+        if (detail.projectId === target.projectId) openDeploymentRow(toDeploymentRow(detail))
+      } catch (error) {
+        ElMessage.error(apiErrorMessage(error, '部署详情加载失败'))
+      }
+    }
+    if (deploymentNavigation.value?.requestId === requestId) deploymentNavigation.value = null
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   disposed = false
   window.addEventListener('ops:open-deploy', handleOpenDeployEvent)
-  void loadDashboard().then(() => {
-    const environment = selectedEnvironment.value || defaultEnvironmentOption()
-    if (canAdministerOperations.value && environment) void openEnvironment(environment)
-    else if (canAdministerOperations.value) environmentManagementMode.value = true
-  })
-  environmentReconcileTimer = window.setInterval(
-    () => void refreshEnvironmentReconciliation(),
-    5000,
-  )
+  document.addEventListener('visibilitychange', handlePageVisibility)
+  updateRealtimeScope()
 })
 onBeforeUnmount(() => {
   disposed = true
-  if (environmentReconcileTimer) window.clearInterval(environmentReconcileTimer)
+  realtime.dispose()
+  document.removeEventListener('visibilitychange', handlePageVisibility)
   window.removeEventListener('ops:open-deploy', handleOpenDeployEvent)
 })
 </script>
 
 <style scoped>
+.overview-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 12px;
+}
+.overview-section {
+  border: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+  border-radius: var(--ck-radius-md, 8px);
+  background: var(--ck-bg-secondary, var(--el-bg-color));
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  min-width: 0;
+  font-size: 13px;
+}
+.overview-section header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.overview-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.overview-section h3 small,
+.overview-secondary,
+.overview-pending {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ck-text-muted, var(--el-text-color-secondary));
+}
+.overview-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.overview-notice.is-fault,
+.overview-health-failed,
+.overview-health-offline,
+.record-status-failed,
+.record-status-warning {
+  color: var(--el-color-danger);
+}
+.overview-notice.is-capacity,
+.overview-health-capacity_critical,
+.overview-health-capacity_attention {
+  color: var(--el-color-warning);
+}
+.overview-stale,
+.overview-health-stale,
+.overview-health-unknown {
+  color: var(--el-color-warning);
+  font-size: 12px;
+}
+.record-status-success,
+.record-status-recovered {
+  color: var(--el-color-success);
+}
+.record-status-running,
+.record-status-accepted {
+  color: var(--el-color-primary);
+}
+.overview-service-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+}
+.overview-service-row .overview-secondary {
+  grid-row: 2;
+}
+.overview-service-row .ops-status {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+.overview-project-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-top: 12px;
+}
+.overview-project-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.overview-project-row > .el-button {
+  margin-left: auto;
+}
+.overview-node-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+.overview-node-table th,
+.overview-node-table td {
+  text-align: left;
+  padding: 10px 5px;
+  border-bottom: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+  overflow-wrap: anywhere;
+}
+.overview-node-table th {
+  color: var(--ck-text-muted, var(--el-text-color-secondary));
+  font-weight: 500;
+}
+.overview-node-table th:first-child {
+  width: 22%;
+}
+.overview-node-table th:nth-child(2) {
+  width: 21%;
+}
+.overview-meter {
+  display: inline-block;
+  width: 42px;
+  max-width: 65%;
+  height: 4px;
+  margin-right: 5px;
+  background: var(--el-fill-color);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.overview-meter i {
+  display: block;
+  height: 100%;
+  background: var(--el-color-primary);
+}
+.overview-meter i.is-capacity {
+  background: var(--el-color-warning);
+}
+.overview-node-table small {
+  font-size: 12px;
+}
+.overview-node-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 14px;
+}
+.overview-event-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 150px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+}
+.overview-event-row strong {
+  font-weight: 500;
+}
+.overview-event-row small,
+.overview-event-row time {
+  font-size: 12px;
+  color: var(--ck-text-muted, var(--el-text-color-secondary));
+}
+.overview-event-row small {
+  margin-left: 12px;
+}
+@media (max-width: 1100px) {
+  .overview-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.ops-status.is-working::before {
+  animation: ops-working-pulse 1.4s ease-in-out infinite;
+}
+.ops-status.is-working {
+  white-space: normal;
+}
+.ops-status.is-working::before {
+  flex-shrink: 0;
+}
+@keyframes ops-working-pulse {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.75);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-status.is-working::before {
+    animation: none;
+  }
+}
+.ops-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.deployment-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.deployment-meta > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+.deployment-meta dt {
+  color: var(--ck-text-muted, var(--el-text-color-secondary));
+}
+.deployment-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.deployment-danger-action {
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+}
+@media (max-width: 520px) {
+  .deployment-meta {
+    grid-template-columns: 1fr;
+  }
+}
+.deployment-delete,
+.deployment-engine-failed {
+  color: var(--el-color-danger);
+}
+.deployment-engine-ready {
+  color: var(--el-color-success);
+}
+.deployment-engine-pending {
+  color: var(--el-color-warning);
+}
+.deployment-current-phase {
+  font-size: 12px;
+  color: var(--el-color-primary);
+  margin: 0 0 16px;
+}
+.deployment-technical summary {
+  color: var(--el-color-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+.deployment-technical pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.ops-drawer-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.ops-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.ops-row-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.ops-access-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+.ops-muted {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+:global(.ops-deployment-drawer) {
+  background: var(--ck-bg-surface, var(--el-bg-color));
+  color: var(--el-text-color-primary);
+}
+:global(.ops-deployment-drawer .el-drawer__header) {
+  margin-bottom: 0;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
+  color: var(--el-text-color-primary);
+}
+:global(.ops-deployment-drawer .el-drawer__title) {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global(.ops-deployment-drawer .el-drawer__body) {
+  padding: 16px 20px;
+}
+.ops-deployment-drawer .ops-drawer-heading {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
 .ops-console {
   height: calc(100vh - 32px);
   padding: 16px;
@@ -3730,15 +4313,18 @@ onBeforeUnmount(() => {
 .ops-detail-toolbar {
   justify-content: space-between;
   gap: 16px;
-  min-height: 64px;
-  padding: 10px 16px;
+  min-height: 52px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
 }
 .ops-detail-heading {
   gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .ops-detail-actions {
   gap: 8px;
+  flex: 0 0 auto;
 }
 .ops-environment-switcher {
   width: 180px;
@@ -3764,31 +4350,40 @@ onBeforeUnmount(() => {
   color: var(--ck-text-tertiary, var(--el-text-color-secondary));
   font-size: 11px;
 }
-.ops-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  background: var(--ck-bg-subtle, var(--el-fill-color-extra-light));
+.ops-toolbar-summaries,
+.ops-toolbar-statuses {
+  display: flex;
+  align-items: center;
 }
-.ops-summary-strip > div {
-  padding: 9px 16px;
+.ops-toolbar-summaries {
+  gap: 3px;
+  min-width: 0;
 }
-.ops-summary-strip > div + div {
-  border-left: 1px solid var(--el-border-color-lighter);
-}
-.ops-summary-strip span,
-.ops-summary-strip strong {
-  display: block;
-}
-.ops-summary-strip span {
-  margin-bottom: 2px;
+.ops-toolbar-summaries button {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
   color: var(--el-text-color-secondary);
-  font-size: 11px;
+  background: transparent;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.ops-summary-strip strong {
-  font-size: 14px;
-  line-height: 20px;
+.ops-toolbar-summaries button:hover {
+  background: var(--ck-bg-hover, var(--el-fill-color-light));
+}
+.ops-toolbar-summaries strong {
+  font-size: 13px;
+  margin-left: 3px;
   font-weight: 600;
+}
+.ops-toolbar-statuses {
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 0 8px;
+  border-inline: 1px solid var(--ck-border-light, var(--el-border-color-lighter));
 }
 .ops-detail-switcher {
   display: flex;
@@ -4452,15 +5047,11 @@ onBeforeUnmount(() => {
   .ops-overview-secondary {
     grid-template-columns: 1fr;
   }
-  .ops-summary-strip {
-    grid-template-columns: repeat(2, 1fr);
+  .ops-detail-toolbar {
+    flex-wrap: wrap;
   }
-  .ops-summary-strip > div:nth-child(3) {
-    border-left: 0;
-    border-top: 1px solid var(--el-border-color-lighter);
-  }
-  .ops-summary-strip > div:nth-child(4) {
-    border-top: 1px solid var(--el-border-color-lighter);
+  .ops-toolbar-statuses {
+    margin-left: auto;
   }
 }
 @media (max-width: 720px) {
@@ -4480,6 +5071,16 @@ onBeforeUnmount(() => {
   }
   .ops-toolbar__actions {
     justify-content: flex-end;
+  }
+  .ops-detail-heading,
+  .ops-toolbar-summaries {
+    flex-wrap: wrap;
+  }
+  .ops-toolbar-statuses {
+    align-self: flex-start;
+    margin-left: 0;
+    border-inline: 0;
+    padding: 0;
   }
   .ops-detail-actions,
   .ops-guidance__actions {
@@ -4515,5 +5116,63 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
     gap: 5px;
   }
+}
+/* 列表密度仅限定本轮子页，不影响运行概览。 */
+.ops-dense-view {
+  font-size: 13px;
+}
+.ops-dense-view .ops-toolbar {
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.ops-dense-view .ops-toolbar__filters :deep(.el-input) {
+  width: 180px;
+}
+.ops-dense-view .ops-toolbar__filters :deep(.el-select) {
+  width: 132px;
+}
+.ops-dense-view :deep(.el-table) {
+  font-size: 13px;
+}
+.ops-dense-view :deep(.el-table th.el-table__cell) {
+  height: 40px;
+  font-size: 12px;
+}
+.ops-dense-view :deep(.el-table .cell) {
+  line-height: 21px;
+}
+.ops-dense-view .ops-primary-cell strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.ops-node-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.ops-node-state small {
+  font-size: 12px;
+  color: var(--ck-text-secondary);
+}
+.ops-node-state .is-attention {
+  color: var(--el-color-warning);
+}
+.ops-dense-view.ops-detail-pane--services {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px 12px;
+}
+.ops-dense-view .ops-sub-toolbar {
+  flex: 0 0 auto;
+  min-height: 34px;
+}
+.ops-dense-view .ops-detail-table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 </style>

@@ -47,11 +47,23 @@ describe('ops presentation', () => {
     })
     expect(runEventPresentation('dispatched', 'Kubernetes 工作负载已提交')).toEqual({
       stage: '已下发',
-      message: '工作负载已下发，等待运行服务就绪',
+      message: '服务实例已下发，等待运行服务就绪',
     })
     expect(runEventPresentation('dispatched', '正在停止 Kubernetes 工作负载')).toEqual({
       stage: '处理中',
-      message: '正在停止 Kubernetes 工作负载',
+      message: '正在停止服务实例',
+    })
+    expect(runEventPresentation('dispatched', 'compute：Kubernetes 工作负载已提交')).toEqual({
+      stage: '已下发',
+      message: '计算引擎：服务实例已下发，等待就绪',
+    })
+    expect(runEventPresentation('observed', 'alarm：工程引擎已就绪')).toEqual({
+      stage: '状态上报',
+      message: '报警引擎：工程引擎已就绪',
+    })
+    expect(runEventPresentation('observed', 'base：健康检查失败（已裁剪）')).toEqual({
+      stage: '状态上报',
+      message: '基础引擎：健康检查失败（已裁剪）',
     })
     expect(
       deploymentDetailPresentation({
@@ -87,8 +99,8 @@ describe('ops presentation', () => {
     ).toMatchObject({
       active: 0,
       steps: [
-        { title: '停止运行资源', description: '正在停止 Kubernetes 工作负载' },
-        { title: '清理运行态消息', description: '工作负载停止后清理运行态消息' },
+        { title: '停止运行资源', description: '正在停止服务实例' },
+        { title: '清理运行态消息', description: '服务实例停止后清理运行态消息' },
         { title: '释放工程端口', description: '清理完成后释放工程端口并移出部署列表' },
       ],
     })
@@ -101,9 +113,34 @@ describe('ops presentation', () => {
       processStatus: 'error',
       steps: expect.arrayContaining([
         expect.objectContaining({ title: '清理运行态消息', description: '运行态消息尚未完成清理' }),
-        expect.objectContaining({ title: '释放工程端口', description: '工程端口仍受保护，尚未释放' }),
+        expect.objectContaining({
+          title: '释放工程端口',
+          description: '工程端口仍受保护，尚未释放',
+        }),
       ]),
     })
+  })
+  it('详情就绪按当前服务意图收敛，已停历史引擎不阻塞完成也不被当作运行服务', () => {
+    const running = {
+      desiredStatus: 'running',
+      observedStatus: 'running',
+      desiredGeneration: 3,
+      observedGeneration: 3,
+    }
+    const stopped = {
+      desiredStatus: 'stopped',
+      observedStatus: 'stopped',
+      desiredGeneration: 2,
+      observedGeneration: 2,
+    }
+    const status = (services: Array<typeof running>) =>
+      deploymentDetailPresentation({ observedStatus: 'running', entryStatus: 'running', services })
+    expect(status([running, stopped]).active).toBe(4)
+    expect(status([running, { ...stopped, observedGeneration: 1 }]).active).toBe(1)
+    expect(status([running, { ...stopped, observedStatus: 'running' }]).active).toBe(1)
+    expect(status([{ ...running, observedGeneration: 2 }, stopped]).active).toBe(1)
+    expect(status([stopped]).active).toBe(1)
+    expect(status([]).active).toBe(1)
   })
   it('按平台固定节点能力，不允许生成不完整的运行节点', () => {
     expect(enrollmentCapabilities('linux')).toEqual(['project_entry', 'data_runtime'])

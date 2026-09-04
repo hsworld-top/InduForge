@@ -7,8 +7,22 @@ const dashboardSource = readFileSync('src/views/Dashboard.vue', 'utf8')
 const langSource = readFileSync('src/lang/index.ts', 'utf8')
 
 describe('ops management console', () => {
+  it('概览入口使用最近动态与查看全部，不再显示事件列表术语', () => {
+    expect(langSource).toContain("recentEvents: '最近动态'")
+    expect(langSource).toContain("allEvents: '查看全部'")
+    expect(langSource).toContain("recentEvents: 'Recent Activity'")
+    expect(source).toContain('@click="openEnvironmentRecords"')
+  })
+  it('部署详情使用固定工程头部与分页历史，不再铺重复概要和纵向步骤', () => {
+    expect(source).toContain('size="min(720px, 94vw)"')
+    expect(source).toContain('class="deployment-meta"')
+    expect(source).toMatch(/v-model="deploymentDrawer"\s+append-to-body/)
+    expect(source).toContain('<DeploymentRunHistory')
+    expect(source).not.toContain('class="ops-deployment-progress"')
+    expect(source).not.toContain('listDeploymentRunEvents(')
+  })
   it('使用工具栏下拉切换运行环境、物理节点、工程部署和运维任务', () => {
-    for (const section of ['environments', 'nodes', 'deployments', 'tasks']) {
+    for (const section of ['environments', 'nodes', 'deployments', 'records']) {
       expect(switcherSource).toContain(`t('opsConsole.sections.${section}')`)
     }
     expect(source).toContain('<OpsSectionSwitcher')
@@ -32,23 +46,23 @@ describe('ops management console', () => {
   })
 
   it('四个可增长主列表使用用户管理相同的表格壳与固定分页条', () => {
-    expect(source.match(/class="ops-list-panel ck-content-area"/g)).toHaveLength(4)
-    expect(source.match(/class="ck-table-shell"/g)).toHaveLength(6)
-    expect(source.match(/class="ck-pagination-bar"/g)).toHaveLength(6)
+    expect(source.match(/class="ops-list-panel ck-content-area"/g)).toHaveLength(3)
+    expect(source.match(/class="ck-table-shell"/g)).toHaveLength(4)
+    expect(source.match(/class="ck-pagination-bar"/g)).toHaveLength(4)
+    expect(source).toContain('<OpsRecords')
     expect(source).toContain("t('opsConsole.pagination.summary'")
     expect(source).toContain("t('opsConsole.pagination.page'")
   })
 
   it('运行环境详情根据正常、异常和未初始化状态提供不同内容', () => {
     expect(source).toContain("selectedEnvironment.status === 'uninitialized'")
-    expect(source).toContain("selectedEnvironment.status === 'attention'")
-    expect(source).toContain("selectedEnvironment.status === 'attention' && foundationDeploying")
-    expect(source).toContain("$t('opsConsole.environments.deploymentInProgressTitle')")
-    expect(source).toContain("$t('opsConsole.environments.setup')")
-    expect(source).toContain('environmentProblems')
-    expect(source).toContain("t('opsConsole.environments.issueBlock'")
+    expect(source).toContain('overview.nodes.capacityAttention')
+    expect(source).toContain('overview.deployments.failed')
+    expect(source).toContain('foundationFaultCount')
+    expect(source).not.toContain('environmentMaxDiskUsage')
+    expect(source).toContain('opsAPI.getRuntimeEnvironmentOverview')
     expect(source).toContain('environmentEvents.value.filter')
-    expect(source).toContain('opsAPI.listRuntimeEnvironmentEvents')
+    expect(source).toContain('opsAPI.listRecords')
   })
 
   it('运维入口直达默认运行概览，只有多个运行范围时显示切换器', () => {
@@ -59,10 +73,10 @@ describe('ops management console', () => {
     expect(source).toContain('command="manage"')
     expect(source).not.toContain('ops-back-button')
     expect(source).not.toContain('ops-breadcrumb')
-    expect(source).toContain("$t('opsConsole.environments.addNode')")
+    expect(source).toContain('class="overview-node-toolbar"')
     expect(source).toContain("t('opsConsole.environments.setupWithNodes')")
-    expect(source).toContain("$t('opsConsole.foundation.strategy')")
-    expect(source).toContain("$t('opsConsole.environments.maxDisk'")
+    expect(source).toContain('项基础服务')
+    expect(source).not.toContain("$t('opsConsole.environments.lastSync'")
   })
 
   it('环境编辑、受控删除和节点安全移除都有真实交互', () => {
@@ -80,7 +94,7 @@ describe('ops management console', () => {
 
   it('详情表格占满主体高度并将节点和事件分页固定在底部', () => {
     expect(source).toContain('class="ops-detail-header"')
-    expect(source.match(/class="ops-detail-pane ops-detail-pane--table"/g)).toHaveLength(2)
+    expect(source.match(/class="ops-detail-pane ops-detail-pane--table ops-dense-view"/g)).toHaveLength(1)
     expect(source).toMatch(/\.ops-detail-content \{[\s\S]*flex: 1;[\s\S]*min-height: 0;/)
     expect(source).toMatch(/\.ops-detail-list \{[\s\S]*height: 100%;[\s\S]*min-height: 0;/)
   })
@@ -89,7 +103,12 @@ describe('ops management console', () => {
     expect(source).toMatch(/\.ops-detail-title h2 \{[\s\S]*font-size: 18px;/)
     expect(source).toMatch(/\.ops-section h3 \{[\s\S]*font-size: 14px;/)
     expect(source).toMatch(/\.ops-environment-detail \{[\s\S]*font-size: 13px;/)
-    expect(source).toMatch(/\.ops-summary-strip span \{[\s\S]*font-size: 11px;/)
+    expect(source).not.toContain('class="ops-summary-strip"')
+    expect(source).toContain('class="ops-toolbar-summaries"')
+    expect(source).not.toContain(
+      'v-if="environmentDetailTab === \'overview\'" class="ops-toolbar-summaries"',
+    )
+    expect(source).toContain('class="ops-toolbar-statuses"')
   })
 
   it('基础服务当前按单实例跨节点分配，并预留不可用的主备和集群模式', () => {
@@ -114,7 +133,7 @@ describe('ops management console', () => {
     expect(source).toMatch(
       /<div v-if="availableEnvironments\.length > 1" class="ops-deployment-field">\s*<label>\{\{ \$t\('opsConsole\.deployments\.targetEnvironment'\) \}\}<\/label>/,
     )
-    expect(source).toContain('opsAPI.listRuntimeEnvironmentNodes(environmentId')
+    expect(source).toMatch(/opsAPI\.listRuntimeEnvironmentNodes\(\s*environmentId,/)
     expect(source).toContain("node.platform === 'linux'")
     expect(source).toContain("node.observedStatus === 'online'")
     expect(source).toContain("node.clusterStatus === 'ready'")
@@ -159,9 +178,14 @@ describe('ops management console', () => {
     )
   })
 
-  it('工程部署列表以紧凑标签展示服务端返回的运行引擎并保持固定分页', () => {
+  it('工程部署列表分列呈现来源，运行引擎留在详情且保持固定分页', () => {
     expect(source).toContain("$t('opsConsole.deployments.runtimeEngines')")
-    expect(source).toContain('class="ops-engine-tags"')
+    expect(source).toContain('label="模式"')
+    expect(source).toContain('label="发布版本"')
+    expect(source).toContain('class="ops-row-actions"')
+    expect(source).toContain('row-key="id"')
+    expect(source).toContain('v-if="environmentOptionTotal > 1"')
+    expect(source).toContain('selectedDeploymentRow.deployment.services || []')
     expect(source).toContain("base: t('opsConsole.deployments.baseEngine')")
     expect(source).toContain("collector: t('opsConsole.deployments.collectionEngine')")
   })
@@ -180,9 +204,10 @@ describe('ops management console', () => {
   })
 
   it('只展示后端真实状态，并以一步式接口创建或更新工程部署', () => {
-    expect(source).toContain('const tasks = ref<TaskRow[]>([])')
+    expect(source).toContain('<OpsRecords')
+    expect(source).not.toContain('const tasks = ref<TaskRow[]>([])')
     expect(source).not.toContain('localDeployments')
-    expect(source).toContain('await opsAPI.createProjectDeployment({')
+    expect(source).toContain('await opsAPI.createProjectDeployment(payload)')
     expect(source).toContain('const existingDeployment = computed')
     expect(source).toContain("$t('opsConsole.deployments.updateDeployment')")
     expect(source).toContain('foundation_redeploy_requested')

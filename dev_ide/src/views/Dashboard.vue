@@ -31,6 +31,7 @@
         @open-workspace="handleWorkspaceOpenRequest"
         @close-workspace="handleWorkspaceCloseRequest"
         @scene-committed="handleWorkspaceSceneCommitted"
+        @project-development-restored="handleProjectDevelopmentRestored"
       />
     </div>
 
@@ -62,6 +63,7 @@
 <script lang="ts">
 // @ts-nocheck
 import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent, markRaw } from 'vue'
+import { deploymentNavigation } from './tenant/project-management/project-deployment-navigation'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
@@ -75,6 +77,14 @@ import { can, canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
 import request from '@/utils/request'
+import {
+  AUTHORING_STALE_EVENT,
+  cacheAuthoringContext,
+  getCachedAuthoringContext,
+  invalidateAuthoringContext,
+  type AuthoringStaleDetail,
+} from '@/utils/authoring-context'
+import { projectAPI } from '@/api/project.api'
 import {
   isWorkspaceCloseRequest,
   isWorkspaceOpenRequest,
@@ -389,6 +399,9 @@ export default {
         }, delay)
       })
     }
+    watch(deploymentNavigation, (target) => {
+      if (target) openTab('ops-management')
+    })
 
     /**
      * 显示节点待审核的全局通知（常驻，手动关闭）。
@@ -669,6 +682,85 @@ export default {
       WujieVue.bus.$emit(`micro-app:designer-${projectId}:scene-committed`, event)
     }
 
+    // 恢复开发快照后销毁同工程的旧工作区实例，下一次打开必须读取新的服务端状态。
+    const handleProjectDevelopmentRestored = ({ projectId }) => {
+      const normalized = String(projectId || '')
+      if (!normalized) return
+      // 服务端已切换开发代次，新工作区不得沿用恢复前的缓存。
+      invalidateAuthoringContext(normalized)
+      const affectedKeys = tabs.value
+        .filter((tab) => {
+          const key = String(tab.key || '')
+          return (
+            key === `${normalized}:ai` ||
+            key === `data-center-${normalized}` ||
+            key.startsWith(`${normalized}:2d:`) ||
+            key.startsWith(`${normalized}:3d:`)
+          )
+        })
+        .map((tab) => tab.key)
+      affectedKeys.forEach(closeTab)
+      void refreshProjectAuthoringContext(normalized).catch((error) => {
+        console.warn('[AuthoringContext] 恢复后刷新失败', error)
+      })
+    }
+
+    const refreshProjectAuthoringContext = async (projectId) => {
+      const normalized = String(projectId || '').trim()
+      if (!normalized) return
+      const response = await projectAPI.getAuthoringContext(normalized)
+      const epoch = String(response?.data?.authoringEpoch || '').trim()
+      if (epoch) cacheAuthoringContext({ projectId: normalized, authoringEpoch: epoch })
+    }
+
+    /**
+     * 开发态代次失效后必须销毁旧编辑实例。旧请求不自动重放，避免覆盖版本恢复后的内容。
+     */
+    const handleAuthoringStale = (event) => {
+      const detail = event?.detail as AuthoringStaleDetail | undefined
+      const projectId = String(detail?.projectId || '').trim()
+      if (!projectId) return
+      handleProjectDevelopmentRestored({ projectId })
+      void refreshProjectAuthoringContext(projectId).catch((error) => {
+        console.warn('[AuthoringContext] 失效后刷新失败', error)
+      })
+      ElMessage.warning('工程开发内容已发生切换，请重新打开编辑界面')
+    }
+
+    const handleAuthoringEpochChanged = (payload = {}) => {
+      const projectId = String(payload.projectId || '').trim()
+      const epoch = String(payload.authoringEpoch || payload.currentAuthoringEpoch || '').trim()
+      if (!projectId || !epoch) return
+      const cached = getCachedAuthoringContext(projectId)
+      if (cached?.authoringEpoch === epoch) return
+      window.dispatchEvent(
+        new CustomEvent(AUTHORING_STALE_EVENT, {
+          detail: { projectId, currentAuthoringEpoch: epoch, action: 'reload' },
+        }),
+      )
+    }
+
+    // Socket 只负责及时提醒；每次重连都通过 HTTP 对账当前已打开工程，补齐断线期间事件。
+    const reconcileOpenProjectAuthoringContexts = async () => {
+      const projectIds = new Set()
+      tabs.value.forEach((tab) => {
+        const id = String(tab.props?.project?.id || '').trim()
+        if (id) projectIds.add(id)
+      })
+      await Promise.allSettled(
+        [...projectIds].map(async (projectId) => {
+          const previous = getCachedAuthoringContext(projectId)
+          const response = await projectAPI.getAuthoringContext(projectId)
+          const epoch = String(response?.data?.authoringEpoch || '').trim()
+          if (!epoch) return
+          cacheAuthoringContext({ projectId, authoringEpoch: epoch })
+          if (previous && previous.authoringEpoch !== epoch) {
+            handleProjectDevelopmentRestored({ projectId })
+          }
+        }),
+      )
+    }
+
     // 点击外部关闭菜单
     const handleClickOutside = (event) => {
       const userMenu = event.target.closest('.user-menu')
@@ -686,6 +778,7 @@ export default {
       // 添加全局点击事件监听
       document.addEventListener('click', handleClickOutside)
       window.addEventListener('keydown', handleKeyDown)
+      window.addEventListener(AUTHORING_STALE_EVENT, handleAuthoringStale)
 
       // 优先恢复历史标签状态，未恢复成功时按角色打开默认标签
       const restored = restoreTabState()
@@ -699,6 +792,10 @@ export default {
       tabsInitialized.value = true
       persistTabState()
       setupOpsPendingSubscription()
+      const authoringSocket = initSocket(Storage.getTenantId())
+      authoringSocket?.on('authoring:epoch-changed', handleAuthoringEpochChanged)
+      authoringSocket?.on('connect', reconcileOpenProjectAuthoringContexts)
+      void reconcileOpenProjectAuthoringContexts()
       notifyExistingPendingRequests()
 
       // 当前租户品牌用于菜单栏和浏览器标签，所有登录角色都需要读取。
@@ -715,12 +812,15 @@ export default {
     onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener(AUTHORING_STALE_EVENT, handleAuthoringStale)
       const socket = getSocket()
       if (socket) {
         socket.off('connect', handleOpsSocketConnect)
         socket.off('disconnect', handleOpsSocketDisconnect)
         socket.off('connect_error', handleOpsSocketConnectError)
         socket.off('ops:node:pending', handleOpsNodePending)
+        socket.off('authoring:epoch-changed', handleAuthoringEpochChanged)
+        socket.off('connect', reconcileOpenProjectAuthoringContexts)
       }
       pendingRequestNotifications.forEach((notification) => notification?.close?.())
       pendingRequestNotifications.clear()
@@ -874,6 +974,7 @@ export default {
       handleWorkspaceOpenRequest,
       handleWorkspaceCloseRequest,
       handleWorkspaceSceneCommitted,
+      handleProjectDevelopmentRestored,
       closeTab,
       maximizeTab,
       restoreTab,

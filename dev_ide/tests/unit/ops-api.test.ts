@@ -10,11 +10,89 @@ vi.mock('@/utils/request', () => ({
 }))
 import { opsAPI } from '@/api/ops.api'
 describe('opsAPI', () => {
+  it('开发态恢复使用确认字和权威工程修订，并按任务编号查询进度', async () => {
+    postMock.mockResolvedValue({ data: { taskId: 'restore-1', state: 'queued' } })
+    getMock.mockResolvedValue({ data: { taskId: 'restore-1', state: 'restoring_workspace' } })
+    await expect(opsAPI.restoreProjectDevelopment('version-1')).resolves.toMatchObject({
+      taskId: 'restore-1',
+    })
+    expect(postMock).toHaveBeenCalledWith(
+      '/publish/versions/version-1/restore-development',
+      { confirmation: 'RESTORE' },
+      { skipErrorToast: true },
+    )
+    await opsAPI.getDevelopmentRestoreTask('restore-1')
+    expect(getMock).toHaveBeenCalledWith('/publish/restore-tasks/restore-1', {
+      skipErrorToast: true,
+    })
+  })
+  it('统一记录按后端分页及筛选查询，不拼接来源数据', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        list: [{ id: 'environment_event:e1', recordType: 'operation' }],
+        pagination: { page: 2, limit: 10, total: 17 },
+      },
+    })
+    const query = {
+      page: 2,
+      limit: 10,
+      recordType: 'operation',
+      objectType: 'node',
+      objectId: 'n1',
+      status: 'accepted',
+      from: '2026-09-01T00:00:00Z',
+    }
+    expect((await opsAPI.listRecords(query)).total).toBe(17)
+    expect(getMock).toHaveBeenLastCalledWith('/ops/records', {
+      params: query,
+      signal: undefined,
+      skipErrorToast: true,
+    })
+  })
+  it('操作历史与事件使用独立标准分页接口，不调用旧全量事件', async () => {
+    const signal = new AbortController().signal
+    getMock.mockResolvedValue({
+      data: { list: [{ id: 'r1' }], pagination: { page: 2, limit: 10, total: 35 } },
+    })
+    expect(await opsAPI.listProjectDeploymentRuns('d1', 2, 10, signal)).toEqual({
+      items: [{ id: 'r1' }],
+      total: 35,
+    })
+    expect(getMock).toHaveBeenLastCalledWith('/ops/project-deployments/d1/runs', {
+      params: { page: 2, limit: 10 },
+      signal,
+      skipErrorToast: true,
+    })
+    await opsAPI.listDeploymentRunEventsPage('r1', 3, 10, signal)
+    expect(getMock).toHaveBeenLastCalledWith('/ops/deployment-runs/r1/events/page', {
+      params: { page: 3, limit: 10 },
+      signal,
+      skipErrorToast: true,
+    })
+  })
   beforeEach(() => {
     getMock.mockReset()
     postMock.mockReset()
     patchMock.mockReset()
     deleteMock.mockReset()
+  })
+  it('重新部署通过正式动作接口，列表环境过滤与取消信号传给统一请求层', async () => {
+    const controller = new AbortController()
+    getMock.mockResolvedValue({ data: { items: [], total: 0 } })
+    postMock.mockResolvedValue({ data: { deployment: { id: 'd1' }, run: { id: 'r1' } } })
+    await opsAPI.listProjectDeployments(
+      { page: 2, pageSize: 10, environmentId: 'e1', keyword: '工程' },
+      controller.signal,
+    )
+    expect(getMock).toHaveBeenCalledWith('/ops/project-deployments', {
+      params: { page: 2, pageSize: 10, environmentId: 'e1', search: '工程' },
+      signal: controller.signal,
+      skipErrorToast: true,
+    })
+    await opsAPI.operateProjectDeployment('d1', 'redeploy')
+    expect(postMock).toHaveBeenCalledWith('/ops/project-deployments/d1/redeploy', undefined, {
+      skipErrorToast: true,
+    })
   })
   it('运行环境编辑和删除使用受控接口与名称确认', async () => {
     const environmentId = '66666666-6666-4666-8666-666666666666'

@@ -18,6 +18,8 @@ import type {
   WorkspaceToolProject,
   WorkspaceToolTarget,
 } from '@/types/workspace-tool'
+import { projectAPI } from '@/api/project.api'
+import { cacheAuthoringContext, getCachedAuthoringContext } from '@/utils/authoring-context'
 
 const props = defineProps<{
   target: WorkspaceToolTarget
@@ -70,10 +72,19 @@ async function loadSession(): Promise<void> {
   error.value = ''
   frameUrl.value = ''
   try {
+    const projectId = String(props.project.id)
+    if (!getCachedAuthoringContext(projectId)) {
+      const context = (await projectAPI.getAuthoringContext(projectId)) as {
+        data?: { authoringEpoch?: string | number }
+      }
+      const epoch = String(context.data?.authoringEpoch || '').trim()
+      if (!epoch) throw new Error('工程开发上下文不可用')
+      cacheAuthoringContext({ projectId, authoringEpoch: epoch })
+    }
     const response = (await request.post<ApiResponse<EditorSessionResponse>>(
-      `/projects/${encodeURIComponent(String(props.project.id))}/scenes/${encodeURIComponent(props.sceneId)}/editor-session`,
+      `/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(props.sceneId)}/editor-session`,
       undefined,
-      { params: { kind: props.target } },
+      { params: { kind: props.target }, projectId: props.project.id },
     )) as unknown as ApiResponse<EditorSessionResponse>
     if (!response.data?.url) throw new Error('编辑会话接口未返回 URL')
     frameUrl.value = response.data.url

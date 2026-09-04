@@ -30,7 +30,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowDown, Cpu, List, Monitor, UploadFilled } from '@element-plus/icons-vue'
 
-export type OpsSection = 'environments' | 'nodes' | 'deployments' | 'tasks'
+export type OpsSection = 'environments' | 'nodes' | 'deployments' | 'records'
 
 const props = defineProps<{
   modelValue: OpsSection
@@ -63,8 +63,8 @@ const sections = computed(() => [
     administratorOnly: false,
   },
   {
-    value: 'tasks' as const,
-    label: t('opsConsole.sections.tasks'),
+    value: 'records' as const,
+    label: t('opsConsole.sections.records'),
     icon: List,
     administratorOnly: false,
   },

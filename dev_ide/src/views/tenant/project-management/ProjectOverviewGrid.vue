@@ -235,21 +235,11 @@
                 </el-button>
               </el-tooltip>
 
-              <el-tooltip
+              <ProjectDeploymentButton
                 v-if="showDeployAction"
-                :content="t('projectManagement.publishAndDeploy')"
-                placement="top"
-              >
-                <el-button
-                  size="small"
-                  text
-                  circle
-                  class="!w-7 !h-7"
-                  @click.stop="emit('deploy', project)"
-                >
-                  <el-icon><UploadFilled /></el-icon>
-                </el-button>
-              </el-tooltip>
+                :summary="project.deploymentSummary"
+                @click="emit('deploy', project)"
+              />
 
               <el-tooltip
                 v-if="showExportAction"
@@ -295,6 +285,7 @@
 </template>
 
 <script setup lang="ts">
+import ProjectDeploymentButton from './ProjectDeploymentButton.vue'
 import { computed } from 'vue'
 import dayjs from 'dayjs'
 import {
@@ -732,12 +723,13 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
   margin-top: 8px;
 }
 
-/* ─── 底部：时间 + 操作始终保持一行 ─── */
+/* 时间与操作分层，状态文字按钮不能挤压完整时间。 */
 .project-overview-grid__footer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
   margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid var(--ck-border-light);
@@ -747,21 +739,20 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
 .project-overview-grid__time {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: calc(100% - 178px);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 100%;
   white-space: nowrap;
   color: var(--ck-text-muted);
-  font-size: 10px;
+  font-size: 12px;
   opacity: 0.7;
 }
 
-/* ─── 操作按钮组：极简透明风格，不换行不压缩 ─── */
+/* 保留全部动作，窄卡片按需换行。 */
 .project-overview-grid__actions {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  width: 166px;
+  width: 100%;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 2px;
   background: transparent;

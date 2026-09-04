@@ -11,6 +11,12 @@ import {
 } from '@/views/tenant/project-management/use-project-overview'
 import type { ProjectOverviewRuntimeSummary } from '@/views/tenant/project-management/project-overview.types'
 
+const deferred = <T>() => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => { resolve = done })
+  return { promise, resolve }
+}
+
 const createRuntimeSummary = (): ProjectOverviewRuntimeSummary => ({
   runtimeStatus: 'running',
   deploymentCount: 1,
@@ -425,5 +431,19 @@ describe('project-overview-state', () => {
 
     expect(overview.groupContext.groupId).toBe('group-next')
     expect(overview.groupContext.groupName).toBe('原始分组')
+  })
+
+  test('筛选切换后的新请求不会被迟到的旧快照覆盖', async () => {
+    const oldRequest = deferred<unknown>()
+    const newRequest = deferred<unknown>()
+    const fetchProjectsApi = vi.fn().mockReturnValueOnce(oldRequest.promise).mockReturnValueOnce(newRequest.promise)
+    const overview = useProjectOverviewState({ fetchProjectsApi })
+    const oldRun = overview.fetchProjects({ search: '旧' })
+    const newRun = overview.fetchProjects({ search: '新' })
+    newRequest.resolve({ data: { list: { projects: [{ id: 'new', name: '新工程' }] }, pagination: { page: 1, limit: 20, total: 1 } } })
+    await newRun
+    oldRequest.resolve({ data: { list: { projects: [{ id: 'old', name: '旧工程' }] }, pagination: { page: 1, limit: 20, total: 1 } } })
+    await oldRun
+    expect(overview.projects.value.map((item) => item.id)).toEqual(['new'])
   })
 })

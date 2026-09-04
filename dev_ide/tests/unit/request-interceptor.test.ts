@@ -81,6 +81,55 @@ describe('request interceptor', () => {
     expect(nextConfig).toBe(config)
   })
 
+  it('工程写请求应优先按显式 projectId 携带 authoring epoch', async () => {
+    const { cacheAuthoringContext } = await import('@/utils/authoring-context')
+    cacheAuthoringContext({ projectId: 'project-explicit', authoringEpoch: 'epoch-7' })
+    await import('@/utils/request')
+    const requestFulfilled = requestUseMock.mock.calls[0]?.[0] as (
+      config: InternalAxiosRequestConfig,
+    ) => InternalAxiosRequestConfig
+    const config = {
+      method: 'post',
+      url: '/projects/project-from-url/scenes',
+      projectId: 'project-explicit',
+      headers: {},
+    } as InternalAxiosRequestConfig
+
+    requestFulfilled(config)
+
+    expect(config.headers['X-InduForge-Authoring-Epoch']).toBe('epoch-7')
+  })
+
+  it('stale 409 应通知失效且不得自动重放写请求', async () => {
+    await import('@/utils/request')
+    const responseRejected = responseUseMock.mock.calls[0]?.[1] as (
+      error: unknown,
+    ) => Promise<unknown>
+    const listener = vi.fn()
+    window.addEventListener('induforge:authoring-stale', listener)
+    const error = {
+      response: {
+        status: 409,
+        data: {
+          code: 40901,
+          msg: '开发内容已切换',
+          data: {
+            projectId: 'project-1',
+            currentAuthoringEpoch: 'epoch-8',
+            action: 'reload',
+          },
+        },
+      },
+      config: { method: 'put', url: '/projects/project-1/scenes/scene-1', headers: {} },
+    }
+
+    await expect(responseRejected(error)).rejects.toBe(error)
+
+    expect(requestMock).not.toHaveBeenCalled()
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener('induforge:authoring-stale', listener)
+  })
+
   it('401 时应清理本地展示态', async () => {
     await import('@/utils/request')
 

@@ -76,10 +76,18 @@ export type ProjectUpdatePayload = {
   visibility?: ProjectVisibility
 }
 
+export type ProjectAuthoringContext = {
+  projectId: string
+  authoringEpoch: string
+}
+
 /**
  * 工程管理 API
  */
 export const projectAPI = {
+  getAuthoringContext(id: ApiId) {
+    return request.get(`/projects/${id}/authoring-context`, { projectId: id })
+  },
   /**
    * 获取工程列表
    * @param {object} params - 查询参数

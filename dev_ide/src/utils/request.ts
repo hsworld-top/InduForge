@@ -8,6 +8,7 @@ import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
 import { STORAGE_KEYS } from '@/constants'
 import type { ApiResponse } from '@/types/api'
+import { getCachedAuthoringContext, notifyAuthoringStale } from './authoring-context'
 
 type RequestInstance = AxiosInstance & {
   <T = unknown, D = unknown>(config: AxiosRequestConfig<D>): Promise<T>
@@ -25,6 +26,8 @@ type RequestInstance = AxiosInstance & {
 /** 调用方可选择自行呈现错误，认证刷新和登录跳转仍由统一层处理。 */
 export type RequestConfig = AxiosRequestConfig & {
   skipErrorToast?: boolean
+  /** 普通开发态写入所属工程，用于携带并发代次，优先级高于 URL 兼容解析。 */
+  projectId?: string | number
 }
 
 /**
@@ -63,6 +66,7 @@ type ExtendedRequestConfig = InternalAxiosRequestConfig & {
   _authRetried?: boolean
   /** 下载等场景需要读取响应头时，保留 Axios 原始响应。 */
   returnRawResponse?: boolean
+  projectId?: string | number
 }
 
 type ApiErrorMeta = {
@@ -172,7 +176,7 @@ export const getApiErrorReqId = (error: unknown): string | undefined => {
   return resolveApiError(error).reqId
 }
 
-const clearAuthAndRedirectToLogin = () => {
+export const clearAuthAndRedirectToLogin = () => {
   Storage.remove(STORAGE_KEYS.USER_INFO)
   Storage.remove(STORAGE_KEYS.TENANT_ID)
   window.location.href = '/login'
@@ -208,6 +212,37 @@ export const refreshSession = (): Promise<boolean> => {
 const isRefreshRequest = (config?: ExtendedRequestConfig): boolean =>
   String(config?.url || '').includes('/auth/refresh')
 
+const isMutation = (method?: string): boolean =>
+  ['post', 'put', 'patch', 'delete'].includes(String(method || 'get').toLowerCase())
+
+const resolveProjectId = (config?: ExtendedRequestConfig): string => {
+  const explicit = String(config?.projectId ?? '').trim()
+  if (explicit) return explicit
+  const match = String(config?.url || '').match(/\/projects\/([^/?#]+)/)
+  return match?.[1] ? decodeURIComponent(match[1]) : ''
+}
+
+const resolveStaleDetail = (
+  config: ExtendedRequestConfig | undefined,
+  status: number | undefined,
+  payload: ErrorResponseData | undefined,
+) => {
+  if (status !== 409 || !isMutation(config?.method)) return null
+  const data = payload?.data
+  if (!data || typeof data !== 'object' || (data as Record<string, unknown>).action !== 'reload') {
+    return null
+  }
+  const record = data as Record<string, unknown>
+  const projectId = String(record.projectId || resolveProjectId(config)).trim()
+  if (!projectId) return null
+  const current = String(record.currentAuthoringEpoch || '').trim()
+  return {
+    projectId,
+    currentAuthoringEpoch: current || undefined,
+    action: 'reload' as const,
+  }
+}
+
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
@@ -224,6 +259,15 @@ request.interceptors.request.use(
     const tenantId = Storage.getTenantId()
     if (tenantId) {
       ;(config.headers as Record<string, string>)['X-Tenant-ID'] = tenantId
+    }
+
+    if (isMutation(config.method)) {
+      const projectId = resolveProjectId(config as ExtendedRequestConfig)
+      const context = projectId ? getCachedAuthoringContext(projectId) : null
+      if (context) {
+        ;(config.headers as Record<string, string>)['X-InduForge-Authoring-Epoch'] =
+          context.authoringEpoch
+      }
     }
 
     return config
@@ -259,6 +303,12 @@ request.interceptors.response.use(
   async (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
     const config = error.config as ExtendedRequestConfig | undefined
+
+    const staleDetail = resolveStaleDetail(config, response?.status, response?.data)
+    if (staleDetail) {
+      notifyAuthoringStale(staleDetail)
+      return Promise.reject(error)
+    }
 
     // 登录会话仍需由统一层续租或跳转；其余运维请求交给业务层展示一次明确错误。
     if (config?.skipErrorToast && (!response || response.status !== 401)) {

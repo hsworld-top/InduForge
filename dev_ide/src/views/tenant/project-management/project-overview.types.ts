@@ -6,6 +6,7 @@ import type {
   ProjectRuntimeMode,
   ProjectVisibility,
 } from '@/api/project.api'
+import type { ProjectDeploymentSummary } from './project-deployment-action'
 
 export type ProjectOverviewViewMode = 'card' | 'list'
 
@@ -77,6 +78,7 @@ export interface ProjectOverviewRuntimeSummary {
 }
 
 export interface ProjectOverviewItem {
+  deploymentSummary?: ProjectDeploymentSummary
   id: string
   name: string
   description?: string | null

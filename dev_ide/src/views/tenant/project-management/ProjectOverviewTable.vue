@@ -1,5 +1,6 @@
 <template>
   <el-table
+    class="project-overview-table"
     :data="tableRows"
     row-key="id"
     :span-method="handleSpanMethod"
@@ -19,7 +20,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column :label="t('projectManagement.projectName')" min-width="160">
+    <el-table-column :label="t('projectManagement.projectName')" min-width="140">
       <template #default="{ row }">
         <div v-if="isGroupRow(row)" class="project-overview-table__group-header">
           <div class="project-overview-table__group-main">
@@ -66,7 +67,7 @@
     <el-table-column
       v-if="showCreatorColumn"
       :label="t('projectManagement.createdBy')"
-      width="140"
+      width="110"
       show-overflow-tooltip
     >
       <template #default="{ row }">
@@ -79,7 +80,7 @@
     <el-table-column
       v-if="showRuntimeModeColumn"
       :label="t('projectManagement.runtimeMode')"
-      width="110"
+      width="88"
       align="center"
     >
       <template #default="{ row }">
@@ -92,7 +93,7 @@
     <el-table-column
       v-if="showRuntimeStatusColumn"
       :label="t('projectManagement.deployStatus')"
-      width="120"
+      width="100"
       align="center"
     >
       <template #default="{ row }">
@@ -109,7 +110,7 @@
     <el-table-column
       v-if="showDescriptionColumn"
       :label="t('projectManagement.description')"
-      min-width="280"
+      min-width="160"
       show-overflow-tooltip
     >
       <template #default="{ row }">
@@ -122,7 +123,7 @@
     <el-table-column
       v-if="showUpdatedAtColumn"
       :label="t('projectManagement.sortFieldUpdatedAt')"
-      width="170"
+      width="138"
     >
       <template #default="{ row }">
         <span v-if="isItemRow(row)">{{ resolveDisplayTime(row.project.updatedAt) }}</span>
@@ -133,7 +134,7 @@
       v-if="showActionColumn"
       prop="actions"
       :label="t('projectManagement.actions')"
-      width="430"
+      width="315"
       fixed="right"
     >
       <template #default="{ row }">
@@ -155,21 +156,11 @@
               </el-button>
             </el-tooltip>
 
-            <el-tooltip
+            <ProjectDeploymentButton
               v-if="showDeployAction"
-              :content="t('projectManagement.publishAndDeploy')"
-              placement="top"
-            >
-              <el-button
-                size="small"
-                text
-                circle
-                class="!w-7 !h-7"
-                @click.stop="emit('deploy', row.project)"
-              >
-                <el-icon><UploadFilled /></el-icon>
-              </el-button>
-            </el-tooltip>
+              :summary="row.project.deploymentSummary"
+              @click="emit('deploy', row.project)"
+            />
 
             <el-tooltip
               v-if="showExportAction"
@@ -249,6 +240,7 @@
 </template>
 
 <script setup lang="ts">
+import ProjectDeploymentButton from './ProjectDeploymentButton.vue'
 import { computed } from 'vue'
 import dayjs from 'dayjs'
 import {
@@ -662,12 +654,18 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
 }
 
 .project-overview-table__project-actions {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 1fr;
   width: 100%;
   align-items: center;
   justify-content: flex-start;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 2px;
+}
+
+.project-overview-table :deep(.el-table-fixed-column--right) {
+  background: var(--ck-bg-card, var(--el-bg-color)) !important;
+  box-shadow: -8px 0 12px -12px rgb(15 23 42 / 45%);
 }
 
 .project-overview-table__description-cell {

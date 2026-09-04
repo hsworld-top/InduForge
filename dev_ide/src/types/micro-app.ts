@@ -10,6 +10,7 @@ export interface MicroAppProjectContext {
   id: string
   tenantId?: string
   name?: string
+  authoringEpoch?: string
 }
 
 /**

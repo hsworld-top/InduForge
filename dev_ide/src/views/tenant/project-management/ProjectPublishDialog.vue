@@ -5,8 +5,11 @@
     width="min(680px, 92vw)"
     append-to-body
     destroy-on-close
+    :show-close="!operationLocked"
+    :close-on-click-modal="!operationLocked"
+    :close-on-press-escape="!operationLocked"
     class="project-publish-dialog"
-    @update:model-value="emit('update:visible', $event)"
+    @update:model-value="handleVisibleChange"
   >
     <div v-if="activeView === 'versions'" v-loading="versionLoading" class="version-manager">
       <div class="version-manager-toolbar">
@@ -31,7 +34,7 @@
         <span>{{ t('projectManagement.versionStatus') }}</span>
         <span>{{ t('projectManagement.versionRefCount') }}</span>
         <span>{{ t('projectManagement.createdAt') }}</span>
-        <span />
+          <span>{{ t('projectManagement.actions') }}</span>
       </div>
 
       <div v-if="sortedVersions.length" class="version-list">
@@ -42,23 +45,38 @@
           </el-tag>
           <span>{{ version.nodeDeploymentRefCount || 0 }}</span>
           <time>{{ formatVersionTime(version.createdAt) }}</time>
-          <el-tooltip
-            :content="
-              canDeleteManagedVersion(version)
-                ? t('projectManagement.deleteVersion')
-                : t('projectManagement.deleteVersionBlocked')
-            "
-            placement="top"
-          >
-            <button
-              type="button"
-              class="version-delete-button"
-              :disabled="!canDeleteManagedVersion(version)"
-              @click="deleteManagedVersion(version)"
+          <div class="version-row-actions">
+            <el-tooltip :content="versionRestoreReason(version)" :disabled="versionRestoreAvailability(version).allowed" placement="top">
+              <span>
+                <el-button
+                  text
+                  size="small"
+                  class="version-restore-button"
+                  :disabled="!versionRestoreAvailability(version).allowed || operationLocked"
+                  @click="openRestoreConfirm(version)"
+                >
+                  {{ t('projectManagement.restoreDevelopment') }}
+                </el-button>
+              </span>
+            </el-tooltip>
+            <el-tooltip
+              :content="
+                canDeleteManagedVersion(version)
+                  ? t('projectManagement.deleteVersion')
+                  : t('projectManagement.deleteVersionBlocked')
+              "
+              placement="top"
             >
-              <el-icon><Delete /></el-icon>
-            </button>
-          </el-tooltip>
+              <button
+                type="button"
+                class="version-delete-button"
+                :disabled="!canDeleteManagedVersion(version) || operationLocked"
+                @click="deleteManagedVersion(version)"
+              >
+                <el-icon><Delete /></el-icon>
+              </button>
+            </el-tooltip>
+          </div>
         </div>
       </div>
       <div v-else class="version-list-empty">
@@ -66,13 +84,55 @@
       </div>
     </div>
 
+    <div v-else-if="activeView === 'restore-confirm'" class="restore-panel restore-confirm">
+      <div class="restore-version-mark">v{{ selectedRestoreVersion?.version }}</div>
+      <p>{{ t('projectManagement.restoreDevelopmentSummary') }}</p>
+      <ul>
+        <li>{{ t('projectManagement.restoreDeploymentUnaffected') }}</li>
+        <li>{{ t('projectManagement.restoreEditorsReload') }}</li>
+      </ul>
+    </div>
+
+    <div v-else-if="activeView === 'restore-progress'" class="restore-panel restore-progress" aria-live="polite">
+      <div class="restore-stage-status">{{ t(currentRestoreStage.labelKey) }}</div>
+      <div class="restore-stage-list">
+        <div v-for="(label, index) in restoreStageLabels" :key="label" :class="['restore-stage', { 'is-active': index === currentRestoreStage.active, 'is-done': index < currentRestoreStage.active }]">
+          <span class="restore-stage-dot" />
+          <span>{{ t(label) }}</span>
+        </div>
+      </div>
+      <p v-if="restoreTask?.taskId" class="restore-task-id">
+        {{ t('projectManagement.restoreTaskId', { id: restoreTask.taskId }) }}
+      </p>
+    </div>
+
+    <div v-else-if="activeView === 'restore-success'" class="restore-panel restore-result restore-result--success">
+      <h3>{{ t('projectManagement.restoreSuccess', { version: selectedRestoreVersion?.version }) }}</h3>
+      <dl>
+        <div><dt>{{ t('projectManagement.restoreBackup') }}</dt><dd>{{ t('projectManagement.restoreBackupCreated') }}</dd></div>
+        <div><dt>{{ t('projectManagement.restoreTime') }}</dt><dd>{{ formatVersionTime(restoreTask?.completedAt) }}</dd></div>
+      </dl>
+    </div>
+
+    <div v-else-if="activeView === 'restore-failure'" class="restore-panel restore-result restore-result--failure">
+      <h3>{{ t('projectManagement.restoreFailure') }}</h3>
+      <p>{{ restoreTask?.errorMessage || restoreRequestError || t('projectManagement.restoreFailedFallback') }}</p>
+      <p v-if="restoreTask?.rolledBack" class="restore-rollback">
+        {{ t('projectManagement.restoreRolledBack') }}
+      </p>
+    </div>
+
     <div v-else v-loading="loading" class="publish-dialog-body">
+      <p v-if="initialDeployment?.observedStatus === 'stopped'" class="publish-mode-hint">
+        更新后将恢复并启动当前部署。
+      </p>
       <div class="publish-mode-tabs" role="tablist">
         <button
           type="button"
           role="tab"
           data-testid="publish-mode-dev"
           :aria-selected="mode === 'DEV'"
+          :disabled="submitting"
           :class="['publish-mode-tab', { 'is-active': mode === 'DEV' }]"
           @click="mode = 'DEV'"
         >
@@ -83,6 +143,7 @@
           role="tab"
           data-testid="publish-mode-release"
           :aria-selected="mode === 'RELEASE'"
+          :disabled="submitting"
           :class="['publish-mode-tab', { 'is-active': mode === 'RELEASE' }]"
           @click="mode = 'RELEASE'"
         >
@@ -101,6 +162,7 @@
           v-model="applicationVersionId"
           size="small"
           :loading="versionLoading"
+          :disabled="submitting"
           :placeholder="t('projectManagement.chooseRelease')"
           @change="syncPlacements"
         >
@@ -122,6 +184,7 @@
           data-testid="publish-environment-select"
           :placeholder="t('projectManagement.chooseEnvironment')"
           :loading="environmentLoading"
+          :disabled="submitting"
           @change="handleEnvironmentChange"
         >
           <el-option
@@ -149,7 +212,7 @@
             size="small"
             :data-testid="`publish-engine-${engine.key}`"
             :placeholder="t('projectManagement.chooseNode')"
-            :disabled="nodeLoading"
+            :disabled="nodeLoading || submitting"
             filterable
           >
             <el-option
@@ -168,11 +231,11 @@
 
     <template #footer>
       <div v-if="activeView === 'publish'" class="publish-dialog-footer">
-        <el-button v-if="mode === 'RELEASE'" text @click="activeView = 'versions'">
+        <el-button v-if="mode === 'RELEASE'" text :disabled="submitting" @click="activeView = 'versions'">
           {{ t('projectManagement.versionManage') }}
         </el-button>
         <span class="publish-dialog-footer__spacer" />
-        <el-button @click="emit('update:visible', false)">
+        <el-button :disabled="submitting" @click="emit('update:visible', false)">
           {{ t('projectManagement.cancel') }}
         </el-button>
         <el-button
@@ -180,41 +243,64 @@
           class="publish-confirm-button"
           data-testid="publish-confirm"
           :disabled="!canConfirm"
+          :loading="submitting"
           @click="submit"
         >
-          {{
-            existingDeployment
-              ? '更新部署'
-              : mode === 'RELEASE'
-                ? t('projectManagement.publishAndDeploy')
-                : t('projectManagement.deployDevMode')
-          }}
+          {{ publishCta.label }}
         </el-button>
+      </div>
+      <div v-else-if="activeView === 'versions'" class="publish-dialog-footer">
+        <span class="publish-dialog-footer__spacer" />
+        <el-button :disabled="operationLocked" @click="requestClose">
+          {{ t('projectManagement.close') }}
+        </el-button>
+      </div>
+      <div v-else-if="activeView === 'restore-confirm'" class="publish-dialog-footer">
+        <span class="publish-dialog-footer__spacer" />
+        <el-button @click="activeView = 'versions'">{{ t('projectManagement.cancel') }}</el-button>
+        <el-button type="primary" data-testid="restore-development-confirm" @click="submitRestore">{{ t('projectManagement.backupAndContinue') }}</el-button>
+      </div>
+      <div v-else-if="activeView === 'restore-success'" class="publish-dialog-footer restore-result-actions">
+        <el-button @click="returnToVersions">{{ t('projectManagement.backToVersionManage') }}</el-button>
+        <span class="publish-dialog-footer__spacer" />
+        <el-button @click="openRestoredWorkspace('datacenter')">{{ t('projectManagement.enterDataCenter') }}</el-button>
+        <el-button type="primary" @click="openRestoredWorkspace('designer')">{{ t('projectManagement.enterDesignCenter') }}</el-button>
+      </div>
+      <div v-else-if="activeView === 'restore-failure'" class="publish-dialog-footer">
+        <span class="publish-dialog-footer__spacer" />
+        <el-button @click="returnToVersions">{{ t('projectManagement.backToVersionManage') }}</el-button>
       </div>
       <div v-else class="publish-dialog-footer">
         <span class="publish-dialog-footer__spacer" />
-        <el-button @click="emit('update:visible', false)">
-          {{ t('projectManagement.close') }}
-        </el-button>
+        <el-button disabled>{{ t('projectManagement.restoreInProgress') }}</el-button>
       </div>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ArrowLeft, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
   opsAPI,
   type ApplicationVersion,
+  type DevelopmentRestoreTask,
   type OpsNode,
   type ProjectDeployment,
   type RuntimeEnvironment,
 } from '@/api/ops.api'
 import request, { getApiErrorMessage } from '@/utils/request'
 import { formatDateTime } from '@/utils'
+import { publishActionContextMatches, type ProjectDeploymentPrimary } from './project-deployment-action'
+import { projectPublishCta } from './project-publish-cta'
+import {
+  isRestoreTerminal,
+  restoreStage,
+  restoreView,
+  versionRestoreAvailability,
+} from './project-development-restore'
 
 type PublishMode = 'DEV' | 'RELEASE'
 type EngineKey = 'base' | 'compute' | 'alarm' | 'collector'
@@ -240,16 +326,28 @@ interface ManagedApplicationVersion extends ApplicationVersion {
 const props = defineProps<{
   visible: boolean
   project: ProjectSummary | null
+  initialDeployment?: ProjectDeploymentPrimary | null
+  initialAction?: { kind: string; label: string } | null
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:visible': [visible: boolean]
   confirm: [payload: PublishPayload]
+  'restore-complete': [payload: { projectId: string }]
+  'open-restored-workspace': [payload: { projectId: string; target: 'designer' | 'datacenter' }]
 }>()
 
 const { t } = useI18n()
 const mode = ref<PublishMode>('DEV')
-const activeView = ref<'publish' | 'versions'>('publish')
+type ActiveView =
+  | 'publish'
+  | 'versions'
+  | 'restore-confirm'
+  | 'restore-progress'
+  | 'restore-success'
+  | 'restore-failure'
+const activeView = ref<ActiveView>('publish')
 const loading = ref(false)
 const versionLoading = ref(false)
 const versionCreating = ref(false)
@@ -264,6 +362,12 @@ const developmentRequirements = ref<EngineKey[]>(['base'])
 const developmentRequirementsReady = ref(false)
 const environmentId = ref('')
 const applicationVersionId = ref('')
+const selectedRestoreVersion = ref<ManagedApplicationVersion | null>(null)
+const restoreTask = ref<DevelopmentRestoreTask | null>(null)
+const restoreRequestError = ref('')
+let restorePollTimer: ReturnType<typeof setTimeout> | null = null
+let restoreRequestRevision = 0
+let restoreCompletionNotified = false
 const placements = reactive<Record<EngineKey, string>>({
   base: '',
   compute: '',
@@ -307,9 +411,36 @@ const existingDeployment = computed(() =>
     (item) => item.projectId === props.project?.id && item.environmentId === environmentId.value,
   ),
 )
+const publishCta = computed(() =>
+  projectPublishCta(existingDeployment.value, mode.value, applicationVersionId.value),
+)
+const operationLocked = computed(
+  () => Boolean(props.submitting) || activeView.value === 'restore-progress',
+)
+const currentRestoreStage = computed(() =>
+  restoreStage(restoreTask.value?.state || 'queued'),
+)
+const restoreStageLabels = [
+  'projectManagement.restoreBackupStage',
+  'projectManagement.restoreContentStage',
+  'projectManagement.restoreVerifyStage',
+]
 
+const initialContextMatches = computed(() =>
+  publishActionContextMatches(props.initialDeployment, mode.value, environmentId.value),
+)
 const dialogTitle = computed(() =>
-  activeView.value === 'versions'
+  activeView.value === 'restore-confirm'
+    ? t('projectManagement.restoreDevelopmentTitle', { version: selectedRestoreVersion.value?.version || '' })
+    : activeView.value === 'restore-progress'
+      ? `${t('projectManagement.restoreProgressTitle')} · ${props.project?.name || ''}`
+      : activeView.value === 'restore-success' || activeView.value === 'restore-failure'
+        ? `${t('projectManagement.restoreResultTitle')} · ${props.project?.name || ''}`
+  : initialContextMatches.value && props.initialAction?.label && activeView.value !== 'versions'
+    ? `${props.initialAction.label} · ${props.project?.name || ''}`
+    : initialContextMatches.value && activeView.value === 'versions' && props.initialAction?.label === '发布新版本'
+      ? `${props.initialAction.label} · ${props.project?.name || ''}`
+      : activeView.value === 'versions'
     ? `${t('projectManagement.versionManageDialog')} · ${props.project?.name || ''}`
     : t('projectManagement.deployDialog', { name: props.project?.name || '' }),
 )
@@ -340,7 +471,7 @@ const sortedVersions = computed(() =>
 )
 
 const versionStatusType = (status: string | undefined) => {
-  if (status === 'success') return 'success'
+  if (status === 'success' || status === 'ready') return 'success'
   if (status === 'failed') return 'danger'
   if (status === 'building') return 'warning'
   return 'info'
@@ -353,7 +484,100 @@ const formatVersionTime = (value: string | undefined) => (value ? formatDateTime
 
 const canDeleteManagedVersion = (version: ManagedApplicationVersion) =>
   (version.nodeDeploymentRefCount || 0) === 0 &&
-  ['success', 'failed'].includes(String(version.status || ''))
+  ['ready', 'failed'].includes(String(version.status || ''))
+
+const versionRestoreReason = (version: ManagedApplicationVersion) => {
+  const availability = versionRestoreAvailability(version)
+  if (availability.reason) return availability.reason
+  return availability.reasonKey ? t(availability.reasonKey) : ''
+}
+
+const openRestoreConfirm = (version: ManagedApplicationVersion) => {
+  if (!versionRestoreAvailability(version).allowed || operationLocked.value) return
+  selectedRestoreVersion.value = version
+  restoreTask.value = null
+  restoreRequestError.value = ''
+  activeView.value = 'restore-confirm'
+}
+
+const clearRestorePoll = () => {
+  if (restorePollTimer) clearTimeout(restorePollTimer)
+  restorePollTimer = null
+}
+
+const applyRestoreTask = (task: DevelopmentRestoreTask) => {
+  restoreTask.value = task
+  activeView.value = `restore-${restoreView(task)}` as ActiveView
+  if (task.state === 'succeeded' && !restoreCompletionNotified && props.project?.id) {
+    restoreCompletionNotified = true
+    emit('restore-complete', { projectId: props.project.id })
+  }
+  if (isRestoreTerminal(task)) clearRestorePoll()
+}
+
+const pollRestoreTask = async (taskId: string, revision: number) => {
+  try {
+    const task = await opsAPI.getDevelopmentRestoreTask(taskId)
+    if (revision !== restoreRequestRevision || !props.visible) return
+    applyRestoreTask(task)
+    if (!isRestoreTerminal(task)) {
+      restorePollTimer = setTimeout(() => void pollRestoreTask(taskId, revision), 1500)
+    }
+  } catch (error) {
+    if (revision !== restoreRequestRevision || !props.visible) return
+    restoreRequestError.value = getApiErrorMessage(error, t('projectManagement.restoreStatusUnavailable'))
+    restorePollTimer = setTimeout(() => void pollRestoreTask(taskId, revision), 3000)
+  }
+}
+
+const submitRestore = async () => {
+  const version = selectedRestoreVersion.value
+  if (
+    !version ||
+    !versionRestoreAvailability(version).allowed ||
+    operationLocked.value
+  ) return
+  const revision = ++restoreRequestRevision
+  restoreRequestError.value = ''
+  activeView.value = 'restore-progress'
+  restoreTask.value = { taskId: '', state: 'queued', versionId: version.id, version: version.version }
+  try {
+    const task = await opsAPI.restoreProjectDevelopment(version.id)
+    if (revision !== restoreRequestRevision) return
+    applyRestoreTask(task)
+    if (!isRestoreTerminal(task)) void pollRestoreTask(String(task.taskId), revision)
+  } catch (error) {
+    if (revision !== restoreRequestRevision) return
+    restoreRequestError.value = getApiErrorMessage(error, t('projectManagement.restoreSubmitFailed'))
+    restoreTask.value = {
+      taskId: '',
+      state: 'failed',
+      versionId: version.id,
+      version: version.version,
+      errorMessage: restoreRequestError.value,
+    }
+    activeView.value = 'restore-failure'
+  }
+}
+
+const returnToVersions = async () => {
+  activeView.value = 'versions'
+  await loadVersions()
+}
+
+const openRestoredWorkspace = (target: 'designer' | 'datacenter') => {
+  if (!props.project?.id) return
+  emit('open-restored-workspace', { projectId: props.project.id, target })
+  emit('update:visible', false)
+}
+
+const requestClose = () => {
+  if (!operationLocked.value) emit('update:visible', false)
+}
+
+const handleVisibleChange = (visible: boolean) => {
+  if (visible || !operationLocked.value) emit('update:visible', visible)
+}
 
 const loadVersions = async () => {
   if (!props.project?.id) return
@@ -429,7 +653,7 @@ const nodeOptionLabel = (node: OpsNode) => {
 }
 
 const canConfirm = computed(() => {
-  if (!props.project?.id || !environmentId.value || nodeLoading.value) return false
+  if (!props.project?.id || !environmentId.value || nodeLoading.value || props.submitting || publishCta.value.disabled) return false
   if (mode.value === 'DEV' && !developmentRequirementsReady.value) return false
   if (mode.value === 'RELEASE' && !applicationVersionId.value) return false
   return engineRows.value.every((engine) => Boolean(placements[engine.key]))
@@ -484,11 +708,19 @@ const loadPublishContext = async () => {
     environments.value = environmentResult.items.filter((item) => item.desiredStatus !== 'deleting')
     versions.value = versionResult.items as ManagedApplicationVersion[]
     deployments.value = deploymentResult.items
-    applicationVersionId.value = readyVersions.value[0]?.id || ''
+    const initial = props.initialDeployment
+    mode.value = initial?.mode === 'production' ? 'RELEASE' : 'DEV'
+    applicationVersionId.value = initial?.applicationVersionId || readyVersions.value[0]?.id || ''
     const defaultEnvironment =
-      availableEnvironments.value.find((item) => item.isDefault) || availableEnvironments.value[0]
+      availableEnvironments.value.find((item) => item.id === initial?.environmentId) ||
+      availableEnvironments.value.find((item) => item.isDefault) ||
+      availableEnvironments.value[0]
     environmentId.value = defaultEnvironment?.id || ''
+    for (const key of ['base', 'compute', 'alarm', 'collector'] as const) {
+      placements[key] = initial?.placements?.[key] || ''
+    }
     await loadNodes(environmentId.value)
+    if (props.initialAction?.label === '发布新版本') activeView.value = 'versions'
   } catch (error) {
     loadError.value = getApiErrorMessage(error, t('projectManagement.publishContextLoadFailed'))
   } finally {
@@ -513,6 +745,8 @@ const loadDevelopmentRequirements = async () => {
 }
 
 const reset = () => {
+  clearRestorePoll()
+  restoreRequestRevision += 1
   mode.value = 'DEV'
   activeView.value = 'publish'
   environmentId.value = ''
@@ -524,6 +758,10 @@ const reset = () => {
   developmentRequirements.value = ['base']
   developmentRequirementsReady.value = false
   loadError.value = ''
+  selectedRestoreVersion.value = null
+  restoreTask.value = null
+  restoreRequestError.value = ''
+  restoreCompletionNotified = false
   placements.base = ''
   placements.compute = ''
   placements.alarm = ''
@@ -566,6 +804,11 @@ watch(
     })
   },
 )
+
+onBeforeUnmount(() => {
+  clearRestorePoll()
+  restoreRequestRevision += 1
+})
 </script>
 
 <style scoped>
@@ -647,7 +890,7 @@ watch(
 .version-list-header,
 .version-list-row {
   display: grid;
-  grid-template-columns: minmax(100px, 0.7fr) 92px 64px minmax(150px, 1.2fr) 32px;
+  grid-template-columns: minmax(86px, 0.7fr) 76px 54px minmax(120px, 1fr) minmax(190px, 1.2fr);
   align-items: center;
   column-gap: 12px;
 }
@@ -692,6 +935,19 @@ watch(
   font-size: 11px;
 }
 
+.version-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.version-restore-button {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
 .version-delete-button {
   display: inline-flex;
   align-items: center;
@@ -727,6 +983,139 @@ watch(
   background: var(--ck-bg-secondary);
   font-size: 12px;
 }
+
+.restore-panel {
+  min-height: 300px;
+  color: var(--ck-text-secondary);
+  font-size: 13px;
+}
+
+.restore-panel h3 {
+  margin: 12px 0 10px;
+  color: var(--ck-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.restore-confirm {
+  padding: 32px 36px;
+  border: 1px solid var(--ck-border-light);
+  border-radius: var(--ck-radius-md);
+  background: var(--ck-bg-card);
+}
+
+.restore-version-mark {
+  display: inline-flex;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: var(--ck-primary);
+  background: var(--ck-primary-light);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.restore-confirm p,
+.restore-confirm ul,
+.restore-result p {
+  margin: 8px 0;
+  line-height: 1.7;
+}
+
+.restore-confirm ul {
+  padding-left: 20px;
+  color: var(--ck-text-muted);
+}
+
+.restore-progress {
+  padding: 54px 48px;
+}
+
+.restore-stage-status {
+  margin-bottom: 22px;
+  color: var(--ck-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.restore-stage-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.restore-stage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  color: var(--ck-text-muted);
+  font-size: 12px;
+}
+
+.restore-stage-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ck-border);
+}
+
+.restore-stage.is-active {
+  color: var(--ck-primary);
+  font-weight: 600;
+}
+
+.restore-stage.is-active .restore-stage-dot {
+  background: var(--ck-primary);
+  box-shadow: 0 0 0 4px var(--ck-primary-light);
+}
+
+.restore-stage.is-done .restore-stage-dot {
+  background: var(--ck-success);
+}
+
+.restore-task-id {
+  margin-top: 24px;
+  color: var(--ck-text-muted);
+  font-size: 11px;
+}
+
+.restore-result {
+  padding: 52px 44px;
+}
+
+.restore-result--success h3 {
+  color: var(--ck-success);
+}
+
+.restore-result--failure h3 {
+  color: var(--ck-danger);
+}
+
+.restore-result dl {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 0;
+}
+
+.restore-result dl div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+}
+
+.restore-result dt {
+  color: var(--ck-text-muted);
+}
+
+.restore-result dd {
+  margin: 0;
+  color: var(--ck-text-primary);
+}
+
+.restore-rollback {
+  color: var(--ck-success);
+}
+
 
 .publish-mode-tabs {
   display: grid;

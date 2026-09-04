@@ -228,7 +228,8 @@ export const applyOpsDeploymentRuntimeSummaries = (
       new Set((deployment.nodeNames || []).map(normalizeTextValue).filter(Boolean)),
     )
     const runtimeStatus = normalizeOpsRuntimeStatus(deployment.observedStatus)
-    const runtimeMode = normalizeRuntimeModeValue(deployment.mode) || project.runtimeSummary.runtimeMode
+    const runtimeMode =
+      normalizeRuntimeModeValue(deployment.mode) || project.runtimeSummary.runtimeMode
     return {
       ...project,
       runtimeSummary: {
@@ -251,6 +252,37 @@ export const applyOpsDeploymentRuntimeSummaries = (
     }
   })
 }
+
+export const applyProjectDeploymentSummaries = (projects: ProjectOverviewItem[]) =>
+  projects.map((project) => {
+    const summary = project.deploymentSummary as
+      | { deploymentCount?: number; primaryDeployment?: OpsDeploymentRuntimeSummary | null }
+      | undefined
+    if (!summary) return project
+    const primary = summary.primaryDeployment
+    if (!primary)
+      return {
+        ...project,
+        runtimeSummary: {
+          ...project.runtimeSummary,
+          deploymentCount: summary.deploymentCount || 0,
+        },
+      }
+    const services = (
+      primary as OpsDeploymentRuntimeSummary & { services?: Array<{ nodeName?: string }> }
+    ).services
+    return applyOpsDeploymentRuntimeSummaries(
+      [project],
+      [
+        {
+          ...primary,
+          projectId: project.id,
+          nodeNames:
+            primary.nodeNames || services?.map((item) => item.nodeName || '').filter(Boolean),
+        },
+      ],
+    )[0]
+  })
 
 const normalizeProjectOverviewItem = (value: unknown): ProjectOverviewItem => {
   const record = asRecord(value)
@@ -400,6 +432,7 @@ export const useProjectOverviewState = (options: UseProjectOverviewOptions = {})
   const fetchProjectsApi: FetchProjectsApi = options.fetchProjectsApi || projectAPI.getProjects
   const projects = ref<ProjectOverviewItem[]>([])
   const loading = ref(false)
+  let requestRevision = 0
   const lastQuery = ref<ProjectOverviewQueryParams>({})
 
   const state = reactive<ProjectOverviewStateTree>({
@@ -514,6 +547,7 @@ export const useProjectOverviewState = (options: UseProjectOverviewOptions = {})
   }
 
   const fetchProjects = async (extraQuery: Partial<ProjectOverviewQueryParams> = {}) => {
+    const revision = ++requestRevision
     loading.value = true
     try {
       const query = {
@@ -523,12 +557,13 @@ export const useProjectOverviewState = (options: UseProjectOverviewOptions = {})
       lastQuery.value = query
 
       const response = await fetchProjectsApi(query)
+      if (revision !== requestRevision) return projects.value
       const { projects: rawProjects, pagination } = extractProjectOverviewResponse(response)
       projects.value = rawProjects.map((item) => normalizeProjectOverviewItem(item))
       applyPagination(pagination)
       return projects.value
     } finally {
-      loading.value = false
+      if (revision === requestRevision) loading.value = false
     }
   }
 

@@ -8,6 +8,8 @@ import type {
   ProjectDeployment,
 } from '@/api/ops.api'
 
+import { opsMessageSummary } from './ops-business'
+
 export const NODE_HEARTBEAT_FRESH_MS = 45_000
 export const capabilityLabel: Record<OpsCapability, string> = {
   project_entry: '工程入口',
@@ -179,39 +181,54 @@ export const serviceStatePresentation = (service: DeploymentService) => ({
   detail: service.lastMessage || '等待状态更新',
   type: lifecycleTagType(service.observedStatus),
 })
-export const runEventPresentation = (stage?: string, message?: string) => {
+const rawRunEventPresentation = (stage?: string, message?: string) => {
   const normalizedMessage = String(message || '').toLowerCase()
+  // 只翻译中心定义的引擎前缀，保留后端已裁剪的事件正文和故障上下文。
+  const engineMessage = (message || '').replace(/^(base|compute|alarm|collector)(\s*[:：])/, (_, engine: OpsServiceType, separator: string) => `${serviceLabel[engine]}${separator}`)
   const queuedMessages: Record<string, string> = {
     'deployment queued': '部署任务已创建，等待目标节点执行',
     'start queued': '启动任务已创建，等待目标节点执行',
     'stop queued': '停止任务已创建，等待目标节点执行',
     'restart queued': '重启任务已创建，等待目标节点执行',
+    'start deployment queued': '启动任务已创建，等待目标节点执行',
+    'stop deployment queued': '停止任务已创建，等待目标节点执行',
+    'restart deployment queued': '重启任务已创建，等待目标节点执行',
+    'redeploy deployment queued': '重新部署任务已创建，等待目标节点执行',
     '删除任务已创建，等待停止 kubernetes 工作负载': '删除任务已创建，等待停止运行资源',
   }
   if (stage === 'dispatched') {
+    if (engineMessage !== message && message) return { stage: '已下发', message: engineMessage }
     if (normalizedMessage === '正在停止 kubernetes 工作负载') {
-      return { stage: '处理中', message: message || '正在停止 Kubernetes 工作负载' }
+      return { stage: '处理中', message: message || '正在停止服务实例' }
     }
-    return { stage: '已下发', message: '工作负载已下发，等待运行服务就绪' }
+    return { stage: '已下发', message: '服务实例已下发，等待运行服务就绪' }
   }
+  if (stage === 'observed') return { stage: '状态上报', message: engineMessage || '运行状态已更新' }
   if (stage === 'ready' || stage === 'succeeded') {
-    return { stage: '已就绪', message: message || '全部运行服务已通过健康检查' }
+    return { stage: '已就绪', message: engineMessage || '全部运行服务已通过健康检查' }
   }
   return {
-    stage: stage === 'queued' ? '已受理' : stage || '状态更新',
-    message: queuedMessages[normalizedMessage] || message || '状态已更新',
+    stage: stage === 'queued' ? '已受理' : stage === 'failed' ? '执行失败' : '状态更新',
+    message: queuedMessages[normalizedMessage] || engineMessage || '状态已更新',
   }
+}
+
+export const runEventPresentation = (stage?: string, message?: string) => {
+  const result = rawRunEventPresentation(stage, message)
+  return { ...result, message: opsMessageSummary(result.message, stage === 'failed' ? 'error' : stage === 'queued' || stage === 'dispatched' ? 'progress' : 'info') }
 }
 
 /**
  * 部署详情只能由后端实际观察状态推进。下发 Kubernetes 工作负载不等于容器已启动，
- * 更不能代表健康检查成功；只有入口与所有运行服务均已 running 才展示完成。
+ * 更不能代表健康检查成功；当前运行服务须就绪，历史停用服务须停止，且全部代次收敛。
  */
 export const deploymentDetailPresentation = (deployment?: {
   observedStatus?: string
   entryStatus?: string
   latestRunOperation?: string
-  services?: Array<Pick<DeploymentService, 'observedStatus'>>
+  services?: Array<
+    Pick<DeploymentService, 'desiredStatus' | 'observedStatus' | 'desiredGeneration' | 'observedGeneration'>
+  >
 }) => {
 	if (deployment?.latestRunOperation === 'stop') {
 		const failed = deployment?.observedStatus === 'failed'
@@ -222,7 +239,7 @@ export const deploymentDetailPresentation = (deployment?: {
 			steps: [
 				{
 					title: '停止运行资源',
-					description: failed ? '停止阶段失败，请查看任务事件' : stopped ? '运行资源已停止' : '正在停止 Kubernetes 工作负载',
+					description: failed ? '停止阶段失败，请查看任务事件' : stopped ? '运行资源已停止' : '正在停止服务实例',
 				},
 				{
 					title: '保留部署配置',
@@ -239,11 +256,11 @@ export const deploymentDetailPresentation = (deployment?: {
 			steps: [
 				{
 					title: '停止运行资源',
-					description: failed ? '删除阶段失败，请查看任务事件' : '正在停止 Kubernetes 工作负载',
+					description: failed ? '删除阶段失败，请查看任务事件' : '正在停止服务实例',
 				},
 				{
 					title: '清理运行态消息',
-					description: failed ? '运行态消息尚未完成清理' : '工作负载停止后清理运行态消息',
+					description: failed ? '运行态消息尚未完成清理' : '服务实例停止后清理运行态消息',
 				},
 				{
 					title: '释放工程端口',
@@ -261,8 +278,15 @@ export const deploymentDetailPresentation = (deployment?: {
     !failed &&
     deployment?.observedStatus === 'running' &&
     deployment?.entryStatus === 'running' &&
-    services.length > 0 &&
-    services.every((service) => service.observedStatus === 'running')
+    services.some((service) => (service.desiredStatus || 'running') === 'running') &&
+    services.every((service) => {
+      const desired = service.desiredStatus || 'running'
+      return (
+        ['running', 'stopped'].includes(desired) &&
+        service.observedStatus === desired &&
+        (service.observedGeneration || 0) >= (service.desiredGeneration || 0)
+      )
+    })
   if (ready) {
     return {
       active: 4,
@@ -280,7 +304,7 @@ export const deploymentDetailPresentation = (deployment?: {
     processStatus: failed ? ('error' as const) : ('process' as const),
     steps: [
       { title: '版本与环境校验', description: '部署条件已确认' },
-      { title: '运行资源准备', description: failed ? '运行资源准备失败，请查看服务状态' : '工作负载已下发，等待 Kubernetes 就绪' },
+      { title: '运行资源准备', description: failed ? '运行资源准备失败，请查看服务状态' : '服务实例已下发，等待运行组件就绪' },
       { title: '服务启动', description: failed ? '运行服务未能启动' : '等待运行服务就绪' },
       { title: '健康检查', description: failed ? '健康检查未通过' : '等待全部运行服务通过健康检查' },
     ],

@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createApp, defineComponent, h, nextTick, type App } from 'vue'
 import i18n from '@/lang'
 import ProjectManagement from '@/views/tenant/ProjectManagement.vue'
+const projectManagementSource = readFileSync('src/views/tenant/ProjectManagement.vue', 'utf8')
+const publishDialogSource = readFileSync(
+  'src/views/tenant/project-management/ProjectPublishDialog.vue',
+  'utf8',
+)
 
 const {
   mockGetProjects,
@@ -795,6 +801,23 @@ const primePageMocks = ({
             runtimeSummary: {
               deploymentCount,
             },
+            deploymentSummary: deploymentCount === 0 ? {
+              deploymentCount: 0,
+              environmentCount: 0,
+              operationInProgress: false,
+              primarySelection: 'none',
+              primaryDeployment: null,
+            } : {
+              deploymentCount: 1,
+              environmentCount: 1,
+              operationInProgress: false,
+              primarySelection: 'unique',
+              primaryDeployment: {
+                id: 'deployment-1', environmentId: 'environment-1', environmentName: '默认环境',
+                mode: 'development', desiredStatus: 'running', observedStatus: 'running',
+                operationInProgress: false, placements: { base: 'node-1' },
+              },
+            },
             tags: [],
             group: {
               id: 'group-a',
@@ -897,6 +920,21 @@ afterEach(() => {
 })
 
 describe('project-management-page', () => {
+  test('部署状态使用共享实时订阅并在隐藏、非活跃与卸载时释放', () => {
+    expect(projectManagementSource).toContain('createOpsRealtimeMonitor')
+    expect(projectManagementSource).toContain("{ topics: ['deployments'] }")
+    expect(projectManagementSource).toContain('props.isActive && pageVisible.value')
+    expect(projectManagementSource).toContain("document.addEventListener('visibilitychange'")
+    expect(projectManagementSource).toContain('realtime.dispose()')
+    expect(projectManagementSource).not.toContain('ops:deploy:status')
+    expect(projectManagementSource).toMatch(/onMounted\(\(\) => \{\s+void fetchProjects\(\)/)
+  })
+  test('发布弹窗使用入口动作标题并让生产更新先进入版本管理', () => {
+    expect(projectManagementSource).toContain(':initial-action="deployForm.project ? deploymentAction(deployForm.project) : null"')
+    expect(publishDialogSource).toContain("props.initialAction?.label === '发布新版本'")
+    expect(publishDialogSource).toContain("activeView.value = 'versions'")
+    expect(publishDialogSource).toContain('更新后将恢复并启动当前部署')
+  })
   test('页面保留新增/导入入口，并在中文创建对话框中不再出现颜色标签文案', async () => {
     primePageMocks()
     const { container } = await mountPage()
@@ -1017,10 +1055,7 @@ describe('project-management-page', () => {
       'publish:示例工程',
     )
     expect(mockMessageInfo).not.toHaveBeenCalled()
-    expect(mockRequestGet).toHaveBeenCalledWith('/ops/project-deployments', {
-      params: { page: 1, pageSize: 1, projectId: 'project-1' },
-      skipErrorToast: true,
-    })
+    expect(mockRequestGet).not.toHaveBeenCalledWith('/ops/project-deployments', expect.anything())
   })
 
   test('批量删除会复用删除影响评估与强制删除保护路径', async () => {

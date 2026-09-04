@@ -13,12 +13,17 @@ describe('工程部署新契约', () => {
     expect(consoleSource).toContain("environmentId: availableEnvironments.value[0]?.id || ''")
     expect(consoleSource).toContain('v-if="availableEnvironments.length > 1"')
     expect(consoleSource).toContain('v-if="environmentOptionTotal > 1"')
-    expect(consoleSource).toContain('else if (canAdministerOperations.value) environmentManagementMode.value = true')
+    expect(consoleSource).toContain(
+      'else if (!selectedEnvironmentId.value) environmentManagementMode.value = true',
+    )
+    expect(consoleSource).toContain('v-if="!initialSnapshotComplete"')
     expect(publishSource).toContain('v-if="availableEnvironments.length > 1"')
   })
 
   it('基础引擎恒定，三个可选引擎只由 capabilities 的四种组合推导', () => {
-    expect(consoleSource).toContain("{ key: 'base', label: t('opsConsole.deployments.baseEngine') }")
+    expect(consoleSource).toContain(
+      "{ key: 'base', label: t('opsConsole.deployments.baseEngine') }",
+    )
     for (const capability of ['compute', 'alarm', 'collector']) {
       expect(consoleSource).toContain(`deploymentCapabilities.value.has(key)`)
       expect(publishSource).toContain('selectedCapabilities.value.has(key)')
@@ -31,8 +36,8 @@ describe('工程部署新契约', () => {
   it('生产仅选择构建成功版本，开发不显示版本且使用 development/production 请求值', () => {
     expect(consoleSource).toContain("item.status === 'ready'")
     expect(publishSource).toContain("['ready', 'success'].includes")
-    expect(consoleSource).toContain("v-if=\"deployForm.mode === 'production'\"")
-    expect(consoleSource).toContain("v-if=\"deployForm.mode === 'development'\"")
+    expect(consoleSource).toContain('v-if="deployForm.mode === \'production\'"')
+    expect(consoleSource).toContain('v-if="deployForm.mode === \'development\'"')
     expect(publishSource).toContain("mode: mode.value === 'RELEASE' ? 'production' : 'development'")
     expect(consoleSource).toContain('mode: deployForm.mode')
   })
@@ -43,12 +48,32 @@ describe('工程部署新契约', () => {
     expect(publishSource).not.toContain('v-model="nextVersion"')
   })
 
+  it('版本恢复在原弹窗内确认并锁定执行，成功后由工程管理刷新并打开工作区', () => {
+    expect(publishSource).toContain("t('projectManagement.restoreDevelopment')")
+    expect(publishSource).toContain('data-testid="restore-development-confirm"')
+    expect(publishSource).toContain('opsAPI.restoreProjectDevelopment')
+    expect(publishSource).toContain("activeView === 'restore-progress'")
+    expect(publishSource).toContain("'restore-complete'")
+    expect(publishSource).toContain('v-if="restoreTask?.taskId"')
+    expect(publishSource).toContain("t(currentRestoreStage.labelKey)")
+    expect(publishSource).toContain('restoreTask?.errorMessage')
+    expect(publishSource).not.toContain('restoreTask?.error ||')
+  })
+
   it('已有同工程同环境部署明确呈现更新语义，两个弹窗高度固定', () => {
-    expect(consoleSource).toContain('item.projectId === deployForm.projectId && item.environmentId === deployForm.environmentId')
-    expect(publishSource).toContain('item.projectId === props.project?.id && item.environmentId === environmentId.value')
+    expect(consoleSource).toContain(
+      'item.projectId === deployForm.projectId && item.environmentId === deployForm.environmentId',
+    )
+    expect(publishSource).toContain(
+      'item.projectId === props.project?.id && item.environmentId === environmentId.value',
+    )
     expect(consoleSource).toContain("$t('opsConsole.deployments.updateDeployment')")
-    expect(publishSource).toContain("? '更新部署'")
-    expect(consoleSource).toMatch(/\.ops-deployment-dialog \.el-dialog__body\) \{[\s\S]*height: 468px;/)
-    expect(publishSource).toMatch(/\.project-publish-dialog \.el-dialog__body\) \{[\s\S]*height: 372px;/)
+    expect(publishSource).toContain('{{ publishCta.label }}')
+    expect(consoleSource).toMatch(
+      /\.ops-deployment-dialog \.el-dialog__body\) \{[\s\S]*height: 468px;/,
+    )
+    expect(publishSource).toMatch(
+      /\.project-publish-dialog \.el-dialog__body\) \{[\s\S]*height: 372px;/,
+    )
   })
 })

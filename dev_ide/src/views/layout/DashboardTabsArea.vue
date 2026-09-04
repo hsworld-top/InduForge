@@ -69,7 +69,9 @@
             @open-workspace="$emit('open-workspace', { tab, request: $event })"
             @close-workspace="$emit('close-workspace', { tab, request: $event })"
             @scene-committed="$emit('scene-committed', { tab, event: $event })"
+            @project-development-restored="$emit('project-development-restored', $event)"
             v-bind="tab.props"
+            :is-active="internalActiveTab === tab.key"
           />
         </div>
       </el-tab-pane>
@@ -142,6 +144,7 @@ const emit = defineEmits([
   'open-workspace',
   'close-workspace',
   'scene-committed',
+  'project-development-restored',
 ])
 
 const appStore = useAppStore()

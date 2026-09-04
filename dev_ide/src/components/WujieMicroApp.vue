@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowReactive, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowReactive, watch } from 'vue'
 import WujieVue from 'wujie-vue3'
 import { useAppStore, useAuthStore } from '@/store'
 import { refreshSession } from '@/utils/request'
@@ -23,6 +23,8 @@ import { Storage } from '@/utils/storage'
 import { createMicroAppEntryFetch } from '@/utils/micro-app-entry-fetch'
 import type { MicroAppType, MicroAppProjectContext } from '@/types/micro-app'
 import type { WorkspaceCloseRequest, WorkspaceOpenRequest } from '@/types/workspace-tool'
+import { projectAPI } from '@/api/project.api'
+import { cacheAuthoringContext } from '@/utils/authoring-context'
 
 const props = defineProps<{
   appType: MicroAppType
@@ -37,6 +39,7 @@ const emit = defineEmits<{
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const authoringEpoch = ref(String(props.project.authoringEpoch || ''))
 
 const instanceName = computed(() => `${props.appType}-${props.project.id}`)
 const appUrl = computed(() => `/${props.appType}/`)
@@ -56,10 +59,18 @@ const buildContext = () => ({
   projectId: String(props.project.id),
   projectName: props.project.name ? String(props.project.name) : undefined,
   tenantId: props.project.tenantId ? String(props.project.tenantId) : Storage.getTenantId(),
+  authoringEpoch: authoringEpoch.value || undefined,
   theme: appStore.theme === 'dark' ? 'dark' : 'light',
   locale: appStore.language === 'en' ? 'en' : 'zh',
   onRefreshAuth: refreshSession,
   onAuthExpired: handleAuthExpired,
+  onAuthoringStale: (payload: { projectId: string; currentAuthoringEpoch?: string }) => {
+    window.dispatchEvent(
+      new CustomEvent('induforge:authoring-stale', {
+        detail: { ...payload, action: 'reload' },
+      }),
+    )
+  },
   onStateChange: (payload: { title?: string; dirty?: boolean } = {}) => {
     emit('stateChange', { instanceName: instanceName.value, ...payload })
   },
@@ -82,11 +93,28 @@ const syncContext = () => {
   WujieVue.bus.$emit(contextEventName.value, nextContext)
 }
 
+const refreshAuthoringContext = async () => {
+  const projectId = String(props.project.id)
+  try {
+    const response = (await projectAPI.getAuthoringContext(projectId)) as {
+      data?: { projectId?: string; authoringEpoch?: string | number }
+    }
+    const value = String(response.data?.authoringEpoch || '').trim()
+    if (!value) return
+    authoringEpoch.value = value
+    cacheAuthoringContext({ projectId, authoringEpoch: value })
+    syncContext()
+  } catch (error) {
+    console.warn('[AuthoringContext] 获取工程开发上下文失败', error)
+  }
+}
+
 watch([() => appStore.theme, () => appStore.language], syncContext, { flush: 'post' })
 
 onMounted(() => {
   WujieVue.bus.$on(contextReadyEventName.value, syncContext)
   syncContext()
+  void refreshAuthoringContext()
 })
 
 onBeforeUnmount(() => {
