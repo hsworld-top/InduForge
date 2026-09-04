@@ -121,3 +121,16 @@ Designer 负责：
 - [工程开发工作空间网络架构](../../02-系统设计/工程开发工作空间网络架构.md)
 - [数据中心概览](../datacenter/README.md)
 - [dev_core 后端概览](../dev_core/README.md)
+
+## 10. Mac 前端连接 Linux 中心开发模式
+
+当 Mac 只运行前端时，使用根目录的 `pnpm dev:ide:linux`、`pnpm dev:datacenter:linux` 或
+`pnpm dev:designer:linux`。首次运行会从版本化模板创建本地忽略的
+`.env.frontend-linux` 后以失败退出；编辑其中的 `IF_FRONTEND_PROXY_TARGET` 为当前 Linux 中心 edge
+入口（例如 `http://172.16.125.129:18080`）后重新执行。该值必须是无账号、路径、查询参数或片段的
+HTTP(S) 纯 origin。
+
+该变量只供 Vite 进程读取，绝不会注入浏览器。浏览器 HTTP 始终请求同源 `/api/v1`，控制面和
+预览实时连接分别固定使用同源 `/control-socket.io`、`/socket.io`，由 Vite 代理转发。未使用
+`frontend-linux` 模式时，仍按根 `.env` 的 `VITE_API_URL`、`VITE_DATA_SERVICE_URL` 分别连接本机
+控制面和数据服务。

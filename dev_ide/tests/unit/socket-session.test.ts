@@ -6,10 +6,12 @@ const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
   disconnect: vi.fn(),
   emit: vi.fn(),
+  host: '',
   options: {} as Record<string, unknown>,
 }))
 vi.mock('socket.io-client', () => ({
   io: (_host: string, options: Record<string, unknown>) => {
+    mocks.host = _host
     mocks.options = options
     return {
       connected: true,
@@ -38,12 +40,19 @@ beforeEach(() => {
   mocks.connect.mockReset()
   mocks.disconnect.mockReset()
   mocks.emit.mockReset()
+  mocks.host = ''
 })
 afterEach(() => {
   closeSocket()
   vi.useRealTimers()
 })
 describe('Socket HttpOnly会话恢复', () => {
+  it('控制面 Socket 固定连接浏览器当前 origin，不读取后端绝对地址', () => {
+    initSocket()
+    expect(mocks.host).toBe(window.location.origin)
+    expect(mocks.options.path).toBe('/control-socket.io')
+  })
+
   it('运维先建立连接时旧消费者补订阅，旧消费者先建立时登记不被覆盖，重连均恢复', () => {
     const first = initSocket()
     expect(initSocket('tenant-1')).toBe(first)

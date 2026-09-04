@@ -6,8 +6,10 @@
 .env.development.local
 .env.test.local
 .env.production.local
+.env.frontend-linux
 !.env.development.example
 !.env.production.example
+!.env.frontend-linux.example
 
 # ============================================
 # 依赖与包管理缓存

@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
 import { htProductionPolicy } from './scripts/ht-editor/production-policy.mjs'
+import { createFrontendProxy } from '../scripts/dev/frontend-proxy.mjs'
 
 const require = createRequire(import.meta.url)
 const Icons = require('unplugin-icons/vite').default
@@ -40,18 +41,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.VITE_DESIGNER_PORT),
       host: true,
-      proxy: {
-        '/api/v1/data': {
-          target: env.VITE_DATA_SERVICE_URL,
-          changeOrigin: true,
-          secure: false,
-        },
-        '/api': {
-          target: env.VITE_API_URL,
-          changeOrigin: true,
-          secure: false,
-        },
-      },
+      proxy: createFrontendProxy(env),
       fs: {
         allow: ['..'],
       },

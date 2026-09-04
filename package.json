@@ -27,6 +27,7 @@
   },
   "scripts": {
     "dev:env": "node scripts/dev/ensure-development-env.mjs",
+    "dev:frontend-linux:env": "node scripts/dev/ensure-frontend-linux-env.mjs",
     "dev:compute-sandbox": "pnpm dev:env && node scripts/dev/compute-sandbox.mjs start",
     "dev:compute-sandbox:rebuild": "pnpm dev:env && node scripts/dev/compute-sandbox.mjs rebuild",
     "dev:compute-sandbox:stop": "node scripts/dev/compute-sandbox.mjs stop",
@@ -37,6 +38,9 @@
     "dev:ide": "pnpm dev:env && pnpm --filter ide dev",
     "dev:datacenter": "pnpm dev:env && pnpm --filter datacenter dev",
     "dev:designer": "pnpm dev:env && pnpm --filter designer dev",
+    "dev:ide:linux": "pnpm dev:frontend-linux:env && pnpm --filter ide exec vite --mode frontend-linux",
+    "dev:datacenter:linux": "pnpm dev:frontend-linux:env && pnpm --filter datacenter exec vite --mode frontend-linux",
+    "dev:designer:linux": "pnpm dev:frontend-linux:env && pnpm --filter designer exec vite --mode frontend-linux",
     "dev:pi-web": "pnpm --filter @induforge/pi-web dev",
     "dev:node-agent-front": "pnpm dev:env && pnpm --filter node_agent_front dev",
     "build:core": "cd dev_core && go build ./...",

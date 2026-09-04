@@ -45,14 +45,10 @@ export const initSocket = (tenantId?: string | null): Socket => {
     return socket
   }
 
-  const apiURL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim()
-  // 提取 socket.io 的 host，兼容 /api 或 /api/v1 结尾
-  const socketHost = apiURL
-    .replace(/\/api\/v1\/?$/i, '')
-    .replace(/\/api\/?$/i, '')
-    .replace(/\/$/, '')
-
-  console.log('[Socket] init host:', socketHost || '(same-origin)')
+  // 浏览器只能连当前 origin；Vite 负责把控制面 Socket 代理到本机或远程中心。
+  // 这样远程中心无需为每台开发机的 Vite 端口放开 CORS。
+  const socketHost = window.location.origin
+  console.log('[Socket] init host:', socketHost)
 
   socket = io(socketHost, {
     withCredentials: true,

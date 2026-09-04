@@ -8,5 +8,3 @@ declare module '*.vue' {
 }
 
 declare const __DATACENTER_DEBUG_ROUTE_ENABLED__: boolean
-declare const __VITE_API_URL__: string | undefined
-declare const __VITE_DATA_SERVICE_URL__: string | undefined
