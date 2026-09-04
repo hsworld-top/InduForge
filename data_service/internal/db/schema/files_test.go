@@ -53,6 +53,23 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 	}
 }
 
+func TestAuthoringFenceCompatibilityRequirementsRemainInFinalSchema(t *testing.T) {
+	payload, err := Files.ReadFile("schema.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := string(payload)
+	for _, expected := range []string{
+		"authoring_epoch bigint DEFAULT 1 NOT NULL",
+		"CREATE TABLE data_authoring_fences (",
+		"token_hash bytea NOT NULL",
+	} {
+		if !strings.Contains(baseline, expected) {
+			t.Fatalf("authoring fence compatibility baseline missing %q", expected)
+		}
+	}
+}
+
 func TestDatapointAndOutputSchemasUseCanonicalTypes(t *testing.T) {
 	payload, err := Files.ReadFile("schema.sql")
 	if err != nil {

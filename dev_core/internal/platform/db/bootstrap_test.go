@@ -16,6 +16,30 @@ func TestSchemaContainsRequiredControlPlaneTables(t *testing.T) {
 	}
 }
 
+func TestRuntimeSchemaValidationCoversAuthoringRestoreBoundary(t *testing.T) {
+	for table, columns := range map[string][]string{
+		"projects":             {"authoring_epoch"},
+		"application_versions": {"authoring_snapshot_schema", "restorable"},
+		"project_deployments":  {"deletion_requested_at"},
+	} {
+		validated := requiredColumns[table]
+		for _, column := range columns {
+			if !containsString(validated, column) {
+				t.Fatalf("runtime schema validation missing %s.%s", table, column)
+			}
+		}
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSchemaDoesNotContainLegacyDesignerTables(t *testing.T) {
 	for _, table := range []string{"design_pages", "design_project_settings", "design_asset_folders", "design_assets"} {
 		if strings.Contains(coreschema.CoreSQL, table) {

@@ -46,6 +46,25 @@ func (i *Initializer) Ensure(ctx context.Context) error {
 		return fmt.Errorf("检查数据库是否为空失败: %w", err)
 	}
 	if hasTables {
+		for table, columns := range map[string][]string{
+			"data_project_tenant_bindings": {"authoring_epoch"},
+			"data_authoring_fences":        {"project_id", "tenant_id", "owner_id", "mode", "token_hash", "expires_at"},
+		} {
+			for _, column := range columns {
+				var exists bool
+				if err := tx.QueryRow(ctx, `
+					SELECT EXISTS (
+						SELECT 1 FROM information_schema.columns
+						WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2
+					)
+				`, table, column).Scan(&exists); err != nil {
+					return fmt.Errorf("校验数据域数据库字段 %s.%s 失败: %w", table, column, err)
+				}
+				if !exists {
+					return fmt.Errorf("数据域数据库结构不兼容，缺少必需字段 %s.%s；请按当前最终基线重建数据库", table, column)
+				}
+			}
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("提交数据库结构检查事务失败: %w", err)
 		}

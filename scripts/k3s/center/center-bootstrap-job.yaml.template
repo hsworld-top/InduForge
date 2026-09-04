@@ -1,0 +1,96 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: center-control-bootstrap
+  namespace: induforge-system
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-control-bootstrap
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        induforge.io/center-node: "true"
+      securityContext:
+        supplementalGroups: [__DOCKER_GID__]
+        fsGroup: 1000
+      initContainers:
+        - name: initialize-control-database
+          image: docker.io/timescale/timescaledb:2.26.4-pg16
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              case "${IF_META_STORE_CORE_DB}" in
+                ''|*[!A-Za-z0-9_]*) echo "invalid IF_META_STORE_CORE_DB" >&2; exit 1 ;;
+              esac
+              export PGPASSWORD="${IF_META_STORE_PASSWORD}"
+              until psql -h center-meta-store -p 18432 -U "${IF_META_STORE_USER}" -d "${IF_META_STORE_ADMIN_DATABASE}" -tAc 'SELECT 1' >/dev/null; do sleep 2; done
+              if ! psql -h center-meta-store -p 18432 -U "${IF_META_STORE_USER}" -d "${IF_META_STORE_ADMIN_DATABASE}" -tAc "SELECT 1 FROM pg_database WHERE datname='${IF_META_STORE_CORE_DB}'" | grep -qx 1; then
+                psql -h center-meta-store -p 18432 -U "${IF_META_STORE_USER}" -d "${IF_META_STORE_ADMIN_DATABASE}" -c "CREATE DATABASE \"${IF_META_STORE_CORE_DB}\""
+              fi
+          env:
+            - name: IF_META_STORE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_USER
+            - name: IF_META_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_PASSWORD
+            - name: IF_META_STORE_ADMIN_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_ADMIN_DATABASE
+            - name: IF_META_STORE_CORE_DB
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: IF_META_STORE_CORE_DB
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: bootstrap
+          image: __CONTROL_IMAGE__
+          imagePullPolicy: Never
+          args: ["init"]
+          envFrom:
+            - secretRef:
+                name: center-env
+          env:
+            - name: DB_AUTO_SCHEMA_SYNC
+              value: "false"
+            - name: IF_META_STORE_HOST
+              value: center-meta-store
+            - name: IF_META_STORE_PORT
+              value: "18432"
+            - name: DATA_SERVICE_URL
+              value: http://center-data:18102
+            - name: DATA_SERVICE_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: DATA_SERVICE_INTERNAL_TOKEN
+            - name: CODE_WORKSPACE_ROOT
+              value: /var/lib/induforge/workspaces
+          volumeMounts:
+            - name: workspaces
+              mountPath: /var/lib/induforge/workspaces
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: workspaces
+          hostPath:
+            path: __DATA_ROOT__/workspaces
+            type: Directory

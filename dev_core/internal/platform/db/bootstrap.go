@@ -45,6 +45,15 @@ var requiredTables = []string{
 	"deployment_runs",
 	"deployment_run_events",
 	"deployment_services",
+	"authoring_restore_tasks",
+	"authoring_restore_task_events",
+	"authoring_project_fences",
+}
+
+var requiredColumns = map[string][]string{
+	"projects":             {"authoring_epoch"},
+	"application_versions": {"authoring_snapshot_schema", "authoring_snapshot_bucket", "authoring_snapshot_key", "authoring_snapshot_hash", "authoring_snapshot_cipher_hash", "authoring_snapshot_size", "authoring_snapshot_key_id", "authoring_project_revision", "restorable"},
+	"project_deployments":  {"deletion_requested_at"},
 }
 
 func EnsureSchema(ctx context.Context, pool *pgxpool.Pool, allowCreate bool) error {
@@ -65,6 +74,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool, allowCreate bool) err
 	for _, table := range requiredTables {
 		if _, ok := existing[table]; !ok {
 			return fmt.Errorf("控制面数据库已有业务表但缺少必需表 %s，服务拒绝自动修改", table)
+		}
+	}
+	for table, columns := range requiredColumns {
+		for _, column := range columns {
+			var exists bool
+			if err := pool.QueryRow(ctx, `
+				SELECT EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2
+				)
+			`, table, column).Scan(&exists); err != nil {
+				return fmt.Errorf("校验控制面数据库字段 %s.%s 失败: %w", table, column, err)
+			}
+			if !exists {
+				return fmt.Errorf("控制面数据库结构不兼容，缺少必需字段 %s.%s；请按当前最终基线重建数据库", table, column)
+			}
 		}
 	}
 	return nil

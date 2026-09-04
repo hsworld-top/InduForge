@@ -246,7 +246,29 @@ render_manifest() {
     -e "s|__RELEASE_KEY_ID__|$RELEASE_KEY_ID|g" \
     -e "s|__RELEASE_MIN_AGENT_VERSION__|$RELEASE_MIN_AGENT_VERSION|g" \
     -e "s|__RELEASE_MIN_RUNTIME_VERSION__|$RELEASE_MIN_RUNTIME_VERSION|g" \
+    -e "s|__CONTROL_REPLICAS__|0|g" \
     "$SCRIPT_DIR/center-system.yaml.template"
+}
+
+render_bootstrap_job() {
+  sed \
+    -e "s|__CONTROL_IMAGE__|$CONTROL_IMAGE|g" \
+    -e "s|__DATA_ROOT__|$DATA_ROOT|g" \
+    -e "s|__DOCKER_GID__|$DOCKER_GID|g" \
+    "$SCRIPT_DIR/center-bootstrap-job.yaml.template"
+}
+
+run_control_bootstrap() {
+  job_manifest=$1
+  kubectl_cmd -n "$NAMESPACE" delete job center-control-bootstrap --ignore-not-found=true --wait=true
+  kubectl_cmd apply -f "$job_manifest"
+  if ! kubectl_cmd -n "$NAMESPACE" wait --for=condition=complete job/center-control-bootstrap --timeout=180s; then
+    echo "center control database bootstrap failed" >&2
+    kubectl_cmd -n "$NAMESPACE" logs job/center-control-bootstrap --all-containers=true >&2 || true
+    kubectl_cmd -n "$NAMESPACE" describe job/center-control-bootstrap >&2 || true
+    return 1
+  fi
+  kubectl_cmd -n "$NAMESPACE" logs job/center-control-bootstrap -c bootstrap --tail=100 || true
 }
 
 persist_config() {
@@ -307,6 +329,7 @@ apply_center() {
   ensure_compute_sandbox_token "$temp_dir/center.env"
   ensure_authoring_snapshot_keyring "$temp_dir/center.env"
   render_manifest > "$temp_dir/center-system.yaml"
+  render_bootstrap_job > "$temp_dir/center-bootstrap-job.yaml"
 
   kubectl_cmd apply -f "$SCRIPT_DIR/namespace.yaml"
   kubectl_cmd label node "$CENTER_NODE_NAME" induforge.io/center-node=true --overwrite
@@ -327,9 +350,16 @@ apply_center() {
   case "$edge_config_result" in
     *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-edge ;;
   esac
+  # 等待旧控制 Pod 完全退出，避免数据库初始化期间仍有控制面写入。
+  kubectl_cmd -n "$NAMESPACE" rollout status deployment/center-control --timeout=180s
   for workload in \
     statefulset/center-meta-store statefulset/center-cache-store statefulset/center-object-store \
-    deployment/compute-sandbox deployment/center-data deployment/center-control deployment/center-edge; do
+    deployment/compute-sandbox deployment/center-data; do
+    kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
+  done
+  run_control_bootstrap "$temp_dir/center-bootstrap-job.yaml"
+  kubectl_cmd -n "$NAMESPACE" scale deployment/center-control --replicas=1
+  for workload in deployment/center-control deployment/center-edge; do
     kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
   done
   doctor

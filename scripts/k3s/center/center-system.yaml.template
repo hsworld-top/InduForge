@@ -560,7 +560,8 @@ metadata:
   name: center-control
   namespace: induforge-system
 spec:
-  replicas: 1
+  # 安装器完成一次性数据库初始化任务后才将正式控制服务放行为 1 个副本。
+  replicas: __CONTROL_REPLICAS__
   strategy:
     type: RollingUpdate
     rollingUpdate:
