@@ -138,8 +138,9 @@ if [ "$(grep -Fc 'location = /health' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
   echo "center health endpoint is not exposed on both edge listeners" >&2
   exit 1
 fi
-if [ "$(grep -Fc 'listen 80 default_server;' "$SCRIPT_DIR/nginx.conf")" -ne 1 ]; then
-  echo "center HTTP listener must remain the default server" >&2
+if [ "$(grep -Fc 'listen 80 default_server;' "$SCRIPT_DIR/nginx.conf")" -ne 1 ] || \
+   [ "$(grep -Fc 'listen 443 ssl default_server;' "$SCRIPT_DIR/nginx.conf")" -ne 1 ]; then
+  echo "center HTTP and HTTPS listeners must remain the only default servers" >&2
   exit 1
 fi
 edge_block=$(sed -n '/name: center-edge/,/volumes:/p' "$temp_dir/rendered.yaml")
@@ -170,8 +171,8 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   cat > "$temp_dir/upstream-nginx.conf" <<'EOF'
 events {}
 http {
-  server { listen 18101; location / { return 200 'ok'; } }
-  server { listen 18102; location / { return 200 'ok'; } }
+  server { listen 18101; location / { return 200 'workspace-gateway'; } }
+  server { listen 18102; location / { return 200 'data-service'; } }
 }
 EOF
   docker network create "$docker_test_network" >/dev/null
@@ -194,6 +195,22 @@ EOF
     sh -c "wget -S -O /dev/null --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test' http://center-edge/ 2>&1 || true")
   if ! printf '%s\n' "$workspace_headers" | grep -Fq 'HTTP/1.1 308 Permanent Redirect'; then
     echo "workspace HTTP host must redirect to HTTPS" >&2
+    exit 1
+  fi
+  for center_host in center.induforge.test kubelet-probe.invalid; do
+    center_body=$(docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
+      wget -qO- --no-check-certificate --header="Host: $center_host" https://center-edge/)
+    if ! printf '%s\n' "$center_body" | grep -Fq 'Welcome to nginx!'; then
+      echo "center HTTPS host $center_host did not reach the static center entry" >&2
+      exit 1
+    fi
+  done
+  workspace_body=$(docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
+    wget -qO- --no-check-certificate \
+      --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test' \
+      https://center-edge/)
+  if [ "$workspace_body" != 'workspace-gateway' ]; then
+    echo "workspace HTTPS host did not reach the authenticated center gateway" >&2
     exit 1
   fi
 else
