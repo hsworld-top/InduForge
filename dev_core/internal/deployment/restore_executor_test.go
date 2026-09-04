@@ -18,6 +18,7 @@ type restoreRepoFake struct {
 	project                                            Project
 	version                                            Version
 	finalized, compensated, completed, cleaned, failed bool
+	failErr                                            error
 }
 
 func (f *restoreRepoFake) GetRestoreTask(context.Context, string, string) (RestoreTask, error) {
@@ -38,10 +39,28 @@ func (f *restoreRepoFake) SetRestoreWorkspaceWasRunning(_ context.Context, _ str
 	return nil
 }
 func (f *restoreRepoFake) FailRestoreTask(_ context.Context, _ string, _ string, rolled bool) error {
+	if f.failErr != nil {
+		return f.failErr
+	}
 	f.failed = true
 	f.task.State = "failed"
 	f.task.RolledBack = rolled
 	return nil
+}
+
+func TestRestoreExecutorRetriesWhenPermanentFailureCannotBePersisted(t *testing.T) {
+	executor, repo, _, _, fences := restoreFixture("queued")
+	repo.task.BackupKey = ""
+	repo.failErr = errors.New("database temporarily unavailable")
+	executor.actors.(*restoreActorResolverFake).user.Role = "TENANT_ADMIN"
+	err := executor.process(context.Background(), repo.task)
+	var terminal *restoreTerminalError
+	if err == nil || errors.As(err, &terminal) || repo.failed {
+		t.Fatalf("unpersisted failure must remain retryable: err=%v repo=%+v", err, repo)
+	}
+	if fences.calls != 0 || fences.active {
+		t.Fatalf("actor validation failure acquired a fence: %+v", fences)
+	}
 }
 func (f *restoreRepoFake) FinalizeRestoreCore(_ context.Context, _ RestoreTask, _ applyRestoreCore) error {
 	f.finalized = true
@@ -111,9 +130,13 @@ func (f *restoreDataFake) GetAuthoringEpoch(context.Context, string, string) (st
 type restoreAuthoringFake struct {
 	target, backup authoringsnapshot.Snapshot
 	targetErr      error
+	captureErr     error
 }
 
 func (f *restoreAuthoringFake) Capture(context.Context, auth.User, Project) (CapturedAuthoring, error) {
+	if f.captureErr != nil {
+		return CapturedAuthoring{}, f.captureErr
+	}
 	return CapturedAuthoring{}, errors.New("unexpected capture")
 }
 func (f *restoreAuthoringFake) PersistBackup(context.Context, Project, string, CapturedAuthoring) (AuthoringSnapshotMetadata, error) {
@@ -132,6 +155,8 @@ type restoreFencesFake struct {
 	calls        int
 	cleanupCalls int
 	lastErr      error
+	active       bool
+	actor        auth.User
 }
 
 func (f *restoreFencesFake) CleanupRestoreFences(context.Context, Project, string) error {
@@ -139,11 +164,26 @@ func (f *restoreFencesFake) CleanupRestoreFences(context.Context, Project, strin
 	return nil
 }
 
-func (f *restoreFencesFake) WithRestoreFences(ctx context.Context, _ auth.User, _ Project, _ string, _ *bool, persist func(bool) error, fn func(context.Context, RestoreFenceTokens) error) error {
+func (f *restoreFencesFake) WithRestoreFences(ctx context.Context, actor auth.User, _ Project, _ string, _ *bool, persist func(bool) error, fn func(context.Context, RestoreFenceTokens) error) error {
 	f.calls++
+	f.active = true
+	f.actor = actor
 	_ = persist(true)
 	f.lastErr = fn(ctx, RestoreFenceTokens{Core: "core", Data: "data", DataEpoch: f.epoch, WorkspaceWasRunning: true, ResumeWorkspace: func(context.Context) error { return nil }})
+	var terminal *restoreTerminalError
+	if f.lastErr == nil || errors.As(f.lastErr, &terminal) {
+		f.active = false
+	}
 	return f.lastErr
+}
+
+type restoreActorResolverFake struct {
+	user auth.User
+	err  error
+}
+
+func (f *restoreActorResolverFake) GetActiveUser(context.Context, string) (auth.User, error) {
+	return f.user, f.err
 }
 
 func restoreFixture(state string) (*RestoreExecutor, *restoreRepoFake, *restoreWorkspaceFake, *restoreDataFake, *restoreFencesFake) {
@@ -153,8 +193,76 @@ func restoreFixture(state string) (*RestoreExecutor, *restoreRepoFake, *restoreW
 	data := &restoreDataFake{epoch: "epoch-2"}
 	fences := &restoreFencesFake{epoch: "epoch-2"}
 	snapshot := authoringsnapshot.Snapshot{Workspace: map[string]string{}, WorkspaceModes: map[string]uint32{}, Scenes: json.RawMessage(`{}`), Data: json.RawMessage(`{}`)}
-	executor := NewRestoreExecutor(repo, &restoreAuthoringFake{target: snapshot, backup: snapshot}, workspace, &restoreScenesFake{}, data, fences, slog.Default())
+	actors := &restoreActorResolverFake{user: auth.User{ID: task.RequestedBy, TenantID: task.TenantID, Role: "DEVELOPER"}}
+	executor := NewRestoreExecutor(repo, &restoreAuthoringFake{target: snapshot, backup: snapshot}, workspace, &restoreScenesFake{}, data, fences, actors, slog.Default())
 	return executor, repo, workspace, data, fences
+}
+
+func TestRestoreExecutorUsesRequestedUsersRealRole(t *testing.T) {
+	executor, repo, _, _, fences := restoreFixture("restoring_data")
+	if err := executor.process(context.Background(), repo.task); err != nil {
+		t.Fatal(err)
+	}
+	if fences.actor.ID != repo.task.RequestedBy || fences.actor.TenantID != repo.task.TenantID || fences.actor.Role != "DEVELOPER" {
+		t.Fatalf("restore did not use resolved request actor: %+v", fences.actor)
+	}
+}
+
+func TestRestoreExecutorRejectsCrossTenantActorAndFailsTaskWithoutFence(t *testing.T) {
+	executor, repo, _, _, fences := restoreFixture("queued")
+	repo.task.BackupKey = ""
+	executor.actors.(*restoreActorResolverFake).user.TenantID = "00000000-0000-0000-0000-000000000099"
+	err := executor.process(context.Background(), repo.task)
+	var terminal *restoreTerminalError
+	if !errors.As(err, &terminal) || !repo.failed || repo.task.State != "failed" {
+		t.Fatalf("cross-tenant actor did not fail durably: err=%v repo=%+v", err, repo)
+	}
+	if fences.calls != 0 || fences.active {
+		t.Fatalf("cross-tenant actor acquired a fence: %+v", fences)
+	}
+}
+
+func TestRestoreExecutorRejectsInvalidRoleAndFailsTaskWithoutFence(t *testing.T) {
+	executor, repo, _, _, fences := restoreFixture("queued")
+	repo.task.BackupKey = ""
+	executor.actors.(*restoreActorResolverFake).user.Role = "TENANT_ADMIN"
+	err := executor.process(context.Background(), repo.task)
+	var terminal *restoreTerminalError
+	if !errors.As(err, &terminal) || !repo.failed || repo.task.State != "failed" {
+		t.Fatalf("invalid actor role did not fail durably: err=%v repo=%+v", err, repo)
+	}
+	if fences.calls != 0 || fences.active {
+		t.Fatalf("invalid actor role acquired a fence: %+v", fences)
+	}
+}
+
+func TestRestoreExecutorFailsPermanentCaptureErrorAndReleasesFence(t *testing.T) {
+	for _, captureErr := range []error{auth.ErrPermissionDenied, ErrAuthoringSnapshotBuilderUnavailable} {
+		executor, repo, _, _, fences := restoreFixture("queued")
+		repo.task.BackupKey = ""
+		executor.authoring.(*restoreAuthoringFake).captureErr = captureErr
+		err := executor.process(context.Background(), repo.task)
+		var terminal *restoreTerminalError
+		if !errors.As(err, &terminal) || !repo.failed || repo.task.State != "failed" {
+			t.Fatalf("permanent capture error did not fail durably: cause=%v err=%v repo=%+v", captureErr, err, repo)
+		}
+		if fences.calls != 1 || fences.active {
+			t.Fatalf("permanent capture error retained a fence: cause=%v fences=%+v", captureErr, fences)
+		}
+	}
+}
+
+func TestRestoreExecutorRetainsFenceForRetryableCaptureError(t *testing.T) {
+	executor, repo, _, _, fences := restoreFixture("queued")
+	repo.task.BackupKey = ""
+	executor.authoring.(*restoreAuthoringFake).captureErr = errors.New("temporary object store failure")
+	err := executor.process(context.Background(), repo.task)
+	if err == nil || repo.failed || repo.task.State == "failed" {
+		t.Fatalf("retryable capture error must remain recoverable: err=%v repo=%+v", err, repo)
+	}
+	if fences.calls != 1 || !fences.active {
+		t.Fatalf("retryable capture error must retain its fence: %+v", fences)
+	}
 }
 
 func TestRestoreExecutorResumesAfterDataForwardWithoutRepeatingForward(t *testing.T) {

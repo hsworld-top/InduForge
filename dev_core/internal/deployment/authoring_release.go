@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -17,6 +18,8 @@ import (
 	"github.com/indu-forge/dev_core/internal/releasebuilder"
 	"github.com/indu-forge/dev_core/internal/sceneasset"
 )
+
+var ErrAuthoringSnapshotBuilderUnavailable = errors.New("开发态快照发布器未配置")
 
 type authoringWorkspace interface {
 	ExportAuthoring(string) (map[string]string, map[string]uint32, error)
@@ -113,7 +116,7 @@ func (b *AuthoringReleaseBuilder) Build(ctx context.Context, actor auth.User, pr
 
 func (b *AuthoringReleaseBuilder) Capture(ctx context.Context, actor auth.User, project Project) (CapturedAuthoring, error) {
 	if b == nil || b.workspace == nil || b.scenes == nil || b.data == nil || b.store == nil || b.keys == nil || b.source == nil {
-		return CapturedAuthoring{}, fmt.Errorf("开发态快照发布器未配置")
+		return CapturedAuthoring{}, ErrAuthoringSnapshotBuilderUnavailable
 	}
 	workspace, modes, err := b.workspace.ExportAuthoring(project.WorkspacePath)
 	if err != nil {

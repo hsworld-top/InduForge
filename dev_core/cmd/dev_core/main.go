@@ -104,8 +104,9 @@ func main() {
 		logger.Error("初始化认证令牌失败", "error", err)
 		os.Exit(1)
 	}
+	authRepository := auth.NewPostgreSQLRepository(pool)
 	authService := auth.NewService(
-		auth.NewPostgreSQLRepository(pool),
+		authRepository,
 		cacheStore,
 		tokenManager,
 		auth.ServiceConfig{AppName: cfg.AppName},
@@ -223,7 +224,7 @@ func main() {
 			os.Exit(1)
 		}
 		authoring := deployment.NewAuthoringReleaseBuilder(workspace, sceneAssetService, dataServiceClient, ifpObjects, keys, source)
-		restoreExecutor = deployment.NewRestoreExecutor(deploymentRepository, authoring, workspace, sceneAssetService, dataServiceClient, deployment.NewAuthoringCaptureCoordinator(deploymentRepository, dataServiceClient, codeWorkspaceService), logger)
+		restoreExecutor = deployment.NewRestoreExecutor(deploymentRepository, authoring, workspace, sceneAssetService, dataServiceClient, deployment.NewAuthoringCaptureCoordinator(deploymentRepository, dataServiceClient, codeWorkspaceService), authService, logger)
 		deploymentService.SetRestoreScheduler(restoreExecutor)
 	}
 	deploymentService.SetReleaseValidator(sceneAssetService)

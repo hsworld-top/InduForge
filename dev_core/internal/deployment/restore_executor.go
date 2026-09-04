@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -52,6 +53,9 @@ type restoreFenceCoordinator interface {
 	WithRestoreFences(context.Context, auth.User, Project, string, *bool, func(bool) error, func(context.Context, RestoreFenceTokens) error) error
 	CleanupRestoreFences(context.Context, Project, string) error
 }
+type restoreActorResolver interface {
+	GetActiveUser(context.Context, string) (auth.User, error)
+}
 
 type RestoreExecutor struct {
 	repo      restoreRepository
@@ -60,17 +64,18 @@ type RestoreExecutor struct {
 	scenes    restoreScenes
 	data      restoreData
 	fences    restoreFenceCoordinator
+	actors    restoreActorResolver
 	logger    *slog.Logger
 	ctx       context.Context
 	mu        sync.Mutex
 	running   map[string]struct{}
 }
 
-func NewRestoreExecutor(repo restoreRepository, authoring restoreAuthoring, workspace restoreWorkspace, scenes restoreScenes, data restoreData, fences restoreFenceCoordinator, logger *slog.Logger) *RestoreExecutor {
+func NewRestoreExecutor(repo restoreRepository, authoring restoreAuthoring, workspace restoreWorkspace, scenes restoreScenes, data restoreData, fences restoreFenceCoordinator, actors restoreActorResolver, logger *slog.Logger) *RestoreExecutor {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &RestoreExecutor{repo: repo, authoring: authoring, workspace: workspace, scenes: scenes, data: data, fences: fences, logger: logger, ctx: context.Background(), running: map[string]struct{}{}}
+	return &RestoreExecutor{repo: repo, authoring: authoring, workspace: workspace, scenes: scenes, data: data, fences: fences, actors: actors, logger: logger, ctx: context.Background(), running: map[string]struct{}{}}
 }
 func (e *RestoreExecutor) Start(ctx context.Context) { e.ctx = ctx; go e.recover(ctx) }
 func (e *RestoreExecutor) recover(ctx context.Context) {
@@ -145,8 +150,23 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 			}
 		}
 	}
-	actor := auth.User{ID: task.RequestedBy, TenantID: task.TenantID, Role: "TENANT_ADMIN"}
-	return e.fences.WithRestoreFences(ctx, actor, project, task.ID, task.WorkspaceWasRunning, func(running bool) error {
+	if e.actors == nil {
+		return e.failBeforeFence(ctx, task, fmt.Errorf("恢复任务用户解析器未配置"))
+	}
+	actor, err := e.actors.GetActiveUser(ctx, task.RequestedBy)
+	if err != nil {
+		if isPermanentRestorePreBackupError(err) {
+			return e.failBeforeFence(ctx, task, err)
+		}
+		return err
+	}
+	if actor.ID != task.RequestedBy || actor.TenantID != task.TenantID {
+		return e.failBeforeFence(ctx, task, auth.ErrPermissionDenied)
+	}
+	if err = auth.RequireCapability(actor, auth.CapabilityProjectWrite); err != nil {
+		return e.failBeforeFence(ctx, task, err)
+	}
+	err = e.fences.WithRestoreFences(ctx, actor, project, task.ID, task.WorkspaceWasRunning, func(running bool) error {
 		return e.repo.SetRestoreWorkspaceWasRunning(ctx, task.ID, running)
 	}, func(runCtx context.Context, tokens RestoreFenceTokens) error {
 		var err error
@@ -166,6 +186,9 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 		if task.BackupKey == "" {
 			captured, captureErr := e.authoring.Capture(runCtx, actor, project)
 			if captureErr != nil {
+				if isPermanentRestorePreBackupError(captureErr) {
+					return &restoreTerminalError{err: captureErr}
+				}
 				return captureErr
 			}
 			backup, persistErr := e.authoring.PersistBackup(runCtx, project, task.ID, captured)
@@ -227,6 +250,15 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 		}
 		return e.finishWorkspace(runCtx, project, task, tokens)
 	})
+	if err != nil && task.BackupKey == "" && isPermanentRestorePreBackupError(err) {
+		return e.failBeforeFence(ctx, task, err)
+	}
+	return err
+}
+
+func isPermanentRestorePreBackupError(err error) bool {
+	var terminal *restoreTerminalError
+	return errors.As(err, &terminal) || errors.Is(err, ErrAuthoringSnapshotBuilderUnavailable) || errors.Is(err, auth.ErrPermissionDenied) || errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthorized) || errors.Is(err, auth.ErrNotFound)
 }
 
 func (e *RestoreExecutor) finishWorkspace(ctx context.Context, project Project, task RestoreTask, tokens RestoreFenceTokens) error {
@@ -251,7 +283,10 @@ func (e *RestoreExecutor) finishWorkspace(ctx context.Context, project Project, 
 
 func (e *RestoreExecutor) failBeforeFence(ctx context.Context, task RestoreTask, cause error) error {
 	if task.BackupKey == "" {
-		_ = e.repo.FailRestoreTask(ctx, task.ID, releaseDiagnosticError(cause), false)
+		if err := e.repo.FailRestoreTask(ctx, task.ID, releaseDiagnosticError(cause), false); err != nil {
+			// 失败状态未持久化时必须保持可重试，不能把尚未收敛的任务伪装成终止态。
+			return fmt.Errorf("记录恢复任务失败状态: %w", err)
+		}
 	}
 	return &restoreTerminalError{err: cause}
 }
