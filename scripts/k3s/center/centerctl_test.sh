@@ -304,6 +304,36 @@ IMAGES
 fi
 shift
 case " $* " in
+  *' get deployment center-control -o jsonpath='*)
+    case "$FAKE_LEGACY_CONTROL_ENV" in
+      __default__) printf '%s\n' 'CODE_WORKSPACE_ALLOWED_ORIGINS
+CENTER_PUBLIC_ORIGIN
+WORKSPACE_PUBLIC_ORIGIN_TEMPLATE' ;;
+      *) printf '%s\n' "$FAKE_LEGACY_CONTROL_ENV" ;;
+    esac
+    ;;
+  *' get job center-control-bootstrap -o name --ignore-not-found=true '*)
+    case "${FAKE_BOOTSTRAP_JOB_STATE:-missing}" in
+      missing) : ;;
+      *) printf 'job.batch/center-control-bootstrap\n' ;;
+    esac
+    ;;
+  *' get job center-control-bootstrap -o jsonpath='*)
+    case "${FAKE_BOOTSTRAP_JOB_STATE:-missing}" in
+      failed) printf 'Failed=True\n' ;;
+      complete) printf 'Complete=True\n' ;;
+      active) : ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  *' get job center-control-bootstrap '*)
+    case "${FAKE_BOOTSTRAP_JOB_STATE:-missing}" in missing) exit 1 ;; *) : ;; esac
+    ;;
+  *' set env deployment/center-control '*)
+    if [ "$FAKE_SET_ENV_FAILURE" = 1 ]; then
+      exit 1
+    fi
+    ;;
   *' get deployment center-control '*) [ "${FAKE_DEPLOYMENT_EXISTS:-1}" = 1 ] ;;
   *' get secret center-env '*) exit 1 ;;
   *' create secret generic '*|*' create configmap '*) printf 'apiVersion: v1\nkind: Secret\n' ;;
@@ -319,10 +349,16 @@ chmod +x "$fake_bin/id" "$fake_bin/docker" "$fake_bin/openssl" "$fake_bin/stat" 
 run_fake_apply() {
   deployment_exists=$1
   log_file=$2
+  bootstrap_job_state=${3:-missing}
+  set_env_failure=${4:-0}
+  legacy_control_env=${5-__default__}
   : > "$log_file"
   PATH="$fake_bin:$PATH" \
   FAKE_K3S_LOG="$log_file" \
   FAKE_DEPLOYMENT_EXISTS="$deployment_exists" \
+  FAKE_BOOTSTRAP_JOB_STATE="$bootstrap_job_state" \
+  FAKE_LEGACY_CONTROL_ENV="$legacy_control_env" \
+  FAKE_SET_ENV_FAILURE="$set_env_failure" \
   IF_CENTER_CONFIG_FILE="$temp_dir/center-k3s.conf" \
   IF_CENTER_K3S_BIN="$fake_bin/k3s" \
   IF_CENTER_NODE_NAME=if-center-01 \
@@ -353,6 +389,54 @@ fresh_log="$temp_dir/fresh.log"
 run_fake_apply 0 "$fresh_log"
 if grep -Eq 'scale deployment/center-control --replicas=0|set env deployment/center-control' "$fresh_log"; then
   echo "fresh center install must skip the legacy deployment preparation" >&2
+  exit 1
+fi
+
+# 同名终态 bootstrap Job 必须在新建前精确删除并确认消失；失败 Job 的日志要先保留。
+for terminal_state in failed complete; do
+  retry_log="$temp_dir/bootstrap-${terminal_state}.log"
+  run_fake_apply 1 "$retry_log" "$terminal_state"
+  delete_line=$(grep -n 'delete job center-control-bootstrap --wait=true' "$retry_log" | cut -d: -f1)
+  delete_wait_line=$(grep -n 'wait --for=delete job/center-control-bootstrap --timeout=60s' "$retry_log" | cut -d: -f1)
+  bootstrap_apply_line=$(grep -n 'apply -f .*/center-bootstrap-job.yaml' "$retry_log" | cut -d: -f1)
+  if [ -z "$delete_line" ] || [ -z "$delete_wait_line" ] || [ -z "$bootstrap_apply_line" ] || [ "$delete_wait_line" -le "$delete_line" ] || [ "$bootstrap_apply_line" -le "$delete_wait_line" ]; then
+    echo "terminal bootstrap job was not deleted and awaited before recreation" >&2
+    exit 1
+  fi
+  if [ "$terminal_state" = failed ]; then
+    failed_logs_line=$(grep -n 'logs job/center-control-bootstrap --all-containers=true' "$retry_log" | cut -d: -f1)
+    failed_describe_line=$(grep -n 'describe job/center-control-bootstrap' "$retry_log" | cut -d: -f1)
+    if [ -z "$failed_logs_line" ] || [ -z "$failed_describe_line" ] || [ "$failed_logs_line" -ge "$delete_line" ] || [ "$failed_describe_line" -ge "$delete_line" ]; then
+      echo "failed bootstrap evidence was not retained before deletion" >&2
+      exit 1
+    fi
+  fi
+done
+
+active_bootstrap_log="$temp_dir/bootstrap-active.log"
+if run_fake_apply 1 "$active_bootstrap_log" active >/dev/null 2>&1; then
+  echo "active bootstrap job was incorrectly replaced" >&2
+  exit 1
+fi
+if grep -Eq 'delete job center-control-bootstrap|apply -f .*/center-bootstrap-job.yaml' "$active_bootstrap_log"; then
+  echo "active bootstrap job must not be deleted or recreated" >&2
+  exit 1
+fi
+
+# 已清理旧环境变量的重复 apply 必须继续到 bootstrap；但 kubectl 的真实失败不能吞掉。
+empty_legacy_log="$temp_dir/empty-legacy.log"
+run_fake_apply 1 "$empty_legacy_log" missing 0 ''
+if grep -Fq 'set env deployment/center-control' "$empty_legacy_log"; then
+  echo "missing legacy control env must not be removed again" >&2
+  exit 1
+fi
+set_env_failure_log="$temp_dir/set-env-failure.log"
+if run_fake_apply 1 "$set_env_failure_log" missing 1 >/dev/null 2>&1; then
+  echo "control env removal failure was incorrectly ignored" >&2
+  exit 1
+fi
+if grep -Eq 'apply -f .*/center-system.yaml' "$set_env_failure_log"; then
+  echo "apply continued after control env removal failed" >&2
   exit 1
 fi
 

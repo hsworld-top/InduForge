@@ -260,8 +260,44 @@ render_bootstrap_job() {
 
 run_control_bootstrap() {
   job_manifest=$1
-  kubectl_cmd -n "$NAMESPACE" delete job center-control-bootstrap --ignore-not-found=true --wait=true
-  kubectl_cmd apply -f "$job_manifest"
+  # --ignore-not-found 只将不存在转换为空输出；鉴权、API 等其他失败仍须中止。
+  if ! existing_job=$(kubectl_cmd -n "$NAMESPACE" get job center-control-bootstrap -o name --ignore-not-found=true); then
+    echo "unable to inspect existing center control bootstrap job" >&2
+    return 1
+  fi
+  if [ -n "$existing_job" ]; then
+    # Job 名称固定，不能对尚在执行的任务 apply：那会把本次启动附着到旧任务，
+    # 也不能直接删除它，否则会丢失唯一的初始化执行者。
+    if ! job_conditions=$(kubectl_cmd -n "$NAMESPACE" get job center-control-bootstrap -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'); then
+      echo "unable to inspect center control bootstrap job state" >&2
+      return 1
+    fi
+    case "$job_conditions" in
+      *'Complete=True'*) ;;
+      *'Failed=True'*)
+        # 失败 Job 即将删除，先输出其证据，保证本次重试不会掩盖上一轮退出原因。
+        echo "removing failed center control bootstrap job before retry" >&2
+        kubectl_cmd -n "$NAMESPACE" logs job/center-control-bootstrap --all-containers=true >&2 || true
+        kubectl_cmd -n "$NAMESPACE" describe job/center-control-bootstrap >&2 || true
+        ;;
+      *)
+        echo "center control bootstrap job is still active or pending; refusing concurrent bootstrap" >&2
+        return 1
+        ;;
+    esac
+    if ! kubectl_cmd -n "$NAMESPACE" delete job center-control-bootstrap --wait=true; then
+      echo "unable to delete completed center control bootstrap job" >&2
+      return 1
+    fi
+    if ! kubectl_cmd -n "$NAMESPACE" wait --for=delete job/center-control-bootstrap --timeout=60s; then
+      echo "center control bootstrap job deletion did not complete" >&2
+      return 1
+    fi
+  fi
+  if ! kubectl_cmd apply -f "$job_manifest"; then
+    echo "unable to create center control bootstrap job" >&2
+    return 1
+  fi
   if ! kubectl_cmd -n "$NAMESPACE" wait --for=condition=complete job/center-control-bootstrap --timeout=180s; then
     echo "center control database bootstrap failed" >&2
     kubectl_cmd -n "$NAMESPACE" logs job/center-control-bootstrap --all-containers=true >&2 || true
@@ -277,11 +313,27 @@ prepare_center_control_upgrade() {
   fi
 
   # 升级旧模板时先停止控制面写入，再清除由明文 value 切换到 Secret valueFrom 的字段。
-  # kubectl set env 使用标准 strategic merge 删除语义，避免 apply 同时保留两种来源。
+  # 仅删除实际存在的键：kubectl set env 对已经不存在的键返回非零，不能把可重试
+  # 的 apply 卡在 bootstrap 之前；读取失败仍须向上返回，不能用 || true 掩盖。
   kubectl_cmd -n "$NAMESPACE" scale deployment/center-control --replicas=0
   kubectl_cmd -n "$NAMESPACE" rollout status deployment/center-control --timeout=180s
-  kubectl_cmd -n "$NAMESPACE" set env deployment/center-control --containers=control \
-    CODE_WORKSPACE_ALLOWED_ORIGINS- CENTER_PUBLIC_ORIGIN- WORKSPACE_PUBLIC_ORIGIN_TEMPLATE-
+  if ! control_env_names=$(kubectl_cmd -n "$NAMESPACE" get deployment center-control -o jsonpath='{range .spec.template.spec.containers[?(@.name=="control")].env[*]}{.name}{"\n"}{end}'); then
+    echo "unable to inspect center-control environment" >&2
+    return 1
+  fi
+  legacy_env_removals=""
+  for legacy_env_name in CODE_WORKSPACE_ALLOWED_ORIGINS CENTER_PUBLIC_ORIGIN WORKSPACE_PUBLIC_ORIGIN_TEMPLATE; do
+    if printf '%s\n' "$control_env_names" | grep -Fxq "$legacy_env_name"; then
+      legacy_env_removals="$legacy_env_removals ${legacy_env_name}-"
+    fi
+  done
+  if [ -n "$legacy_env_removals" ]; then
+    # shellcheck disable=SC2086
+    if ! kubectl_cmd -n "$NAMESPACE" set env deployment/center-control --containers=control $legacy_env_removals; then
+      echo "unable to remove legacy center-control environment" >&2
+      return 1
+    fi
+  fi
 }
 
 persist_config() {
