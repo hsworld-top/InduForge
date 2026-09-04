@@ -26,7 +26,7 @@ IMAGE_DIR="$PACKAGE_DIR/scripts/docker/images"
 REQUIRED_IMAGES=(
   "induforge/edge:latest"
   "induforge/control:latest"
-  "induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64"
+  "induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64"
   "induforge/data:latest"
   "induforge/meta-store:latest"
   "induforge/cache-store:latest"

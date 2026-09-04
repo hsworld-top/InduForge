@@ -53,7 +53,7 @@ for expected in \
   'resources: ["nodes"]' \
   'verbs: ["get", "list", "patch"]' \
   'value: http://center-data:18102' \
-	'value: induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64' \
+	'value: induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64' \
 	'DATA_SERVICE_INTERNAL_TOKEN' \
   'value: /contracts/collector-protocols' \
   'hostPort: 18080' \
@@ -294,7 +294,7 @@ docker.io/induforge/control:1.0.0
 docker.io/induforge/data:1.0.0
 docker.io/induforge/edge:1.0.0
 docker.io/induforge/compute-sandbox:1.0.0
-docker.io/induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64
+docker.io/induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64
 docker.io/timescale/timescaledb:2.26.4-pg16
 docker.io/library/redis:7.2-alpine
 docker.io/chrislusf/seaweedfs:3.85

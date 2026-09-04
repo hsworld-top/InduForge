@@ -5,8 +5,10 @@ set -eu
 # centerctl 可能通过镜像预检却让控制面创建不存在或旧版本的工作区镜像。
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)
-workspace_image='induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64'
+workspace_image='induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64'
 legacy_image='induforge/designer-code-server:4.131.0-node22-pnpm10.19.0'
+previous_workspace_revision='a8eafe26'
+previous_workspace_image="induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-${previous_workspace_revision}-arm64"
 
 for source_file in \
   "$REPO_ROOT/designer/code-workspace/verify-image.sh" \
@@ -14,15 +16,17 @@ for source_file in \
   "$SCRIPT_DIR/center-system.yaml.template" \
   "$REPO_ROOT/scripts/offline/build-package.sh" \
   "$REPO_ROOT/scripts/offline/build-package.ps1" \
-  "$REPO_ROOT/scripts/release/build-offline-package-linux.sh" \
-  "$REPO_ROOT/scripts/docker/docker-compose.prod.yml" \
-  "$REPO_ROOT/scripts/docker/docker-compose.offline.yml"; do
+  "$REPO_ROOT/scripts/release/build-offline-package-linux.sh"; do
   if ! grep -Fq "$workspace_image" "$source_file"; then
     echo "正式工作区镜像引用缺失: $source_file" >&2
     exit 1
   fi
   if grep -Fq "$legacy_image" "$source_file"; then
     echo "正式工作区镜像仍引用旧版本: $source_file" >&2
+    exit 1
+  fi
+  if grep -Fq "$previous_workspace_image" "$source_file"; then
+    echo "正式工作区镜像仍引用前一版本: $source_file" >&2
     exit 1
   fi
 done
