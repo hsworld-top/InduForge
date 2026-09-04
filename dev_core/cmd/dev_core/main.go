@@ -414,10 +414,7 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 	}); err != nil {
 		return err
 	}
-	if dataServiceClient == nil {
-		return fmt.Errorf("数据服务项目租户绑定客户端未配置")
-	}
-	if err := dataServiceClient.EnsureProjectTenantBinding(ctx, platformdb.BuiltinDemoProjectID, cfg.DefaultTenantID); err != nil {
+	if err := syncBuiltinDemoProjectTenantBinding(ctx, pool, dataServiceClient); err != nil {
 		return fmt.Errorf("同步内置教程工程项目租户绑定失败，可稍后重试: %w", err)
 	}
 	var demoProjectActive bool
@@ -436,6 +433,35 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 		if filepath.Clean(initializedPath) != filepath.Clean(demoWorkspacePath) {
 			return fmt.Errorf("内置教程工程工作区路径不一致")
 		}
+	}
+	return nil
+}
+
+// builtinProjectTenantBindingEnsurer 将控制面已提交的工程归属同步至数据域。
+// Bootstrap 可能在工程恢复、默认租户配置调整后再次执行，因此必须以控制库的
+// tenant_id 与 authoring_epoch 为事实源，不能重新使用启动配置推导历史工程归属。
+type builtinProjectTenantBindingEnsurer interface {
+	EnsureProjectTenantBindingAtEpoch(context.Context, string, string, string) error
+}
+
+func syncBuiltinDemoProjectTenantBinding(ctx context.Context, pool *pgxpool.Pool, ensurer builtinProjectTenantBindingEnsurer) error {
+	if ensurer == nil {
+		return fmt.Errorf("数据服务项目租户绑定客户端未配置")
+	}
+	var tenantID string
+	var authoringEpoch int64
+	if err := pool.QueryRow(ctx, `SELECT tenant_id,authoring_epoch FROM projects WHERE id=$1 AND status<>'deleted'`, platformdb.BuiltinDemoProjectID).Scan(&tenantID, &authoringEpoch); err != nil {
+		return fmt.Errorf("读取内置教程工程项目归属失败: %w", err)
+	}
+	return ensureBuiltinProjectTenantBinding(ctx, ensurer, tenantID, authoringEpoch)
+}
+
+func ensureBuiltinProjectTenantBinding(ctx context.Context, ensurer builtinProjectTenantBindingEnsurer, tenantID string, authoringEpoch int64) error {
+	if authoringEpoch < 1 {
+		return fmt.Errorf("内置教程工程开发态代次无效")
+	}
+	if err := ensurer.EnsureProjectTenantBindingAtEpoch(ctx, platformdb.BuiltinDemoProjectID, tenantID, project.FormatAuthoringEpoch(authoringEpoch)); err != nil {
+		return err
 	}
 	return nil
 }
