@@ -3,7 +3,16 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 temp_dir=$(mktemp -d)
-trap 'rm -rf "$temp_dir"' EXIT INT TERM
+docker_test_network=""
+docker_test_upstream=""
+docker_test_edge=""
+cleanup() {
+  if [ -n "$docker_test_edge" ]; then docker rm -f "$docker_test_edge" >/dev/null 2>&1 || true; fi
+  if [ -n "$docker_test_upstream" ]; then docker rm -f "$docker_test_upstream" >/dev/null 2>&1 || true; fi
+  if [ -n "$docker_test_network" ]; then docker network rm "$docker_test_network" >/dev/null 2>&1 || true; fi
+  rm -rf "$temp_dir"
+}
+trap cleanup EXIT INT TERM
 
 IF_CENTER_NODE_NAME=if-center-01 \
 IF_CENTER_CONTROL_IMAGE=induforge/control:1.0.0 \
@@ -129,6 +138,15 @@ if [ "$(grep -Fc 'location = /health' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
   echo "center health endpoint is not exposed on both edge listeners" >&2
   exit 1
 fi
+if [ "$(grep -Fc 'listen 80 default_server;' "$SCRIPT_DIR/nginx.conf")" -ne 1 ]; then
+  echo "center HTTP listener must remain the default server" >&2
+  exit 1
+fi
+edge_block=$(sed -n '/name: center-edge/,/volumes:/p' "$temp_dir/rendered.yaml")
+if [ "$(printf '%s\n' "$edge_block" | grep -Fc 'path: /health')" -ne 2 ]; then
+  echo "center edge readiness and liveness probes must use /health" >&2
+  exit 1
+fi
 if ! grep -Fq 'preview-control)-[0-9a-f-]{36}' "$SCRIPT_DIR/nginx.conf" || ! grep -Fq 'proxy_pass http://center-control:18101;' "$SCRIPT_DIR/nginx.conf"; then
   echo "workspace hosts are not routed to the authenticated center gateway" >&2
   exit 1
@@ -145,6 +163,39 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     -v "$SCRIPT_DIR/nginx.conf:/etc/nginx/nginx.conf:ro" \
     -v "$temp_dir/nginx-tls:/etc/nginx/tls:ro" \
     nginx:1.28-alpine nginx -t >/dev/null
+
+  docker_test_network="induforge-center-nginx-test-$$"
+  docker_test_upstream="induforge-center-upstream-test-$$"
+  docker_test_edge="induforge-center-edge-test-$$"
+  cat > "$temp_dir/upstream-nginx.conf" <<'EOF'
+events {}
+http {
+  server { listen 18101; location / { return 200 'ok'; } }
+  server { listen 18102; location / { return 200 'ok'; } }
+}
+EOF
+  docker network create "$docker_test_network" >/dev/null
+  docker run -d --name "$docker_test_upstream" \
+    --network "$docker_test_network" \
+    --network-alias center-control \
+    --network-alias center-data \
+    -v "$temp_dir/upstream-nginx.conf:/etc/nginx/nginx.conf:ro" \
+    nginx:1.28-alpine >/dev/null
+  docker run -d --name "$docker_test_edge" \
+    --network "$docker_test_network" \
+    --network-alias center-edge \
+    -v "$SCRIPT_DIR/nginx.conf:/etc/nginx/nginx.conf:ro" \
+    -v "$temp_dir/nginx-tls:/etc/nginx/tls:ro" \
+    nginx:1.28-alpine >/dev/null
+
+  docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
+    wget -qO- --header='Host: kubelet-probe.invalid' http://center-edge/health >/dev/null
+  workspace_headers=$(docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
+    sh -c "wget -S -O /dev/null --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test' http://center-edge/ 2>&1 || true")
+  if ! printf '%s\n' "$workspace_headers" | grep -Fq 'HTTP/1.1 308 Permanent Redirect'; then
+    echo "workspace HTTP host must redirect to HTTPS" >&2
+    exit 1
+  fi
 else
   echo "skip nginx syntax test: Docker is unavailable" >&2
 fi

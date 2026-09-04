@@ -782,13 +782,13 @@ spec:
               hostPort: __HTTPS_PORT__
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: http
             initialDelaySeconds: 2
             periodSeconds: 3
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
