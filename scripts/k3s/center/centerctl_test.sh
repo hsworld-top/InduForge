@@ -152,6 +152,15 @@ if ! grep -Fq 'preview-control)-[0-9a-f-]{36}' "$SCRIPT_DIR/nginx.conf" || ! gre
   echo "workspace hosts are not routed to the authenticated center gateway" >&2
   exit 1
 fi
+workspace_tls_block=$(awk '
+  /^  server \{/ { server += 1 }
+  server == 2 { print }
+  server == 2 && /^  }$/ { exit }
+' "$SCRIPT_DIR/nginx.conf")
+if ! printf '%s\n' "$workspace_tls_block" | grep -Fq 'proxy_set_header Host $http_host;'; then
+  echo "workspace HTTPS proxy must preserve a non-default public Host port" >&2
+  exit 1
+fi
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   mkdir -p "$temp_dir/nginx-tls"
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
@@ -171,7 +180,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   cat > "$temp_dir/upstream-nginx.conf" <<'EOF'
 events {}
 http {
-  server { listen 18101; location / { return 200 'workspace-gateway'; } }
+  server { listen 18101; location / { return 200 "workspace-gateway:$http_host"; } }
   server { listen 18102; location / { return 200 'data-service'; } }
 }
 EOF
@@ -207,10 +216,10 @@ EOF
   done
   workspace_body=$(docker run --rm --network "$docker_test_network" nginx:1.28-alpine \
     wget -qO- --no-check-certificate \
-      --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test' \
+      --header='Host: code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test:18443' \
       https://center-edge/)
-  if [ "$workspace_body" != 'workspace-gateway' ]; then
-    echo "workspace HTTPS host did not reach the authenticated center gateway" >&2
+  if [ "$workspace_body" != 'workspace-gateway:code-01234567-89ab-cdef-0123-456789abcdef.workspace.induforge.test:18443' ]; then
+    echo "workspace HTTPS proxy did not preserve the non-default Host port for the authenticated center gateway" >&2
     exit 1
   fi
 else
