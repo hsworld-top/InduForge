@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// 同一查询按租户/环境批量汇总部署，不把未停止但仍在换代的工程误算为运行中。
+// 历史停用引擎可保留，但必须确认已停止且自身代次收敛；没有运行引擎的部署不计运行数。
+const runtimeEnvironmentDeploymentCountsSQL = `SELECT deployment.tenant_id,deployment.environment_id,
+	count(*)::int AS project_count,
+	count(*) FILTER (WHERE deployment.desired_status='running' AND deployment.observed_status='running'
+		AND deployment.has_running_service AND deployment.services_converged)::int AS running_deployment_count
+	FROM (
+		SELECT d.tenant_id,d.environment_id,d.id,d.desired_status,d.observed_status,
+			bool_or(s.desired_status='running') AS has_running_service,
+			bool_and(COALESCE(s.observed_status=s.desired_status AND s.observed_generation=s.desired_generation,false)) AS services_converged
+		FROM project_deployments d
+		LEFT JOIN deployment_services s ON s.project_deployment_id=d.id AND s.tenant_id=d.tenant_id
+		WHERE d.tenant_id=$1 AND d.deleted_at IS NULL
+		GROUP BY d.tenant_id,d.environment_id,d.id,d.desired_status,d.observed_status
+	) deployment GROUP BY deployment.tenant_id,deployment.environment_id`
+
 const runtimeEnvironmentProjectionSQL = `
 	SELECT e.id,e.tenant_id,e.name,e.code,e.desired_status,e.is_default,
 		CASE
@@ -20,10 +36,11 @@ const runtimeEnvironmentProjectionSQL = `
 			ELSE 'available'
 		END AS status,
 		COALESCE(ns.node_count,0),COALESCE(ns.online_count,0),
-		COALESCE(fs.service_count,0),COALESCE(fs.healthy_count,0),0,
+		COALESCE(fs.service_count,0),COALESCE(fs.healthy_count,0),COALESCE(ds.project_count,0),COALESCE(ds.running_deployment_count,0),
 		COALESCE(ev.name,'运行环境已创建'),COALESCE(ev.operator_name,'系统'),ev.created_at,
 		e.created_at,e.updated_at
 	FROM runtime_environments e
+	LEFT JOIN (` + runtimeEnvironmentDeploymentCountsSQL + `) ds ON ds.tenant_id=e.tenant_id AND ds.environment_id=e.id
 	LEFT JOIN LATERAL (
 		SELECT count(*)::int AS node_count,
 			count(*) FILTER (WHERE n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds')::int AS online_count
@@ -211,10 +228,15 @@ func (r *PostgreSQLRepository) ListRuntimeEnvironmentNodes(ctx context.Context, 
 		if scanErr != nil {
 			return nil, 0, scanErr
 		}
-		if scanErr = r.attachNodeCluster(ctx, &item); scanErr != nil {
-			return nil, 0, scanErr
-		}
 		items = append(items, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, 0, err
+	}
+	if err = r.attachNodeClusters(ctx, tenant, items); err != nil {
+		return nil, 0, err
 	}
 	var total int64
 	err = r.pool.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.tenant_id=$1 JOIN host_nodes n ON n.id=en.node_id WHERE en.environment_id=$2 AND ($3='' OR n.display_name ILIKE '%'||$3||'%' OR n.hostname ILIKE '%'||$3||'%')`, tenant, environmentID, f.Search).Scan(&total)
@@ -388,7 +410,7 @@ func (r *PostgreSQLRepository) ListRuntimeEnvironmentServices(ctx context.Contex
 	if err := r.requireRuntimeEnvironment(ctx, tenant, environmentID); err != nil {
 		return nil, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.environment_id::text,s.node_id::text,n.display_name,s.service_type,s.desired_status,s.observed_status,COALESCE(s.last_message,''),s.desired_generation,s.observed_generation,s.operation,s.observed_at,s.created_at,s.updated_at FROM runtime_environment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.tenant_id=$1 AND s.environment_id=$2 ORDER BY s.created_at,s.service_type`, tenant, environmentID)
+	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.environment_id::text,s.node_id::text,n.display_name,s.service_type,s.desired_status,s.observed_status,COALESCE(s.last_message,''),s.desired_generation,s.observed_generation,s.operation,s.observed_at,s.created_at,s.updated_at,COALESCE(s.observed_at<=now()-interval '45 seconds',true) FROM runtime_environment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.tenant_id=$1 AND s.environment_id=$2 ORDER BY s.created_at,s.service_type`, tenant, environmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +418,7 @@ func (r *PostgreSQLRepository) ListRuntimeEnvironmentServices(ctx context.Contex
 	items := make([]RuntimeEnvironmentService, 0)
 	for rows.Next() {
 		var item RuntimeEnvironmentService
-		if err := rows.Scan(&item.ID, &item.EnvironmentID, &item.NodeID, &item.NodeName, &item.ServiceType, &item.DesiredStatus, &item.ObservedStatus, &item.LastMessage, &item.DesiredGeneration, &item.ObservedGeneration, &item.Operation, &item.ObservedAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.EnvironmentID, &item.NodeID, &item.NodeName, &item.ServiceType, &item.DesiredStatus, &item.ObservedStatus, &item.LastMessage, &item.DesiredGeneration, &item.ObservedGeneration, &item.Operation, &item.ObservedAt, &item.CreatedAt, &item.UpdatedAt, &item.ObservedStale); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -615,7 +637,7 @@ func (r *PostgreSQLRepository) requireRuntimeEnvironment(ctx context.Context, te
 
 func scanRuntimeEnvironment(row scanner) (RuntimeEnvironment, error) {
 	var item RuntimeEnvironment
-	err := row.Scan(&item.ID, &item.TenantID, &item.Name, &item.Code, &item.DesiredStatus, &item.IsDefault, &item.Status, &item.NodeCount, &item.OnlineNodeCount, &item.FoundationTotal, &item.FoundationHealthy, &item.ProjectCount, &item.RecentChange, &item.RecentBy, &item.RecentAt, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.TenantID, &item.Name, &item.Code, &item.DesiredStatus, &item.IsDefault, &item.Status, &item.NodeCount, &item.OnlineNodeCount, &item.FoundationTotal, &item.FoundationHealthy, &item.ProjectCount, &item.RunningDeploymentCount, &item.RecentChange, &item.RecentBy, &item.RecentAt, &item.CreatedAt, &item.UpdatedAt)
 	return item, err
 }
 

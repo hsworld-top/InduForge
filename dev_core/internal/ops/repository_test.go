@@ -146,15 +146,19 @@ func TestDeploymentListAndTotalShareVisibleFilters(t *testing.T) {
 	if !ok {
 		t.Fatal("无法定位仓储实现文件")
 	}
-	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "repository.go"))
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "deployment_list.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(deploymentCountFilter, "d.project_id::text=$3") || strings.Contains(deploymentCountFilter, "$4") || strings.Contains(deploymentCountFilter, "$5") {
+	if !contains(deploymentCountFilter, "d.project_id::text=$3") || !contains(deploymentCountFilter, "d.environment_id::text=$4") || strings.Contains(deploymentCountFilter, "$5") {
 		t.Fatal("count 查询必须只绑定自身实际使用的搜索和工程范围参数")
 	}
-	if !strings.Contains(string(raw), "deploymentCountFilter, tenant, f.Search, f.ProjectID") {
+	if !strings.Contains(string(raw), "deploymentCountFilter, tenant, f.Search, f.ProjectID, f.EnvironmentID") {
 		t.Fatal("count 查询参数必须与 count 过滤条件严格对应")
+	}
+	// 只替换占位符后应完全一致，防止分页列表与总数的租户/工程/环境范围漂移。
+	if strings.NewReplacer("$5", "$3", "$6", "$4").Replace(deploymentListFilter) != deploymentCountFilter || !contains(deploymentListFilter, "d.tenant_id=$1") {
+		t.Fatal("列表和总数必须共享完全相同的租户、工程和环境过滤语义")
 	}
 }
 

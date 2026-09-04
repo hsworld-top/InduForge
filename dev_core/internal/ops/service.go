@@ -80,6 +80,10 @@ type Repository interface {
 	ValidateDeploymentTargets(context.Context, string, CreateDeploymentInput) error
 	GetDeployment(context.Context, string, string) (ProjectDeployment, error)
 	GetRun(context.Context, string, string) (DeploymentRun, error)
+	ListDeploymentRuns(context.Context, string, string, PageFilter) ([]DeploymentRunHistory, int64, error)
+	ListRecords(context.Context, string, RecordFilter, bool, bool) ([]OpsRecord, int64, error)
+	GetEnvironmentOverview(context.Context, string, string) (EnvironmentOverview, error)
+	ListRunEventsPage(context.Context, string, string, PageFilter) ([]DeploymentRunEvent, int64, error)
 	ListRunEvents(context.Context, string, string) ([]DeploymentRunEvent, error)
 	OperateService(context.Context, string, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
 	OperateDeployment(context.Context, string, string, string, string) (ProjectDeployment, DeploymentRun, error)
@@ -655,7 +659,7 @@ func (s *Service) OperateDeployment(ctx context.Context, actor auth.User, deploy
 	if err := auth.RequireCapability(actor, auth.CapabilityDeploymentOperate); err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
-	if operation != "start" && operation != "stop" && operation != "restart" {
+	if operation != "start" && operation != "stop" && operation != "restart" && operation != "redeploy" {
 		return ProjectDeployment{}, DeploymentRun{}, fmt.Errorf("工程部署操作不支持")
 	}
 	return s.repository.OperateDeployment(ctx, actor.TenantID, deploymentID, operation, actor.ID)

@@ -2,9 +2,12 @@ package realtime
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/indu-forge/dev_core/internal/auth"
@@ -12,27 +15,35 @@ import (
 )
 
 type Server struct {
-	io          *socket.Server
-	handler     http.Handler
-	authService *auth.Service
-	logger      *slog.Logger
+	io        *socket.Server
+	handler   http.Handler
+	logger    *slog.Logger
+	ops       *opsHub
+	authSlots chan struct{}
 }
 
 func New(authService *auth.Service, logger *slog.Logger) *Server {
+	return newServer(authService.AuthenticateSession, logger)
+}
+
+func newServer(validate sessionValidator, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	ioServer := socket.NewServer(nil, nil)
 	ioServer.SetPath("/control-socket.io")
-	server := &Server{io: ioServer, authService: authService, logger: logger}
+	server := &Server{io: ioServer, logger: logger, authSlots: make(chan struct{}, 64)}
+	server.ops = newOpsHub(validate)
 	server.handler = server.io.ServeHandler(nil)
-	server.io.On("connection", server.onConnection)
+	// namespace CONNECT 回复必须晚于鉴权及监听器安装，否则客户端首个watch可能丢失。
+	server.io.Use(server.authenticateConnection)
 	return server
 }
 
 func (s *Server) Handler() http.Handler { return s.handler }
 
 func (s *Server) Close() {
+	s.ops.close()
 	s.io.Close(func(err error) {
 		if err != nil {
 			s.logger.Warn("关闭 Socket.IO 服务失败", "error", err)
@@ -40,20 +51,95 @@ func (s *Server) Close() {
 	})
 }
 
-func (s *Server) onConnection(arguments ...any) {
-	client, ok := arguments[0].(*socket.Socket)
-	if !ok {
-		return
+func (s *Server) authenticateConnection(client *socket.Socket, next func(*socket.ExtendedError)) {
+	// 第三方库在EngineIO读循环同步调用middleware。鉴权必须异步且有并发上限，
+	// 否则慢数据库会阻塞close/ping处理，连接断开也不能取消鉴权。
+	select {
+	case s.authSlots <- struct{}{}:
+		go func() {
+			defer func() { <-s.authSlots }()
+			s.admitConnection(client, next)
+		}()
+	default:
+		next(socket.NewExtendedError("realtime authentication busy", nil))
 	}
+}
+
+func (s *Server) admitConnection(client *socket.Socket, next func(*socket.ExtendedError)) {
+	id := string(client.Id())
 	token := handshakeToken(client.Handshake())
-	actor, err := s.authService.Authenticate(context.Background(), token)
-	if err != nil {
-		client.Disconnect(true)
+	ctx, cancel := context.WithTimeout(s.ops.ctx, 3*time.Second)
+	defer cancel()
+	// Engine连接可在慢鉴权期间关闭，此时namespace尚未connected，不会发disconnect。
+	// 同一把锁覆盖关闭标记和hub准入，保证关闭与add交错也不留下幽灵连接。
+	var admission sync.Mutex
+	closed := false
+	cleanup := func(...any) {
+		admission.Lock()
+		closed = true
+		admission.Unlock()
+		cancel()
+		s.ops.remove(id)
+	}
+	client.Conn().Once("close", cleanup)
+	client.On("disconnect", cleanup)
+	if client.Conn().ReadyState() != "open" {
+		next(socket.NewExtendedError("connection closed", nil))
 		return
 	}
+	actor, expires, err := s.ops.validate(ctx, token)
+	if err != nil || ctx.Err() != nil {
+		code := opsAuthForbidden
+		if errors.Is(err, auth.ErrAccessTokenExpired) {
+			code = opsAuthExpired
+		}
+		next(socket.NewExtendedError("unauthorized", map[string]any{"code": code}))
+		return
+	}
+	writable := func() bool {
+		return client.Connected() && client.Conn().ReadyState() == "open" && client.Conn().Transport().Writable()
+	}
+	admission.Lock()
+	if closed || client.Conn().ReadyState() != "open" {
+		admission.Unlock()
+		next(socket.NewExtendedError("connection closed", nil))
+		return
+	}
+	added := s.ops.add(id, token, actor, expires, func(event string, payload any) error {
+		// Emit本身不返回底层队列错误，必须在进入EngineIO前检查真实transport背压。
+		if !writable() {
+			return fmt.Errorf("实时连接发送背压")
+		}
+		return client.Emit(event, payload)
+	}, writable, func() { client.Disconnect(true) })
+	admission.Unlock()
+	if !added {
+		next(socket.NewExtendedError("realtime capacity exceeded", nil))
+		return
+	}
+	client.On("ops:watch", func(values ...any) {
+		if len(values) > 0 {
+			s.ops.watch(id, values[0], false)
+		}
+	})
+	client.On("ops:unwatch", func(values ...any) {
+		if len(values) > 0 {
+			s.ops.watch(id, values[0], true)
+		}
+	})
 	room := socket.Room("ops:tenant:" + actor.TenantID)
-	client.On("ops:subscribe", func(...any) { client.Join(room) })
+	client.On("ops:subscribe", func(...any) {
+		if auth.RequireCapability(actor, auth.CapabilityNodeRead) == nil {
+			client.Join(room)
+		}
+	})
 	client.On("ops:unsubscribe", func(...any) { client.Leave(room) })
+	next(nil)
+}
+
+// PublishChange 只发布状态已提交后的失效通知；HTTP 快照始终是权威数据源。
+func (s *Server) PublishChange(tenantID string, topics, entityIDs []string, terminal bool) {
+	s.ops.publish(tenantID, topics, entityIDs, terminal)
 }
 
 func (s *Server) NodePending(tenantID string, payload map[string]any) {

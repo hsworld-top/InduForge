@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/indu-forge/dev_core/internal/auth"
-	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
 )
 
 func (h *Handler) listRuntimeEnvironments(w http.ResponseWriter, r *http.Request) {
@@ -20,7 +19,7 @@ func (h *Handler) listRuntimeEnvironments(w http.ResponseWriter, r *http.Request
 		for _, item := range items {
 			payload = append(payload, runtimeEnvironmentPayload(item))
 		}
-		platformapi.WriteSuccess(w, r, pageData(payload, total, filter))
+		h.writeSuccess(w, r, pageData(payload, total, filter))
 	})
 }
 
@@ -36,7 +35,7 @@ func (h *Handler) createRuntimeEnvironment(w http.ResponseWriter, r *http.Reques
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, runtimeEnvironmentPayload(item))
+		h.writeSuccess(w, r, runtimeEnvironmentPayload(item))
 	})
 }
 
@@ -47,7 +46,7 @@ func (h *Handler) getRuntimeEnvironment(w http.ResponseWriter, r *http.Request) 
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, runtimeEnvironmentPayload(item))
+		h.writeSuccess(w, r, runtimeEnvironmentPayload(item))
 	})
 }
 
@@ -63,7 +62,7 @@ func (h *Handler) updateRuntimeEnvironment(w http.ResponseWriter, r *http.Reques
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, runtimeEnvironmentPayload(item))
+		h.writeSuccess(w, r, runtimeEnvironmentPayload(item))
 	})
 }
 
@@ -79,7 +78,7 @@ func (h *Handler) deleteRuntimeEnvironment(w http.ResponseWriter, r *http.Reques
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"status": status})
+		h.writeSuccess(w, r, map[string]any{"status": status})
 	})
 }
 
@@ -95,7 +94,7 @@ func (h *Handler) listRuntimeEnvironmentNodes(w http.ResponseWriter, r *http.Req
 		for _, item := range items {
 			payload = append(payload, nodePayload(item))
 		}
-		platformapi.WriteSuccess(w, r, pageData(payload, total, filter))
+		h.writeSuccess(w, r, pageData(payload, total, filter))
 	})
 }
 
@@ -115,7 +114,7 @@ func (h *Handler) addRuntimeEnvironmentNodes(w http.ResponseWriter, r *http.Requ
 		for _, item := range items {
 			payload = append(payload, nodePayload(item))
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
+		h.writeSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
 	})
 }
 
@@ -125,7 +124,7 @@ func (h *Handler) removeRuntimeEnvironmentNode(w http.ResponseWriter, r *http.Re
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"removed": true})
+		h.writeSuccess(w, r, map[string]any{"removed": true})
 	})
 }
 
@@ -141,7 +140,7 @@ func (h *Handler) listRuntimeEnvironmentEvents(w http.ResponseWriter, r *http.Re
 		for _, item := range items {
 			payload = append(payload, runtimeEnvironmentEventPayload(item))
 		}
-		platformapi.WriteSuccess(w, r, pageData(payload, total, filter))
+		h.writeSuccess(w, r, pageData(payload, total, filter))
 	})
 }
 
@@ -156,7 +155,7 @@ func (h *Handler) listRuntimeEnvironmentServices(w http.ResponseWriter, r *http.
 		for _, item := range items {
 			payload = append(payload, runtimeEnvironmentServicePayload(item))
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
+		h.writeSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
 	})
 }
 
@@ -176,7 +175,7 @@ func (h *Handler) deployRuntimeEnvironmentFoundation(w http.ResponseWriter, r *h
 		for _, item := range items {
 			payload = append(payload, runtimeEnvironmentServicePayload(item))
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
+		h.writeSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
 	})
 }
 
@@ -196,7 +195,7 @@ func (h *Handler) migrateRuntimeEnvironmentFoundation(w http.ResponseWriter, r *
 		for _, item := range items {
 			payload = append(payload, runtimeEnvironmentServicePayload(item))
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
+		h.writeSuccess(w, r, map[string]any{"items": payload, "total": len(payload)})
 	})
 }
 
@@ -207,8 +206,9 @@ func runtimeEnvironmentServicePayload(item RuntimeEnvironmentService) map[string
 		"desiredStatus": item.DesiredStatus, "observedStatus": item.ObservedStatus,
 		"lastMessage": item.LastMessage, "desiredGeneration": item.DesiredGeneration,
 		"observedGeneration": item.ObservedGeneration, "observedAt": item.ObservedAt,
-		"operation": item.Operation,
-		"createdAt": item.CreatedAt, "updatedAt": item.UpdatedAt,
+		"observedStale": item.ObservedStale,
+		"operation":     item.Operation,
+		"createdAt":     item.CreatedAt, "updatedAt": item.UpdatedAt,
 	}
 }
 
@@ -220,7 +220,8 @@ func runtimeEnvironmentPayload(item RuntimeEnvironment) map[string]any {
 		"nodeCount": item.NodeCount, "onlineNodeCount": item.OnlineNodeCount,
 		"foundationTotal": item.FoundationTotal, "foundationHealthy": item.FoundationHealthy,
 		"projectCount": item.ProjectCount, "recentChange": item.RecentChange,
-		"recentAt": item.RecentAt, "recentBy": item.RecentBy,
+		"runningDeploymentCount": item.RunningDeploymentCount,
+		"recentAt":               item.RecentAt, "recentBy": item.RecentBy,
 		"createdAt": item.CreatedAt, "updatedAt": item.UpdatedAt,
 	}
 }

@@ -62,6 +62,7 @@ type RuntimeEnvironment struct {
 	IsDefault                                        bool
 	NodeCount, OnlineNodeCount                       int
 	FoundationTotal, FoundationHealthy, ProjectCount int
+	RunningDeploymentCount                           int
 	RecentChange, RecentBy                           string
 	RecentAt                                         *time.Time
 	CreatedAt, UpdatedAt                             time.Time
@@ -108,6 +109,7 @@ type RuntimeEnvironmentService struct {
 	DesiredGeneration, ObservedGeneration            int64
 	Operation                                        string
 	ObservedAt                                       *time.Time
+	ObservedStale                                    bool
 	CreatedAt, UpdatedAt                             time.Time
 }
 
@@ -173,6 +175,7 @@ type PageFilter struct {
 	Page, PageSize int
 	Search         string
 	ProjectID      string
+	EnvironmentID  string
 	Status         string
 }
 

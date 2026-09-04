@@ -19,6 +19,8 @@ import (
 type PostgreSQLRepository struct {
 	pool       *pgxpool.Pool
 	k3sAPIPort int
+	events     ChangePublisher
+	observer   changeObserver
 }
 
 const defaultK3sVersion = "v1.36.4+k3s1"
@@ -28,10 +30,10 @@ const defaultRuntimeEnvironmentCode = "default-runtime"
 const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,COALESCE(d.application_version_id::text,''),COALESCE(v.version,CASE WHEN d.mode='development' THEN '__DEV__' ELSE '' END),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),COALESCE((SELECT operation FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),COALESCE(d.last_ready_mode,''),COALESCE(d.last_ready_application_version_id::text,''),COALESCE(lv.version,CASE WHEN d.last_ready_mode='development' THEN '__DEV__' ELSE '' END),COALESCE(d.last_ready_generation,0),d.last_ready_at,d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id LEFT JOIN application_versions lv ON lv.id=d.last_ready_application_version_id AND lv.tenant_id=d.tenant_id`
 
 // deploymentListFilter 与 deploymentCountFilter 保持完全相同的可见语义，但参数
-// 编号必须分别适配分页查询与 count 查询。count 不接受无用途的 $3/$4，否则
+// 编号必须分别适配分页查询与 count 查询。count 不接受无用途的分页参数，否则
 // PostgreSQL 无法从 SQL 推断参数类型。
-const deploymentListFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5)`
-const deploymentCountFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($3='' OR d.project_id::text=$3)`
+const deploymentListFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($5='' OR d.project_id::text=$5) AND ($6='' OR d.environment_id::text=$6)`
+const deploymentCountFilter = `d.tenant_id=$1 AND d.deleted_at IS NULL AND e.deleted_at IS NULL AND ($2='' OR p.name ILIKE '%'||$2||'%') AND ($3='' OR d.project_id::text=$3) AND ($4='' OR d.environment_id::text=$4)`
 
 type releaseMetadata struct {
 	ID, Version, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
@@ -249,10 +251,14 @@ func (r *PostgreSQLRepository) ClaimEnrollment(ctx context.Context, in ClaimEnro
 	if e != nil {
 		return Enrollment{}, Node{}, e
 	}
-	return en, n, tx.Commit(ctx)
+	if e = tx.Commit(ctx); e != nil {
+		return en, n, e
+	}
+	r.publish(n.TenantID, []string{"nodes", "environments", "events"}, nil, true)
+	return en, n, nil
 }
 func (r *PostgreSQLRepository) ListNodes(ctx context.Context, tenant string, f PageFilter) ([]Node, int64, error) {
-	rows, e := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND ($2='' OR n.display_name ILIKE '%'||$2||'%' OR n.hostname ILIKE '%'||$2||'%') ORDER BY n.updated_at DESC,n.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
+	rows, e := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND ($2='' OR n.display_name ILIKE '%'||$2||'%' OR n.hostname ILIKE '%'||$2||'%') ORDER BY n.created_at DESC,n.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -263,10 +269,14 @@ func (r *PostgreSQLRepository) ListNodes(ctx context.Context, tenant string, f P
 		if e != nil {
 			return nil, 0, e
 		}
-		if e = r.attachNodeCluster(ctx, &x); e != nil {
-			return nil, 0, e
-		}
 		items = append(items, x)
+	}
+	if e = rows.Err(); e != nil {
+		return nil, 0, e
+	}
+	rows.Close()
+	if e = r.attachNodeClusters(ctx, tenant, items); e != nil {
+		return nil, 0, e
 	}
 	var total int64
 	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM host_nodes WHERE tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR hostname ILIKE '%'||$2||'%')`, tenant, f.Search).Scan(&total)
@@ -357,6 +367,14 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 	if e != nil {
 		return Node{}, nil, ErrAgentUnauthorized
 	}
+	// 节点更新已独立提交；指标投影不包含heartbeat/updated时间，重复心跳不制造通知。
+	r.observedChange(n.TenantID, []string{"nodes"}, []string{n.ID}, previousStatus != n.ObservedStatus, struct {
+		Status, Desired, Version, IP string
+		Summary                      map[string]any
+	}{n.ObservedStatus, n.DesiredStatus, n.AgentVersion, n.IPAddress, in.ResourceSummary})
+	if previousStatus != n.ObservedStatus && previousStatus != "offline" {
+		r.publish(n.TenantID, []string{"environments", "events"}, nil, true)
+	}
 	if n.ObservedStatus != "online" || n.DesiredStatus != "active" {
 		return n, []DeploymentService{}, nil
 	}
@@ -369,6 +387,7 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 		if e != nil {
 			return n, nil, e
 		}
+		r.publish(n.TenantID, []string{"environments", "events"}, nil, true)
 	}
 	previousTimeStatus := timeSyncStatusFromSummary(previousSummary)
 	currentTimeStatus, currentTimeMessage := timeSyncStatusFromMap(in.ResourceSummary)
@@ -385,6 +404,7 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 		if _, e = r.pool.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message) SELECT $1,en.environment_id,'node_time_sync_changed',$4,$2,$5,$6 FROM runtime_environment_nodes en WHERE en.node_id=$3`, n.TenantID, n.DisplayName, n.ID, name, result, currentTimeMessage); e != nil {
 			return n, nil, e
 		}
+		r.publish(n.TenantID, []string{"environments", "events"}, nil, true)
 	}
 	if in.ClusterState != nil && in.ClusterState.ClusterID != "" {
 		state := *in.ClusterState
@@ -419,11 +439,13 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 				if updateErr != nil {
 					return n, nil, updateErr
 				}
+				r.publish(n.TenantID, []string{"nodes", "environments", "events"}, nil, true)
 			}
 			if state.ObservedState == "not-installed" && desiredAction == "removing" && nodeKind == "worker" {
 				if err := r.finalizeClusterNodeRemoval(ctx, n.TenantID, n.ID, n.DisplayName, state.ClusterID); err != nil {
 					return n, nil, err
 				}
+				r.publish(n.TenantID, []string{"nodes", "environments", "events"}, nil, true)
 			}
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return n, nil, err
@@ -449,6 +471,7 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 			if err := r.finalizeEnvironmentDeletion(ctx, n.TenantID, environmentID); err != nil {
 				return n, nil, err
 			}
+			r.observedChange(n.TenantID, []string{"environments", "events"}, nil, true, environmentID+":deleted")
 			continue
 		}
 		observedStatus := "pending"
@@ -514,6 +537,7 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 			if _, err := r.pool.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message) VALUES($1,$2,'foundation_state_changed',$3,'全部基础服务',$4,$5)`, n.TenantID, environmentID, name, eventResult, state.Message); err != nil {
 				return n, nil, err
 			}
+			r.publish(n.TenantID, []string{"environments", "events"}, []string{environmentID, n.ID}, observedStatus != "pending")
 		}
 	}
 	affected := map[string]struct{}{}
@@ -521,7 +545,8 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 		var serviceType string
 		var publicPort int
 		var managedNodeAddress string
-		lookupErr := r.pool.QueryRow(ctx, `SELECT s.service_type,COALESCE(s.public_port,0),COALESCE(n.ip_address,'') FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.id=$1 AND s.node_id=$2`, o.ServiceID, n.ID).Scan(&serviceType, &publicPort, &managedNodeAddress)
+		var deploymentID string
+		lookupErr := r.pool.QueryRow(ctx, `SELECT s.service_type,COALESCE(s.public_port,0),COALESCE(n.ip_address,''),s.project_deployment_id::text FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.id=$1 AND s.node_id=$2`, o.ServiceID, n.ID).Scan(&serviceType, &publicPort, &managedNodeAddress, &deploymentID)
 		if errors.Is(lookupErr, pgx.ErrNoRows) {
 			if o.Endpoint != "" {
 				return n, nil, fmt.Errorf("节点不能为未知工程服务上报访问地址")
@@ -531,13 +556,16 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 		if lookupErr != nil {
 			return n, nil, lookupErr
 		}
+		// 即使服务观测重复也重试汇总，修复上一次独立心跳SQL成功、后续汇总失败的可恢复窗口。
+		affected[deploymentID] = struct{}{}
 		// 用户访问地址只由已登记节点管理 IP 与中心分配端口生成；Agent/Kubernetes
 		// PodIP 均不是受控用户入口，不能通过心跳覆盖该地址。
 		endpoint := deploymentObservedEndpoint(managedNodeAddress, serviceType, publicPort)
 		var did string
-		e = r.pool.QueryRow(ctx, `UPDATE deployment_services s SET observed_status=$1,replicas_observed=$2,observed_generation=$3,last_message=$4,endpoint=CASE WHEN s.service_type='base' THEN $5 ELSE s.endpoint END,observed_at=now(),updated_at=now() WHERE s.id=$6 AND s.desired_generation=$3 AND s.node_id=$7 RETURNING s.project_deployment_id`, o.ObservedStatus, o.ReplicasObserved, o.ObservedGeneration, o.Message, endpoint, o.ServiceID, n.ID).Scan(&did)
+		e = r.pool.QueryRow(ctx, `UPDATE deployment_services s SET observed_status=$1,replicas_observed=$2,observed_generation=$3,last_message=$4,endpoint=CASE WHEN s.service_type='base' THEN $5 ELSE s.endpoint END,observed_at=now(),updated_at=now() WHERE s.id=$6 AND s.desired_generation=$3 AND s.node_id=$7 AND (s.observed_status,s.replicas_observed,s.observed_generation,COALESCE(s.last_message,'')) IS DISTINCT FROM ($1,$2,$3,$4) RETURNING s.project_deployment_id`, o.ObservedStatus, o.ReplicasObserved, o.ObservedGeneration, o.Message, endpoint, o.ServiceID, n.ID).Scan(&did)
 		if e == nil {
 			affected[did] = struct{}{}
+			r.publish(n.TenantID, []string{"deployments", "events"}, []string{did, o.ServiceID}, o.ObservedStatus != "pending")
 		} else if !errors.Is(e, pgx.ErrNoRows) {
 			return n, nil, e
 		}
@@ -627,7 +655,7 @@ func logicalTypesForFoundationWorkload(workload string) []string {
 // ReconcileNodeLiveness 把心跳超时转换为一次性的状态迁移和环境事件。仅首次从
 // online 变为 offline 时写事件，定时扫描不会产生重复告警风暴。
 func (r *PostgreSQLRepository) ReconcileNodeLiveness(ctx context.Context) (int64, error) {
-	var count int64
+	var changed []byte
 	err := r.pool.QueryRow(ctx, `WITH offline AS (
 		UPDATE host_nodes SET observed_status='offline',updated_at=now()
 		WHERE observed_status='online' AND desired_status<>'revoked' AND last_heartbeat_at<now()-interval '45 seconds'
@@ -642,11 +670,21 @@ func (r *PostgreSQLRepository) ReconcileNodeLiveness(ctx context.Context) (int64
 	SELECT offline.tenant_id,en.environment_id,'node_offline','物理节点心跳超时',offline.display_name,'failed','超过 45 秒未收到心跳；已停止向该节点下发新操作，节点上既有进程不被强制终止'
 	FROM offline JOIN runtime_environment_nodes en ON en.node_id=offline.id
 	RETURNING id)
-	SELECT count(*) FROM offline`).Scan(&count)
+	SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'tenantId',tenant_id)),'[]'::jsonb) FROM offline`).Scan(&changed)
 	if err != nil {
 		return 0, err
 	}
-	return count, nil
+	var nodes []struct {
+		ID       string `json:"id"`
+		TenantID string `json:"tenantId"`
+	}
+	if err = json.Unmarshal(changed, &nodes); err != nil {
+		return 0, err
+	}
+	for _, node := range nodes {
+		r.publish(node.TenantID, []string{"nodes", "environments", "events"}, nil, true)
+	}
+	return int64(len(nodes)), nil
 }
 
 func (r *PostgreSQLRepository) AgentClusterPlan(ctx context.Context, id, hash string) (*ClusterPlan, error) {
@@ -942,23 +980,7 @@ func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID
 }
 
 func (r *PostgreSQLRepository) ListDeployments(ctx context.Context, tenant string, f PageFilter) ([]ProjectDeployment, int64, error) {
-	rows, e := r.pool.Query(ctx, deploymentSelect+` WHERE `+deploymentListFilter+` ORDER BY d.updated_at DESC,d.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize, f.ProjectID)
-	if e != nil {
-		return nil, 0, e
-	}
-	defer rows.Close()
-	out := []ProjectDeployment{}
-	for rows.Next() {
-		d, e := scanDeployment(rows)
-		if e != nil {
-			return nil, 0, e
-		}
-		d.Services, _ = r.listServices(ctx, d.ID)
-		out = append(out, d)
-	}
-	var total int64
-	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id WHERE `+deploymentCountFilter, tenant, f.Search, f.ProjectID).Scan(&total)
-	return out, total, e
+	return loadDeploymentPage(ctx, r.pool, tenant, f)
 }
 func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, tenant string, in CreateDeploymentInput) error {
 	metadata, err := deploymentMetadata(ctx, r.pool, tenant, in)
@@ -1061,6 +1083,21 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	defer tx.Rollback(ctx)
 	if e = tx.QueryRow(ctx, lockDeploymentProjectSQL, tenant, in.ProjectID).Scan(new(string)); e != nil {
 		return ProjectDeployment{}, DeploymentRun{}, mapNotFound(e)
+	}
+	// 新建/升级和生命周期动作共享部署行锁；锁后再查运行任务，避免覆盖正在执行的代次。
+	var existingID string
+	var deleting bool
+	e = tx.QueryRow(ctx, `SELECT id::text,deletion_requested_at IS NOT NULL FROM project_deployments WHERE tenant_id=$1 AND project_id=$2 AND environment_id=$3 AND deleted_at IS NULL FOR UPDATE`, tenant, in.ProjectID, in.EnvironmentID).Scan(&existingID, &deleting)
+	if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+		return ProjectDeployment{}, DeploymentRun{}, e
+	}
+	if e == nil {
+		if deleting {
+			return ProjectDeployment{}, DeploymentRun{}, ErrDeploymentBusy
+		}
+		if e = requireDeploymentIdle(ctx, tx, existingID); e != nil {
+			return ProjectDeployment{}, DeploymentRun{}, e
+		}
 	}
 	metadata, err := deploymentMetadata(ctx, tx, tenant, in)
 	if err != nil {
@@ -1267,44 +1304,13 @@ func (r *PostgreSQLRepository) OperateService(ctx context.Context, tenant, did, 
 // OperateDeployment 在单一事务中变更同一 Deployment 的所有服务，并只创建一条
 // DeploymentRun。这样 Agent 收到的是一次完整工程生命周期变更，而非局部服务操作。
 func (r *PostgreSQLRepository) OperateDeployment(ctx context.Context, tenant, did, op, user string) (ProjectDeployment, DeploymentRun, error) {
-	desired := "running"
-	if op == "stop" {
-		desired = "stopped"
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return ProjectDeployment{}, DeploymentRun{}, err
 	}
 	defer tx.Rollback(ctx)
-	var id string
-	if err = tx.QueryRow(ctx, `SELECT id FROM project_deployments WHERE id=$1 AND tenant_id=$2 FOR UPDATE`, did, tenant).Scan(&id); err != nil {
-		return ProjectDeployment{}, DeploymentRun{}, mapNotFound(err)
-	}
-	var pending string
-	err = tx.QueryRow(ctx, `SELECT id FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, did).Scan(&pending)
-	if err == nil {
-		return ProjectDeployment{}, DeploymentRun{}, ErrDeploymentBusy
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return ProjectDeployment{}, DeploymentRun{}, err
-	}
-	// 不按 service_type 过滤：start/stop/restart 必须同时推进工程的全部服务代次。
-	tag, err := tx.Exec(ctx, `UPDATE deployment_services SET desired_status=$1,observed_status='pending',desired_generation=desired_generation+1,last_operation=$2,updated_at=now() WHERE project_deployment_id=$3 AND tenant_id=$4`, desired, op, did, tenant)
+	run, err := queueDeploymentOperation(ctx, tx, tenant, did, op, user)
 	if err != nil {
-		return ProjectDeployment{}, DeploymentRun{}, err
-	}
-	if tag.RowsAffected() == 0 {
-		return ProjectDeployment{}, DeploymentRun{}, ErrNotFound
-	}
-	if _, err = tx.Exec(ctx, `UPDATE project_deployments SET desired_status=$1,observed_status='pending',updated_at=now() WHERE id=$2 AND tenant_id=$3`, desired, did, tenant); err != nil {
-		return ProjectDeployment{}, DeploymentRun{}, err
-	}
-	var run DeploymentRun
-	err = tx.QueryRow(ctx, `INSERT INTO deployment_runs(tenant_id,project_deployment_id,operation,desired_status,created_by) VALUES($1,$2,$3,$4,$5) RETURNING id,tenant_id,project_deployment_id,operation,desired_status,observed_status,progress,COALESCE(message,''),started_at,completed_at`, tenant, did, op, desired, user).Scan(runScanArgs(&run)...)
-	if err != nil {
-		return ProjectDeployment{}, run, err
-	}
-	if _, err = tx.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) VALUES($1,'queued',$2)`, run.ID, op+" deployment queued"); err != nil {
 		return ProjectDeployment{}, run, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -1387,46 +1393,39 @@ func (r *PostgreSQLRepository) listServices(ctx context.Context, did string) ([]
 	return out, rows.Err()
 }
 func (r *PostgreSQLRepository) reconcileDeployment(ctx context.Context, did string) error {
-	var desired string
-	var pending, failed int
-	e := r.pool.QueryRow(ctx, `SELECT d.desired_status,count(*) FILTER (WHERE s.observed_generation<>s.desired_generation OR s.observed_status<>s.desired_status),count(*) FILTER (WHERE s.observed_status='failed') FROM project_deployments d JOIN deployment_services s ON s.project_deployment_id=d.id WHERE d.id=$1 GROUP BY d.desired_status`, did).Scan(&desired, &pending, &failed)
-	if e != nil {
-		return e
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
 	}
-	observed := desired
-	if failed > 0 {
-		observed = "failed"
-	} else if pending > 0 {
-		observed = "pending"
+	defer tx.Rollback(ctx)
+	state, err := reconcileDeploymentTransaction(ctx, tx, did)
+	if err != nil {
+		return err
 	}
-	_, e = r.pool.Exec(ctx, `UPDATE project_deployments SET observed_status=$1,updated_at=now() WHERE id=$2`, observed, did)
-	if e != nil || observed == "pending" {
-		return e
+	if err = tx.Commit(ctx); err != nil {
+		return err
 	}
-	if observed == "running" {
-		var generation int64
-		if e = r.pool.QueryRow(ctx, `SELECT min(desired_generation) FROM deployment_services WHERE project_deployment_id=$1 AND desired_status='running'`, did).Scan(&generation); e != nil {
-			return e
-		}
-		if _, e = r.PromoteDeploymentLastReady(ctx, did, generation); e != nil {
-			return e
-		}
+	if state.changed {
+		r.publish(state.tenant, []string{"deployments", "events"}, []string{did}, state.observed != "pending")
+		r.publish(state.tenant, []string{"environments"}, nil, state.observed != "pending")
 	}
-	var run string
-	e = r.pool.QueryRow(ctx, `WITH latest AS (SELECT id FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending' ORDER BY started_at DESC LIMIT 1) UPDATE deployment_runs SET observed_status=$2,progress=100,completed_at=now() WHERE id=(SELECT id FROM latest) RETURNING id`, did, observed).Scan(&run)
-	if errors.Is(e, pgx.ErrNoRows) {
-		return nil
-	}
-	return e
+	return nil
 }
 
-// PromoteDeploymentLastReady 只在全部运行服务确认同一代次 ready 后推进可恢复快照。
+// 历史停用服务仍须实际停止并确认自身代次，但不要求其与当前运行服务代次一致。
+const deploymentLastReadyPendingServiceFilter = `s.observed_status<>s.desired_status OR s.observed_generation<>s.desired_generation OR (s.desired_status='running' AND s.desired_generation<>$2)`
+
+// PromoteDeploymentLastReady 只在全部运行服务确认同一代次 ready、历史服务已停止后推进可恢复快照。
 // 0 rows 是并发更新/状态变化，调用方不得覆盖此前 last-ready。
 func (r *PostgreSQLRepository) PromoteDeploymentLastReady(ctx context.Context, deploymentID string, expectedGeneration int64) (bool, error) {
+	return promoteDeploymentLastReady(ctx, r.pool, deploymentID, expectedGeneration)
+}
+
+func promoteDeploymentLastReady(ctx context.Context, executor statementExecutor, deploymentID string, expectedGeneration int64) (bool, error) {
 	if expectedGeneration < 1 {
 		return false, fmt.Errorf("last-ready generation 非法")
 	}
-	tag, err := r.pool.Exec(ctx, `UPDATE project_deployments d SET last_ready_mode=d.mode,last_ready_application_version_id=CASE WHEN d.mode='release' THEN d.application_version_id ELSE NULL END,last_ready_artifact_descriptor=CASE WHEN d.mode='development' THEN d.artifact_descriptor ELSE NULL END,last_ready_generation=$2,last_ready_at=now(),updated_at=now() WHERE d.id=$1 AND d.desired_status='running' AND NOT EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.desired_status<>'running' OR s.desired_generation<>$2 OR s.observed_generation<>$2 OR s.observed_status<>'running')) AND (d.last_ready_generation IS NULL OR d.last_ready_generation<>$2)`, deploymentID, expectedGeneration)
+	tag, err := executor.Exec(ctx, `UPDATE project_deployments d SET last_ready_mode=d.mode,last_ready_application_version_id=CASE WHEN d.mode='release' THEN d.application_version_id ELSE NULL END,last_ready_artifact_descriptor=CASE WHEN d.mode='development' THEN d.artifact_descriptor ELSE NULL END,last_ready_generation=$2,last_ready_at=now(),updated_at=now() WHERE d.id=$1 AND d.desired_status='running' AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND s.desired_status='running') AND NOT EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (`+deploymentLastReadyPendingServiceFilter+`)) AND (d.last_ready_generation IS NULL OR d.last_ready_generation<>$2)`, deploymentID, expectedGeneration)
 	if err != nil {
 		return false, err
 	}

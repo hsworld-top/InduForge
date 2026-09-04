@@ -209,6 +209,25 @@ func TestOperateDeploymentRequiresOperateCapability(t *testing.T) {
 	}
 }
 
+func TestRedeployDoesNotRebuildAndRequiresOperateCapability(t *testing.T) {
+	for _, role := range []string{"OPERATOR", "VIEWER"} {
+		r := &deploymentRepository{}
+		s := NewService(r, nil)
+		s.SetDevelopmentArtifactBuilder(func(context.Context, auth.User, string, string) (DevelopmentArtifact, error) {
+			t.Fatal("重新部署不得调用开发构建器")
+			return DevelopmentArtifact{}, nil
+		})
+		_, _, err := s.OperateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: role}, "deployment", "redeploy")
+		if role == "VIEWER" {
+			if err == nil || r.deploymentOperation != "" {
+				t.Fatal("无运维权限不能重新部署")
+			}
+		} else if err != nil || r.deploymentOperation != "redeploy" || r.validated {
+			t.Fatalf("重新部署必须直接使用已有制品而不是创建路径: %v", err)
+		}
+	}
+}
+
 func TestOperateServiceIsFailClosed(t *testing.T) {
 	repository := &deploymentRepository{}
 	_, _, err := NewService(repository, nil).OperateService(context.Background(), auth.User{TenantID: "tenant", Role: "OPERATOR"}, "deployment-1", ServiceBase, "stop")

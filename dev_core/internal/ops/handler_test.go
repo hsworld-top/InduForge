@@ -34,6 +34,103 @@ func TestReleaseNotDeployableUsesBusinessValidationEnvelope(t *testing.T) {
 	}
 }
 
+func TestDeploymentMutationAndRequirementsRoutesAreMounted(t *testing.T) {
+	h := NewHandler(NewService(struct{ Repository }{}, nil), nil)
+	router := chi.NewRouter()
+	h.MountRoutes(router)
+	for _, item := range []struct{ method, path string }{
+		{http.MethodDelete, "/api/v1/ops/project-deployments/11111111-1111-4111-8111-111111111111"},
+		{http.MethodGet, "/api/v1/ops/project-deployments/development-requirements"},
+	} {
+		req := httptest.NewRequest(item.method, item.path, nil)
+		out := httptest.NewRecorder()
+		router.ServeHTTP(out, req)
+		if out.Code == http.StatusNotFound {
+			t.Fatalf("route not mounted: %s %s", item.method, item.path)
+		}
+	}
+}
+
+func TestNewOpsReadRoutesHaveConcreteHTTPEvidence(t *testing.T) {
+	h := NewHandler(NewService(struct{ Repository }{}, nil), nil)
+	router := chi.NewRouter()
+	h.MountRoutes(router)
+	requests := []*http.Request{
+		httptest.NewRequest(http.MethodDelete, "/api/v1/ops/project-deployments/11111111-1111-4111-8111-111111111111", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/ops/project-deployments/development-requirements", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/ops/project-deployments/11111111-1111-4111-8111-111111111111/runs", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/ops/deployment-runs/11111111-1111-4111-8111-111111111111/events/page", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/ops/records", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/ops/runtime-environments/11111111-1111-4111-8111-111111111111/overview", nil),
+	}
+	for _, request := range requests {
+		out := httptest.NewRecorder()
+		router.ServeHTTP(out, request)
+		if out.Code == http.StatusNotFound {
+			t.Fatalf("route not mounted: %s %s", request.Method, request.URL.Path)
+		}
+	}
+}
+
+type deploymentListHTTPRepository struct {
+	Repository
+	filter PageFilter
+	tenant string
+}
+
+func (r *deploymentListHTTPRepository) ListDeployments(_ context.Context, tenant string, f PageFilter) ([]ProjectDeployment, int64, error) {
+	r.tenant, r.filter = tenant, f
+	return []ProjectDeployment{{ID: "deployment", EnvironmentID: f.EnvironmentID}}, 21, nil
+}
+
+func TestDeploymentListForwardsEnvironmentAndPaginationWithinActorTenant(t *testing.T) {
+	repository := &deploymentListHTTPRepository{}
+	router := chi.NewRouter()
+	NewHandler(NewService(repository, nil), nil).MountRoutes(router)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ops/project-deployments?environmentId="+testEnvironmentID+"&projectId="+testProjectID+"&page=2&pageSize=10&search=demo&tenantId=other", nil)
+	request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || repository.tenant != "tenant" || repository.filter.EnvironmentID != testEnvironmentID || repository.filter.ProjectID != testProjectID || repository.filter.Page != 2 || repository.filter.PageSize != 10 || repository.filter.Search != "demo" {
+		t.Fatalf("分页过滤没有进入当前租户仓储: filter=%+v tenant=%s body=%s", repository.filter, repository.tenant, response.Body.String())
+	}
+	var envelope struct {
+		Code int `json:"code"`
+		Data struct {
+			Total int                 `json:"total"`
+			Items []ProjectDeployment `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || envelope.Code != 0 || envelope.Data.Total != 21 || len(envelope.Data.Items) != 1 {
+		t.Fatalf("必须保留后端总数和分页结果: %s err=%v", response.Body.String(), err)
+	}
+}
+
+func TestRedeployRouteUsesUnifiedResponseAndReportsBusy(t *testing.T) {
+	for _, failure := range []error{nil, ErrDeploymentBusy} {
+		repository := &deploymentRepository{deploymentErr: failure}
+		router := chi.NewRouter()
+		NewHandler(NewService(repository, nil), nil).MountRoutes(router)
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments/deployment/redeploy", nil)
+		request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPERATOR"}))
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		var envelope struct {
+			Code int                        `json:"code"`
+			Data map[string]json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || repository.deploymentOperation != "redeploy" {
+			t.Fatalf("重部署路由未进入生命周期服务: %s %v", response.Body.String(), err)
+		}
+		if failure == nil && (envelope.Code != 0 || envelope.Data["deployment"] == nil || envelope.Data["run"] == nil) {
+			t.Fatalf("成功包络无部署及run: %s", response.Body.String())
+		}
+		if failure != nil && envelope.Code == 0 {
+			t.Fatal("互斥拒绝不能返回成功")
+		}
+	}
+}
+
 func TestNodePortConflictUsesAlreadyExistsEnvelope(t *testing.T) {
 	h := &Handler{}
 	w := httptest.NewRecorder()

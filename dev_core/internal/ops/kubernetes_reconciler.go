@@ -228,120 +228,126 @@ type ProjectDeploymentDeleter interface {
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.tenant_id::text,s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-	count := 0
+	type pendingWorkload struct {
+		tenant   string
+		workload ProjectWorkload
+	}
+	items := []pendingWorkload{}
 	for rows.Next() {
-		var serviceID, deploymentID, environmentID, nodeID, engine, releaseID, releaseDigest string
-		var generation int64
-		var port *int
-		if err = rows.Scan(&serviceID, &deploymentID, &environmentID, &nodeID, &engine, &releaseID, &releaseDigest, &generation, &port); err != nil {
-			return count, err
+		var item pendingWorkload
+		w := &item.workload
+		if err = rows.Scan(&item.tenant, &w.ServiceID, &w.DeploymentID, &w.EnvironmentID, &w.NodeID, &w.Engine, &w.ReleaseID, &w.ReleaseDigest, &w.Generation, &w.HostPort); err != nil {
+			rows.Close()
+			return 0, err
 		}
-		releaseDigest = projectReleaseDigest(releaseDigest)
-		workload := ProjectWorkload{EnvironmentID: environmentID, DeploymentID: deploymentID, ServiceID: serviceID, NodeID: nodeID, Engine: engine, ReleaseID: releaseID, ReleaseDigest: releaseDigest, Generation: generation, HostPort: port}
-		if applyErr := applier.Reconcile(ctx, workload); applyErr != nil {
-			message := applyErr.Error()
-			if len(message) > 1024 {
-				message = message[:1024]
-			}
-			_, _ = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, message, serviceID)
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,$1,$2 FROM deployment_runs WHERE project_deployment_id=$3 AND observed_status='pending'`, workloadFailureStage(message), message, deploymentID)
-			_ = r.reconcileDeployment(ctx, deploymentID)
-			continue
-		}
+		w.ReleaseDigest = projectReleaseDigest(w.ReleaseDigest)
+		items = append(items, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, err
+	}
+	// 先释放数据库连接再访问K3s。保持单调和循环、最多100项串行，不按用户启动调和器。
+	count := 0
+	for _, item := range items {
+		workload := item.workload
 		status := ProjectWorkloadStatus{Message: "Kubernetes rollout 已提交，等待 readiness"}
-		if inspector, ok := applier.(ProjectWorkloadInspector); ok {
+		if applyErr := applier.Reconcile(ctx, workload); applyErr != nil {
+			status = ProjectWorkloadStatus{Failed: true, Message: applyErr.Error()}
+		} else if inspector, ok := applier.(ProjectWorkloadInspector); ok {
 			if status, err = inspector.Status(ctx, workload); err != nil {
-				return count, err
+				status = ProjectWorkloadStatus{Failed: true, Message: err.Error()}
 			}
 		}
-		if status.Failed {
-			_, _ = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,$1,$2 FROM deployment_runs WHERE project_deployment_id=$3 AND observed_status='pending'`, workloadFailureStage(status.Message), status.Message, deploymentID)
-			_ = r.reconcileDeployment(ctx, deploymentID)
-			continue
-		}
-		if status.Ready {
-			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='running',replicas_observed=$1,observed_generation=desired_generation,last_message=$2,observed_at=now(),updated_at=now() WHERE id=$3`, status.ReplicasObserved, status.Message, serviceID)
-		} else {
-			_, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='pending',last_message=$1,observed_at=now(),updated_at=now() WHERE id=$2`, status.Message, serviceID)
-		}
+		tx, err := r.pool.Begin(ctx)
 		if err != nil {
 			return count, err
 		}
-		_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'dispatched','Kubernetes 工作负载已提交' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
-		if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
+		state, err := recordAndReconcileWorkload(ctx, tx, workload, status)
+		if err != nil {
+			_ = tx.Rollback(ctx)
 			return count, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return count, err
+		}
+		if state.changed {
+			r.publish(item.tenant, []string{"deployments", "environments", "events"}, []string{workload.DeploymentID, workload.EnvironmentID, workload.ServiceID}, state.observed != "pending")
 		}
 		count++
 	}
-	return count, rows.Err()
+	return count, nil
 }
 
 // ReconcileStoppedProjectDeployments 与运行态调和器成对工作。停止不能只更新
 // desired_status，否则 K3s 工作负载会继续运行且 deployment run 永远 pending。
 func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Context, stopper ProjectDeploymentStopper) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.deletion_requested_at IS NOT NULL FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation)) ORDER BY d.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.tenant_id::text,d.deletion_requested_at IS NOT NULL,COALESCE((SELECT max(desired_generation) FROM deployment_services WHERE project_deployment_id=d.id),0) FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation)) ORDER BY d.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-	count := 0
+	type pendingStop struct {
+		deployment, environment, tenant string
+		deleting                        bool
+		generation                      int64
+	}
+	items := []pendingStop{}
 	for rows.Next() {
-		var deploymentID, environmentID string
-		var deleting bool
-		if err = rows.Scan(&deploymentID, &environmentID, &deleting); err != nil {
-			return count, err
+		var item pendingStop
+		if err = rows.Scan(&item.deployment, &item.environment, &item.tenant, &item.deleting, &item.generation); err != nil {
+			rows.Close()
+			return 0, err
 		}
+		items = append(items, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, item := range items {
+		deploymentID, environmentID, deleting := item.deployment, item.environment, item.deleting
 		if deleting {
 			deleter, ok := stopper.(ProjectDeploymentDeleter)
 			if !ok {
 				return count, fmt.Errorf("项目删除调和器未配置")
 			}
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'dispatched','正在停止 Kubernetes 工作负载' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
+			_, _ = r.pool.Exec(ctx, insertRunEventOnceSQL, "dispatched", "正在停止 Kubernetes 工作负载", deploymentID)
 			err = deleter.DeleteDeployment(ctx, environmentID, deploymentID)
 		} else {
 			err = stopper.StopDeployment(ctx, environmentID, deploymentID)
 		}
 		if err != nil {
 			message := err.Error()
-			if len(message) > 1024 {
-				message = message[:1024]
-			}
-			if _, updateErr := r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='failed',last_message=$1,observed_at=now(),updated_at=now() WHERE project_deployment_id=$2 AND desired_status='stopped'`, message, deploymentID); updateErr != nil {
-				return count, updateErr
-			}
-			eventMessage := message
 			if deleting {
-				eventMessage = deletionFailureStage(message)
+				message = deletionFailureStage(message)
 			}
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'failed',$1 FROM deployment_runs WHERE project_deployment_id=$2 AND observed_status='pending'`, eventMessage, deploymentID)
-			if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
+			if err = r.recordStoppedOutcome(ctx, deploymentID, item.generation, true, message); err != nil {
 				return count, err
 			}
 			continue
 		}
 		if deleting {
-			_, _ = r.pool.Exec(ctx, `INSERT INTO deployment_run_events(deployment_run_id,stage,message) SELECT id,'observed','运行态消息已清理，正在释放工程端口' FROM deployment_runs WHERE project_deployment_id=$1 AND observed_status='pending'`, deploymentID)
+			_, _ = r.pool.Exec(ctx, insertRunEventOnceSQL, "observed", "运行态消息已清理，正在释放工程端口", deploymentID)
 			if err = r.finalizeDeletedDeployment(ctx, deploymentID); err != nil {
 				return count, err
 			}
+			r.publish(item.tenant, []string{"deployments", "environments", "events"}, nil, true)
 			count++
 			continue
 		}
-		if _, err = r.pool.Exec(ctx, `UPDATE deployment_services SET observed_status='stopped',replicas_observed=0,observed_generation=desired_generation,last_message='Kubernetes 工作负载已停止',observed_at=now(),updated_at=now() WHERE project_deployment_id=$1 AND desired_status='stopped'`, deploymentID); err != nil {
-			return count, err
-		}
-		if err = r.reconcileDeployment(ctx, deploymentID); err != nil {
+		if err = r.recordStoppedOutcome(ctx, deploymentID, item.generation, false, "Kubernetes 工作负载已停止"); err != nil {
 			return count, err
 		}
 		count++
 	}
-	return count, rows.Err()
+	return count, nil
 }
 
 func (r *PostgreSQLRepository) finalizeDeletedDeployment(ctx context.Context, deploymentID string) error {

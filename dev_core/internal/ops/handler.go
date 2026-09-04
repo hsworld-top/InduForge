@@ -19,6 +19,7 @@ import (
 type Handler struct {
 	service *Service
 	auth    *auth.Service
+	changes ChangePublisher
 }
 
 func NewHandler(s *Service, a *auth.Service) *Handler { return &Handler{service: s, auth: a} }
@@ -54,10 +55,15 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Post("/project-deployments/{id}/start", h.operateDeployment("start"))
 		r.Post("/project-deployments/{id}/stop", h.operateDeployment("stop"))
 		r.Post("/project-deployments/{id}/restart", h.operateDeployment("restart"))
+		r.Post("/project-deployments/{id}/redeploy", h.operateDeployment("redeploy"))
 		r.Post("/project-deployments/{id}/services/{service}/start", h.operate("start"))
 		r.Post("/project-deployments/{id}/services/{service}/stop", h.operate("stop"))
 		r.Post("/project-deployments/{id}/services/{service}/restart", h.operate("restart"))
 		r.Get("/deployment-runs/{id}", h.getRun)
+		r.Get("/records", h.listRecords)
+		r.Get("/runtime-environments/{id}/overview", h.getEnvironmentOverview)
+		r.Get("/project-deployments/{id}/runs", h.listDeploymentRuns)
+		r.Get("/deployment-runs/{id}/events/page", h.listRunEventsPage)
 		r.Get("/deployment-runs/{id}/events", h.events)
 		r.Post("/agent/enrollments/claim", h.claim)
 		r.Post("/agent/nodes/{id}/heartbeat", h.heartbeat)
@@ -73,7 +79,7 @@ func (h *Handler) deleteDeployment(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"run": runPayload(run)})
+		h.writeSuccess(w, r, map[string]any{"run": runPayload(run)})
 	})
 }
 func (h *Handler) actor(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
@@ -94,6 +100,7 @@ func (h *Handler) actor(w http.ResponseWriter, r *http.Request) (auth.User, bool
 }
 func (h *Handler) user(w http.ResponseWriter, r *http.Request, fn func(auth.User)) {
 	if u, ok := h.actor(w, r); ok {
+		*r = *r.WithContext(auth.WithUser(r.Context(), u))
 		fn(u)
 	}
 }
@@ -108,7 +115,7 @@ func (h *Handler) listEnrollments(w http.ResponseWriter, r *http.Request) {
 		for _, v := range x {
 			out = append(out, enrollmentPayload(v))
 		}
-		platformapi.WriteSuccess(w, r, pageData(out, n, page(r)))
+		h.writeSuccess(w, r, pageData(out, n, page(r)))
 	})
 }
 func (h *Handler) createEnrollment(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +136,7 @@ func (h *Handler) createEnrollment(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "code": code})
+		h.writeSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "code": code})
 	})
 }
 func (h *Handler) getEnrollment(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +146,7 @@ func (h *Handler) getEnrollment(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, enrollmentPayload(x))
+		h.writeSuccess(w, r, enrollmentPayload(x))
 	})
 }
 func (h *Handler) approve(w http.ResponseWriter, r *http.Request) { h.change(w, r, true) }
@@ -151,7 +158,7 @@ func (h *Handler) change(w http.ResponseWriter, r *http.Request, ok bool) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, enrollmentPayload(x))
+		h.writeSuccess(w, r, enrollmentPayload(x))
 	})
 }
 func (h *Handler) listNodes(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +172,7 @@ func (h *Handler) listNodes(w http.ResponseWriter, r *http.Request) {
 		for _, v := range x {
 			out = append(out, nodePayload(v))
 		}
-		platformapi.WriteSuccess(w, r, pageData(out, n, page(r)))
+		h.writeSuccess(w, r, pageData(out, n, page(r)))
 	})
 }
 func (h *Handler) getNode(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +182,7 @@ func (h *Handler) getNode(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, nodePayload(x))
+		h.writeSuccess(w, r, nodePayload(x))
 	})
 }
 func (h *Handler) removeNode(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +191,7 @@ func (h *Handler) removeNode(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"status": "removing"})
+		h.writeSuccess(w, r, map[string]any{"status": "removing"})
 	})
 }
 func (h *Handler) listDeployments(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +205,7 @@ func (h *Handler) listDeployments(w http.ResponseWriter, r *http.Request) {
 		for _, v := range x {
 			out = append(out, deploymentPayload(v))
 		}
-		platformapi.WriteSuccess(w, r, pageData(out, n, page(r)))
+		h.writeSuccess(w, r, pageData(out, n, page(r)))
 	})
 }
 func (h *Handler) createDeployment(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +223,7 @@ func (h *Handler) createDeployment(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
+		h.writeSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
 	})
 }
 func (h *Handler) developmentEngineRequirements(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +233,7 @@ func (h *Handler) developmentEngineRequirements(w http.ResponseWriter, r *http.R
 			h.err(w, r, err)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"engines": requirements})
+		h.writeSuccess(w, r, map[string]any{"engines": requirements})
 	})
 }
 func (h *Handler) getDeployment(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +243,7 @@ func (h *Handler) getDeployment(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, deploymentPayload(d))
+		h.writeSuccess(w, r, deploymentPayload(d))
 	})
 }
 func (h *Handler) operate(op string) http.HandlerFunc {
@@ -247,7 +254,7 @@ func (h *Handler) operate(op string) http.HandlerFunc {
 				h.err(w, r, e)
 				return
 			}
-			platformapi.WriteSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
+			h.writeSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
 		})
 	}
 }
@@ -259,7 +266,7 @@ func (h *Handler) operateDeployment(op string) http.HandlerFunc {
 				h.err(w, r, e)
 				return
 			}
-			platformapi.WriteSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
+			h.writeSuccess(w, r, map[string]any{"deployment": deploymentPayload(d), "run": runPayload(run)})
 		})
 	}
 }
@@ -270,7 +277,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, runPayload(x))
+		h.writeSuccess(w, r, runPayload(x))
 	})
 }
 func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
@@ -280,7 +287,7 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"items": x})
+		h.writeSuccess(w, r, map[string]any{"items": x})
 	})
 }
 func (h *Handler) listPackages(w http.ResponseWriter, r *http.Request) {
@@ -289,7 +296,7 @@ func (h *Handler) listPackages(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, e)
 			return
 		}
-		platformapi.WriteSuccess(w, r, map[string]any{"items": h.service.ListPackages()})
+		h.writeSuccess(w, r, map[string]any{"items": h.service.ListPackages()})
 	})
 }
 func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +340,7 @@ func (h *Handler) claim(w http.ResponseWriter, r *http.Request) {
 		h.err(w, r, err)
 		return
 	}
-	platformapi.WriteSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "node": nodePayload(n), "agentToken": t, "pendingApproval": true})
+	h.writeSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "node": nodePayload(n), "agentToken": t, "pendingApproval": true})
 }
 
 func remoteIPAddress(r *http.Request) string {
@@ -357,7 +364,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 		h.err(w, r, e)
 		return
 	}
-	platformapi.WriteSuccess(w, r, map[string]any{"node": nodePayload(n), "services": s})
+	h.writeSuccess(w, r, map[string]any{"node": nodePayload(n), "services": s})
 }
 func (h *Handler) commands(w http.ResponseWriter, r *http.Request) {
 	nodeID, token := chi.URLParam(r, "id"), agentToken(r)
@@ -395,7 +402,7 @@ func (h *Handler) commands(w http.ResponseWriter, r *http.Request) {
 	if foundationDelete != nil {
 		foundationPlan = nil
 	}
-	platformapi.WriteSuccess(w, r, map[string]any{"commands": x, "clusterPlan": plan, "clusterUninstall": uninstall, "foundationPlan": foundationPlan, "foundationDelete": foundationDelete, "timeSyncPlan": timeSyncPlan})
+	h.writeSuccess(w, r, map[string]any{"commands": x, "clusterPlan": plan, "clusterUninstall": uninstall, "foundationPlan": foundationPlan, "foundationDelete": foundationDelete, "timeSyncPlan": timeSyncPlan})
 }
 func (h *Handler) agentBinding(w http.ResponseWriter, r *http.Request) {
 	binding, err := h.service.AgentDeploymentBinding(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"), r.URL.Query().Get("serviceId"))
@@ -408,7 +415,7 @@ func (h *Handler) agentBinding(w http.ResponseWriter, r *http.Request) {
 		h.err(w, r, fmt.Errorf("%w: DeploymentBinding 内容无效", ErrReleaseNotDeployable))
 		return
 	}
-	platformapi.WriteSuccess(w, r, payload)
+	h.writeSuccess(w, r, payload)
 }
 func (h *Handler) agentRelease(w http.ResponseWriter, r *http.Request) {
 	_, content, err := h.service.AgentRelease(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"), r.URL.Query().Get("serviceId"))
@@ -436,7 +443,7 @@ func agentToken(r *http.Request) string {
 func page(r *http.Request) PageFilter {
 	p, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	n, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	return PageFilter{Page: p, PageSize: n, Search: r.URL.Query().Get("search"), ProjectID: r.URL.Query().Get("projectId"), Status: r.URL.Query().Get("status")}
+	return PageFilter{Page: p, PageSize: n, Search: r.URL.Query().Get("search"), ProjectID: r.URL.Query().Get("projectId"), EnvironmentID: r.URL.Query().Get("environmentId"), Status: r.URL.Query().Get("status")}
 }
 func pageData(x any, n int64, f PageFilter) map[string]any {
 	if f.Page <= 0 {
