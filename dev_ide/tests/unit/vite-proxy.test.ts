@@ -8,11 +8,14 @@ describe('dev_ide vite proxy', () => {
     const designerSource = readFileSync('../designer/vite.config.js', 'utf8')
 
     expect(source).toContain('createFrontendProxy(env,')
-    expect(source).toContain('createFrontendWorkspaceProxy(env,')
+    expect(source).not.toContain('createFrontendWorkspaceProxy(env,')
     expect(source).toContain("requireCenterTarget: mode === 'frontend-linux'")
     expect(datacenterSource).toContain("requireCenterTarget: mode === 'frontend-linux'")
     expect(designerSource).toContain("requireCenterTarget: mode === 'frontend-linux'")
-    expect(designerSource).toContain('createFrontendWorkspaceProxy(env,')
+    expect(designerSource).not.toContain('createFrontendWorkspaceProxy(env,')
+    const packageJson = JSON.parse(readFileSync('../package.json', 'utf8'))
+    expect(packageJson.scripts['dev:workspace-proxy']).toContain('workspace-proxy.vite.config.mjs')
+    expect(packageJson.scripts['dev:frontend:linux']).toContain('dev:workspace-proxy')
     // IDE 仍然用本机的两个 Vite 子应用承载 Wujie，统一启动命令必须包含它们。
     expect(source).toContain("'/datacenter'")
     expect(source).toContain("'/designer'")

@@ -3,6 +3,7 @@
 /** 部分构建脚本注入的全局（与 getApiBase 一致） */
 declare const __VITE_API_URL__: string | undefined
 declare const __FRONTEND_WORKSPACE_PROXY_SUFFIX__: string
+declare const __FRONTEND_WORKSPACE_PROXY_PORT__: number
 
 interface ImportMetaEnv {
   readonly VITE_DESIGNER_AI_URL?: string

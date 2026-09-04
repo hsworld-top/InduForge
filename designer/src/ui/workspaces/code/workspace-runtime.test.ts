@@ -137,17 +137,14 @@ describe('Designer 工作空间运行模式', () => {
     }
 
     expect(
-      rewriteFrontendLinuxWorkspaceState(
-        workspace,
-        'http://localhost:18601',
-        'workspace.172.16.125.129.nip.io',
-      ).services,
+      rewriteFrontendLinuxWorkspaceState(workspace, 18604, 'workspace.172.16.125.129.nip.io')
+        .services,
     ).toEqual({
-      ai: { url: `http://ai-${uuid}.localhost:18601/?ticket=ai`, hostPort: 18080 },
-      code: { url: `http://code-${uuid}.localhost:18601/editor?ticket=code`, hostPort: 18080 },
-      preview: { url: `http://preview-${uuid}.localhost:18601/app/`, hostPort: 18080 },
+      ai: { url: `http://ai-${uuid}.localhost:18604/?ticket=ai`, hostPort: 18080 },
+      code: { url: `http://code-${uuid}.localhost:18604/editor?ticket=code`, hostPort: 18080 },
+      preview: { url: `http://preview-${uuid}.localhost:18604/app/`, hostPort: 18080 },
       previewControl: {
-        url: `http://preview-control-${uuid}.localhost:18601/api?ticket=control`,
+        url: `http://preview-control-${uuid}.localhost:18604/api?ticket=control`,
         hostPort: 18080,
       },
     })
@@ -157,7 +154,7 @@ describe('Designer 工作空间运行模式', () => {
     expect(
       rewriteFrontendLinuxWorkspaceState(
         runningWorkspace,
-        'http://localhost:18601',
+        18604,
         'workspace.172.16.125.129.nip.io',
       ),
     ).toEqual(runningWorkspace)

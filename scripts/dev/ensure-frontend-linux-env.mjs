@@ -7,6 +7,7 @@ import {
   validateFrontendLinuxProxyTarget,
 } from './frontend-linux-env.mjs'
 import { validateFrontendWorkspaceProxySuffix } from './frontend-workspace-proxy.mjs'
+import { resolveFrontendWorkspaceProxyPort } from './frontend-workspace-proxy.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '../..')
@@ -50,6 +51,14 @@ if (!created) {
   )
   if (!suffixValidation.valid) {
     console.error(`.env.frontend-linux 无效：${suffixValidation.message}`)
+    process.exitCode = 1
+  }
+  const workspaceProxyPort =
+    content.match(/^\s*IF_FRONTEND_WORKSPACE_PROXY_PORT\s*=\s*(.*?)\s*(?:#.*)?$/m)?.[1] || ''
+  try {
+    resolveFrontendWorkspaceProxyPort(workspaceProxyPort.replace(/^['"]|['"]$/g, '').trim())
+  } catch (error) {
+    console.error(`.env.frontend-linux 无效：${error.message}`)
     process.exitCode = 1
   }
 }

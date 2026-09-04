@@ -3,7 +3,6 @@ import { fileURLToPath, URL } from 'node:url'
 import path from 'node:path'
 import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import { createFrontendProxy } from '../scripts/dev/frontend-proxy.mjs'
-import { createFrontendWorkspaceProxy } from '../scripts/dev/frontend-workspace-proxy.mjs'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -24,12 +23,6 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: {
         ...createFrontendProxy(env, { requireCenterTarget: mode === 'frontend-linux' }),
-        ...(mode === 'frontend-linux'
-          ? createFrontendWorkspaceProxy(env, {
-              requireConfig: true,
-              localPort: Number(env.VITE_IDE_PORT),
-            })
-          : {}),
         // Wujie 子应用通过 IDE 同源路径加载，浏览器只携带 HttpOnly Cookie。
         '/datacenter': {
           target: `http://localhost:${env.VITE_DATACENTER_PORT || 18602}`,

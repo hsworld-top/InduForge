@@ -3,6 +3,7 @@ import { validateFrontendLinuxProxyTarget } from './frontend-linux-env.mjs'
 const WORKSPACE_SERVICE_PATTERN = '(ai|code|preview|preview-control)'
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const DNS_SUFFIX_PATTERN = /^workspace(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/
+export const DEFAULT_FRONTEND_WORKSPACE_PROXY_PORT = 18604
 
 /** frontend-linux 工作区入口的域名后缀，例如 workspace.172.16.125.129.nip.io。 */
 export function validateFrontendWorkspaceProxySuffix(value) {
@@ -32,6 +33,13 @@ function readPort(value, name) {
     throw new Error(`${name} 必须是 1 到 65535 的端口号。`)
   }
   return port
+}
+
+export function resolveFrontendWorkspaceProxyPort(value) {
+  const raw = String(value || '').trim()
+  return raw
+    ? readPort(raw, 'IF_FRONTEND_WORKSPACE_PROXY_PORT')
+    : DEFAULT_FRONTEND_WORKSPACE_PROXY_PORT
 }
 
 /**
@@ -77,7 +85,10 @@ export function resolveFrontendWorkspaceProxyConfig(
     throw new Error(`前端 Linux 工作区代理配置无效：${targetValidation.message}`)
   }
   return {
-    localPort: readPort(localPort, '本地前端端口'),
+    localPort:
+      localPort === undefined
+        ? resolveFrontendWorkspaceProxyPort(env.IF_FRONTEND_WORKSPACE_PROXY_PORT)
+        : readPort(localPort, '本地前端端口'),
     suffix: suffixValidation.suffix,
     target: targetValidation.target,
   }
@@ -91,8 +102,8 @@ function rewriteProxyOrigin(proxyRequest, request, workspace) {
 }
 
 /**
- * 使用中心入口作为 TCP 目标、工作区域名作为 Host 路由目标。bypass 严格拒绝非工作区 Host，
- * 因此此规则不会把 Vite 变成任意 Host 的转发器。
+ * 使用中心入口作为 TCP 目标、工作区域名作为 Host 路由目标。此规则仅能挂在独立工作区
+ * Vite 进程：Vite 会按 path 选择第一条代理规则，不能与常规 /api 或 Wujie 代理混用。
  */
 export function createFrontendWorkspaceProxy(env = {}, options = {}) {
   const config = resolveFrontendWorkspaceProxyConfig(env, options)
@@ -112,8 +123,8 @@ export function createFrontendWorkspaceProxy(env = {}, options = {}) {
       secure: false,
       ws: true,
       bypass(request) {
-        // 返回原路径让 Vite 继续正常处理；绝不把未匹配 Host 发送到 target。
-        return resolveRequest(request) ? undefined : request.url
+        // 独立端口不承载 IDE；未匹配 Host 必须 404，绝不成为开放代理。
+        return resolveRequest(request) ? undefined : false
       },
       configure(proxy) {
         proxy.on('proxyReq', (proxyRequest, request) => {

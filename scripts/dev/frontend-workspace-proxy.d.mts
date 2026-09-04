@@ -16,7 +16,9 @@ export interface WorkspaceRequestRoute {
   remoteOrigin: string
 }
 
+export const DEFAULT_FRONTEND_WORKSPACE_PROXY_PORT: number
 export function validateFrontendWorkspaceProxySuffix(value: string): WorkspaceProxySuffixValidation
+export function resolveFrontendWorkspaceProxyPort(value?: string | undefined): number
 export function resolveLocalWorkspaceRequest(
   host: string | undefined,
   localPort: number,

@@ -24,6 +24,7 @@ interface WorkspaceRuntimeDependencies {
 }
 
 declare const __FRONTEND_WORKSPACE_PROXY_SUFFIX__: string
+declare const __FRONTEND_WORKSPACE_PROXY_PORT__: number
 
 const WORKSPACE_SERVICE_PATTERN = '(ai|code|preview|preview-control)'
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -38,21 +39,15 @@ function escapeRegex(value: string): string {
  */
 export function rewriteFrontendLinuxWorkspaceUrl(
   value: string | null,
-  localOrigin: string,
+  localProxyPort: number,
   workspaceSuffix: string,
 ): string | null {
-  if (!value || !workspaceSuffix) return value
+  if (!value || !workspaceSuffix || !Number.isInteger(localProxyPort) || localProxyPort < 1) {
+    return value
+  }
   try {
     const remote = new URL(value)
-    const local = new URL(localOrigin)
-    if (
-      !['http:', 'https:'].includes(remote.protocol) ||
-      local.protocol !== 'http:' ||
-      local.hostname !== 'localhost' ||
-      !local.port
-    ) {
-      return value
-    }
+    if (!['http:', 'https:'].includes(remote.protocol)) return value
     const match = remote.hostname.match(
       new RegExp(
         `^${WORKSPACE_SERVICE_PATTERN}-(${UUID_PATTERN})\\.${escapeRegex(workspaceSuffix)}$`,
@@ -62,25 +57,23 @@ export function rewriteFrontendLinuxWorkspaceUrl(
     if (!match) return value
     const [, service, instanceId] = match
     if (!service || !instanceId) return value
-    return `http://${service.toLowerCase()}-${instanceId.toLowerCase()}.localhost:${local.port}${remote.pathname}${remote.search}${remote.hash}`
+    return `http://${service.toLowerCase()}-${instanceId.toLowerCase()}.localhost:${localProxyPort}${remote.pathname}${remote.search}${remote.hash}`
   } catch {
     return value
   }
 }
 
-function currentBrowserOrigin(): string {
-  return typeof window === 'undefined' ? '' : window.location.origin
-}
-
 export function rewriteFrontendLinuxWorkspaceState(
   workspace: CodeWorkspaceState,
-  localOrigin = currentBrowserOrigin(),
+  localProxyPort = typeof __FRONTEND_WORKSPACE_PROXY_PORT__ === 'number'
+    ? __FRONTEND_WORKSPACE_PROXY_PORT__
+    : 0,
   workspaceSuffix = typeof __FRONTEND_WORKSPACE_PROXY_SUFFIX__ === 'string'
     ? __FRONTEND_WORKSPACE_PROXY_SUFFIX__
     : '',
 ): CodeWorkspaceState {
   const rewrite = (url: string | null) =>
-    rewriteFrontendLinuxWorkspaceUrl(url, localOrigin, workspaceSuffix)
+    rewriteFrontendLinuxWorkspaceUrl(url, localProxyPort, workspaceSuffix)
   return {
     ...workspace,
     services: {
