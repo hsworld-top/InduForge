@@ -133,6 +133,21 @@ if ! grep -Fq 'preview-control)-[0-9a-f-]{36}' "$SCRIPT_DIR/nginx.conf" || ! gre
   echo "workspace hosts are not routed to the authenticated center gateway" >&2
   exit 1
 fi
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  mkdir -p "$temp_dir/nginx-tls"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+    -subj '/CN=center.induforge.test' \
+    -keyout "$temp_dir/nginx-tls/center.key" \
+    -out "$temp_dir/nginx-tls/center.crt" >/dev/null 2>&1
+  docker run --rm \
+    --add-host center-control:127.0.0.1 \
+    --add-host center-data:127.0.0.1 \
+    -v "$SCRIPT_DIR/nginx.conf:/etc/nginx/nginx.conf:ro" \
+    -v "$temp_dir/nginx-tls:/etc/nginx/tls:ro" \
+    nginx:1.28-alpine nginx -t >/dev/null
+else
+  echo "skip nginx syntax test: Docker is unavailable" >&2
+fi
 if [ "$(grep -Fc 'location /api/v1/data' "$SCRIPT_DIR/nginx.conf")" -ne 2 ] || [ "$(grep -Fc 'proxy_pass http://center-data:18102;' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
   echo "center data API is not exposed on both edge listeners" >&2
   exit 1
