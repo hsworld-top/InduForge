@@ -353,9 +353,9 @@ const deployment = (value: ProjectDeployment): ProjectDeployment => ({
 
 export interface OpsRecord {
   id: string
-  sourceKind: 'deployment_run' | 'cluster_event' | 'environment_event'
+  sourceKind: 'deployment_run' | 'cluster_event' | 'environment_event' | 'authoring_restore_task'
   recordType: 'operation' | 'event'
-  objectType: 'deployment' | 'foundation' | 'environment' | 'node' | 'cluster'
+  objectType: 'project' | 'deployment' | 'foundation' | 'environment' | 'node' | 'cluster'
   objectId: string
   objectName: string
   environmentId: string | null
@@ -367,7 +367,7 @@ export interface OpsRecord {
   completedAt: string | null
   durationMs: number | null
   message: string
-  taskRef: { runId: string; deploymentId: string } | null
+  taskRef: { runId?: string; deploymentId?: string; restoreTaskId?: string } | null
   detailUnavailableReason: string
 }
 export interface OpsRecordQuery {

@@ -211,4 +211,40 @@ describe('统一运维记录实际SFC', () => {
     expect(host.textContent).toContain('对象已删除，保留操作摘要')
     expect(mocks.events).not.toHaveBeenCalled()
   })
+  it('工程开发态恢复显示工程对象、实际耗时和权威摘要，不误读为部署执行事件', async () => {
+    mocks.list.mockResolvedValue({
+      items: [
+        row('restore', {
+          sourceKind: 'authoring_restore_task',
+          objectType: 'project',
+          objectId: 'p1',
+          objectName: '数据点与报警 Demo',
+          title: '恢复工程开发态',
+          status: 'running',
+          completedAt: null,
+          durationMs: null,
+          message: '正在恢复工程内容',
+          taskRef: { restoreTaskId: 'restore-task-1' },
+        }),
+        row('restore-done', {
+          sourceKind: 'authoring_restore_task',
+          objectType: 'project',
+          title: '恢复工程开发态',
+          status: 'success',
+          completedAt: '2026-09-03T00:00:48Z',
+          durationMs: 48000,
+          taskRef: { restoreTaskId: 'restore-task-2' },
+        }),
+      ],
+      total: 2,
+    })
+    const { state } = await mount()
+    expect(host.textContent).toContain('工程')
+    expect(host.textContent).toContain('48秒')
+    state.expandedId = 'restore'
+    await flush()
+    expect(host.querySelector('.record-detail-heading')?.textContent).toContain('记录详情')
+    expect(host.textContent).toContain('正在恢复工程内容')
+    expect(mocks.events).not.toHaveBeenCalled()
+  })
 })

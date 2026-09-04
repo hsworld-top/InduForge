@@ -23,6 +23,7 @@ type recordReader struct {
 	queries           []string
 	rows              *historyRows
 	runID, recordType string
+	sourceKind        string
 }
 
 func (r *recordReader) QueryRow(_ context.Context, q string, args ...any) pgx.Row {
@@ -38,9 +39,24 @@ func (r *recordReader) Query(_ context.Context, q string, args ...any) (pgx.Rows
 	var environment *string
 	var completed *time.Time
 	var duration *int64
-	owner := &historyReader{t: r.t, active: true, size: r.size, values: []any{"deployment_run:id", "deployment_run", r.recordType, "deployment", "object", "工程", environment, "启动", "running", "", "actor", time.Now(), completed, duration, "message", r.runID}}
+	sourceKind := r.sourceKind
+	if sourceKind == "" {
+		sourceKind = "deployment_run"
+	}
+	owner := &historyReader{t: r.t, active: true, size: r.size, values: []any{sourceKind + ":id", sourceKind, r.recordType, "deployment", "object", "工程", environment, "启动", "running", "", "actor", time.Now(), completed, duration, "message", r.runID}}
 	r.rows = &historyRows{reader: owner}
 	return r.rows, nil
+}
+
+func TestRestoreRecordUsesRestoreTaskReference(t *testing.T) {
+	reader := &recordReader{t: t, size: 1, runID: "restore-task", recordType: "operation", sourceKind: "authoring_restore_task"}
+	rows, _, err := loadRecords(context.Background(), reader, "tenant", RecordFilter{}, true, false)
+	if err != nil || len(rows) != 1 || rows[0].TaskRef == nil {
+		t.Fatalf("恢复记录加载失败 rows=%+v err=%v", rows, err)
+	}
+	if rows[0].TaskRef.RestoreTaskID != "restore-task" || rows[0].TaskRef.RunID != "" || rows[0].TaskRef.DeploymentID != "" {
+		t.Fatalf("恢复记录不能伪装成部署任务 %+v", rows[0].TaskRef)
+	}
 }
 func TestRecordsFixedDatabasePaginationPermissionsAndDeletedSummary(t *testing.T) {
 	for _, size := range []int{0, 1, 20, 200} {
@@ -85,6 +101,10 @@ func TestRecordsSQLCanonicalSourcesAndFormalSchema(t *testing.T) {
 		"CASE WHEN d.deleted_at IS NULL THEN r.id::text ELSE '' END",
 		"left(COALESCE(r.message,''),4)='重新部署' THEN '重新部署工程'",
 		"COALESCE(NULLIF(e.target,''),c.name),NULL::text", "left(e.event_type,11)='foundation_'",
+		"FROM authoring_restore_tasks t JOIN projects p ON p.id=t.project_id AND p.tenant_id=t.tenant_id",
+		"LEFT JOIN LATERAL (SELECT e.message FROM authoring_restore_task_events e",
+		"WHEN t.state='queued' THEN 'accepted' WHEN t.state='succeeded' THEN 'success' WHEN t.state='failed' THEN 'failed' ELSE 'running'",
+		"'authoring_restore_task'", "'恢复工程开发态'",
 	} {
 		if !strings.Contains(opsRecordsUnionSQL, fragment) {
 			t.Fatalf("状态/权限/镜像规则缺失 %s", fragment)
@@ -93,7 +113,7 @@ func TestRecordsSQLCanonicalSourcesAndFormalSchema(t *testing.T) {
 	if strings.Contains(opsRecordsUnionSQL, "AND d.deleted_at IS NULL") || strings.Contains(opsRecordsUnionSQL, "AND v.deleted_at IS NULL") {
 		t.Fatal("删除对象审计被丢弃")
 	}
-	if strings.Count(opsRecordsUnionSQL, " UNION ALL") != 2 || strings.Contains(opsRecordsUnionSQL, "runtime_environment_nodes") {
+	if strings.Count(opsRecordsUnionSQL, " UNION ALL") != 3 || strings.Contains(opsRecordsUnionSQL, "runtime_environment_nodes") {
 		t.Fatal("源不精确或按当前成员猜历史归属")
 	}
 	schema, err := os.ReadFile("../../db/schema/core-schema.sql")

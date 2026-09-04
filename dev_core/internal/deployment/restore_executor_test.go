@@ -182,6 +182,22 @@ type restoreActorResolverFake struct {
 	err  error
 }
 
+type restoreChangeRecorder struct {
+	calls []struct {
+		tenant      string
+		topics, ids []string
+		terminal    bool
+	}
+}
+
+func (r *restoreChangeRecorder) PublishChange(tenant string, topics, ids []string, terminal bool) {
+	r.calls = append(r.calls, struct {
+		tenant      string
+		topics, ids []string
+		terminal    bool
+	}{tenant, topics, ids, terminal})
+}
+
 func (f *restoreActorResolverFake) GetActiveUser(context.Context, string) (auth.User, error) {
 	return f.user, f.err
 }
@@ -196,6 +212,48 @@ func restoreFixture(state string) (*RestoreExecutor, *restoreRepoFake, *restoreW
 	actors := &restoreActorResolverFake{user: auth.User{ID: task.RequestedBy, TenantID: task.TenantID, Role: "DEVELOPER"}}
 	executor := NewRestoreExecutor(repo, &restoreAuthoringFake{target: snapshot, backup: snapshot}, workspace, &restoreScenesFake{}, data, fences, actors, slog.Default())
 	return executor, repo, workspace, data, fences
+}
+
+func TestRestoreExecutorPublishesCommittedOperationChanges(t *testing.T) {
+	executor, repo, _, _, _ := restoreFixture("queued")
+	changes := &restoreChangeRecorder{}
+	executor.SetChangePublisher(changes)
+	if err := executor.process(context.Background(), repo.task); err != nil {
+		t.Fatal(err)
+	}
+	if len(changes.calls) == 0 {
+		t.Fatal("恢复状态已推进但未通知运维记录")
+	}
+	var running, terminal bool
+	for _, call := range changes.calls {
+		if call.tenant != repo.task.TenantID || len(call.topics) != 1 || call.topics[0] != "events" || len(call.ids) != 2 || call.ids[0] != repo.task.ProjectID || call.ids[1] != repo.task.ID {
+			t.Fatalf("恢复通知范围错误 %+v", call)
+		}
+		if call.terminal {
+			terminal = true
+		} else {
+			running = true
+		}
+	}
+	if !running || !terminal {
+		t.Fatalf("运行中/终态通知不完整 %+v", changes.calls)
+	}
+}
+
+func TestRestoreExecutorEnqueuePublishesAcceptedAsNonTerminal(t *testing.T) {
+	executor, repo, _, _, _ := restoreFixture("queued")
+	changes := &restoreChangeRecorder{}
+	executor.SetChangePublisher(changes)
+	// 预占运行槽，隔离 Enqueue 的受理通知，避免后台执行器并发追加后续阶段通知。
+	executor.running[repo.task.ID] = struct{}{}
+	executor.Enqueue(repo.task)
+	if len(changes.calls) == 0 {
+		t.Fatal("已受理恢复任务未通知运维记录")
+	}
+	accepted := changes.calls[0]
+	if accepted.terminal || accepted.tenant != repo.task.TenantID || len(accepted.topics) != 1 || accepted.topics[0] != "events" || len(accepted.ids) != 2 || accepted.ids[0] != repo.task.ProjectID || accepted.ids[1] != repo.task.ID {
+		t.Fatalf("已受理通知必须是精确的非终态 events 失效提示 %+v", accepted)
+	}
 }
 
 func TestRestoreExecutorUsesRequestedUsersRealRole(t *testing.T) {

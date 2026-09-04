@@ -30,7 +30,17 @@ const recordsProjectionFixtureSQL = `WITH users(id,tenant_id,full_name,username)
  ('update','tenant','environment','environment_updated','已编辑','success','user',now(),''),
  ('mirror','tenant','environment','node_online','恢复在线','success',NULL::text,now(),''),
  ('progress','tenant','environment','foundation_state_changed','正在部署','success',NULL::text,now(),''),
- ('failure','tenant','environment','foundation_state_changed','异常','failed',NULL::text,now(),'')) `
+ ('failure','tenant','environment','foundation_state_changed','异常','failed',NULL::text,now(),'')),
+ authoring_restore_tasks(id,tenant_id,project_id,requested_by,state,started_at,completed_at,error_message,created_at) AS (VALUES
+ ('restore-queued','tenant','project','user','queued',NULL::timestamptz,NULL::timestamptz,'',now()),
+ ('restore-running','tenant','project','user','restoring_scenes',now()-interval '2 seconds',NULL::timestamptz,'',now()-interval '2 seconds'),
+ ('restore-success','tenant','project','user','succeeded',now()-interval '3 seconds',now(),'',now()-interval '3 seconds'),
+ ('restore-failed','tenant','project','user','failed',now()-interval '4 seconds',now(),'恢复时发现快照损坏',now()-interval '4 seconds')),
+ authoring_restore_task_events(id,tenant_id,task_id,message,created_at) AS (VALUES
+ ('restore-event-queued','tenant','restore-queued','已受理工程开发态恢复请求',now()),
+ ('restore-event-running','tenant','restore-running','正在恢复工程内容',now()),
+ ('restore-event-success','tenant','restore-success','工程开发态恢复完成',now()),
+ ('restore-event-failed','tenant','restore-failed','恢复失败，已完整回滚',now())) `
 
 func TestRecordsProjectionPostgreSQL(t *testing.T) {
 	dsn := os.Getenv("INDUFORGE_TEST_POSTGRES_DSN")
@@ -45,11 +55,16 @@ func TestRecordsProjectionPostgreSQL(t *testing.T) {
 	}
 	defer conn.Close(ctx)
 	for _, test := range []struct {
-		tenant string
-		events bool
-		want   int
-	}{{"tenant", true, 10}, {"tenant", false, 3}, {"other", true, 0}} {
-		rows, err := conn.Query(ctx, recordsProjectionFixtureSQL+`SELECT id,record_type,status,run_id,title FROM (`+opsRecordsUnionSQL+`) records ORDER BY id`, test.tenant, true, test.events)
+		tenant, name  string
+		tasks, events bool
+		want          int
+	}{
+		{"tenant", "全量", true, true, 14},
+		{"tenant", "无系统事件权限", true, false, 7},
+		{"tenant", "无任务权限", false, true, 7},
+		{"other", "跨租户", true, true, 0},
+	} {
+		rows, err := conn.Query(ctx, recordsProjectionFixtureSQL+`SELECT id,record_type,status,run_id,title FROM (`+opsRecordsUnionSQL+`) records ORDER BY id`, test.tenant, test.tasks, test.events)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,13 +108,29 @@ func TestRecordsProjectionPostgreSQL(t *testing.T) {
 				if status != "running" {
 					t.Fatal("pending不应成功")
 				}
+			case strings.HasSuffix(id, ":restore-queued"):
+				if kind != "operation" || status != "accepted" || runID != "restore-queued" || title != "恢复工程开发态" {
+					t.Fatal("恢复请求映射错误")
+				}
+			case strings.HasSuffix(id, ":restore-running"):
+				if kind != "operation" || status != "running" || runID != "restore-running" {
+					t.Fatal("恢复执行中映射错误")
+				}
+			case strings.HasSuffix(id, ":restore-success"):
+				if kind != "operation" || status != "success" || runID != "restore-success" {
+					t.Fatal("恢复成功映射错误")
+				}
+			case strings.HasSuffix(id, ":restore-failed"):
+				if kind != "operation" || status != "failed" || runID != "restore-failed" {
+					t.Fatal("恢复失败映射错误")
+				}
 			default:
 				t.Fatalf("非规范镜像或未知记录 %s", id)
 			}
 		}
 		rows.Close()
 		if rows.Err() != nil || count != test.want {
-			t.Fatalf("tenant=%s events=%v count=%d want=%d err=%v", test.tenant, test.events, count, test.want, rows.Err())
+			t.Fatalf("case=%s tenant=%s tasks=%v events=%v count=%d want=%d err=%v", test.name, test.tenant, test.tasks, test.events, count, test.want, rows.Err())
 		}
 	}
 }

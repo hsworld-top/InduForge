@@ -225,6 +225,7 @@ func main() {
 		}
 		authoring := deployment.NewAuthoringReleaseBuilder(workspace, sceneAssetService, dataServiceClient, ifpObjects, keys, source)
 		restoreExecutor = deployment.NewRestoreExecutor(deploymentRepository, authoring, workspace, sceneAssetService, dataServiceClient, deployment.NewAuthoringCaptureCoordinator(deploymentRepository, dataServiceClient, codeWorkspaceService), authService, logger)
+		restoreExecutor.SetChangePublisher(realtimeServer)
 		deploymentService.SetRestoreScheduler(restoreExecutor)
 	}
 	deploymentService.SetReleaseValidator(sceneAssetService)

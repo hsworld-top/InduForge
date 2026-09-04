@@ -146,10 +146,11 @@
                   <td class="record-time">{{ formatDateTime(row.time) }}</td>
                   <td>
                     {{
-                      row.sourceKind === 'deployment_run'
+                      row.completedAt
                         ? runDurationLabel({
                             id: row.id,
                             completedAt: row.completedAt || undefined,
+                            startedAt: row.time,
                             durationMs: row.durationMs,
                           })
                         : '—'
@@ -164,11 +165,11 @@
                 <tr v-if="expandedId === row.id">
                   <td colspan="6" class="record-detail">
                     <div class="record-detail-heading">
-                      <strong>{{ row.taskRef ? '执行明细' : '记录详情' }}</strong
+                      <strong>{{ row.taskRef?.runId ? '执行明细' : '记录详情' }}</strong
                       ><span>{{ row.objectName || objectLabels[row.objectType] }}</span>
                     </div>
                     <DeploymentRunEvents
-                      v-if="row.taskRef"
+                      v-if="row.taskRef?.runId"
                       :key="row.taskRef.runId"
                       :run-id="row.taskRef.runId"
                       :active="active"
@@ -225,6 +226,7 @@ const props = defineProps<{
   environments: { id: string; name: string }[]
 }>()
 const objectLabels = {
+  project: '工程',
   deployment: '工程部署',
   foundation: '基础服务',
   environment: '运行环境',

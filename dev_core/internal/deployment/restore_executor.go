@@ -57,6 +57,11 @@ type restoreActorResolver interface {
 	GetActiveUser(context.Context, string) (auth.User, error)
 }
 
+// RestoreChangePublisher 只发布已持久化状态的失效提示；运维页仍通过 HTTP 读取权威任务记录。
+type RestoreChangePublisher interface {
+	PublishChange(string, []string, []string, bool)
+}
+
 type RestoreExecutor struct {
 	repo      restoreRepository
 	authoring restoreAuthoring
@@ -65,6 +70,7 @@ type RestoreExecutor struct {
 	data      restoreData
 	fences    restoreFenceCoordinator
 	actors    restoreActorResolver
+	changes   RestoreChangePublisher
 	logger    *slog.Logger
 	ctx       context.Context
 	mu        sync.Mutex
@@ -76,6 +82,12 @@ func NewRestoreExecutor(repo restoreRepository, authoring restoreAuthoring, work
 		logger = slog.Default()
 	}
 	return &RestoreExecutor{repo: repo, authoring: authoring, workspace: workspace, scenes: scenes, data: data, fences: fences, actors: actors, logger: logger, ctx: context.Background(), running: map[string]struct{}{}}
+}
+func (e *RestoreExecutor) SetChangePublisher(changes RestoreChangePublisher) { e.changes = changes }
+func (e *RestoreExecutor) publishChange(task RestoreTask, terminal bool) {
+	if e.changes != nil {
+		e.changes.PublishChange(task.TenantID, []string{"events"}, []string{task.ProjectID, task.ID}, terminal)
+	}
 }
 func (e *RestoreExecutor) Start(ctx context.Context) { e.ctx = ctx; go e.recover(ctx) }
 func (e *RestoreExecutor) recover(ctx context.Context) {
@@ -96,6 +108,8 @@ func (e *RestoreExecutor) recover(ctx context.Context) {
 	}
 }
 func (e *RestoreExecutor) Enqueue(task RestoreTask) {
+	// CreateRestoreTask 已提交后才会入队；已受理不是终态，但 events 主题会即时标脏。
+	e.publishChange(task, false)
 	e.mu.Lock()
 	if _, ok := e.running[task.ID]; ok {
 		e.mu.Unlock()
@@ -200,6 +214,7 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 				_ = e.authoring.DeleteSnapshot(runCtx, backup.Key)
 				return err
 			}
+			e.publishChange(task, false)
 			task, err = e.repo.GetRestoreTask(runCtx, task.TenantID, task.ID)
 			if err != nil {
 				return err
@@ -208,6 +223,7 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 		if err = e.repo.SetRestoreStage(runCtx, task.ID, "restoring_workspace", "workspace_staging"); err != nil {
 			return err
 		}
+		e.publishChange(task, false)
 		if err = e.workspace.StageRestoreWithModes(project.ID, task.ID, target.Workspace, target.WorkspaceModes); err != nil {
 			return e.compensate(runCtx, actor, project, task, tokens, err)
 		}
@@ -218,6 +234,7 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 		if err = e.repo.SetRestoreStage(runCtx, task.ID, "restoring_scenes", "scenes_prepared"); err != nil {
 			return err
 		}
+		e.publishChange(task, false)
 		sceneCtx := sceneasset.WithRestoreFence(runCtx, tokens.Core)
 		prepared, err := e.scenes.PrepareAuthoringRestore(sceneCtx, actor, project.ID, sceneasset.AuthoringSnapshotOptions{ExpectedProjectID: project.ID, Fence: tokens.Core}, scenes)
 		if err != nil {
@@ -226,6 +243,7 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 		if err = e.repo.SetRestoreStage(runCtx, task.ID, "restoring_data", "data"); err != nil {
 			return err
 		}
+		e.publishChange(task, false)
 		dataEpoch := tokens.DataEpoch
 		expected, targetEpoch := fmt.Sprintf("epoch-%d", task.ExpectedEpoch), fmt.Sprintf("epoch-%d", task.TargetEpoch)
 		if dataEpoch == expected {
@@ -245,6 +263,7 @@ func (e *RestoreExecutor) process(ctx context.Context, task RestoreTask) error {
 			}); err != nil {
 				return e.compensate(runCtx, actor, project, task, tokens, err)
 			}
+			e.publishChange(task, false)
 		} else if projectNow.AuthoringEpoch != task.TargetEpoch {
 			return e.compensate(runCtx, actor, project, task, tokens, fmt.Errorf("工程编辑代次与恢复任务不一致"))
 		}
@@ -274,6 +293,7 @@ func (e *RestoreExecutor) finishWorkspace(ctx context.Context, project Project, 
 	if err := e.repo.CompleteRestore(ctx, task.ID); err != nil {
 		return err
 	}
+	e.publishChange(task, true)
 	if err := e.workspace.FinalizeRestore(project.ID, task.ID); err != nil {
 		e.logger.Warn("清理工程恢复临时目录失败", "taskId", task.ID, "error", releaseDiagnosticError(err))
 		return nil
@@ -287,12 +307,15 @@ func (e *RestoreExecutor) failBeforeFence(ctx context.Context, task RestoreTask,
 			// 失败状态未持久化时必须保持可重试，不能把尚未收敛的任务伪装成终止态。
 			return fmt.Errorf("记录恢复任务失败状态: %w", err)
 		}
+		e.publishChange(task, true)
 	}
 	return &restoreTerminalError{err: cause}
 }
 
 func (e *RestoreExecutor) compensate(ctx context.Context, actor auth.User, project Project, task RestoreTask, tokens RestoreFenceTokens, cause error) error {
-	_ = e.repo.SetRestoreStage(ctx, task.ID, "compensating", "rollback")
+	if e.repo.SetRestoreStage(ctx, task.ID, "compensating", "rollback") == nil {
+		e.publishChange(task, false)
+	}
 	backup, openErr := e.authoring.OpenStored(ctx, project, AuthoringSnapshotMetadata{Bucket: task.BackupBucket, Key: task.BackupKey, ContentHash: task.BackupHash, CipherHash: task.BackupCipherHash, Size: task.BackupSize, KeyID: task.BackupKeyID, ProjectRevision: task.BackupProjectRevision})
 	if openErr != nil {
 		return &restoreIncompleteError{err: fmt.Errorf("%v；备份不可读: %w", cause, openErr)}
@@ -333,5 +356,6 @@ func (e *RestoreExecutor) compensate(ctx context.Context, actor auth.User, proje
 	if err := e.repo.FailRestoreTask(ctx, task.ID, releaseDiagnosticError(cause), true); err != nil {
 		return &restoreIncompleteError{err: err}
 	}
+	e.publishChange(task, true)
 	return &restoreTerminalError{err: cause}
 }

@@ -18,8 +18,9 @@ type RecordFilter struct {
 	From, To                               *time.Time
 }
 type RecordTaskRef struct {
-	RunID        string `json:"runId"`
-	DeploymentID string `json:"deploymentId"`
+	RunID         string `json:"runId,omitempty"`
+	DeploymentID  string `json:"deploymentId,omitempty"`
+	RestoreTaskID string `json:"restoreTaskId,omitempty"`
 }
 type OpsRecord struct {
 	ID                      string         `json:"id"`
@@ -41,7 +42,7 @@ type OpsRecord struct {
 	DetailUnavailableReason string         `json:"detailUnavailableReason"`
 }
 
-// 三类数据在数据库内 UNION/过滤/排序，不在进程内全量合并。每个源都显式限定租户与权限。
+// 四类数据在数据库内 UNION/过滤/排序，不在进程内全量合并。每个源都显式限定租户与权限。
 // 节点三类扇出镜像只保留有真实 node_id 的 cluster 规范源，不通过消息、名称、时间猜关联。
 const opsRecordsUnionSQL = `SELECT 'deployment_run:'||r.id::text AS id,'deployment_run'::text AS source_kind,'operation'::text AS record_type,
  'deployment'::text AS object_type,d.id::text AS object_id,p.name AS object_name,d.environment_id::text AS environment_id,
@@ -71,7 +72,17 @@ const opsRecordsUnionSQL = `SELECT 'deployment_run:'||r.id::text AS id,'deployme
  e.created_at,NULL::timestamptz,NULL::bigint,COALESCE(e.message,''),''
  FROM runtime_environment_events e JOIN runtime_environments v ON v.id=e.environment_id AND v.tenant_id=e.tenant_id
  LEFT JOIN users u ON u.id=e.created_by AND u.tenant_id=e.tenant_id
- WHERE e.tenant_id=$1 AND $3::boolean AND e.event_type NOT IN ('node_online','node_offline','node_time_sync_changed')`
+ WHERE e.tenant_id=$1 AND $3::boolean AND e.event_type NOT IN ('node_online','node_offline','node_time_sync_changed')
+ UNION ALL
+ SELECT 'authoring_restore_task:'||t.id::text,'authoring_restore_task','operation','project',p.id::text,p.name,NULL::text,'恢复工程开发态',
+ CASE WHEN t.state='queued' THEN 'accepted' WHEN t.state='succeeded' THEN 'success' WHEN t.state='failed' THEN 'failed' ELSE 'running' END,
+ ''::text,COALESCE(NULLIF(u.full_name,''),u.username,'未知用户'),
+ t.created_at,t.completed_at,CASE WHEN t.completed_at IS NULL THEN NULL ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (t.completed_at-COALESCE(t.started_at,t.created_at)))*1000))::bigint END,
+ CASE WHEN t.state='failed' THEN COALESCE(NULLIF(t.error_message,''),latest.message,'恢复未完成') ELSE COALESCE(latest.message,'') END,t.id::text AS run_id
+ FROM authoring_restore_tasks t JOIN projects p ON p.id=t.project_id AND p.tenant_id=t.tenant_id
+ LEFT JOIN users u ON u.id=t.requested_by AND u.tenant_id=t.tenant_id
+ LEFT JOIN LATERAL (SELECT e.message FROM authoring_restore_task_events e WHERE e.task_id=t.id AND e.tenant_id=t.tenant_id ORDER BY e.created_at DESC,e.id DESC LIMIT 1) latest ON TRUE
+ WHERE t.tenant_id=$1 AND $2::boolean`
 
 const opsRecordsFilterSQL = ` WHERE ($4='' OR title ILIKE '%'||$4||'%' OR object_name ILIKE '%'||$4||'%' OR message ILIKE '%'||$4||'%')
  AND ($5='' OR record_type=$5) AND ($6='' OR object_type=$6) AND ($7='' OR environment_id=$7)
@@ -85,7 +96,7 @@ func normalizeRecordFilter(f RecordFilter) (RecordFilter, error) {
 	if utf8.RuneCountInString(f.Search) > 200 {
 		return f, fmt.Errorf("搜索词不能超过200个字符")
 	}
-	for _, field := range []struct{ value, allowed string }{{f.RecordType, "|operation|event|"}, {f.ObjectType, "|deployment|foundation|environment|node|cluster|"}, {f.Sort, "|time_desc|time_asc|"}, {f.Status, "|accepted|running|success|failed|warning|recovered|info|"}} {
+	for _, field := range []struct{ value, allowed string }{{f.RecordType, "|operation|event|"}, {f.ObjectType, "|project|deployment|foundation|environment|node|cluster|"}, {f.Sort, "|time_desc|time_asc|"}, {f.Status, "|accepted|running|success|failed|warning|recovered|info|"}} {
 		valid := field.value == ""
 		for _, allowed := range strings.Split(field.allowed, "|") {
 			valid = valid || field.value == allowed
@@ -152,7 +163,11 @@ func loadRecords(ctx context.Context, reader deploymentPageReader, tenant string
 			return nil, 0, err
 		}
 		if runID != "" {
-			item.TaskRef = &RecordTaskRef{RunID: runID, DeploymentID: item.ObjectID}
+			if item.SourceKind == "authoring_restore_task" {
+				item.TaskRef = &RecordTaskRef{RestoreTaskID: runID}
+			} else {
+				item.TaskRef = &RecordTaskRef{RunID: runID, DeploymentID: item.ObjectID}
+			}
 		}
 		if item.SourceKind == "deployment_run" && runID == "" {
 			item.DetailUnavailableReason = "对象已删除，保留操作摘要"
