@@ -410,10 +410,6 @@ func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGra
 func (g *Gateway) applyCORS(w http.ResponseWriter, r *http.Request) bool {
 	origin := strings.TrimRight(strings.TrimSpace(r.Header.Get("Origin")), "/")
 	if origin == "" {
-		if g.allowInsecureHTTPDev {
-			http.Error(w, "HTTP 开发工作区必须提供明确 Origin", http.StatusForbidden)
-			return false
-		}
 		return true
 	}
 	selfOrigin := g.scheme + "://" + strings.ToLower(r.Host)

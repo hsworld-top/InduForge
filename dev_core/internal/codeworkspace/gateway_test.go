@@ -107,19 +107,19 @@ func TestGatewayInsecureHTTPDevelopmentMode(t *testing.T) {
 	if wrongResult.Code != http.StatusBadRequest {
 		t.Fatalf("HTTP 模式接受了 HTTPS 协议头: %d", wrongResult.Code)
 	}
-	missingOrigin := httptest.NewRequest(http.MethodGet, publicURL, nil)
-	missingOrigin.Host = parsed.Host
-	missingOrigin.Header.Set("X-Forwarded-Proto", "http")
-	missingOriginResult := httptest.NewRecorder()
-	gateway.ServeHTTP(missingOriginResult, missingOrigin)
-	if missingOriginResult.Code != http.StatusForbidden {
-		t.Fatalf("HTTP 开发模式接受了缺少 Origin 的请求: %d", missingOriginResult.Code)
+	maliciousOrigin := httptest.NewRequest(http.MethodOptions, publicURL, nil)
+	maliciousOrigin.Host = parsed.Host
+	maliciousOrigin.Header.Set("X-Forwarded-Proto", "http")
+	maliciousOrigin.Header.Set("Origin", "http://attacker.example")
+	maliciousOriginResult := httptest.NewRecorder()
+	gateway.ServeHTTP(maliciousOriginResult, maliciousOrigin)
+	if maliciousOriginResult.Code != http.StatusForbidden {
+		t.Fatalf("HTTP 开发模式接受了恶意显式 Origin: %d", maliciousOriginResult.Code)
 	}
 	// 协议错配必须在票据读取前返回，随后正确协议仍可完成交换。
 	exchange := httptest.NewRequest(http.MethodGet, publicURL, nil)
 	exchange.Host = parsed.Host
 	exchange.Header.Set("X-Forwarded-Proto", "http")
-	exchange.Header.Set("Origin", "http://center.induforge.test:18080")
 	goodResult := httptest.NewRecorder()
 	gateway.ServeHTTP(goodResult, exchange)
 	if goodResult.Code != http.StatusSeeOther {
@@ -133,7 +133,6 @@ func TestGatewayInsecureHTTPDevelopmentMode(t *testing.T) {
 	proxyRequest := httptest.NewRequest(http.MethodGet, "http://"+parsed.Host+"/", nil)
 	proxyRequest.Host = parsed.Host
 	proxyRequest.Header.Set("X-Forwarded-Proto", "http")
-	proxyRequest.Header.Set("Origin", "http://center.induforge.test:18080")
 	proxyRequest.AddCookie(cookies[0])
 	proxyResult := httptest.NewRecorder()
 	gateway.ServeHTTP(proxyResult, proxyRequest)
