@@ -46,6 +46,9 @@ func (r *PostgreSQLRepository) List(ctx context.Context, tenantID string, filter
 	for _, row := range rows {
 		items = append(items, projectFromListRow(row))
 	}
+	if err := r.attachDeploymentSummaries(ctx, tenantID, items); err != nil {
+		return nil, 0, fmt.Errorf("查询工程部署摘要失败: %w", err)
+	}
 	return items, total, nil
 }
 
@@ -365,10 +368,10 @@ func (r *PostgreSQLRepository) SetGroup(ctx context.Context, tenantID, projectID
 }
 
 func projectFromModel(row dbsqlc.Project) Project {
-	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, CreatedBy: uuidString(row.CreatedBy), UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, AuthoringEpoch: row.AuthoringEpoch, CreatedBy: uuidString(row.CreatedBy), UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 }
 func projectFromListRow(row dbsqlc.ListProjectsRow) Project {
-	item := Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, CreatedBy: uuidString(row.CreatedBy), CreatedByName: row.CreatedByName, UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	item := Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, AuthoringEpoch: row.AuthoringEpoch, CreatedBy: uuidString(row.CreatedBy), CreatedByName: row.CreatedByName, UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.GroupID.Valid {
 		item.Group = &Group{ID: uuidString(row.GroupID), Name: textString(row.GroupName)}
 	}
@@ -433,6 +436,9 @@ func mapConstraintError(err error) error {
 	var pgError *pgconn.PgError
 	if errors.As(err, &pgError) && pgError.Code == "23505" {
 		return ErrAlreadyExists
+	}
+	if errors.As(err, &pgError) && pgError.Code == "55000" {
+		return ErrAuthoringBusy
 	}
 	return fmt.Errorf("保存工程资源失败: %w", err)
 }

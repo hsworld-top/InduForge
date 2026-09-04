@@ -11,9 +11,13 @@ import (
 
 func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 	var pod map[string]any
+	var service map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/services"):
+			if err := json.NewDecoder(r.Body).Decode(&service); err != nil {
+				t.Fatalf("解析 Service 请求失败: %v", err)
+			}
 			w.WriteHeader(http.StatusCreated)
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/pods"):
 			if err := json.NewDecoder(r.Body).Decode(&pod); err != nil {
@@ -64,6 +68,13 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 	if strings.Contains(payload, `"allowPrivilegeEscalation":true`) {
 		t.Fatalf("工作区 Pod 不得允许权限提升: %s", payload)
 	}
+	servicePayload, err := json.Marshal(service)
+	if err != nil {
+		t.Fatalf("序列化 Service 失败: %v", err)
+	}
+	if !strings.Contains(string(servicePayload), `"type":"ClusterIP"`) || strings.Contains(string(servicePayload), `"type":"NodePort"`) || strings.Contains(string(servicePayload), `"nodePort"`) {
+		t.Fatalf("Kubernetes 工作区必须只发布 ClusterIP: %s", servicePayload)
+	}
 	if strings.Contains(payload, "chown -R") {
 		t.Fatalf("初始化器不得递归遍历用户缓存目录: %s", payload)
 	}
@@ -106,7 +117,7 @@ func TestKubernetesInspectMapsEvictedWorkspaceToUnhealthy(t *testing.T) {
 				"status":{"phase":"Failed","reason":"Evicted","containerStatuses":[{"ready":false}]}
 			}`))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/services/"):
-			_, _ = w.Write([]byte(`{"spec":{"ports":[{"name":"code","nodePort":32122},{"name":"preview-control","nodePort":31298}]}}`))
+			_, _ = w.Write([]byte(`{"spec":{"ports":[{"name":"code","port":3000},{"name":"preview-control","port":5174}]}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -121,7 +132,7 @@ func TestKubernetesInspectMapsEvictedWorkspaceToUnhealthy(t *testing.T) {
 	if state.Running || state.Health != "unhealthy" {
 		t.Fatalf("Evicted 工作区必须映射为不可用状态: %#v", state)
 	}
-	if state.ServicePorts["preview-control"] != "31298" {
+	if state.ServicePorts["preview-control"] != "5174" || state.HostPort != "" {
 		t.Fatalf("工作区 Service 端口未保留: %#v", state.ServicePorts)
 	}
 }

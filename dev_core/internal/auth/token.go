@@ -5,11 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// ErrAccessTokenExpired 仅供长连接区分可续租到期与账号撤权；REST仍统一返回未授权。
+var ErrAccessTokenExpired = errors.New("访问令牌已到期")
 
 type Claims struct {
 	UserID   string `json:"userId"`
@@ -81,6 +85,9 @@ func (m *TokenManager) ParseAccessToken(value string) (Claims, error) {
 		}
 		return m.secret, nil
 	}, jwt.WithIssuer(m.issuer), jwt.WithAudience(m.audience), jwt.WithExpirationRequired())
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		return Claims{}, ErrAccessTokenExpired
+	}
 	if err != nil || !token.Valid {
 		return Claims{}, ErrUnauthorized
 	}

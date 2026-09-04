@@ -94,19 +94,18 @@ func (k *KubernetesEngine) Inspect(ctx context.Context, name string) (ContainerS
 	var service struct {
 		Spec struct {
 			Ports []struct {
-				Name     string `json:"name"`
-				NodePort int    `json:"nodePort"`
+				Name string `json:"name"`
+				Port int    `json:"port"`
 			} `json:"ports"`
 		} `json:"spec"`
 	}
 	if err := k.request(ctx, http.MethodGet, "/api/v1/namespaces/"+k.namespace+"/services/"+name, nil, &service); err == nil {
 		state.ServicePorts = make(map[string]string, len(service.Spec.Ports))
 		for _, port := range service.Spec.Ports {
-			if port.NodePort > 0 {
-				state.ServicePorts[port.Name] = fmt.Sprint(port.NodePort)
+			if port.Port > 0 {
+				state.ServicePorts[port.Name] = fmt.Sprint(port.Port)
 			}
 		}
-		state.HostPort = state.ServicePorts["code"]
 	}
 	return state, nil
 }
@@ -114,7 +113,7 @@ func (k *KubernetesEngine) Inspect(ctx context.Context, name string) (ContainerS
 func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error {
 	labels := spec.Labels
 	labels["app.kubernetes.io/name"] = spec.Name
-	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"type": "NodePort", "selector": map[string]string{"app.kubernetes.io/name": spec.Name}, "ports": []any{
+	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"type": "ClusterIP", "selector": map[string]string{"app.kubernetes.io/name": spec.Name}, "ports": []any{
 		map[string]any{"name": "code", "port": 3000, "targetPort": 3000, "protocol": "TCP"},
 		map[string]any{"name": "ai", "port": 30141, "targetPort": 30141, "protocol": "TCP"},
 		map[string]any{"name": "preview", "port": 5173, "targetPort": 5173, "protocol": "TCP"},

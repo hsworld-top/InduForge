@@ -17,6 +17,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/app"
 	"github.com/indu-forge/dev_core/internal/auditlog"
 	"github.com/indu-forge/dev_core/internal/auth"
+	"github.com/indu-forge/dev_core/internal/authoringsnapshot"
 	"github.com/indu-forge/dev_core/internal/codeworkspace"
 	"github.com/indu-forge/dev_core/internal/config"
 	"github.com/indu-forge/dev_core/internal/contextpack"
@@ -147,7 +148,24 @@ func main() {
 		os.Exit(1)
 	}
 	codeWorkspaceService.SetPresence(cacheStore)
-	controlPlane.SetCodeWorkspaceHandler(codeworkspace.NewHandler(codeWorkspaceService, authService))
+	codeWorkspaceService.SetAuthoringEpochGuard(projectRepository)
+	codeWorkspaceHandler := codeworkspace.NewHandler(codeWorkspaceService, authService)
+	var codeWorkspaceGateway *codeworkspace.Gateway
+	if cfg.WorkspacePublicOriginTemplate != "" {
+		codeWorkspaceGateway, err = codeworkspace.NewGateway(codeWorkspaceService, codeworkspace.GatewayConfig{
+			PublicOriginTemplate: cfg.WorkspacePublicOriginTemplate,
+			CenterPublicOrigin:   cfg.CenterPublicOrigin,
+			Namespace:            cfg.CodeWorkspaceNamespace,
+			AllowedOrigins:       cfg.CodeWorkspaceAllowedOrigins,
+			ResolveUser:          authService.GetActiveUser,
+		})
+		if err != nil {
+			logger.Error("初始化代码工作区隔离网关失败", "error", err)
+			os.Exit(1)
+		}
+		codeWorkspaceHandler.SetGateway(codeWorkspaceGateway)
+	}
+	controlPlane.SetCodeWorkspaceHandler(codeWorkspaceHandler)
 	controlPlane.SetRuntimeAccessHandler(runtimeaccess.NewHandler(runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), authService))
 	contextPackService := contextpack.NewService(project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword), runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), workspace, cfg.DataServiceURL)
 	contextPackHandler := contextpack.NewHandler(contextPackService)
@@ -156,6 +174,7 @@ func main() {
 		sceneasset.NewPostgreSQLRepository(pool), projectRepository, designObjects, cacheStore,
 		sceneasset.NewRegistry(sceneasset.NewHTProvider()),
 	)
+	sceneAssetService.SetAuthoringEpochGuard(projectRepository)
 	sceneAssetHandler := sceneasset.NewHandler(sceneAssetService, cfg.DataServiceURL)
 	contextPackService.SetSceneContracts(sceneAssetService)
 	realtimeServer := realtime.New(authService, logger)
@@ -164,6 +183,7 @@ func main() {
 	nodeService.SetEvents(realtimeServer)
 	nodeHandler := node.NewHandler(nodeService, authService)
 	opsRepository := ops.NewPostgreSQLRepository(pool)
+	opsRepository.SetEvents(realtimeServer)
 	opsRepository.SetK3sAPIPort(cfg.OpsK3sAPIPort)
 	if cfg.OpsCenterNodeID != "" {
 		if err := opsRepository.EnsureRuntimeCluster(ctx, cfg.OpsCenterNodeID); err != nil {
@@ -174,14 +194,37 @@ func main() {
 	opsService := ops.NewService(opsRepository, ops.NewFilePackageStore(cfg.NodePackageDirectory), ifpObjects)
 	opsService.SetClusterTokenKey([]byte(cfg.JWTSecret))
 	opsHandler := ops.NewHandler(opsService, authService)
+	opsHandler.SetEvents(realtimeServer)
 	controlPlane.SetNodeHandler(nodeHandler)
+	deploymentRepository := deployment.NewPostgreSQLRepository(pool)
 	deploymentService := deployment.NewService(
-		deployment.NewPostgreSQLRepository(pool), workspace, ifpObjects,
+		deploymentRepository, workspace, ifpObjects,
 		deployment.ServiceConfig{ArtifactBucket: cfg.ObjectStoreIFPBucket, MinNodeAgentVersion: cfg.MinNodeAgentVersion, MinRuntimeVersion: cfg.MinRuntimeVersion},
 	)
-	if err := configureReleasePublishing(deploymentService, cfg, dataServiceClient); err != nil {
+	if err := configureReleasePublishing(deploymentService, deploymentRepository, workspace, sceneAssetService, codeWorkspaceService, ifpObjects, cfg, dataServiceClient); err != nil {
 		logger.Error("初始化正式 Release 发布失败", "error", err)
 		os.Exit(1)
+	}
+	var restoreExecutor *deployment.RestoreExecutor
+	if cfg.ReleaseBuilderEnabled && codeWorkspaceGateway != nil {
+		keys, keyErr := authoringsnapshot.NewKeyring(cfg.AuthoringSnapshotCurrentKeyID, cfg.AuthoringSnapshotKeyring)
+		if keyErr != nil {
+			logger.Error("初始化开发态恢复密钥环失败", "error", keyErr)
+			os.Exit(1)
+		}
+		runner, runnerErr := deployment.NewDockerFrontendBuildRunner(deployment.DockerFrontendBuildRunnerConfig{DockerHost: cfg.CodeServerDockerHost, Image: cfg.ReleaseBuilderImage, WorkspaceVolume: cfg.CodeWorkspaceVolume, WorkspaceRoot: cfg.WorkspaceRoot, BootstrapProjectID: platformdb.BuiltinDemoProjectID, BootstrapTemplateID: "vite-vue-js"})
+		if runnerErr != nil {
+			logger.Error("初始化开发态恢复构建输入失败", "error", runnerErr)
+			os.Exit(1)
+		}
+		source, sourceErr := deployment.NewProjectReleaseSourceBuilder(deployment.ProjectReleaseSourceBuilderConfig{DataServiceURL: cfg.DataServiceURL, BuilderID: cfg.ReleaseBuilderID, TenantBindingEnsurer: dataServiceClient}, runner)
+		if sourceErr != nil {
+			logger.Error("初始化开发态恢复快照读取器失败", "error", sourceErr)
+			os.Exit(1)
+		}
+		authoring := deployment.NewAuthoringReleaseBuilder(workspace, sceneAssetService, dataServiceClient, ifpObjects, keys, source)
+		restoreExecutor = deployment.NewRestoreExecutor(deploymentRepository, authoring, workspace, sceneAssetService, dataServiceClient, deployment.NewAuthoringCaptureCoordinator(deploymentRepository, dataServiceClient, codeWorkspaceService), logger)
+		deploymentService.SetRestoreScheduler(restoreExecutor)
 	}
 	deploymentService.SetReleaseValidator(sceneAssetService)
 	deploymentService.SetEvents(realtimeServer)
@@ -200,7 +243,7 @@ func main() {
 	controlPlane.SetAuditLogHandler(auditlog.NewHandler(auditlog.NewService(auditLogRepository), authService))
 	application := app.New(app.Options{
 		Logger:      logger,
-		Middlewares: []func(http.Handler) http.Handler{auth.ResolveUser(authService), auditlog.Middleware(auditLogRepository, logger)},
+		Middlewares: []func(http.Handler) http.Handler{project.ResolveAuthoringEpoch, auth.ResolveUser(authService), auditlog.Middleware(auditLogRepository, logger)},
 		Mount: func(router chi.Router) {
 			router.Handle("/control-socket.io", realtimeServer.Handler())
 			router.Handle("/control-socket.io/*", realtimeServer.Handler())
@@ -210,9 +253,13 @@ func main() {
 			platformapi.HandlerFromMuxWithBaseURL(controlPlane, router, "/api/v1")
 		},
 	})
+	var serverHandler http.Handler = application.Handler()
+	if codeWorkspaceGateway != nil {
+		serverHandler = codeWorkspaceGateway.Wrap(serverHandler)
+	}
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           application.Handler(),
+		Handler:           serverHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -221,6 +268,9 @@ func main() {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if restoreExecutor != nil {
+		restoreExecutor.Start(signalCtx)
+	}
 	go worker.New(worker.NewPostgreSQLRepository(pool), ifpObjects, logger, 10*time.Second).Run(signalCtx)
 	go runSceneObjectCleanup(signalCtx, sceneAssetService, logger)
 	go runOpsLivenessReconciler(signalCtx, opsRepository, logger)
@@ -252,7 +302,7 @@ func main() {
 }
 
 // configureReleasePublishing 默认不注入构建器，使未启用环境的 Publish 保持失败关闭。
-func configureReleasePublishing(service *deployment.Service, cfg config.Config, dataServiceClient *dataservice.InternalClient) error {
+func configureReleasePublishing(service *deployment.Service, repository *deployment.PostgreSQLRepository, workspace *project.FileWorkspace, scenes *sceneasset.Service, codeWorkspaces *codeworkspace.Service, objects *objectstore.MinIO, cfg config.Config, dataServiceClient *dataservice.InternalClient) error {
 	if !cfg.ReleaseBuilderEnabled {
 		return nil
 	}
@@ -269,6 +319,12 @@ func configureReleasePublishing(service *deployment.Service, cfg config.Config, 
 		return err
 	}
 	service.SetReleaseSourceBuilder(builder)
+	keys, err := authoringsnapshot.NewKeyring(cfg.AuthoringSnapshotCurrentKeyID, cfg.AuthoringSnapshotKeyring)
+	if err != nil {
+		return err
+	}
+	service.SetFormalAuthoringBuilder(deployment.NewAuthoringReleaseBuilder(workspace, scenes, dataServiceClient, objects, keys, builder))
+	service.SetAuthoringCaptureCoordinator(deployment.NewAuthoringCaptureCoordinator(repository, dataServiceClient, codeWorkspaces))
 	service.SetSigningConfig(key)
 	return nil
 }
@@ -283,6 +339,9 @@ func runOpsLivenessReconciler(ctx context.Context, repository *ops.PostgreSQLRep
 		case <-ticker.C:
 			if _, err := repository.ReconcileNodeLiveness(ctx); err != nil {
 				logger.Warn("更新运维节点在线状态失败", "error", err)
+			}
+			if err := repository.ReconcileFoundationFreshness(ctx); err != nil {
+				logger.Warn("更新基础服务观测时效失败", "error", err)
 			}
 		}
 	}

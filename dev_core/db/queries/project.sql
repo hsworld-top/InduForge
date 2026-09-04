@@ -1,6 +1,6 @@
 -- name: ListProjects :many
 SELECT p.id, p.tenant_id, p.name, p.code, p.description, p.icon, p.workspace_path,
-       p.status, p.visibility, p.created_by, p.updated_by, p.archived_at, p.created_at, p.updated_at,
+       p.status, p.visibility, p.authoring_epoch, p.created_by, p.updated_by, p.archived_at, p.created_at, p.updated_at,
        creator.username AS created_by_name,
        g.id AS group_id, g.name AS group_name,
        COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name, 'color', t.color, 'description', t.description, 'sortOrder', t.sort_order)) FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb) AS tags
@@ -23,7 +23,7 @@ WHERE p.tenant_id = sqlc.arg(tenant_id)
   AND (sqlc.arg(group_id)::text = '' OR g.id::text = sqlc.arg(group_id))
   AND (sqlc.arg(tag_id)::text = '' OR EXISTS (SELECT 1 FROM project_tag_bindings filter_tb WHERE filter_tb.project_id = p.id AND filter_tb.tag_id::text = sqlc.arg(tag_id)))
 GROUP BY p.id, creator.username, g.id, g.name
-ORDER BY p.updated_at DESC
+ORDER BY p.updated_at DESC,p.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: CountProjects :one

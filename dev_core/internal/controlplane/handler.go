@@ -14,6 +14,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/runtimeaccess"
 	"github.com/indu-forge/dev_core/internal/tenant"
 	"github.com/indu-forge/dev_core/internal/user"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 type Handler struct {
@@ -35,6 +36,10 @@ func (h *Handler) SetUserHandler(handler *user.Handler) {
 }
 
 func (h *Handler) SetProjectHandler(handler *project.Handler) { h.project = handler }
+
+func (h *Handler) GetProjectAuthoringContext(w http.ResponseWriter, r *http.Request, projectID openapi_types.UUID) {
+	h.project.GetProjectAuthoringContext(w, r, projectID.String())
+}
 
 func (h *Handler) SetCodeWorkspaceHandler(handler *codeworkspace.Handler) {
 	h.codeWorkspace = handler
@@ -231,6 +236,12 @@ func (h *Handler) PublishProjectVersion(w http.ResponseWriter, r *http.Request, 
 }
 func (h *Handler) DeletePublishedVersion(w http.ResponseWriter, r *http.Request, versionID string) {
 	h.deployment.DeletePublishedVersion(w, r, versionID)
+}
+func (h *Handler) RestoreVersionDevelopment(w http.ResponseWriter, r *http.Request, versionID openapi_types.UUID) {
+	h.deployment.RestoreVersionDevelopment(w, r, versionID.String())
+}
+func (h *Handler) GetRestoreDevelopmentTask(w http.ResponseWriter, r *http.Request, taskID openapi_types.UUID) {
+	h.deployment.GetRestoreDevelopmentTask(w, r, taskID.String())
 }
 func (h *Handler) ListProjectDeploymentNodes(w http.ResponseWriter, r *http.Request, projectID string) {
 	h.deployment.ListProjectDeploymentNodes(w, r, projectID)

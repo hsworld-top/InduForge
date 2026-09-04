@@ -62,7 +62,7 @@ func (q *Queries) CountProjects(ctx context.Context, arg CountProjectsParams) (i
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9)
-RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by, updated_by, archived_at, created_at, updated_at
+RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, authoring_epoch, created_by, updated_by, archived_at, created_at, updated_at
 `
 
 type CreateProjectParams struct {
@@ -100,6 +100,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.WorkspacePath,
 		&i.Status,
 		&i.Visibility,
+		&i.AuthoringEpoch,
 		&i.CreatedBy,
 		&i.UpdatedBy,
 		&i.ArchivedAt,
@@ -265,7 +266,7 @@ func (q *Queries) DeleteProjectTagBindings(ctx context.Context, projectID pgtype
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by, updated_by, archived_at, created_at, updated_at FROM projects WHERE id = $1 AND tenant_id = $2 AND status <> 'deleted' LIMIT 1
+SELECT id, tenant_id, name, code, description, icon, workspace_path, status, visibility, authoring_epoch, created_by, updated_by, archived_at, created_at, updated_at FROM projects WHERE id = $1 AND tenant_id = $2 AND status <> 'deleted' LIMIT 1
 `
 
 type GetProjectParams struct {
@@ -286,6 +287,7 @@ func (q *Queries) GetProject(ctx context.Context, arg GetProjectParams) (Project
 		&i.WorkspacePath,
 		&i.Status,
 		&i.Visibility,
+		&i.AuthoringEpoch,
 		&i.CreatedBy,
 		&i.UpdatedBy,
 		&i.ArchivedAt,
@@ -488,7 +490,7 @@ func (q *Queries) ListProjectTags(ctx context.Context, arg ListProjectTagsParams
 
 const listProjects = `-- name: ListProjects :many
 SELECT p.id, p.tenant_id, p.name, p.code, p.description, p.icon, p.workspace_path,
-       p.status, p.visibility, p.created_by, p.updated_by, p.archived_at, p.created_at, p.updated_at,
+       p.status, p.visibility, p.authoring_epoch, p.created_by, p.updated_by, p.archived_at, p.created_at, p.updated_at,
        creator.username AS created_by_name,
        g.id AS group_id, g.name AS group_name,
        COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name, 'color', t.color, 'description', t.description, 'sortOrder', t.sort_order)) FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb) AS tags
@@ -511,7 +513,7 @@ WHERE p.tenant_id = $1
   AND ($8::text = '' OR g.id::text = $8)
   AND ($9::text = '' OR EXISTS (SELECT 1 FROM project_tag_bindings filter_tb WHERE filter_tb.project_id = p.id AND filter_tb.tag_id::text = $9))
 GROUP BY p.id, creator.username, g.id, g.name
-ORDER BY p.updated_at DESC
+ORDER BY p.updated_at DESC,p.id DESC
 LIMIT $11 OFFSET $10
 `
 
@@ -530,24 +532,25 @@ type ListProjectsParams struct {
 }
 
 type ListProjectsRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	Name          string             `json:"name"`
-	Code          string             `json:"code"`
-	Description   pgtype.Text        `json:"description"`
-	Icon          pgtype.Text        `json:"icon"`
-	WorkspacePath string             `json:"workspace_path"`
-	Status        string             `json:"status"`
-	Visibility    string             `json:"visibility"`
-	CreatedBy     pgtype.UUID        `json:"created_by"`
-	UpdatedBy     pgtype.UUID        `json:"updated_by"`
-	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	CreatedByName string             `json:"created_by_name"`
-	GroupID       pgtype.UUID        `json:"group_id"`
-	GroupName     pgtype.Text        `json:"group_name"`
-	Tags          interface{}        `json:"tags"`
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Name           string             `json:"name"`
+	Code           string             `json:"code"`
+	Description    pgtype.Text        `json:"description"`
+	Icon           pgtype.Text        `json:"icon"`
+	WorkspacePath  string             `json:"workspace_path"`
+	Status         string             `json:"status"`
+	Visibility     string             `json:"visibility"`
+	AuthoringEpoch int64              `json:"authoring_epoch"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
+	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	CreatedByName  string             `json:"created_by_name"`
+	GroupID        pgtype.UUID        `json:"group_id"`
+	GroupName      pgtype.Text        `json:"group_name"`
+	Tags           interface{}        `json:"tags"`
 }
 
 func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]ListProjectsRow, error) {
@@ -581,6 +584,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]L
 			&i.WorkspacePath,
 			&i.Status,
 			&i.Visibility,
+			&i.AuthoringEpoch,
 			&i.CreatedBy,
 			&i.UpdatedBy,
 			&i.ArchivedAt,
@@ -606,7 +610,7 @@ UPDATE projects
 SET status = $1, archived_at = CASE WHEN $1 = 'archived' THEN now() ELSE NULL END,
     updated_by = $2, updated_at = now()
 WHERE id = $3 AND tenant_id = $4 AND status <> 'deleted'
-RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by, updated_by, archived_at, created_at, updated_at
+RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, authoring_epoch, created_by, updated_by, archived_at, created_at, updated_at
 `
 
 type SetProjectLifecycleStatusParams struct {
@@ -634,6 +638,7 @@ func (q *Queries) SetProjectLifecycleStatus(ctx context.Context, arg SetProjectL
 		&i.WorkspacePath,
 		&i.Status,
 		&i.Visibility,
+		&i.AuthoringEpoch,
 		&i.CreatedBy,
 		&i.UpdatedBy,
 		&i.ArchivedAt,
@@ -667,7 +672,7 @@ UPDATE projects
 SET name = $1, description = $2,
     icon = $3, visibility = $4, updated_by = $5, updated_at = now()
 WHERE id = $6 AND tenant_id = $7 AND status <> 'deleted'
-RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by, updated_by, archived_at, created_at, updated_at
+RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, authoring_epoch, created_by, updated_by, archived_at, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
@@ -701,6 +706,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.WorkspacePath,
 		&i.Status,
 		&i.Visibility,
+		&i.AuthoringEpoch,
 		&i.CreatedBy,
 		&i.UpdatedBy,
 		&i.ArchivedAt,

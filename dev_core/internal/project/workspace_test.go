@@ -67,6 +67,54 @@ func TestWorkspaceInitializeCreatesFinalDirectoryLayout(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRestoreCanRollbackAndFinalize(t *testing.T) {
+	root := t.TempDir()
+	projectID := "11111111-1111-4111-8111-111111111111"
+	taskID := "22222222-2222-4222-8222-222222222222"
+	workspace, err := NewFileWorkspace(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := workspace.Initialize(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(current, "version.txt"), []byte("current"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err = workspace.StageRestore(projectID, taskID, map[string]string{"version.txt": base64.StdEncoding.EncodeToString([]byte("restored"))}); err != nil {
+		t.Fatal(err)
+	}
+	if content, _ := os.ReadFile(filepath.Join(current, "version.txt")); string(content) != "current" {
+		t.Fatal("staging 不得改变当前工作空间")
+	}
+	if err = workspace.ActivateRestore(projectID, taskID); err != nil {
+		t.Fatal(err)
+	}
+	if content, _ := os.ReadFile(filepath.Join(current, "version.txt")); string(content) != "restored" {
+		t.Fatalf("未激活恢复内容: %q", content)
+	}
+	if err = workspace.RollbackRestore(projectID, taskID); err != nil {
+		t.Fatal(err)
+	}
+	if content, _ := os.ReadFile(filepath.Join(current, "version.txt")); string(content) != "current" {
+		t.Fatalf("未恢复备份: %q", content)
+	}
+
+	if err = workspace.StageRestore(projectID, taskID, map[string]string{"version.txt": base64.StdEncoding.EncodeToString([]byte("final"))}); err != nil {
+		t.Fatal(err)
+	}
+	if err = workspace.ActivateRestore(projectID, taskID); err != nil {
+		t.Fatal(err)
+	}
+	if err = workspace.FinalizeRestore(projectID, taskID); err != nil {
+		t.Fatal(err)
+	}
+	if content, _ := os.ReadFile(filepath.Join(current, "version.txt")); string(content) != "final" {
+		t.Fatalf("最终内容错误: %q", content)
+	}
+}
+
 func TestWorkspaceSyncContextSwapsRealContextStateDirectory(t *testing.T) {
 	root := t.TempDir()
 	projectID := "11111111-1111-4111-8111-111111111111"
@@ -246,7 +294,7 @@ func TestWorkspaceExportExcludesGeneratedDirectories(t *testing.T) {
 }
 
 func TestWorkspaceLimitsMatchProductContract(t *testing.T) {
-	if maxWorkspaceFileSize != 32<<20 || maxWorkspaceTotalSize != 512<<20 {
+	if maxWorkspaceFileSize != 32<<20 || maxWorkspaceTotalSize != 64<<20 {
 		t.Fatalf("工作空间限制不符合产品约定: file=%d total=%d", maxWorkspaceFileSize, maxWorkspaceTotalSize)
 	}
 	if runtime.GOOS == "windows" {

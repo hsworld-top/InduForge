@@ -41,7 +41,7 @@ VALUES (
   'ready', $6, $7, $8,
   $9, $10, $11, $12, now()
 )
-RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
+RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, authoring_snapshot_schema, authoring_snapshot_bucket, authoring_snapshot_key, authoring_snapshot_hash, authoring_snapshot_cipher_hash, authoring_snapshot_size, authoring_snapshot_key_id, authoring_project_revision, restorable, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
 `
 
 type CreateApplicationVersionParams struct {
@@ -92,6 +92,15 @@ func (q *Queries) CreateApplicationVersion(ctx context.Context, arg CreateApplic
 		&i.ManifestHash,
 		&i.ChecksumsHash,
 		&i.SigningKeyID,
+		&i.AuthoringSnapshotSchema,
+		&i.AuthoringSnapshotBucket,
+		&i.AuthoringSnapshotKey,
+		&i.AuthoringSnapshotHash,
+		&i.AuthoringSnapshotCipherHash,
+		&i.AuthoringSnapshotSize,
+		&i.AuthoringSnapshotKeyID,
+		&i.AuthoringProjectRevision,
+		&i.Restorable,
 		&i.BuildLog,
 		&i.ErrorMessage,
 		&i.CreatedBy,
@@ -224,6 +233,8 @@ WHERE application_versions.id = $1 AND application_versions.tenant_id = $2
     WHERE d.application_version_id = application_versions.id
       AND d.deleted_at IS NULL AND d.status IN ('pending', 'deploying', 'running')
   )
+  AND NOT EXISTS (SELECT 1 FROM authoring_restore_tasks t WHERE t.application_version_id = application_versions.id
+    AND t.state IN ('queued','staging','restoring_workspace','restoring_scenes','restoring_data','finalizing','compensating'))
 `
 
 type DeleteApplicationVersionParams struct {
@@ -240,7 +251,7 @@ func (q *Queries) DeleteApplicationVersion(ctx context.Context, arg DeleteApplic
 }
 
 const getApplicationVersion = `-- name: GetApplicationVersion :one
-SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.manifest_hash, v.checksums_hash, v.signing_key_id, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
+SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.manifest_hash, v.checksums_hash, v.signing_key_id, v.authoring_snapshot_schema, v.authoring_snapshot_bucket, v.authoring_snapshot_key, v.authoring_snapshot_hash, v.authoring_snapshot_cipher_hash, v.authoring_snapshot_size, v.authoring_snapshot_key_id, v.authoring_project_revision, v.restorable, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
 JOIN projects p ON p.id = v.project_id
 WHERE v.id = $1 AND v.tenant_id = $2
   AND p.status <> 'deleted' AND v.status <> 'deleted'
@@ -272,6 +283,15 @@ func (q *Queries) GetApplicationVersion(ctx context.Context, arg GetApplicationV
 		&i.ManifestHash,
 		&i.ChecksumsHash,
 		&i.SigningKeyID,
+		&i.AuthoringSnapshotSchema,
+		&i.AuthoringSnapshotBucket,
+		&i.AuthoringSnapshotKey,
+		&i.AuthoringSnapshotHash,
+		&i.AuthoringSnapshotCipherHash,
+		&i.AuthoringSnapshotSize,
+		&i.AuthoringSnapshotKeyID,
+		&i.AuthoringProjectRevision,
+		&i.Restorable,
 		&i.BuildLog,
 		&i.ErrorMessage,
 		&i.CreatedBy,
@@ -366,7 +386,7 @@ func (q *Queries) GetNodeDeployment(ctx context.Context, arg GetNodeDeploymentPa
 }
 
 const listApplicationVersions = `-- name: ListApplicationVersions :many
-SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.manifest_hash, v.checksums_hash, v.signing_key_id, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
+SELECT v.id, v.tenant_id, v.project_id, v.version, v.name, v.description, v.status, v.source_hash, v.artifact_bucket, v.artifact_key, v.artifact_hash, v.artifact_size, v.manifest, v.manifest_hash, v.checksums_hash, v.signing_key_id, v.authoring_snapshot_schema, v.authoring_snapshot_bucket, v.authoring_snapshot_key, v.authoring_snapshot_hash, v.authoring_snapshot_cipher_hash, v.authoring_snapshot_size, v.authoring_snapshot_key_id, v.authoring_project_revision, v.restorable, v.build_log, v.error_message, v.created_by, v.completed_at, v.deleted_at, v.created_at, v.updated_at FROM application_versions v
 JOIN projects p ON p.id = v.project_id
 WHERE v.project_id = $1 AND v.tenant_id = $2
   AND p.status <> 'deleted' AND v.status <> 'deleted'
@@ -412,6 +432,15 @@ func (q *Queries) ListApplicationVersions(ctx context.Context, arg ListApplicati
 			&i.ManifestHash,
 			&i.ChecksumsHash,
 			&i.SigningKeyID,
+			&i.AuthoringSnapshotSchema,
+			&i.AuthoringSnapshotBucket,
+			&i.AuthoringSnapshotKey,
+			&i.AuthoringSnapshotHash,
+			&i.AuthoringSnapshotCipherHash,
+			&i.AuthoringSnapshotSize,
+			&i.AuthoringSnapshotKeyID,
+			&i.AuthoringProjectRevision,
+			&i.Restorable,
 			&i.BuildLog,
 			&i.ErrorMessage,
 			&i.CreatedBy,
@@ -568,7 +597,7 @@ func (q *Queries) ListStaleNodeCommands(ctx context.Context) ([]ListStaleNodeCom
 const markApplicationVersionFailed = `-- name: MarkApplicationVersionFailed :one
 UPDATE application_versions SET status='failed', error_message=$1, completed_at=now(), updated_at=now()
 WHERE id=$2 AND tenant_id=$3 AND status='building'
-RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
+RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, authoring_snapshot_schema, authoring_snapshot_bucket, authoring_snapshot_key, authoring_snapshot_hash, authoring_snapshot_cipher_hash, authoring_snapshot_size, authoring_snapshot_key_id, authoring_project_revision, restorable, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
 `
 
 type MarkApplicationVersionFailedParams struct {
@@ -597,6 +626,15 @@ func (q *Queries) MarkApplicationVersionFailed(ctx context.Context, arg MarkAppl
 		&i.ManifestHash,
 		&i.ChecksumsHash,
 		&i.SigningKeyID,
+		&i.AuthoringSnapshotSchema,
+		&i.AuthoringSnapshotBucket,
+		&i.AuthoringSnapshotKey,
+		&i.AuthoringSnapshotHash,
+		&i.AuthoringSnapshotCipherHash,
+		&i.AuthoringSnapshotSize,
+		&i.AuthoringSnapshotKeyID,
+		&i.AuthoringProjectRevision,
+		&i.Restorable,
 		&i.BuildLog,
 		&i.ErrorMessage,
 		&i.CreatedBy,
@@ -613,22 +651,36 @@ UPDATE application_versions
 SET status='ready', artifact_bucket=$1, artifact_key=$2,
     artifact_hash=$3, artifact_size=$4, manifest=$5,
     manifest_hash=$6, checksums_hash=$7, signing_key_id=$8,
+    authoring_snapshot_schema=$9, authoring_snapshot_bucket=$10,
+    authoring_snapshot_key=$11, authoring_snapshot_hash=$12,
+    authoring_snapshot_cipher_hash=$13, authoring_snapshot_size=$14,
+    authoring_snapshot_key_id=$15, authoring_project_revision=$16,
+    restorable=$17,
     completed_at=now(), error_message=NULL, updated_at=now()
-WHERE id=$9 AND tenant_id=$10 AND status='building'
-RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
+WHERE id=$18 AND tenant_id=$19 AND status='building'
+RETURNING id, tenant_id, project_id, version, name, description, status, source_hash, artifact_bucket, artifact_key, artifact_hash, artifact_size, manifest, manifest_hash, checksums_hash, signing_key_id, authoring_snapshot_schema, authoring_snapshot_bucket, authoring_snapshot_key, authoring_snapshot_hash, authoring_snapshot_cipher_hash, authoring_snapshot_size, authoring_snapshot_key_id, authoring_project_revision, restorable, build_log, error_message, created_by, completed_at, deleted_at, created_at, updated_at
 `
 
 type MarkApplicationVersionReadyParams struct {
-	ArtifactBucket pgtype.Text `json:"artifact_bucket"`
-	ArtifactKey    pgtype.Text `json:"artifact_key"`
-	ArtifactHash   pgtype.Text `json:"artifact_hash"`
-	ArtifactSize   pgtype.Int8 `json:"artifact_size"`
-	Manifest       []byte      `json:"manifest"`
-	ManifestHash   pgtype.Text `json:"manifest_hash"`
-	ChecksumsHash  pgtype.Text `json:"checksums_hash"`
-	SigningKeyID   pgtype.Text `json:"signing_key_id"`
-	VersionID      pgtype.UUID `json:"version_id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
+	ArtifactBucket              pgtype.Text `json:"artifact_bucket"`
+	ArtifactKey                 pgtype.Text `json:"artifact_key"`
+	ArtifactHash                pgtype.Text `json:"artifact_hash"`
+	ArtifactSize                pgtype.Int8 `json:"artifact_size"`
+	Manifest                    []byte      `json:"manifest"`
+	ManifestHash                pgtype.Text `json:"manifest_hash"`
+	ChecksumsHash               pgtype.Text `json:"checksums_hash"`
+	SigningKeyID                pgtype.Text `json:"signing_key_id"`
+	AuthoringSnapshotSchema     pgtype.Text `json:"authoring_snapshot_schema"`
+	AuthoringSnapshotBucket     pgtype.Text `json:"authoring_snapshot_bucket"`
+	AuthoringSnapshotKey        pgtype.Text `json:"authoring_snapshot_key"`
+	AuthoringSnapshotHash       pgtype.Text `json:"authoring_snapshot_hash"`
+	AuthoringSnapshotCipherHash pgtype.Text `json:"authoring_snapshot_cipher_hash"`
+	AuthoringSnapshotSize       pgtype.Int8 `json:"authoring_snapshot_size"`
+	AuthoringSnapshotKeyID      pgtype.Text `json:"authoring_snapshot_key_id"`
+	AuthoringProjectRevision    pgtype.Text `json:"authoring_project_revision"`
+	Restorable                  bool        `json:"restorable"`
+	VersionID                   pgtype.UUID `json:"version_id"`
+	TenantID                    pgtype.UUID `json:"tenant_id"`
 }
 
 func (q *Queries) MarkApplicationVersionReady(ctx context.Context, arg MarkApplicationVersionReadyParams) (ApplicationVersion, error) {
@@ -641,6 +693,15 @@ func (q *Queries) MarkApplicationVersionReady(ctx context.Context, arg MarkAppli
 		arg.ManifestHash,
 		arg.ChecksumsHash,
 		arg.SigningKeyID,
+		arg.AuthoringSnapshotSchema,
+		arg.AuthoringSnapshotBucket,
+		arg.AuthoringSnapshotKey,
+		arg.AuthoringSnapshotHash,
+		arg.AuthoringSnapshotCipherHash,
+		arg.AuthoringSnapshotSize,
+		arg.AuthoringSnapshotKeyID,
+		arg.AuthoringProjectRevision,
+		arg.Restorable,
 		arg.VersionID,
 		arg.TenantID,
 	)
@@ -662,6 +723,15 @@ func (q *Queries) MarkApplicationVersionReady(ctx context.Context, arg MarkAppli
 		&i.ManifestHash,
 		&i.ChecksumsHash,
 		&i.SigningKeyID,
+		&i.AuthoringSnapshotSchema,
+		&i.AuthoringSnapshotBucket,
+		&i.AuthoringSnapshotKey,
+		&i.AuthoringSnapshotHash,
+		&i.AuthoringSnapshotCipherHash,
+		&i.AuthoringSnapshotSize,
+		&i.AuthoringSnapshotKeyID,
+		&i.AuthoringProjectRevision,
+		&i.Restorable,
 		&i.BuildLog,
 		&i.ErrorMessage,
 		&i.CreatedBy,

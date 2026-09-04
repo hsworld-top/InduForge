@@ -24,10 +24,14 @@ func WriteSuccess(w http.ResponseWriter, r *http.Request, data any) {
 }
 
 func WriteError(w http.ResponseWriter, r *http.Request, statusCode, code int, message string) {
+	WriteErrorData(w, r, statusCode, code, message, nil)
+}
+
+func WriteErrorData(w http.ResponseWriter, r *http.Request, statusCode, code int, message string, data any) {
 	WriteJSON(w, statusCode, Envelope{
 		Code:  code,
 		Msg:   message,
-		Data:  nil,
+		Data:  data,
 		ReqID: RequestIDFromContext(r.Context()),
 	})
 }

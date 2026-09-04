@@ -20,6 +20,13 @@ import (
 
 func TestProjectHTTPInterfaces(t *testing.T) {
 	handler, token := newProjectServer(t)
+	authoringContextRequest := httptest.NewRequest(http.MethodGet, "/api/v1/projects/11111111-1111-4111-8111-111111111111/authoring-context", nil)
+	authoringContextRequest.Header.Set("Authorization", "Bearer "+token)
+	authoringContextResponse := httptest.NewRecorder()
+	handler.ServeHTTP(authoringContextResponse, authoringContextRequest)
+	if authoringContextResponse.Code != http.StatusOK {
+		t.Fatalf("工程创作上下文请求未进入统一 HTTP 路由: status=%d body=%s", authoringContextResponse.Code, authoringContextResponse.Body.String())
+	}
 	assertOK(t, call(t, handler, http.MethodGet, "/api/v1/projects", nil, token))
 	tag := call(t, handler, http.MethodPost, "/api/v1/projects/tags", map[string]any{"name": "关键", "description": "说明", "sortOrder": 1}, token)
 	assertOK(t, tag)

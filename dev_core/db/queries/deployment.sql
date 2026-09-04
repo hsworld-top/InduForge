@@ -40,7 +40,9 @@ WHERE application_versions.id = sqlc.arg(version_id) AND application_versions.te
     SELECT 1 FROM node_deployments d
     WHERE d.application_version_id = application_versions.id
       AND d.deleted_at IS NULL AND d.status IN ('pending', 'deploying', 'running')
-  );
+  )
+  AND NOT EXISTS (SELECT 1 FROM authoring_restore_tasks t WHERE t.application_version_id = application_versions.id
+    AND t.state IN ('queued','staging','restoring_workspace','restoring_scenes','restoring_data','finalizing','compensating'));
 
 -- name: ListProjectNodeDeployments :many
 SELECT d.*, n.name AS node_name, n.status AS node_status, n.ip_address,
@@ -137,6 +139,11 @@ UPDATE application_versions
 SET status='ready', artifact_bucket=sqlc.arg(artifact_bucket), artifact_key=sqlc.arg(artifact_key),
     artifact_hash=sqlc.arg(artifact_hash), artifact_size=sqlc.arg(artifact_size), manifest=sqlc.arg(manifest),
     manifest_hash=sqlc.arg(manifest_hash), checksums_hash=sqlc.arg(checksums_hash), signing_key_id=sqlc.arg(signing_key_id),
+    authoring_snapshot_schema=sqlc.arg(authoring_snapshot_schema), authoring_snapshot_bucket=sqlc.arg(authoring_snapshot_bucket),
+    authoring_snapshot_key=sqlc.arg(authoring_snapshot_key), authoring_snapshot_hash=sqlc.arg(authoring_snapshot_hash),
+    authoring_snapshot_cipher_hash=sqlc.arg(authoring_snapshot_cipher_hash), authoring_snapshot_size=sqlc.arg(authoring_snapshot_size),
+    authoring_snapshot_key_id=sqlc.arg(authoring_snapshot_key_id), authoring_project_revision=sqlc.arg(authoring_project_revision),
+    restorable=sqlc.arg(restorable),
     completed_at=now(), error_message=NULL, updated_at=now()
 WHERE id=sqlc.arg(version_id) AND tenant_id=sqlc.arg(tenant_id) AND status='building'
 RETURNING *;

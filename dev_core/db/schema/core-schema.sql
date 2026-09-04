@@ -81,12 +81,14 @@ CREATE TABLE projects (
   workspace_path text NOT NULL UNIQUE,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
   visibility text NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'internal')),
+  authoring_epoch bigint NOT NULL DEFAULT 1 CHECK (authoring_epoch > 0),
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   updated_by uuid REFERENCES users (id) ON DELETE SET NULL,
   archived_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (tenant_id, code)
+  UNIQUE (tenant_id, code),
+  UNIQUE (id, tenant_id)
 );
 CREATE INDEX projects_tenant_status_idx ON projects (tenant_id, status, updated_at DESC);
 
@@ -125,6 +127,8 @@ CREATE TABLE scene_documents (
   UNIQUE (project_id, kind, scene_id),
   UNIQUE (id, tenant_id),
   UNIQUE (id, project_id),
+  UNIQUE (id, project_id, tenant_id),
+  FOREIGN KEY (project_id, tenant_id) REFERENCES projects (id, tenant_id) ON DELETE CASCADE,
   CHECK (entry_path <> '' AND entry_path !~ '(^|/)\.\.(/|$)' AND left(entry_path, 1) <> '/')
 );
 CREATE INDEX scene_documents_project_idx ON scene_documents (project_id, kind, updated_at DESC) WHERE deleted_at IS NULL;
@@ -490,6 +494,15 @@ CREATE TABLE application_versions (
   manifest_hash text,
   checksums_hash text,
   signing_key_id text,
+  authoring_snapshot_schema text CHECK (authoring_snapshot_schema IS NULL OR authoring_snapshot_schema = 'authoring-snapshot.v1'),
+  authoring_snapshot_bucket text,
+  authoring_snapshot_key text,
+  authoring_snapshot_hash text CHECK (authoring_snapshot_hash IS NULL OR authoring_snapshot_hash ~ '^[0-9a-f]{64}$'),
+  authoring_snapshot_cipher_hash text CHECK (authoring_snapshot_cipher_hash IS NULL OR authoring_snapshot_cipher_hash ~ '^[0-9a-f]{64}$'),
+  authoring_snapshot_size bigint CHECK (authoring_snapshot_size IS NULL OR authoring_snapshot_size > 0),
+  authoring_snapshot_key_id text,
+  authoring_project_revision text,
+  restorable boolean NOT NULL DEFAULT false,
   build_log text,
   error_message text,
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
@@ -497,9 +510,98 @@ CREATE TABLE application_versions (
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (project_id, version)
+  UNIQUE (project_id, version),
+  UNIQUE (id, project_id),
+  UNIQUE (id, project_id, tenant_id),
+  FOREIGN KEY (project_id, tenant_id) REFERENCES projects (id, tenant_id) ON DELETE CASCADE,
+  CHECK (NOT restorable OR (
+    status = 'ready' AND authoring_snapshot_schema IS NOT NULL AND authoring_snapshot_bucket IS NOT NULL
+    AND authoring_snapshot_key IS NOT NULL AND authoring_snapshot_hash IS NOT NULL
+    AND authoring_snapshot_cipher_hash IS NOT NULL AND authoring_snapshot_size IS NOT NULL
+    AND authoring_snapshot_key_id IS NOT NULL AND authoring_project_revision IS NOT NULL
+  ))
 );
 CREATE INDEX application_versions_project_idx ON application_versions (project_id, created_at DESC);
+
+CREATE TABLE authoring_restore_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL,
+  application_version_id uuid NOT NULL,
+  requested_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  current_project_revision text,
+  expected_authoring_epoch bigint NOT NULL CHECK (expected_authoring_epoch > 0),
+  target_authoring_epoch bigint NOT NULL CHECK (target_authoring_epoch = expected_authoring_epoch + 1),
+  state text NOT NULL DEFAULT 'queued' CHECK (state IN (
+    'queued', 'staging', 'restoring_workspace', 'restoring_scenes', 'restoring_data',
+    'finalizing', 'compensating', 'succeeded', 'failed'
+  )),
+  stage text NOT NULL DEFAULT 'queued',
+  backup_schema text CHECK (backup_schema IS NULL OR backup_schema = 'authoring-snapshot.v1'),
+  backup_bucket text,
+  backup_key text,
+  backup_hash text CHECK (backup_hash IS NULL OR backup_hash ~ '^[0-9a-f]{64}$'),
+  backup_cipher_hash text CHECK (backup_cipher_hash IS NULL OR backup_cipher_hash ~ '^[0-9a-f]{64}$'),
+  backup_size bigint CHECK (backup_size IS NULL OR backup_size > 0),
+  backup_key_id text,
+  backup_project_revision text,
+  rolled_back boolean NOT NULL DEFAULT false,
+  workspace_was_running boolean,
+  cleanup_completed_at timestamptz,
+  error_message text,
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (id, tenant_id),
+  FOREIGN KEY (project_id, tenant_id) REFERENCES projects (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (application_version_id, project_id, tenant_id) REFERENCES application_versions (id, project_id, tenant_id) ON DELETE RESTRICT
+);
+CREATE UNIQUE INDEX authoring_restore_tasks_active_project_uidx
+  ON authoring_restore_tasks (project_id)
+  WHERE state IN ('queued', 'staging', 'restoring_workspace', 'restoring_scenes', 'restoring_data', 'finalizing', 'compensating');
+CREATE INDEX authoring_restore_tasks_project_idx ON authoring_restore_tasks (project_id, created_at DESC, id DESC);
+
+CREATE TABLE authoring_restore_task_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  task_id uuid NOT NULL,
+  stage text NOT NULL,
+  message text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (task_id, tenant_id) REFERENCES authoring_restore_tasks (id, tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX authoring_restore_task_events_task_idx ON authoring_restore_task_events (task_id, created_at, id);
+
+CREATE TABLE authoring_project_fences (
+  project_id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  owner_kind text NOT NULL CHECK (owner_kind IN ('build','restore')),
+  owner_id uuid NOT NULL,
+  fence_token_hash text NOT NULL CHECK (fence_token_hash ~ '^[0-9a-f]{64}$'),
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (project_id, tenant_id) REFERENCES projects (id, tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX authoring_project_fences_expiry_idx ON authoring_project_fences (expires_at);
+
+CREATE FUNCTION enforce_authoring_project_write() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE pid uuid;
+BEGIN
+  IF TG_TABLE_NAME='projects' THEN pid := COALESCE(NEW.id, OLD.id); ELSE pid := COALESCE(NEW.project_id, OLD.project_id); END IF;
+  IF current_setting('induforge.authoring_restore', true) = 'on' THEN IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended(pid::text, 0));
+  IF EXISTS (SELECT 1 FROM authoring_project_fences WHERE project_id=pid AND expires_at>now()) OR EXISTS (SELECT 1 FROM authoring_restore_tasks WHERE project_id=pid AND state IN ('queued','staging','restoring_workspace','restoring_scenes','restoring_data','finalizing','compensating')) THEN
+    RAISE EXCEPTION 'authoring project is fenced' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END $$;
+DO $$ DECLARE table_name text; BEGIN
+  FOREACH table_name IN ARRAY ARRAY['projects','scene_documents','scene_assets','scene_asset_generations','scene_asset_generation_files','scene_asset_draft_files','scene_file_nodes','scene_asset_bindings','scene_revisions','scene_revision_files','scene_revision_assets','project_tag_bindings','project_group_members'] LOOP
+    EXECUTE format('CREATE TRIGGER %I_authoring_gate BEFORE INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION enforce_authoring_project_write()',table_name,table_name);
+  END LOOP;
+END $$;
 
 CREATE TABLE nodes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -749,6 +851,7 @@ CREATE TABLE project_deployments (
   last_ready_at timestamptz,
   access_port integer NOT NULL CHECK (access_port BETWEEN 1024 AND 65532),
   deleted_at timestamptz,
+  deletion_requested_at timestamptz,
   desired_status text NOT NULL DEFAULT 'running' CHECK (desired_status IN ('running', 'stopped')),
   observed_status text NOT NULL DEFAULT 'pending' CHECK (observed_status IN ('pending', 'running', 'stopped', 'degraded', 'failed')),
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,

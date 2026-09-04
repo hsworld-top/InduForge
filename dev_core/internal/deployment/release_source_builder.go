@@ -97,7 +97,7 @@ func (b *ProjectReleaseSourceBuilder) DevelopmentEngineRequirements(ctx context.
 	if b == nil || b.httpClient == nil || b.tenantBindingEnsurer == nil {
 		return nil, fmt.Errorf("开发引擎需求预检未初始化")
 	}
-	if err := b.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, project.ID, project.TenantID); err != nil {
+	if err := ensureProjectBindingEpoch(ctx, b.tenantBindingEnsurer, project); err != nil {
 		return nil, fmt.Errorf("同步数据服务项目租户绑定失败: %w", err)
 	}
 	artifact, _, err := b.fetchRuntimeArtifact(ctx, project.ID, authorization)
@@ -114,14 +114,33 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 	if b.tenantBindingEnsurer == nil {
 		return ReleaseSource{}, fmt.Errorf("数据服务项目租户绑定客户端未配置")
 	}
-	if err := b.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, project.ID, project.TenantID); err != nil {
+	if err := ensureProjectBindingEpoch(ctx, b.tenantBindingEnsurer, project); err != nil {
 		return ReleaseSource{}, fmt.Errorf("同步数据服务项目租户绑定失败: %w", err)
 	}
 	artifact, runtimeJSON, err := b.fetchRuntimeArtifact(ctx, project.ID, authorization)
 	if err != nil {
 		return ReleaseSource{}, err
 	}
+	return b.buildReleaseSourceFromFrozen(ctx, project, version, artifact, runtimeJSON, authorization)
+}
+
+func ensureProjectBindingEpoch(ctx context.Context, ensurer interface {
+	EnsureProjectTenantBinding(context.Context, string, string) error
+}, item Project) error {
+	if versioned, ok := ensurer.(interface {
+		EnsureProjectTenantBindingAtEpoch(context.Context, string, string, string) error
+	}); ok {
+		return versioned.EnsureProjectTenantBindingAtEpoch(ctx, item.ID, item.TenantID, projectAuthoringEpoch(item))
+	}
+	if item.AuthoringEpoch > 1 {
+		return fmt.Errorf("数据服务不支持工程编辑代次")
+	}
+	return ensurer.EnsureProjectTenantBinding(ctx, item.ID, item.TenantID)
+}
+
+func (b *ProjectReleaseSourceBuilder) buildReleaseSourceFromFrozen(ctx context.Context, project Project, version Version, artifact map[string]any, runtimeJSON []byte, authorization string) (ReleaseSource, error) {
 	var collector, collectorSourceSnapshot []byte
+	var err error
 	if containsEngine(releasebuilder.DeriveEngineRequirements(artifact), "collector") {
 		collector, collectorSourceSnapshot, err = b.fetchCollectorArtifact(ctx, project, version, artifact, authorization)
 		if err != nil {
@@ -158,6 +177,30 @@ func (b *ProjectReleaseSourceBuilder) BuildReleaseSource(ctx context.Context, pr
 		SchemaPlan:             []byte(`{"schemaVersion":"release-schema-plan.v1","changes":[]}`),
 		ProjectDocument:        artifact, SourceRevision: sourceRevision, BuilderID: b.builderID,
 	}, nil
+}
+
+func (b *ProjectReleaseSourceBuilder) buildReleaseSourceFromCaptured(ctx context.Context, project Project, version Version, artifact map[string]any, runtimeJSON, collector, collectorSourceSnapshot []byte) (ReleaseSource, error) {
+	frontend, err := b.frontend.BuildProjectFrontend(ctx, project, version)
+	if err != nil {
+		return ReleaseSource{}, fmt.Errorf("构建工程前端失败: %w", err)
+	}
+	if frontend.Cleanup != nil {
+		defer frontend.Cleanup()
+	}
+	client, err := b.packFrontend(frontend.DistDir)
+	if err != nil {
+		return ReleaseSource{}, err
+	}
+	runtime, err := b.packRuntime(project.WorkspacePath, runtimeJSON)
+	if err != nil {
+		return ReleaseSource{}, err
+	}
+	sourceRev := sourceRevision(client, runtime, collector)
+	sbom, err := json.Marshal(map[string]any{"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": map[string]any{"component": map[string]any{"type": "application", "name": project.Code, "version": sourceRev}}})
+	if err != nil {
+		return ReleaseSource{}, fmt.Errorf("生成 Release SBOM 失败: %w", err)
+	}
+	return ReleaseSource{Client: client, Runtime: runtime, Collector: collector, CollectorSourceSnapshot: collectorSourceSnapshot, SBOM: sbom, ResourceRecommendation: []byte(`{"cpu":"250m","memory":"256Mi"}`), HealthContract: []byte(`{"schemaVersion":"release-health.v1","readiness":"http"}`), SchemaPlan: []byte(`{"schemaVersion":"release-schema-plan.v1","changes":[]}`), ProjectDocument: artifact, SourceRevision: sourceRev, BuilderID: b.builderID}, nil
 }
 
 // fetchCollectorArtifact 只接受 data service 生成且携带自身完整性元数据的 bytes；

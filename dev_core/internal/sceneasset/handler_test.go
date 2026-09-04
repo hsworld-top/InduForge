@@ -5,12 +5,23 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	platformcache "github.com/indu-forge/dev_core/internal/platform/cache"
+	"github.com/indu-forge/dev_core/internal/project"
 )
+
+func TestWriteErrorReturnsStructuredAuthoringEpochConflict(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/scenes/s/files", nil)
+	(&Handler{}).writeError(recorder, request, &project.AuthoringEpochConflict{ProjectID: "p", Current: "epoch-7"})
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"currentAuthoringEpoch":"epoch-7"`) || !strings.Contains(recorder.Body.String(), `"action":"reload"`) {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
 
 func TestSceneRoutesRequireAuthentication(t *testing.T) {
 	router := chi.NewRouter()

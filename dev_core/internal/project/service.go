@@ -16,26 +16,47 @@ var (
 	ErrAlreadyExists = errors.New("工程编码已存在")
 	ErrTagNotFound   = errors.New("工程标签不存在")
 	ErrGroupNotFound = errors.New("工程分组不存在")
+	ErrAuthoringBusy = errors.New("工程正在发布或恢复，请稍后重试")
 )
 
 type Project struct {
-	ID            string
-	TenantID      string
-	Name          string
-	Code          string
-	Description   string
-	Icon          string
-	WorkspacePath string
-	Status        string
-	Visibility    string
-	CreatedBy     string
-	CreatedByName string
-	UpdatedBy     string
-	Group         *Group
-	Tags          []Tag
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                string
+	TenantID          string
+	Name              string
+	Code              string
+	Description       string
+	Icon              string
+	WorkspacePath     string
+	Status            string
+	Visibility        string
+	AuthoringEpoch    int64
+	CreatedBy         string
+	CreatedByName     string
+	UpdatedBy         string
+	Group             *Group
+	Tags              []Tag
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeploymentSummary DeploymentSummary
 }
+
+type DeploymentSummary struct {
+	DeploymentCount, EnvironmentCount int
+	OperationInProgress               bool
+	UpdatedAt                         *time.Time
+	PrimarySelection                  string
+	PrimaryDeployment                 *PrimaryDeployment
+}
+type PrimaryDeployment struct {
+	ID, EnvironmentID, EnvironmentName, Mode, DesiredStatus, ObservedStatus string
+	Version, ApplicationVersionID, CurrentOperation                         string
+	AccessPort                                                              int
+	UpdatedAt                                                               time.Time
+	OperationInProgress, Updating                                           bool
+	Placements                                                              map[string]string
+	Services                                                                []DeploymentPlacement
+}
+type DeploymentPlacement struct{ ServiceType, NodeID, NodeName, DesiredStatus, ObservedStatus string }
 
 type Tag struct {
 	ID           string
@@ -136,6 +157,16 @@ type Service struct {
 	tenantBindingEnsurer   TenantBindingEnsurer
 }
 
+func (s *Service) requireAuthoringEpoch(ctx context.Context, actor auth.User, projectID string) error {
+	guard, ok := s.repository.(interface {
+		RequireAuthoringEpoch(context.Context, string, string, string) error
+	})
+	if !ok {
+		return nil
+	}
+	return guard.RequireAuthoringEpoch(ctx, actor.TenantID, projectID, AuthoringEpochFromContext(ctx))
+}
+
 func (s *Service) SetTenantBindingEnsurer(ensurer TenantBindingEnsurer) {
 	s.tenantBindingEnsurer = ensurer
 }
@@ -166,6 +197,14 @@ func (s *Service) Get(ctx context.Context, actor auth.User, projectID string) (P
 		return Project{}, auth.ErrPermissionDenied
 	}
 	return item, nil
+}
+
+func (s *Service) GetAuthoringContext(ctx context.Context, actor auth.User, projectID string) (string, error) {
+	item, err := s.Get(ctx, actor, projectID)
+	if err != nil {
+		return "", err
+	}
+	return FormatAuthoringEpoch(item.AuthoringEpoch), nil
 }
 
 func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInput) (Project, error) {
@@ -200,14 +239,25 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInpu
 		slog.Default().Error("运维事件: 项目租户绑定同步失败", "projectId", created.ID, "reason", "数据服务内部客户端未配置")
 		return Project{}, fmt.Errorf("工程已创建，但项目租户绑定同步失败，可稍后重试")
 	}
-	if err := s.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, created.ID, created.TenantID); err != nil {
-		slog.Default().Error("运维事件: 项目租户绑定同步失败", "projectId", created.ID, "error", err)
-		return Project{}, fmt.Errorf("工程已创建，但项目租户绑定同步失败，可稍后重试: %w", err)
+	var bindingErr error
+	if epochEnsurer, ok := s.tenantBindingEnsurer.(interface {
+		EnsureProjectTenantBindingAtEpoch(context.Context, string, string, string) error
+	}); ok {
+		bindingErr = epochEnsurer.EnsureProjectTenantBindingAtEpoch(ctx, created.ID, created.TenantID, FormatAuthoringEpoch(created.AuthoringEpoch))
+	} else {
+		bindingErr = s.tenantBindingEnsurer.EnsureProjectTenantBinding(ctx, created.ID, created.TenantID)
+	}
+	if bindingErr != nil {
+		slog.Default().Error("运维事件: 项目租户绑定同步失败", "projectId", created.ID, "error", bindingErr)
+		return Project{}, fmt.Errorf("工程已创建，但项目租户绑定同步失败，可稍后重试: %w", bindingErr)
 	}
 	return created, nil
 }
 
 func (s *Service) Update(ctx context.Context, actor auth.User, projectID string, input ProjectInput) (Project, error) {
+	if err := s.requireAuthoringEpoch(ctx, actor, projectID); err != nil {
+		return Project{}, err
+	}
 	item, err := s.repository.Get(ctx, actor.TenantID, projectID)
 	if err != nil {
 		return Project{}, err
@@ -227,6 +277,9 @@ func (s *Service) Update(ctx context.Context, actor auth.User, projectID string,
 	return s.repository.Update(ctx, item, actor)
 }
 func (s *Service) Delete(ctx context.Context, actor auth.User, projectID string) error {
+	if err := s.requireAuthoringEpoch(ctx, actor, projectID); err != nil {
+		return err
+	}
 	item, err := s.repository.Get(ctx, actor.TenantID, projectID)
 	if err != nil {
 		return err
@@ -251,6 +304,9 @@ func (s *Service) DeleteImpact(ctx context.Context, actor auth.User, projectID s
 }
 
 func (s *Service) Operate(ctx context.Context, actor auth.User, projectID, operation string) (Project, error) {
+	if err := s.requireAuthoringEpoch(ctx, actor, projectID); err != nil {
+		return Project{}, err
+	}
 	item, err := s.repository.Get(ctx, actor.TenantID, projectID)
 	if err != nil {
 		return Project{}, err
@@ -355,6 +411,9 @@ func (s *Service) DeleteTag(ctx context.Context, actor auth.User, tagID string) 
 	return s.repository.DeleteTag(ctx, actor.TenantID, tagID)
 }
 func (s *Service) ReplaceTags(ctx context.Context, actor auth.User, projectID string, tagIDs []string) error {
+	if err := s.requireAuthoringEpoch(ctx, actor, projectID); err != nil {
+		return err
+	}
 	item, err := s.repository.Get(ctx, actor.TenantID, projectID)
 	if err != nil {
 		return err
@@ -399,6 +458,9 @@ func (s *Service) DeleteGroup(ctx context.Context, actor auth.User, groupID stri
 	return s.repository.DeleteGroup(ctx, actor.TenantID, groupID)
 }
 func (s *Service) SetGroup(ctx context.Context, actor auth.User, projectID string, groupID *string) error {
+	if err := s.requireAuthoringEpoch(ctx, actor, projectID); err != nil {
+		return err
+	}
 	item, err := s.repository.Get(ctx, actor.TenantID, projectID)
 	if err != nil {
 		return err

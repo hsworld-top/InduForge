@@ -62,6 +62,39 @@ func (h *Handler) PublishProjectVersion(w http.ResponseWriter, r *http.Request, 
 	platformapi.WriteSuccess(w, r, versionPayload(item))
 }
 
+func (h *Handler) RestoreVersionDevelopment(w http.ResponseWriter, r *http.Request, versionID string) {
+	actor, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Confirmation string `json:"confirmation"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		h.invalid(w, r, err)
+		return
+	}
+	item, err := h.service.RestoreDevelopment(r.Context(), actor, versionID, input.Confirmation)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteJSON(w, http.StatusAccepted, platformapi.Envelope{Code: platformapi.SuccessCode, Msg: "success", Data: restoreTaskPayload(item), ReqID: platformapi.RequestIDFromContext(r.Context())})
+}
+
+func (h *Handler) GetRestoreDevelopmentTask(w http.ResponseWriter, r *http.Request, taskID string) {
+	actor, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	item, err := h.service.GetRestoreTask(r.Context(), actor, taskID)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, restoreTaskPayload(item))
+}
+
 func (h *Handler) DeletePublishedVersion(w http.ResponseWriter, r *http.Request, versionID string) {
 	actor, ok := h.requireUser(w, r)
 	if !ok {
@@ -221,6 +254,10 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
 	case errors.Is(err, ErrLegacyReleaseDisabled):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
+	case errors.Is(err, ErrAuthoringRestoreUnavailable):
+		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
+	case errors.Is(err, ErrAuthoringBusy):
+		platformapi.WriteError(w, r, http.StatusConflict, platformapi.ErrorCodeAlreadyExists, err.Error())
 	default:
 		if strings.Contains(err.Error(), "不能为空") || strings.Contains(err.Error(), "至少选择") || strings.Contains(err.Error(), "无效") || strings.Contains(err.Error(), "缺少") {
 			h.invalid(w, r, err)
@@ -228,6 +265,26 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		}
 		platformapi.WriteError(w, r, http.StatusInternalServerError, platformapi.ErrorCodeInternal, "系统内部错误")
 	}
+}
+
+func restoreTaskPayload(item RestoreTask) map[string]any {
+	result := map[string]any{"taskId": item.ID, "projectId": item.ProjectID, "versionId": item.VersionID, "currentProjectRevision": item.CurrentProjectRevision, "state": item.State, "stage": item.Stage, "rolledBack": item.RolledBack, "errorMessage": item.ErrorMessage, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+	if item.BackupKey != "" {
+		result["backupId"] = item.ID
+	} else {
+		result["backupId"] = nil
+	}
+	if item.StartedAt != nil {
+		result["startedAt"] = item.StartedAt.Format(timeFormat)
+	} else {
+		result["startedAt"] = nil
+	}
+	if item.CompletedAt != nil {
+		result["completedAt"] = item.CompletedAt.Format(timeFormat)
+	} else {
+		result["completedAt"] = nil
+	}
+	return result
 }
 
 func (h *Handler) invalid(w http.ResponseWriter, r *http.Request, err error) {
@@ -239,15 +296,18 @@ func decodeJSON(r *http.Request, target any) error {
 }
 
 func versionPayload(item Version) map[string]any {
-	status := item.Status
-	if status == "ready" {
-		status = "success"
-	}
 	payload := map[string]any{
 		"id": item.ID, "projectId": item.ProjectID, "version": item.Version, "name": item.Name,
-		"description": item.Description, "status": status, "mode": "RELEASE", "sourceHash": item.SourceHash,
+		"description": item.Description, "status": item.Status, "mode": "RELEASE", "sourceHash": item.SourceHash,
 		"artifactHash": item.ArtifactHash, "artifactSize": item.ArtifactSize, "manifest": item.Manifest,
 		"errorMessage": item.ErrorMessage, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat),
+	}
+	payload["restorable"] = item.Restorable
+	payload["authoringProjectRevision"] = item.AuthoringProjectRevision
+	if item.Restorable {
+		payload["restoreUnavailableReason"] = nil
+	} else {
+		payload["restoreUnavailableReason"] = "该版本没有完整开发态快照"
 	}
 	if item.CompletedAt != nil {
 		payload["completedAt"] = item.CompletedAt.Format(timeFormat)

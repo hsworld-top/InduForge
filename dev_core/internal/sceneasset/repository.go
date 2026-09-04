@@ -33,9 +33,18 @@ type revisionFile struct {
 	ObjectKey string
 	Type      string
 	Size      int64
+	Role      string
 }
 
-type PostgreSQLRepository struct{ pool *pgxpool.Pool }
+type sceneAssetPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+type PostgreSQLRepository struct{ pool sceneAssetPool }
 
 func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
 	return &PostgreSQLRepository{pool: pool}

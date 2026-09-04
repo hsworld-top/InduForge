@@ -54,11 +54,14 @@ type PresenceStore interface {
 }
 
 type Service struct {
-	projects ProjectRepository
-	engine   Engine
-	config   Config
-	presence PresenceStore
-	now      func() time.Time
+	projects   ProjectRepository
+	engine     Engine
+	config     Config
+	presence   PresenceStore
+	now        func() time.Time
+	epochGuard interface {
+		RequireAuthoringEpoch(context.Context, string, string, string) error
+	}
 }
 
 func NewService(projects ProjectRepository, engine Engine, config Config) (*Service, error) {
@@ -89,6 +92,110 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 func (s *Service) SetPresence(store PresenceStore) {
 	s.presence = store
 }
+func (s *Service) SetAuthoringEpochGuard(guard interface {
+	RequireAuthoringEpoch(context.Context, string, string, string) error
+}) {
+	s.epochGuard = guard
+}
+
+func (s *Service) requireEpoch(ctx context.Context, actor auth.User, projectID string) error {
+	if s.epochGuard == nil {
+		return nil
+	}
+	return s.epochGuard.RequireAuthoringEpoch(ctx, actor.TenantID, projectID, project.AuthoringEpochFromContext(ctx))
+}
+
+// FreezeAuthoring 在开发态捕获/恢复临界区停止工程容器，并返回按原状态恢复的函数。
+func (s *Service) FreezeAuthoring(ctx context.Context, actor auth.User, projectID string) (func(context.Context) error, error) {
+	return s.freezeAuthoring(ctx, actor, projectID, nil, nil)
+}
+
+// FreezeAuthoringRestore 在首次停止前持久化原运行状态；重启后使用 known 恢复同一决定。
+func (s *Service) FreezeAuthoringRestore(ctx context.Context, actor auth.User, projectID string, known *bool, persist func(bool) error) (func(context.Context) error, bool, error) {
+	observed := false
+	remember := func(running bool) error {
+		observed = running
+		if persist != nil {
+			return persist(running)
+		}
+		return nil
+	}
+	resume, err := s.freezeAuthoring(ctx, actor, projectID, known, remember)
+	wasRunning := known != nil && *known
+	if known == nil {
+		wasRunning = observed
+	}
+	return resume, wasRunning, err
+}
+
+func (s *Service) freezeAuthoring(ctx context.Context, actor auth.User, projectID string, known *bool, persist func(bool) error) (func(context.Context) error, error) {
+	item, err := s.authorize(ctx, actor, projectID)
+	if err != nil {
+		return nil, err
+	}
+	name := containerName(projectID)
+	state, err := s.engine.Inspect(ctx, name)
+	if known != nil {
+		if *known {
+			if err == nil && state.Running {
+				if stopErr := s.engine.Stop(ctx, name); stopErr != nil {
+					return nil, stopErr
+				}
+			}
+			return s.resumeAuthoring(item), nil
+		}
+		if err == nil && state.Running {
+			return nil, fmt.Errorf("恢复任务记录的工作区状态不一致")
+		}
+		return func(context.Context) error { return nil }, nil
+	}
+	if errors.Is(err, ErrContainerNotFound) {
+		if persist != nil {
+			if persistErr := persist(false); persistErr != nil {
+				return nil, persistErr
+			}
+		}
+		return func(context.Context) error { return nil }, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !state.Running {
+		if persist != nil {
+			if persistErr := persist(false); persistErr != nil {
+				return nil, persistErr
+			}
+		}
+		return func(context.Context) error { return nil }, nil
+	}
+	if persist != nil {
+		if persistErr := persist(true); persistErr != nil {
+			return nil, persistErr
+		}
+	}
+	if err := s.engine.Stop(ctx, name); err != nil {
+		return nil, err
+	}
+	return s.resumeAuthoring(item), nil
+}
+
+func (s *Service) resumeAuthoring(item project.Project) func(context.Context) error {
+	name := containerName(item.ID)
+	return func(resumeCtx context.Context) error {
+		if _, inspectErr := s.engine.Inspect(resumeCtx, name); errors.Is(inspectErr, ErrContainerNotFound) {
+			spec, specErr := s.containerSpec(item)
+			if specErr != nil {
+				return specErr
+			}
+			if createErr := s.engine.Create(resumeCtx, spec); createErr != nil && !errors.Is(createErr, ErrContainerConflict) {
+				return createErr
+			}
+		} else if inspectErr != nil {
+			return inspectErr
+		}
+		return s.engine.Start(resumeCtx, name)
+	}
+}
 
 func (s *Service) Status(ctx context.Context, actor auth.User, projectID string) (Status, error) {
 	if _, err := s.authorize(ctx, actor, projectID); err != nil {
@@ -101,11 +208,30 @@ func (s *Service) Status(ctx context.Context, actor auth.User, projectID string)
 	s.attachPresence(ctx, actor, projectID, &status)
 	return status, nil
 }
+func (s *Service) AuthoringEpoch(ctx context.Context, actor auth.User, projectID string) (string, error) {
+	item, err := s.authorize(ctx, actor, projectID)
+	if err != nil {
+		return "", err
+	}
+	return project.FormatAuthoringEpoch(item.AuthoringEpoch), nil
+}
+func (s *Service) RequireProxyEpoch(ctx context.Context, actor auth.User, projectID, epoch string) error {
+	if _, err := s.authorize(ctx, actor, projectID); err != nil {
+		return err
+	}
+	if s.epochGuard == nil {
+		return fmt.Errorf("工程编辑代次保护未配置")
+	}
+	return s.epochGuard.RequireAuthoringEpoch(ctx, actor.TenantID, projectID, epoch)
+}
 
 // Start 首次进入时创建工程唯一容器；已有容器时只启动，不覆盖共享配置和扩展目录。
 func (s *Service) Start(ctx context.Context, actor auth.User, projectID string) (Status, error) {
 	item, err := s.authorize(ctx, actor, projectID)
 	if err != nil {
+		return Status{}, err
+	}
+	if err := s.requireEpoch(ctx, actor, projectID); err != nil {
 		return Status{}, err
 	}
 	name := containerName(projectID)
@@ -164,6 +290,9 @@ func (s *Service) Stop(ctx context.Context, actor auth.User, projectID string) (
 	if err != nil {
 		return Status{}, err
 	}
+	if err := s.requireEpoch(ctx, actor, projectID); err != nil {
+		return Status{}, err
+	}
 	if err := s.validateOwnership(state, projectID); err != nil {
 		return Status{}, err
 	}
@@ -177,6 +306,9 @@ func (s *Service) Stop(ctx context.Context, actor auth.User, projectID string) (
 func (s *Service) Rebuild(ctx context.Context, actor auth.User, projectID string) (Status, error) {
 	item, err := s.authorize(ctx, actor, projectID)
 	if err != nil {
+		return Status{}, err
+	}
+	if err := s.requireEpoch(ctx, actor, projectID); err != nil {
 		return Status{}, err
 	}
 	name := containerName(projectID)

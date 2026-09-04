@@ -23,6 +23,19 @@ func NewHandler(service *Service, authService *auth.Service) *Handler {
 	return &Handler{service: service, authService: authService}
 }
 
+func (h *Handler) GetProjectAuthoringContext(w http.ResponseWriter, r *http.Request, projectID string) {
+	actor, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	epoch, err := h.service.GetAuthoringContext(r.Context(), actor, projectID)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, map[string]any{"projectId": projectID, "authoringEpoch": epoch})
+}
+
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.requireUser(w, r)
 	if !ok {
@@ -327,6 +340,10 @@ func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (auth.User
 	return actor, true
 }
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	if data, ok := AuthoringEpochConflictData(err); ok {
+		platformapi.WriteErrorData(w, r, http.StatusConflict, platformapi.ErrorCodeAlreadyExists, err.Error(), data)
+		return
+	}
 	switch {
 	case errors.Is(err, ErrNotFound):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeProjectNotFound, err.Error())
@@ -336,6 +353,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeNotFound, err.Error())
 	case errors.Is(err, auth.ErrPermissionDenied):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodePermissionDenied, err.Error())
+	case errors.Is(err, ErrAuthoringBusy):
+		platformapi.WriteError(w, r, http.StatusConflict, platformapi.ErrorCodeAlreadyExists, err.Error())
 	default:
 		if strings.Contains(err.Error(), "不能为空") || strings.Contains(err.Error(), "不支持") {
 			h.writeInvalid(w, r, err)
@@ -417,6 +436,10 @@ func projectResponse(item Project) map[string]any {
 	} else {
 		payload["group"] = nil
 		payload["groupId"] = nil
+	}
+	// 只在仓储已完成批量读取后返回摘要；未读取不能伪装成零部署。
+	if item.DeploymentSummary.PrimarySelection != "" {
+		payload["deploymentSummary"] = deploymentSummaryResponse(item.DeploymentSummary)
 	}
 	return payload
 }

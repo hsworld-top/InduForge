@@ -17,11 +17,14 @@ import (
 type Handler struct {
 	service     *Service
 	authService *auth.Service
+	gateway     *Gateway
 }
 
 func NewHandler(service *Service, authService *auth.Service) *Handler {
 	return &Handler{service: service, authService: authService}
 }
+
+func (h *Handler) SetGateway(gateway *Gateway) { h.gateway = gateway }
 
 func (h *Handler) GetCodeWorkspace(w http.ResponseWriter, r *http.Request, projectID string) {
 	h.execute(w, r, projectID, h.service.Status)
@@ -57,15 +60,42 @@ func (h *Handler) execute(w http.ResponseWriter, r *http.Request, projectID stri
 	if onlineUsers == nil {
 		onlineUsers = []OnlineUser{}
 	}
-	payload := map[string]any{"containerName": status.ContainerName, "status": status.Status, "hostPort": hostPort, "onlineUsers": onlineUsers, "services": workspaceServices(r, status)}
-	if status.Status == "running" && status.HostPort != "" {
+	services, err := h.workspaceServices(r, actor, projectID, status)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	payload := map[string]any{"containerName": status.ContainerName, "status": status.Status, "hostPort": hostPort, "onlineUsers": onlineUsers, "services": services}
+	if h.gateway != nil {
+		w.Header().Set("Cache-Control", "no-store")
+	}
+	if h.gateway == nil && status.Status == "running" && status.HostPort != "" {
 		payload["url"] = codeServerURL(r, status.HostPort)
 	}
 	platformapi.WriteSuccess(w, r, payload)
 }
 
 // workspaceServices 始终返回前端所需的四项服务，避免集群工作区因缺字段被当作断连。
-func workspaceServices(r *http.Request, status Status) map[string]any {
+func (h *Handler) workspaceServices(r *http.Request, actor auth.User, projectID string, status Status) (map[string]any, error) {
+	if h.gateway != nil {
+		result := map[string]any{}
+		epoch, err := h.service.AuthoringEpoch(r.Context(), actor, projectID)
+		if err != nil {
+			return nil, err
+		}
+		for responseName, serviceName := range map[string]string{"ai": "ai", "code": "code", "preview": "preview", "previewControl": "preview-control"} {
+			var endpoint any
+			if status.Status == "running" {
+				value, issueErr := h.gateway.PublicURL(actor, projectID, epoch, serviceName)
+				if issueErr != nil {
+					return nil, issueErr
+				}
+				endpoint = value
+			}
+			result[responseName] = map[string]any{"url": endpoint, "hostPort": nil}
+		}
+		return result, nil
+	}
 	port := func(name string) string {
 		if status.ServicePorts != nil && status.ServicePorts[name] != "" {
 			return status.ServicePorts[name]
@@ -87,7 +117,7 @@ func workspaceServices(r *http.Request, status Status) map[string]any {
 		}
 		return map[string]any{"url": endpoint, "hostPort": hostPort}
 	}
-	return map[string]any{"ai": service("ai"), "code": service("code"), "preview": service("preview"), "previewControl": service("preview-control")}
+	return map[string]any{"ai": service("ai"), "code": service("code"), "preview": service("preview"), "previewControl": service("preview-control")}, nil
 }
 
 func codeServerURL(r *http.Request, port string) string {
@@ -124,6 +154,10 @@ func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (auth.User
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	if data, ok := project.AuthoringEpochConflictData(err); ok {
+		platformapi.WriteErrorData(w, r, http.StatusConflict, platformapi.ErrorCodeAlreadyExists, err.Error(), data)
+		return
+	}
 	switch {
 	case errors.Is(err, project.ErrNotFound):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeProjectNotFound, err.Error())

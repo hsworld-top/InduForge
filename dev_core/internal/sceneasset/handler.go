@@ -892,6 +892,10 @@ func sceneKind(r *http.Request) string {
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	if data, ok := project.AuthoringEpochConflictData(err); ok {
+		platformapi.WriteErrorData(w, r, http.StatusConflict, platformapi.ErrorCodeAlreadyExists, err.Error(), data)
+		return
+	}
 	switch {
 	case errors.Is(err, auth.ErrPermissionDenied):
 		platformapi.WriteError(w, r, http.StatusForbidden, platformapi.ErrorCodePermissionDenied, err.Error())

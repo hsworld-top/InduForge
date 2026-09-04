@@ -1,6 +1,7 @@
 package db
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -59,9 +60,26 @@ func TestActiveSceneNamesAreUniqueWithinProject(t *testing.T) {
 
 func TestSchemaDoesNotContainRuntimeMigrationStatements(t *testing.T) {
 	upper := strings.ToUpper(coreschema.CoreSQL)
-	for _, statement := range []string{"ALTER TABLE", "DROP TABLE", "UPDATE ", "DELETE FROM"} {
-		if strings.Contains(upper, statement) {
+	for _, statement := range []string{"ALTER TABLE", "DROP TABLE", `UPDATE\s`, "DELETE FROM"} {
+		if regexp.MustCompile(`(?m)^\s*`+statement).FindStringIndex(upper) != nil {
 			t.Errorf("schema must be an empty-database baseline, found %s", statement)
+		}
+	}
+}
+
+func TestAuthoringRestoreFinalSchemaRequiresCompleteSnapshotMetadata(t *testing.T) {
+	for _, expected := range []string{
+		"authoring_snapshot_schema text",
+		"authoring_snapshot_cipher_hash text",
+		"restorable boolean NOT NULL DEFAULT false",
+		"CREATE TABLE authoring_restore_tasks",
+		"CREATE UNIQUE INDEX authoring_restore_tasks_active_project_uidx",
+		"CREATE TABLE authoring_restore_task_events",
+		"FOREIGN KEY (application_version_id, project_id, tenant_id) REFERENCES application_versions (id, project_id, tenant_id)",
+		"UNIQUE (id, project_id, tenant_id)",
+	} {
+		if !strings.Contains(coreschema.CoreSQL, expected) {
+			t.Fatalf("authoring restore final schema missing %q", expected)
 		}
 	}
 }

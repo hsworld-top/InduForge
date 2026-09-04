@@ -70,6 +70,19 @@ func NewService(repository Repository, cache CaptchaStore, tokens *TokenManager,
 	return service
 }
 
+// GetActiveUser 为短期派生会话重新读取账号与租户状态，避免长期连接沿用签发时
+// 已过期的角色或停用状态。它不签发新 Token，也不接受浏览器提供的身份字段。
+func (s *Service) GetActiveUser(ctx context.Context, userID string) (User, error) {
+	user, err := s.repository.GetUser(ctx, userID)
+	if err != nil {
+		return User{}, err
+	}
+	if user.Status != "active" || user.TenantStatus != "active" {
+		return User{}, ErrForbidden
+	}
+	return user, nil
+}
+
 const (
 	sliderTrackWidth = 280
 	sliderThumbWidth = 44
@@ -204,6 +217,22 @@ func (s *Service) Authenticate(ctx context.Context, accessToken string) (User, e
 		return User{}, ErrUnauthorized
 	}
 	return user, nil
+}
+
+// AuthenticateSession 供长连接使用已验证的账号与令牌截止时间；不得向浏览器返回令牌本身。
+func (s *Service) AuthenticateSession(ctx context.Context, accessToken string) (User, time.Time, error) {
+	claims, err := s.tokens.ParseAccessToken(accessToken)
+	if err != nil {
+		return User{}, time.Time{}, err
+	}
+	if claims.ExpiresAt == nil {
+		return User{}, time.Time{}, ErrUnauthorized
+	}
+	actor, err := s.Authenticate(ctx, accessToken)
+	if err != nil {
+		return User{}, time.Time{}, err
+	}
+	return actor, claims.ExpiresAt.Time, nil
 }
 
 func (s *Service) RevokeAccessToken(ctx context.Context, accessToken string) error {

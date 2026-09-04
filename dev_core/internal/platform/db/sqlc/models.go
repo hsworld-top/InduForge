@@ -9,29 +9,38 @@ import (
 )
 
 type ApplicationVersion struct {
-	ID             pgtype.UUID        `json:"id"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	ProjectID      pgtype.UUID        `json:"project_id"`
-	Version        string             `json:"version"`
-	Name           pgtype.Text        `json:"name"`
-	Description    pgtype.Text        `json:"description"`
-	Status         string             `json:"status"`
-	SourceHash     pgtype.Text        `json:"source_hash"`
-	ArtifactBucket pgtype.Text        `json:"artifact_bucket"`
-	ArtifactKey    pgtype.Text        `json:"artifact_key"`
-	ArtifactHash   pgtype.Text        `json:"artifact_hash"`
-	ArtifactSize   pgtype.Int8        `json:"artifact_size"`
-	Manifest       []byte             `json:"manifest"`
-	ManifestHash   pgtype.Text        `json:"manifest_hash"`
-	ChecksumsHash  pgtype.Text        `json:"checksums_hash"`
-	SigningKeyID   pgtype.Text        `json:"signing_key_id"`
-	BuildLog       pgtype.Text        `json:"build_log"`
-	ErrorMessage   pgtype.Text        `json:"error_message"`
-	CreatedBy      pgtype.UUID        `json:"created_by"`
-	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                          pgtype.UUID        `json:"id"`
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	ProjectID                   pgtype.UUID        `json:"project_id"`
+	Version                     string             `json:"version"`
+	Name                        pgtype.Text        `json:"name"`
+	Description                 pgtype.Text        `json:"description"`
+	Status                      string             `json:"status"`
+	SourceHash                  pgtype.Text        `json:"source_hash"`
+	ArtifactBucket              pgtype.Text        `json:"artifact_bucket"`
+	ArtifactKey                 pgtype.Text        `json:"artifact_key"`
+	ArtifactHash                pgtype.Text        `json:"artifact_hash"`
+	ArtifactSize                pgtype.Int8        `json:"artifact_size"`
+	Manifest                    []byte             `json:"manifest"`
+	ManifestHash                pgtype.Text        `json:"manifest_hash"`
+	ChecksumsHash               pgtype.Text        `json:"checksums_hash"`
+	SigningKeyID                pgtype.Text        `json:"signing_key_id"`
+	AuthoringSnapshotSchema     pgtype.Text        `json:"authoring_snapshot_schema"`
+	AuthoringSnapshotBucket     pgtype.Text        `json:"authoring_snapshot_bucket"`
+	AuthoringSnapshotKey        pgtype.Text        `json:"authoring_snapshot_key"`
+	AuthoringSnapshotHash       pgtype.Text        `json:"authoring_snapshot_hash"`
+	AuthoringSnapshotCipherHash pgtype.Text        `json:"authoring_snapshot_cipher_hash"`
+	AuthoringSnapshotSize       pgtype.Int8        `json:"authoring_snapshot_size"`
+	AuthoringSnapshotKeyID      pgtype.Text        `json:"authoring_snapshot_key_id"`
+	AuthoringProjectRevision    pgtype.Text        `json:"authoring_project_revision"`
+	Restorable                  bool               `json:"restorable"`
+	BuildLog                    pgtype.Text        `json:"build_log"`
+	ErrorMessage                pgtype.Text        `json:"error_message"`
+	CreatedBy                   pgtype.UUID        `json:"created_by"`
+	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
+	DeletedAt                   pgtype.Timestamptz `json:"deleted_at"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AuditLog struct {
@@ -53,6 +62,49 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type AuthoringProjectFence struct {
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	OwnerKind      string             `json:"owner_kind"`
+	OwnerID        pgtype.UUID        `json:"owner_id"`
+	FenceTokenHash string             `json:"fence_token_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AuthoringRestoreTask struct {
+	ID                     pgtype.UUID        `json:"id"`
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	ProjectID              pgtype.UUID        `json:"project_id"`
+	ApplicationVersionID   pgtype.UUID        `json:"application_version_id"`
+	RequestedBy            pgtype.UUID        `json:"requested_by"`
+	CurrentProjectRevision pgtype.Text        `json:"current_project_revision"`
+	State                  string             `json:"state"`
+	Stage                  string             `json:"stage"`
+	BackupSchema           pgtype.Text        `json:"backup_schema"`
+	BackupBucket           pgtype.Text        `json:"backup_bucket"`
+	BackupKey              pgtype.Text        `json:"backup_key"`
+	BackupHash             pgtype.Text        `json:"backup_hash"`
+	BackupCipherHash       pgtype.Text        `json:"backup_cipher_hash"`
+	BackupSize             pgtype.Int8        `json:"backup_size"`
+	BackupKeyID            pgtype.Text        `json:"backup_key_id"`
+	ErrorMessage           pgtype.Text        `json:"error_message"`
+	StartedAt              pgtype.Timestamptz `json:"started_at"`
+	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AuthoringRestoreTaskEvent struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	TaskID    pgtype.UUID        `json:"task_id"`
+	Stage     string             `json:"stage"`
+	Message   string             `json:"message"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type DeploymentBinding struct {
 	ID                   pgtype.UUID        `json:"id"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
@@ -61,6 +113,8 @@ type DeploymentBinding struct {
 	ProjectID            pgtype.UUID        `json:"project_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ApplicationVersionID pgtype.UUID        `json:"application_version_id"`
+	ArtifactMode         string             `json:"artifact_mode"`
+	ArtifactDescriptor   []byte             `json:"artifact_descriptor"`
 	Revision             int32              `json:"revision"`
 	Binding              []byte             `json:"binding"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
@@ -223,35 +277,44 @@ type NodeEnrollment struct {
 }
 
 type Project struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	Name          string             `json:"name"`
-	Code          string             `json:"code"`
-	Description   pgtype.Text        `json:"description"`
-	Icon          pgtype.Text        `json:"icon"`
-	WorkspacePath string             `json:"workspace_path"`
-	Status        string             `json:"status"`
-	Visibility    string             `json:"visibility"`
-	CreatedBy     pgtype.UUID        `json:"created_by"`
-	UpdatedBy     pgtype.UUID        `json:"updated_by"`
-	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Name           string             `json:"name"`
+	Code           string             `json:"code"`
+	Description    pgtype.Text        `json:"description"`
+	Icon           pgtype.Text        `json:"icon"`
+	WorkspacePath  string             `json:"workspace_path"`
+	Status         string             `json:"status"`
+	Visibility     string             `json:"visibility"`
+	AuthoringEpoch int64              `json:"authoring_epoch"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
+	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProjectDeployment struct {
-	ID                   pgtype.UUID        `json:"id"`
-	TenantID             pgtype.UUID        `json:"tenant_id"`
-	ProjectID            pgtype.UUID        `json:"project_id"`
-	EnvironmentID        pgtype.UUID        `json:"environment_id"`
-	ApplicationVersionID pgtype.UUID        `json:"application_version_id"`
-	Mode                 string             `json:"mode"`
-	AccessPort           int32              `json:"access_port"`
-	DesiredStatus        string             `json:"desired_status"`
-	ObservedStatus       string             `json:"observed_status"`
-	CreatedBy            pgtype.UUID        `json:"created_by"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                            pgtype.UUID        `json:"id"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	ProjectID                     pgtype.UUID        `json:"project_id"`
+	EnvironmentID                 pgtype.UUID        `json:"environment_id"`
+	ApplicationVersionID          pgtype.UUID        `json:"application_version_id"`
+	Mode                          string             `json:"mode"`
+	ArtifactDescriptor            []byte             `json:"artifact_descriptor"`
+	LastReadyMode                 pgtype.Text        `json:"last_ready_mode"`
+	LastReadyApplicationVersionID pgtype.UUID        `json:"last_ready_application_version_id"`
+	LastReadyArtifactDescriptor   []byte             `json:"last_ready_artifact_descriptor"`
+	LastReadyGeneration           pgtype.Int8        `json:"last_ready_generation"`
+	LastReadyAt                   pgtype.Timestamptz `json:"last_ready_at"`
+	AccessPort                    int32              `json:"access_port"`
+	DeletedAt                     pgtype.Timestamptz `json:"deleted_at"`
+	DeletionRequestedAt           pgtype.Timestamptz `json:"deletion_requested_at"`
+	DesiredStatus                 string             `json:"desired_status"`
+	ObservedStatus                string             `json:"observed_status"`
+	CreatedBy                     pgtype.UUID        `json:"created_by"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProjectGroup struct {
@@ -436,6 +499,7 @@ type RuntimeEnvironmentService struct {
 	Operation            string             `json:"operation"`
 	StorageClaim         string             `json:"storage_claim"`
 	PreviousStorageClaim pgtype.Text        `json:"previous_storage_claim"`
+	ResourceRefs         []byte             `json:"resource_refs"`
 	LastMessage          pgtype.Text        `json:"last_message"`
 	ObservedAt           pgtype.Timestamptz `json:"observed_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
@@ -553,6 +617,7 @@ type SceneDocument struct {
 	DraftVersion          int64              `json:"draft_version"`
 	CommittedDraftVersion int64              `json:"committed_draft_version"`
 	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	DeletionRequestedAt   pgtype.Timestamptz `json:"deletion_requested_at"`
 	CreatedBy             pgtype.UUID        `json:"created_by"`
 	UpdatedBy             pgtype.UUID        `json:"updated_by"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`

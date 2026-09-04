@@ -32,6 +32,7 @@ type ObjectRef struct {
 }
 
 type ObjectReader struct {
+	Bucket      string
 	Reader      io.ReadCloser
 	Size        int64
 	ContentType string
@@ -87,7 +88,7 @@ func (store *MinIO) Open(ctx context.Context, objectKey string) (ObjectReader, e
 	if err != nil {
 		return ObjectReader{}, fmt.Errorf("打开对象失败: %w", err)
 	}
-	return ObjectReader{Reader: object, Size: info.Size, ContentType: info.ContentType}, nil
+	return ObjectReader{Bucket: store.bucket, Reader: object, Size: info.Size, ContentType: info.ContentType}, nil
 }
 
 func (store *MinIO) Delete(ctx context.Context, objectKey string) error {

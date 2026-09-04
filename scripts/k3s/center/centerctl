@@ -214,6 +214,21 @@ ensure_compute_sandbox_token() {
   printf '\nDATA_SERVICE_COMPUTE_SANDBOX_TOKEN=%s\n' "$token" >> "$env_path"
 }
 
+ensure_authoring_snapshot_keyring() {
+  env_path=$1
+  if grep -Eq '^AUTHORING_SNAPSHOT_CURRENT_KEY_ID=.+$' "$env_path" && grep -Eq '^AUTHORING_SNAPSHOT_KEYRING_JSON=.+$' "$env_path"; then return; fi
+  key_id=$(kubectl_cmd -n "$NAMESPACE" get secret center-env -o jsonpath='{.data.AUTHORING_SNAPSHOT_CURRENT_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  keyring=$(kubectl_cmd -n "$NAMESPACE" get secret center-env -o jsonpath='{.data.AUTHORING_SNAPSHOT_KEYRING_JSON}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  if [ -z "$key_id" ] || [ -z "$keyring" ]; then
+    key_id=authoring-snapshot-key-v1
+    encoded=$(openssl rand -base64 32 | tr -d '\n')
+    keyring="{\"$key_id\":\"$encoded\"}"
+  fi
+  sed -i.bak '/^AUTHORING_SNAPSHOT_CURRENT_KEY_ID=/d;/^AUTHORING_SNAPSHOT_KEYRING_JSON=/d' "$env_path"
+  rm -f "$env_path.bak"
+  printf '\nAUTHORING_SNAPSHOT_CURRENT_KEY_ID=%s\nAUTHORING_SNAPSHOT_KEYRING_JSON=%s\n' "$key_id" "$keyring" >> "$env_path"
+}
+
 render_manifest() {
   validate_settings
   sed \
@@ -282,8 +297,15 @@ apply_center() {
   temp_dir=$(mktemp -d)
   trap 'rm -rf "$temp_dir"' EXIT INT TERM
   tr -d '\r' < "$env_file" > "$temp_dir/center.env"
+  for required_key in CENTER_PUBLIC_ORIGIN WORKSPACE_PUBLIC_ORIGIN_TEMPLATE CODE_WORKSPACE_ALLOWED_ORIGINS; do
+    if ! grep -Eq "^${required_key}=.+" "$temp_dir/center.env"; then
+      echo "center environment is missing required workspace gateway setting: $required_key" >&2
+      exit 1
+    fi
+  done
   ensure_data_service_internal_token "$temp_dir/center.env"
   ensure_compute_sandbox_token "$temp_dir/center.env"
+  ensure_authoring_snapshot_keyring "$temp_dir/center.env"
   render_manifest > "$temp_dir/center-system.yaml"
 
   kubectl_cmd apply -f "$SCRIPT_DIR/namespace.yaml"

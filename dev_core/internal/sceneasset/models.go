@@ -125,16 +125,17 @@ type FileContent struct {
 }
 
 type EditorSession struct {
-	ID        string    `json:"sessionId"`
-	UserID    string    `json:"userId"`
-	TenantID  string    `json:"tenantId"`
-	ProjectID string    `json:"projectId"`
-	SceneID   string    `json:"sceneId"`
-	SceneName string    `json:"sceneName"`
-	Kind      string    `json:"kind"`
-	Provider  string    `json:"provider"`
-	EntryPath string    `json:"entryPath"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	ID             string    `json:"sessionId"`
+	UserID         string    `json:"userId"`
+	TenantID       string    `json:"tenantId"`
+	ProjectID      string    `json:"projectId"`
+	AuthoringEpoch string    `json:"authoringEpoch"`
+	SceneID        string    `json:"sceneId"`
+	SceneName      string    `json:"sceneName"`
+	Kind           string    `json:"kind"`
+	Provider       string    `json:"provider"`
+	EntryPath      string    `json:"entryPath"`
+	ExpiresAt      time.Time `json:"expiresAt"`
 }
 
 type EditorSessionResponse struct {
@@ -320,13 +321,14 @@ type AssetBinding struct {
 }
 
 type AssetEditorSession struct {
-	ID        string    `json:"sessionId"`
-	UserID    string    `json:"userId"`
-	TenantID  string    `json:"tenantId"`
-	ProjectID string    `json:"projectId"`
-	AssetID   string    `json:"assetId"`
-	Provider  string    `json:"provider"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	ID             string    `json:"sessionId"`
+	UserID         string    `json:"userId"`
+	TenantID       string    `json:"tenantId"`
+	ProjectID      string    `json:"projectId"`
+	AuthoringEpoch string    `json:"authoringEpoch"`
+	AssetID        string    `json:"assetId"`
+	Provider       string    `json:"provider"`
+	ExpiresAt      time.Time `json:"expiresAt"`
 }
 
 type AssetAnalysis struct {

@@ -639,6 +639,21 @@ spec:
               value: induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64
             - name: CODE_WORKSPACE_ENGINE
               value: kubernetes
+            - name: CENTER_PUBLIC_ORIGIN
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: CENTER_PUBLIC_ORIGIN
+            - name: WORKSPACE_PUBLIC_ORIGIN_TEMPLATE
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: WORKSPACE_PUBLIC_ORIGIN_TEMPLATE
+            - name: CODE_WORKSPACE_ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: CODE_WORKSPACE_ALLOWED_ORIGINS
             - name: CODE_WORKSPACE_VOLUME
               value: __RELEASE_WORKSPACE_VOLUME__
             - name: RELEASE_BUILDER_ENABLED
@@ -651,6 +666,16 @@ spec:
               value: /var/run/induforge/release-signing-key.pem
             - name: RELEASE_SIGNING_KEY_ID
               value: __RELEASE_KEY_ID__
+            - name: AUTHORING_SNAPSHOT_CURRENT_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: AUTHORING_SNAPSHOT_CURRENT_KEY_ID
+            - name: AUTHORING_SNAPSHOT_KEYRING_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: center-env
+                  key: AUTHORING_SNAPSHOT_KEYRING_JSON
             - name: RELEASE_MIN_NODE_AGENT_VERSION
               value: __RELEASE_MIN_AGENT_VERSION__
             - name: RELEASE_MIN_RUNTIME_VERSION

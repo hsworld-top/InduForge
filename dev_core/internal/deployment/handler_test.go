@@ -43,8 +43,8 @@ func TestDeploymentHTTPFlow(t *testing.T) {
 	if err := json.Unmarshal(published.Data, &release); err != nil {
 		t.Fatal(err)
 	}
-	if release["version"] != "1.0.0" || release["status"] != "success" {
-		t.Fatalf("正式发布必须使用服务端生成版本并成功就绪: %#v", release)
+	if release["version"] != "1.0.0" || release["status"] != "ready" || release["restorable"] != true {
+		t.Fatalf("完整恢复执行器接线后版本必须可恢复: %#v", release)
 	}
 	if len(store.content) == 0 || store.contentType != "application/zstd" || !strings.Contains(store.key, release["artifactHash"].(string)) {
 		t.Fatalf("正式发布未上传受签名制品: key=%s type=%s size=%d", store.key, store.contentType, len(store.content))
@@ -61,6 +61,12 @@ func TestDeploymentHTTPFlow(t *testing.T) {
 	assertOK(t, call(t, handler, http.MethodDelete, "/api/v1/deployments/node-deployment/"+testDeploymentID, nil, token))
 	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/project/"+testProjectID+"/deploy-dev", map[string]any{"nodeIds": []string{testNodeID}}, token))
 	assertLegacyReleaseDisabled(t, call(t, handler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/rollback", map[string]any{"nodeId": testNodeID}, token))
+	restored := call(t, handler, http.MethodPost, "/api/v1/publish/versions/"+testVersionID+"/restore-development", map[string]any{"confirmation": "RESTORE"}, token)
+	assertOK(t, restored)
+	if restored.HTTPStatus != http.StatusAccepted {
+		t.Fatalf("restore status=%d", restored.HTTPStatus)
+	}
+	assertOK(t, call(t, handler, http.MethodGet, "/api/v1/publish/restore-tasks/"+testDeploymentID, nil, token))
 	assertOK(t, call(t, handler, http.MethodDelete, "/api/v1/publish/deployment/"+testVersionID, nil, token))
 }
 
@@ -96,7 +102,7 @@ func newDeploymentServer(t *testing.T, role string) (http.Handler, string, *fake
 	now := time.Now()
 	repository := &fakeRepository{
 		versions: map[string]deployment.Version{
-			testVersionID: {ID: testVersionID, TenantID: testsupport.TenantID, ProjectID: testProjectID, Version: "1.0.0", Status: "ready", ArtifactBucket: "artifacts", ArtifactKey: "versions/test.ifp", ArtifactHash: "hash", Manifest: map[string]any{"artifactBucket": "artifacts", "artifactKey": "versions/test.ifp", "artifactHash": "hash", "artifactSize": int64(128)}, CreatedAt: now, UpdatedAt: now},
+			testVersionID: {ID: testVersionID, TenantID: testsupport.TenantID, ProjectID: testProjectID, Version: "1.0.0", Status: "ready", Restorable: true, ArtifactBucket: "artifacts", ArtifactKey: "versions/test.ifp", ArtifactHash: "hash", Manifest: map[string]any{"artifactBucket": "artifacts", "artifactKey": "versions/test.ifp", "artifactHash": "hash", "artifactSize": int64(128)}, CreatedAt: now, UpdatedAt: now},
 		},
 		deployments: map[string]deployment.Deployment{
 			testDeploymentID: {ID: testDeploymentID, TenantID: testsupport.TenantID, ProjectID: testProjectID, NodeID: testNodeID, Status: "stopped", CreatedAt: now, UpdatedAt: now},
@@ -105,6 +111,9 @@ func newDeploymentServer(t *testing.T, role string) (http.Handler, string, *fake
 	store := &fakeStore{}
 	service := deployment.NewService(repository, fakeWorkspace{}, store, deployment.ServiceConfig{ArtifactBucket: "artifacts", MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0"})
 	service.SetReleaseSourceBuilder(fakeReleaseSourceBuilder{source: validReleaseSource()})
+	service.SetFormalAuthoringBuilder(fakeReleaseSourceBuilder{source: validReleaseSource()})
+	service.SetAuthoringCaptureCoordinator(fakeCaptureCoordinator{})
+	service.SetRestoreScheduler(fakeRestoreScheduler{})
 	service.SetSigningConfig(deployment.SigningConfig{Key: ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x42}, ed25519.SeedSize)), KeyID: "test-release-key"})
 	root := controlplane.NewHandler(auth.NewHandler(authService))
 	root.SetDeploymentHandler(deployment.NewHandler(service, authService))
@@ -115,9 +124,10 @@ func newDeploymentServer(t *testing.T, role string) (http.Handler, string, *fake
 }
 
 type envelope struct {
-	Code int             `json:"code"`
-	Msg  string          `json:"msg"`
-	Data json.RawMessage `json:"data"`
+	Code       int             `json:"code"`
+	Msg        string          `json:"msg"`
+	Data       json.RawMessage `json:"data"`
+	HTTPStatus int             `json:"-"`
 }
 
 func call(t *testing.T, handler http.Handler, method, path string, body any, token string) envelope {
@@ -133,13 +143,14 @@ func call(t *testing.T, handler http.Handler, method, path string, body any, tok
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK && response.Code != http.StatusInternalServerError {
+	if response.Code != http.StatusOK && response.Code != http.StatusAccepted && response.Code != http.StatusInternalServerError {
 		t.Fatalf("%s %s status=%d body=%s", method, path, response.Code, response.Body.String())
 	}
 	var result envelope
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
+	result.HTTPStatus = response.Code
 	return result
 }
 
@@ -192,6 +203,25 @@ type fakeRepository struct {
 	markFailedTenant     string
 	markFailedVersion    string
 	markFailedBackground bool
+}
+type fakeRestoreScheduler struct{}
+
+func (fakeRestoreScheduler) Enqueue(deployment.RestoreTask) {}
+
+func (r *fakeRepository) AcquireAuthoringFence(context.Context, string, string, string, string, time.Duration) (string, error) {
+	return "test-fence", nil
+}
+func (r *fakeRepository) ReleaseAuthoringFence(context.Context, string, string, string, string) error {
+	return nil
+}
+func (r *fakeRepository) RenewAuthoringFence(context.Context, string, string, string, string, time.Duration) error {
+	return nil
+}
+func (r *fakeRepository) GetRestoreTask(context.Context, string, string) (deployment.RestoreTask, error) {
+	return deployment.RestoreTask{ID: testDeploymentID, TenantID: testsupport.TenantID, ProjectID: testProjectID, VersionID: testVersionID, State: "queued", Stage: "queued", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+func (r *fakeRepository) CreateRestoreTask(context.Context, string, string, string) (deployment.RestoreTask, error) {
+	return deployment.RestoreTask{ID: testDeploymentID, TenantID: testsupport.TenantID, ProjectID: testProjectID, VersionID: testVersionID, State: "queued", Stage: "queued", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 }
 
 func (r *fakeRepository) GetProject(_ context.Context, tenantID, projectID string) (deployment.Project, error) {
@@ -250,6 +280,7 @@ func (r *fakeRepository) MarkVersionReady(_ context.Context, tenantID, id string
 	item.Status = "ready"
 	item.ArtifactBucket, item.ArtifactKey, item.ArtifactHash, item.ArtifactSize = input.Bucket, input.ArtifactKey, input.ArtifactHash, input.ArtifactSize
 	item.Manifest, item.ManifestHash, item.ChecksumsHash, item.SigningKeyID = input.Manifest, input.ManifestHash, input.ChecksumsHash, input.SigningKeyID
+	item.Restorable, item.AuthoringProjectRevision = input.Restorable, input.AuthoringProjectRevision
 	now := time.Now()
 	item.CompletedAt, item.UpdatedAt = &now, now
 	r.versions[id] = item
@@ -266,6 +297,27 @@ func (b fakeReleaseSourceBuilder) BuildReleaseSource(context.Context, deployment
 		return deployment.ReleaseSource{}, b.err
 	}
 	return b.source, nil
+}
+
+func (b fakeReleaseSourceBuilder) Build(ctx context.Context, _ auth.User, project deployment.Project, version deployment.Version, authorization string) (deployment.AuthoringReleaseResult, error) {
+	source, err := b.BuildReleaseSource(ctx, project, version, authorization)
+	return deployment.AuthoringReleaseResult{Source: source, Bucket: "authoring", Key: "authoring/test", ContentHash: strings.Repeat("a", 64), CipherHash: strings.Repeat("b", 64), Size: 1, KeyID: "test-key", ProjectRevision: "sha256:test"}, err
+}
+func (b fakeReleaseSourceBuilder) Capture(context.Context, auth.User, deployment.Project) (deployment.CapturedAuthoring, error) {
+	return deployment.CapturedAuthoring{}, b.err
+}
+func (b fakeReleaseSourceBuilder) BuildCaptured(ctx context.Context, project deployment.Project, version deployment.Version, _ deployment.CapturedAuthoring) (deployment.AuthoringReleaseResult, error) {
+	return b.Build(ctx, auth.User{}, project, version, "")
+}
+func (b fakeReleaseSourceBuilder) BuildDevelopmentCaptured(ctx context.Context, project deployment.Project, version deployment.Version, captured deployment.CapturedAuthoring) (deployment.AuthoringReleaseResult, error) {
+	return b.BuildCaptured(ctx, project, version, captured)
+}
+func (b fakeReleaseSourceBuilder) DeleteSnapshot(context.Context, string) error { return nil }
+
+type fakeCaptureCoordinator struct{}
+
+func (fakeCaptureCoordinator) Capture(ctx context.Context, _ auth.User, _ deployment.Project, _ string, fn func(context.Context) (deployment.CapturedAuthoring, error)) (deployment.CapturedAuthoring, error) {
+	return fn(ctx)
 }
 
 func validReleaseSource() deployment.ReleaseSource {
@@ -310,6 +362,8 @@ func TestPublishMarksBuildFailedOnPipelineErrors(t *testing.T) {
 			repository := &fakeRepository{versions: map[string]deployment.Version{}, deployments: map[string]deployment.Deployment{}, markReadyErr: test.markReady}
 			service := deployment.NewService(repository, fakeWorkspace{}, test.store, test.config)
 			service.SetReleaseSourceBuilder(test.builder)
+			service.SetFormalAuthoringBuilder(test.builder)
+			service.SetAuthoringCaptureCoordinator(fakeCaptureCoordinator{})
 			service.SetSigningConfig(deployment.SigningConfig{Key: ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x42}, ed25519.SeedSize)), KeyID: "test-release-key"})
 			if _, err := service.Publish(context.Background(), actor, testProjectID, deployment.PublishInput{}); err == nil {
 				t.Fatal("失败的正式发布不应返回成功")
@@ -332,6 +386,8 @@ func TestPublishBuildsSignedImmutableRelease(t *testing.T) {
 	store := &fakeStore{}
 	service := deployment.NewService(repository, fakeWorkspace{}, store, deployment.ServiceConfig{ArtifactBucket: "artifacts", MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0"})
 	service.SetReleaseSourceBuilder(fakeReleaseSourceBuilder{source: validReleaseSource()})
+	service.SetFormalAuthoringBuilder(fakeReleaseSourceBuilder{source: validReleaseSource()})
+	service.SetAuthoringCaptureCoordinator(fakeCaptureCoordinator{})
 	service.SetSigningConfig(deployment.SigningConfig{Key: ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x42}, ed25519.SeedSize)), KeyID: "test-release-key"})
 	actor := auth.User{ID: testsupport.UserID, TenantID: testsupport.TenantID, Role: "PROJECT_ADMIN"}
 

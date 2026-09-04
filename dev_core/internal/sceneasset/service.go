@@ -48,6 +48,21 @@ type Service struct {
 	objects    objectStore
 	sessions   sessionStore
 	providers  *Registry
+	epochGuard interface {
+		RequireAuthoringEpoch(context.Context, string, string, string) error
+	}
+}
+
+type restoreFenceContextKey struct{}
+
+func WithRestoreFence(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, restoreFenceContextKey{}, token)
+}
+
+func (s *Service) SetAuthoringEpochGuard(guard interface {
+	RequireAuthoringEpoch(context.Context, string, string, string) error
+}) {
+	s.epochGuard = guard
 }
 
 func NewService(repository *PostgreSQLRepository, projects projectReader, objects objectStore, sessions sessionStore, providers *Registry) *Service {
@@ -222,7 +237,7 @@ func (s *Service) CreateEditorSession(ctx context.Context, actor auth.User, proj
 	}
 	now := time.Now().UTC()
 	session := EditorSession{ID: uuid.NewString(), UserID: actor.ID, TenantID: actor.TenantID, ProjectID: projectID,
-		SceneID: sceneID, SceneName: scene.Name, Kind: kind, Provider: scene.Provider, EntryPath: scene.EntryPath, ExpiresAt: now.Add(SessionTTL)}
+		AuthoringEpoch: project.AuthoringEpochFromContext(ctx), SceneID: sceneID, SceneName: scene.Name, Kind: kind, Provider: scene.Provider, EntryPath: scene.EntryPath, ExpiresAt: now.Add(SessionTTL)}
 	encoded, _ := json.Marshal(session)
 	if err := s.sessions.PutSceneSession(ctx, session.ID, string(encoded), SessionTTL); err != nil {
 		return EditorSessionResponse{}, err
@@ -335,6 +350,9 @@ func (s *Service) ResolveSession(ctx context.Context, actor auth.User, sessionID
 	}
 	if session.ID != sessionID || session.UserID != actor.ID || session.TenantID != actor.TenantID || time.Now().After(session.ExpiresAt) {
 		return EditorSession{}, Scene{}, ErrSessionForbidden
+	}
+	if session.AuthoringEpoch == "" || session.AuthoringEpoch != project.AuthoringEpochFromContext(ctx) {
+		return EditorSession{}, Scene{}, ErrSessionExpired
 	}
 	if err := s.requireWrite(ctx, actor, session.ProjectID); err != nil {
 		return EditorSession{}, Scene{}, err
@@ -706,7 +724,13 @@ func (s *Service) requireWrite(ctx context.Context, actor auth.User, projectID s
 	if err != nil {
 		return err
 	}
-	return project.RequireCapability(actor, item, auth.CapabilityProjectWrite)
+	if err := project.RequireCapability(actor, item, auth.CapabilityProjectWrite); err != nil {
+		return err
+	}
+	if s.epochGuard != nil && ctx.Value(restoreFenceContextKey{}) == nil {
+		return s.epochGuard.RequireAuthoringEpoch(ctx, actor.TenantID, projectID, project.AuthoringEpochFromContext(ctx))
+	}
+	return nil
 }
 
 func normalizePage(page, limit int) (int, int) {

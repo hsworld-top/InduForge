@@ -56,6 +56,8 @@ for expected in \
   'name: wait-center-control' \
   'name: release-signing-key' \
   'RELEASE_BUILDER_ENABLED' \
+	'AUTHORING_SNAPSHOT_CURRENT_KEY_ID' \
+	'AUTHORING_SNAPSHOT_KEYRING_JSON' \
   'value: induforge/release-builder:1.0.0-node24-pnpm11.21.0' \
   'value: induforge-center-workspaces' \
   'defaultMode: 0400' \
@@ -77,6 +79,10 @@ if [ "$(grep -Fc 'path: /var/run/docker.sock' "$temp_dir/rendered.yaml")" -ne 1 
 fi
 if [ "$(grep -Fc 'location = /health' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
   echo "center health endpoint is not exposed on both edge listeners" >&2
+  exit 1
+fi
+if ! grep -Fq 'preview-control)-[0-9a-f-]{36}' "$SCRIPT_DIR/nginx.conf" || ! grep -Fq 'proxy_pass http://center-control:18101;' "$SCRIPT_DIR/nginx.conf"; then
+  echo "workspace hosts are not routed to the authenticated center gateway" >&2
   exit 1
 fi
 if [ "$(grep -Fc 'location /api/v1/data' "$SCRIPT_DIR/nginx.conf")" -ne 2 ] || [ "$(grep -Fc 'proxy_pass http://center-data:18102;' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then

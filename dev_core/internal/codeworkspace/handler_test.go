@@ -16,6 +16,15 @@ import (
 	"github.com/indu-forge/dev_core/internal/testsupport"
 )
 
+func TestWriteErrorReturnsStructuredAuthoringEpochConflict(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/code-workspace/start", nil)
+	(&Handler{}).writeError(recorder, request, &project.AuthoringEpochConflict{ProjectID: "p", Current: "epoch-3"})
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"currentAuthoringEpoch":"epoch-3"`) || !strings.Contains(recorder.Body.String(), `"action":"reload"`) {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
 type testAPIHandler struct {
 	platformapi.Unimplemented
 	workspace *Handler

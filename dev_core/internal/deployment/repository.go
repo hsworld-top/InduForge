@@ -35,7 +35,7 @@ func (r *PostgreSQLRepository) GetProject(ctx context.Context, tenantID, project
 	if err != nil {
 		return Project{}, mapNotFound(err)
 	}
-	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, WorkspacePath: row.WorkspacePath, CreatedBy: uuidString(row.CreatedBy), Visibility: row.Visibility}, nil
+	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, WorkspacePath: row.WorkspacePath, CreatedBy: uuidString(row.CreatedBy), Visibility: row.Visibility, AuthoringEpoch: row.AuthoringEpoch}, nil
 }
 
 func (r *PostgreSQLRepository) ListVersions(ctx context.Context, tenantID, projectID string, page, limit int) ([]Version, int64, error) {
@@ -113,9 +113,19 @@ func (r *PostgreSQLRepository) BeginProductionBuild(ctx context.Context, project
 		return Version{}, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, project.ID); err != nil {
+		return Version{}, err
+	}
 	var locked string
 	if err = tx.QueryRow(ctx, `SELECT id::text FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, tenant, projectID).Scan(&locked); err != nil {
 		return Version{}, mapNotFound(err)
+	}
+	var restoring bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM authoring_restore_tasks WHERE project_id=$1 AND state IN ('queued','staging','restoring_workspace','restoring_scenes','restoring_data','finalizing','compensating'))`, project.ID).Scan(&restoring); err != nil {
+		return Version{}, err
+	}
+	if restoring {
+		return Version{}, ErrAuthoringBusy
 	}
 	// 发布请求中断时无法保证失败回写可达。只收口超过最大受控构建窗口的旧记录，
 	// 不影响仍在执行的 Release Builder；版本号继续单调递增且不可复用。
@@ -126,6 +136,13 @@ func (r *PostgreSQLRepository) BeginProductionBuild(ctx context.Context, project
 		  AND created_at < now() - $3::interval
 	`, tenant, projectID, fmt.Sprintf("%d seconds", int(staleProductionBuildTimeout.Seconds()))); err != nil {
 		return Version{}, err
+	}
+	var building bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM application_versions WHERE tenant_id=$1 AND project_id=$2 AND status='building')`, tenant, projectID).Scan(&building); err != nil {
+		return Version{}, err
+	}
+	if building {
+		return Version{}, ErrAuthoringBusy
 	}
 	var patch int
 	// 软删除版本仍受 (project_id, version) 唯一约束保护，正式版本号必须保持单调且不可复用。
@@ -155,9 +172,14 @@ func (r *PostgreSQLRepository) MarkVersionReady(ctx context.Context, tenantID, v
 	}
 	row, err := r.queries.MarkApplicationVersionReady(ctx, dbsqlc.MarkApplicationVersionReadyParams{
 		ArtifactBucket: nullableText(input.Bucket), ArtifactKey: nullableText(input.ArtifactKey), ArtifactHash: nullableText(input.ArtifactHash),
-		ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, Manifest: manifest,
-		ManifestHash: nullableText(input.ManifestHash), ChecksumsHash: nullableText(input.ChecksumsHash), SigningKeyID: nullableText(input.SigningKeyID),
-		VersionID: version, TenantID: tenant,
+		ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, Manifest: manifest, ManifestHash: nullableText(input.ManifestHash),
+		ChecksumsHash: nullableText(input.ChecksumsHash), SigningKeyID: nullableText(input.SigningKeyID),
+		AuthoringSnapshotSchema: nullableText(input.AuthoringSnapshotSchema), AuthoringSnapshotBucket: nullableText(input.AuthoringSnapshotBucket),
+		AuthoringSnapshotKey: nullableText(input.AuthoringSnapshotKey), AuthoringSnapshotHash: nullableText(input.AuthoringSnapshotHash),
+		AuthoringSnapshotCipherHash: nullableText(input.AuthoringSnapshotCipherHash), AuthoringSnapshotSize: pgtype.Int8{Int64: input.AuthoringSnapshotSize, Valid: true},
+		AuthoringSnapshotKeyID: nullableText(input.AuthoringSnapshotKeyID), AuthoringProjectRevision: nullableText(input.AuthoringProjectRevision),
+		Restorable: input.Restorable,
+		VersionID:  version, TenantID: tenant,
 	})
 	if err != nil {
 		return Version{}, mapNotFound(err)
@@ -176,19 +198,43 @@ func (r *PostgreSQLRepository) MarkVersionFailed(ctx context.Context, tenantID, 
 	return versionFromModel(row), nil
 }
 
-func (r *PostgreSQLRepository) DeleteVersion(ctx context.Context, tenantID, versionID string) error {
-	if _, err := r.GetVersion(ctx, tenantID, versionID); err != nil {
-		return err
+func (r *PostgreSQLRepository) GetRestoreTask(ctx context.Context, tenantID, taskID string) (RestoreTask, error) {
+	tenant, task, err := parsePair(tenantID, taskID)
+	if err != nil {
+		return RestoreTask{}, ErrNotFound
 	}
-	tenantUUID, versionUUID, _ := parsePair(tenantID, versionID)
-	rows, err := r.queries.DeleteApplicationVersion(ctx, dbsqlc.DeleteApplicationVersionParams{VersionID: versionUUID, TenantID: tenantUUID})
+	var item RestoreTask
+	var started, completed pgtype.Timestamptz
+	err = r.pool.QueryRow(ctx, `SELECT id,tenant_id,project_id,application_version_id,requested_by,COALESCE(current_project_revision,''),expected_authoring_epoch,target_authoring_epoch,state,stage,COALESCE(backup_bucket,''),COALESCE(backup_key,''),COALESCE(backup_hash,''),COALESCE(backup_cipher_hash,''),COALESCE(backup_size,0),COALESCE(backup_key_id,''),COALESCE(backup_project_revision,''),rolled_back,workspace_was_running,COALESCE(error_message,''),started_at,completed_at,created_at,updated_at FROM authoring_restore_tasks WHERE id=$1 AND tenant_id=$2`, task, tenant).Scan(&item.ID, &item.TenantID, &item.ProjectID, &item.VersionID, &item.RequestedBy, &item.CurrentProjectRevision, &item.ExpectedEpoch, &item.TargetEpoch, &item.State, &item.Stage, &item.BackupBucket, &item.BackupKey, &item.BackupHash, &item.BackupCipherHash, &item.BackupSize, &item.BackupKeyID, &item.BackupProjectRevision, &item.RolledBack, &item.WorkspaceWasRunning, &item.ErrorMessage, &started, &completed, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		return RestoreTask{}, mapNotFound(err)
+	}
+	item.StartedAt = timePointer(started)
+	item.CompletedAt = timePointer(completed)
+	return item, nil
+}
+
+func (r *PostgreSQLRepository) DeleteVersion(ctx context.Context, tenantID, versionID string) error {
+	item, err := r.GetVersion(ctx, tenantID, versionID)
 	if err != nil {
 		return err
 	}
-	if rows == 0 {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, item.ProjectID); err != nil {
+		return err
+	}
+	command, err := tx.Exec(ctx, `UPDATE application_versions v SET status='deleted',deleted_at=now(),updated_at=now() WHERE v.id=$1 AND v.tenant_id=$2 AND NOT EXISTS(SELECT 1 FROM node_deployments d WHERE d.application_version_id=v.id AND d.deleted_at IS NULL AND d.status IN ('pending','deploying','running')) AND NOT EXISTS(SELECT 1 FROM authoring_restore_tasks t WHERE t.application_version_id=v.id AND t.state IN ('queued','staging','restoring_workspace','restoring_scenes','restoring_data','finalizing','compensating'))`, versionID, tenantID)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
 		return ErrVersionInUse
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *PostgreSQLRepository) ListProjectDeployments(ctx context.Context, tenantID, projectID string) ([]Deployment, error) {
@@ -311,6 +357,7 @@ func versionFromModel(row dbsqlc.ApplicationVersion) Version {
 		Name: textString(row.Name), Description: textString(row.Description), Status: row.Status,
 		SourceHash: textString(row.SourceHash), ArtifactKey: textString(row.ArtifactKey), ArtifactBucket: textString(row.ArtifactBucket), ArtifactHash: textString(row.ArtifactHash),
 		ArtifactSize: int64Value(row.ArtifactSize), ManifestHash: textString(row.ManifestHash), ChecksumsHash: textString(row.ChecksumsHash), SigningKeyID: textString(row.SigningKeyID), ErrorMessage: textString(row.ErrorMessage), CompletedAt: timePointer(row.CompletedAt),
+		Restorable: row.Restorable, AuthoringProjectRevision: textString(row.AuthoringProjectRevision), AuthoringSnapshotSchema: textString(row.AuthoringSnapshotSchema), AuthoringSnapshotBucket: textString(row.AuthoringSnapshotBucket), AuthoringSnapshotKey: textString(row.AuthoringSnapshotKey), AuthoringSnapshotHash: textString(row.AuthoringSnapshotHash), AuthoringSnapshotCipherHash: textString(row.AuthoringSnapshotCipherHash), AuthoringSnapshotKeyID: textString(row.AuthoringSnapshotKeyID), AuthoringSnapshotSize: int64Value(row.AuthoringSnapshotSize),
 		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 	}
 	decodeJSONValue(row.Manifest, &item.Manifest)

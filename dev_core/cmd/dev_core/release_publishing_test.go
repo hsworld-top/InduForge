@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestConfigureReleasePublishingKeepsDefaultDisabled(t *testing.T) {
-	if err := configureReleasePublishing(nil, config.Config{}, nil); err != nil {
+	if err := configureReleasePublishing(nil, nil, nil, nil, nil, nil, config.Config{}, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -26,8 +27,8 @@ func TestConfigureReleasePublishingWiresEnabledDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := deployment.NewService(nil, nil, nil, deployment.ServiceConfig{})
-	cfg := config.Config{ReleaseBuilderEnabled: true, ReleaseBuilderImage: "builder", ReleaseBuilderID: "release-builder-v1", ReleaseSigningKeyFile: file, ReleaseSigningKeyID: "key-v1", MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0", DataServiceURL: "http://data.example", CodeWorkspaceVolume: "workspaces", WorkspaceRoot: t.TempDir()}
-	if err := configureReleasePublishing(s, cfg, nil); err != nil {
+	cfg := config.Config{ReleaseBuilderEnabled: true, ReleaseBuilderImage: "builder", ReleaseBuilderID: "release-builder-v1", ReleaseSigningKeyFile: file, ReleaseSigningKeyID: "key-v1", MinNodeAgentVersion: "1.0.0", MinRuntimeVersion: "1.0.0", DataServiceURL: "http://data.example", CodeWorkspaceVolume: "workspaces", WorkspaceRoot: t.TempDir(), AuthoringSnapshotCurrentKeyID: "snapshot-v1", AuthoringSnapshotKeyring: map[string]string{"snapshot-v1": base64.StdEncoding.EncodeToString(make([]byte, 32))}}
+	if err := configureReleasePublishing(s, nil, nil, nil, nil, nil, cfg, nil); err != nil {
 		t.Fatal(err)
 	}
 }

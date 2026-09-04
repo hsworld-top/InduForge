@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
+	"github.com/indu-forge/dev_core/internal/authoringsnapshot"
 	projectaccess "github.com/indu-forge/dev_core/internal/project"
 )
 
@@ -23,39 +24,46 @@ var (
 	ErrVersionInUse          = errors.New("版本正在使用，不能删除")
 	ErrScenesNotReady        = errors.New("场景草稿未提交或运行工件校验失败")
 	ErrLegacyReleaseDisabled = errors.New("正式版本构建与交付尚未开放，当前不能创建正式部署；已保存源码仍可用于开发预览")
+	ErrAuthoringBusy         = errors.New("工程正在发布或恢复，请稍后重试")
 )
 
 type Project struct {
-	ID            string
-	TenantID      string
-	Name          string
-	Code          string
-	WorkspacePath string
-	CreatedBy     string
-	Visibility    string
+	ID             string
+	TenantID       string
+	Name           string
+	Code           string
+	WorkspacePath  string
+	CreatedBy      string
+	Visibility     string
+	AuthoringEpoch int64
 }
 
 type Version struct {
-	ID             string
-	TenantID       string
-	ProjectID      string
-	Version        string
-	Name           string
-	Description    string
-	Status         string
-	SourceHash     string
-	ArtifactKey    string
-	ArtifactBucket string
-	ArtifactHash   string
-	ArtifactSize   int64
-	Manifest       map[string]any
-	ManifestHash   string
-	ChecksumsHash  string
-	SigningKeyID   string
-	ErrorMessage   string
-	CompletedAt    *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                                                                         string
+	TenantID                                                                   string
+	ProjectID                                                                  string
+	Version                                                                    string
+	Name                                                                       string
+	Description                                                                string
+	Status                                                                     string
+	SourceHash                                                                 string
+	ArtifactKey                                                                string
+	ArtifactBucket                                                             string
+	ArtifactHash                                                               string
+	ArtifactSize                                                               int64
+	Manifest                                                                   map[string]any
+	ManifestHash                                                               string
+	ChecksumsHash                                                              string
+	SigningKeyID                                                               string
+	Restorable                                                                 bool
+	AuthoringProjectRevision                                                   string
+	AuthoringSnapshotSchema, AuthoringSnapshotBucket, AuthoringSnapshotKey     string
+	AuthoringSnapshotHash, AuthoringSnapshotCipherHash, AuthoringSnapshotKeyID string
+	AuthoringSnapshotSize                                                      int64
+	ErrorMessage                                                               string
+	CompletedAt                                                                *time.Time
+	CreatedAt                                                                  time.Time
+	UpdatedAt                                                                  time.Time
 }
 
 type Deployment struct {
@@ -107,6 +115,11 @@ type VersionReadyInput struct {
 	Bucket, ArtifactKey, ArtifactHash, ManifestHash, ChecksumsHash, SigningKeyID string
 	ArtifactSize                                                                 int64
 	Manifest                                                                     map[string]any
+	AuthoringSnapshotSchema, AuthoringSnapshotBucket, AuthoringSnapshotKey       string
+	AuthoringSnapshotHash, AuthoringSnapshotCipherHash, AuthoringSnapshotKeyID   string
+	AuthoringProjectRevision                                                     string
+	AuthoringSnapshotSize                                                        int64
+	Restorable                                                                   bool
 }
 
 type DeployInput struct {
@@ -134,6 +147,11 @@ type Repository interface {
 	ListProjectDeployments(context.Context, string, string) ([]Deployment, error)
 	Deploy(context.Context, string, DeployInput) ([]Deployment, error)
 	Operate(context.Context, string, string, string) (Deployment, error)
+	AcquireAuthoringFence(context.Context, string, string, string, string, time.Duration) (string, error)
+	ReleaseAuthoringFence(context.Context, string, string, string, string) error
+	RenewAuthoringFence(context.Context, string, string, string, string, time.Duration) error
+	GetRestoreTask(context.Context, string, string) (RestoreTask, error)
+	CreateRestoreTask(context.Context, string, string, string) (RestoreTask, error)
 }
 
 type ServiceConfig struct{ ArtifactBucket, MinNodeAgentVersion, MinRuntimeVersion string }
@@ -148,6 +166,15 @@ type ReleaseSource struct {
 }
 type ReleaseSourceBuilder interface {
 	BuildReleaseSource(context.Context, Project, Version, string) (ReleaseSource, error)
+}
+type FormalAuthoringBuilder interface {
+	Capture(context.Context, auth.User, Project) (CapturedAuthoring, error)
+	BuildCaptured(context.Context, Project, Version, CapturedAuthoring) (AuthoringReleaseResult, error)
+	BuildDevelopmentCaptured(context.Context, Project, Version, CapturedAuthoring) (AuthoringReleaseResult, error)
+	DeleteSnapshot(context.Context, string) error
+}
+type AuthoringCaptureCoordinator interface {
+	Capture(context.Context, auth.User, Project, string, func(context.Context) (CapturedAuthoring, error)) (CapturedAuthoring, error)
 }
 
 // DevelopmentRequirementsSource 只读取当前数据域运行工件，用于开发部署在创建
@@ -171,14 +198,17 @@ type SigningConfig struct {
 }
 
 type Service struct {
-	repository    Repository
-	workspace     Workspace
-	store         ArtifactStore
-	config        ServiceConfig
-	events        Events
-	releases      ReleaseValidator
-	sourceBuilder ReleaseSourceBuilder
-	signing       SigningConfig
+	repository       Repository
+	workspace        Workspace
+	store            ArtifactStore
+	config           ServiceConfig
+	events           Events
+	releases         ReleaseValidator
+	sourceBuilder    ReleaseSourceBuilder
+	authoringBuilder FormalAuthoringBuilder
+	authoringCapture AuthoringCaptureCoordinator
+	restoreScheduler RestoreScheduler
+	signing          SigningConfig
 }
 
 type Events interface {
@@ -197,7 +227,14 @@ func (s *Service) SetEvents(events Events) { s.events = events }
 
 func (s *Service) SetReleaseValidator(validator ReleaseValidator)       { s.releases = validator }
 func (s *Service) SetReleaseSourceBuilder(builder ReleaseSourceBuilder) { s.sourceBuilder = builder }
-func (s *Service) SetSigningConfig(config SigningConfig)                { s.signing = config }
+func (s *Service) SetFormalAuthoringBuilder(builder FormalAuthoringBuilder) {
+	s.authoringBuilder = builder
+}
+func (s *Service) SetAuthoringCaptureCoordinator(coordinator AuthoringCaptureCoordinator) {
+	s.authoringCapture = coordinator
+}
+func (s *Service) SetRestoreScheduler(scheduler RestoreScheduler) { s.restoreScheduler = scheduler }
+func (s *Service) SetSigningConfig(config SigningConfig)          { s.signing = config }
 
 // DevelopmentEngineRequirements 返回当前工程数据工件决定的开发部署引擎；开发态
 // 不创建 application_versions，也不允许页面从历史版本猜测可选引擎。
@@ -235,14 +272,21 @@ func (s *Service) BuildDevelopmentArtifact(ctx context.Context, actor auth.User,
 	if err = requireProject(actor, project, auth.CapabilityDeploymentExecute); err != nil {
 		return DevelopmentArtifact{}, err
 	}
-	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
+	if s.authoringBuilder == nil || s.authoringCapture == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
 		return DevelopmentArtifact{}, fmt.Errorf("开发制品构建器或签名配置未配置")
 	}
 	version := Version{ID: uuid.NewString(), ProjectID: project.ID, TenantID: project.TenantID, Version: "__DEV__"}
-	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project, version, authorization)
+	captured, err := s.authoringCapture.Capture(ctx, actor, project, version.ID, func(captureCtx context.Context) (CapturedAuthoring, error) {
+		return s.authoringBuilder.Capture(captureCtx, actor, project)
+	})
+	if err != nil {
+		return DevelopmentArtifact{}, fmt.Errorf("捕获开发制品输入失败: %w", err)
+	}
+	authoring, err := s.authoringBuilder.BuildDevelopmentCaptured(ctx, project, version, captured)
 	if err != nil {
 		return DevelopmentArtifact{}, fmt.Errorf("构建开发制品输入失败: %w", err)
 	}
+	source := authoring.Source
 	result, err := assembleFormalRelease(project, version, source, s.signing, s.config, time.Now().UTC())
 	if err != nil {
 		return DevelopmentArtifact{}, fmt.Errorf("组装开发制品失败: %w", err)
@@ -309,13 +353,28 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 		}
 		return Version{}, cause
 	}
-	if s.sourceBuilder == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
+	if s.authoringBuilder == nil || s.authoringCapture == nil || len(s.signing.Key) != ed25519.PrivateKeySize || strings.TrimSpace(s.signing.KeyID) == "" {
 		return fail("configuration", fmt.Errorf("正式 Release 构建器或签名配置未配置"))
 	}
-	source, err := s.sourceBuilder.BuildReleaseSource(ctx, project, version, input.Authorization)
+	captured, err := s.authoringCapture.Capture(ctx, actor, project, version.ID, func(captureCtx context.Context) (CapturedAuthoring, error) {
+		return s.authoringBuilder.Capture(captureCtx, actor, project)
+	})
+	if err != nil {
+		return fail("capture", fmt.Errorf("捕获正式 Release 开发态失败: %w", err))
+	}
+	authoring, err := s.authoringBuilder.BuildCaptured(ctx, project, version, captured)
 	if err != nil {
 		return fail("source", fmt.Errorf("读取正式 Release 构建输入失败: %w", err))
 	}
+	keepSnapshot := false
+	defer func() {
+		if !keepSnapshot {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = s.authoringBuilder.DeleteSnapshot(cleanupCtx, authoring.Key)
+		}
+	}()
+	source := authoring.Source
 	result, err := assembleFormalRelease(project, version, source, s.signing, s.config, time.Now().UTC())
 	if err != nil {
 		return fail("assemble", fmt.Errorf("组装正式 Release 失败: %w", err))
@@ -325,10 +384,16 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 		return fail("upload", fmt.Errorf("上传正式 Release 失败: %w", err))
 	}
 	ready.SigningKeyID = s.signing.KeyID
+	ready.AuthoringSnapshotSchema, ready.AuthoringSnapshotBucket, ready.AuthoringSnapshotKey = authoringsnapshot.SchemaVersion, authoring.Bucket, authoring.Key
+	ready.AuthoringSnapshotHash, ready.AuthoringSnapshotCipherHash, ready.AuthoringSnapshotSize = authoring.ContentHash, authoring.CipherHash, authoring.Size
+	// 只有完整恢复执行器（含独立 workspace origin、双域 fence 与持久 Saga）接线后，
+	// 新版本才对外声明可恢复；未配置环境继续失败关闭。
+	ready.AuthoringSnapshotKeyID, ready.AuthoringProjectRevision, ready.Restorable = authoring.KeyID, authoring.ProjectRevision, s.restoreScheduler != nil
 	completed, err := s.repository.MarkVersionReady(ctx, actor.TenantID, version.ID, ready)
 	if err != nil {
 		return fail("mark-ready", fmt.Errorf("确认正式 Release 失败: %w", err))
 	}
+	keepSnapshot = true
 	return completed, nil
 }
 

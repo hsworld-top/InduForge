@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
 	platformcache "github.com/indu-forge/dev_core/internal/platform/cache"
+	"github.com/indu-forge/dev_core/internal/project"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -503,7 +504,7 @@ func (s *Service) CreateAssetEditorSession(ctx context.Context, actor auth.User,
 	}
 	now := time.Now().UTC()
 	session := AssetEditorSession{ID: uuid.NewString(), UserID: actor.ID, TenantID: actor.TenantID,
-		ProjectID: projectID, AssetID: asset.ID, Provider: asset.Provider, ExpiresAt: now.Add(SessionTTL)}
+		ProjectID: projectID, AuthoringEpoch: project.AuthoringEpochFromContext(ctx), AssetID: asset.ID, Provider: asset.Provider, ExpiresAt: now.Add(SessionTTL)}
 	encoded, _ := json.Marshal(session)
 	if err := s.sessions.PutSceneSession(ctx, session.ID, string(encoded), SessionTTL); err != nil {
 		return EditorSessionResponse{}, err
@@ -525,6 +526,9 @@ func (s *Service) ResolveAssetSession(ctx context.Context, actor auth.User, sess
 	}
 	if session.ID != sessionID || session.UserID != actor.ID || session.TenantID != actor.TenantID || time.Now().After(session.ExpiresAt) {
 		return AssetEditorSession{}, SceneAsset{}, ErrSessionForbidden
+	}
+	if session.AuthoringEpoch == "" || session.AuthoringEpoch != project.AuthoringEpochFromContext(ctx) {
+		return AssetEditorSession{}, SceneAsset{}, ErrSessionExpired
 	}
 	if err := s.requireWrite(ctx, actor, session.ProjectID); err != nil {
 		return AssetEditorSession{}, SceneAsset{}, err

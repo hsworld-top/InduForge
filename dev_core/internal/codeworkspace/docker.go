@@ -46,8 +46,8 @@ type ContainerState struct {
 	Running  bool
 	Health   string
 	HostPort string
-	// ServicePorts 保存工作区各正式入口的宿主端口。Docker 旧路径只提供 code，
-	// Kubernetes 路径通过 NodePort 提供四个入口，二者共用同一响应契约。
+	// ServicePorts 保存本机 Docker 开发路径的宿主端口。Kubernetes 工作区只
+	// 创建 ClusterIP Service，由中心工作区网关访问，绝不发布 NodePort。
 	ServicePorts map[string]string
 	Labels       map[string]string
 }

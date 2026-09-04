@@ -615,6 +615,7 @@ paths:
       operationId: listProjects
       tags: [project]
       summary: listProjects
+      description: 稳定按updated_at DESC、id DESC分页。每个data.list项目附deploymentSummary，由当前页项目ID一次租户隔离批量查询；包含deploymentCount、environmentCount、operationInProgress、updatedAt、primarySelection及primaryDeployment。仅deploymentCount=1时primarySelection=unique并返回primaryDeployment；0为none，多部署为multiple且primaryDeployment=null，不以最近/默认环境部署代表全部。primary的mode为development|production，observedStatus沿正式部署状态，不新增deploying枚举。pending run、删除请求，或非失败/非异常部署中未失败运行引擎的desiredGeneration大于observedGeneration时，operationInProgress为true；updating保留代次细分。失败/异常部署、失败服务及反向代次不持续阻塞异常处理。placements/services是现有槽位预填，不替代当前制品的required引擎判断。摘要查询失败则整个列表失败，不返回伪造0。
       responses:
         '200':
           description: 成功
@@ -958,6 +959,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/authoring-context:
+    get:
+      operationId: getProjectAuthoringContext
+      tags: [project]
+      summary: getProjectAuthoringContext
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        default: { description: 失败, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
   /projects/{projectId}/delete-impact:
     get:
       operationId: getProjectDeleteImpact
@@ -1577,6 +1591,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+  /publish/versions/{versionId}/restore-development:
+    post:
+      operationId: restoreVersionDevelopment
+      tags: [deployment]
+      summary: restoreVersionDevelopment
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RestoreDevelopmentRequest' }
+      responses:
+        '202': { description: 已受理, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        default: { description: 失败, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+  /publish/restore-tasks/{taskId}:
+    get:
+      operationId: getRestoreDevelopmentTask
+      tags: [deployment]
+      summary: getRestoreDevelopmentTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: 成功, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        default: { description: 失败, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
   /deployments/{deploymentId}/deploy:
     post:
       operationId: deployPublishedVersion
@@ -2897,6 +2942,7 @@ paths:
   /ops/runtime-environments:
     get:
       operationId: listRuntimeEnvironments
+      description: 每项projectCount为当前租户该环境未删除的部署总量；runningDeploymentCount只计desiredStatus与observedStatus均running、至少存在运行引擎且所有引擎状态与代次均收敛的部署。两者由单次SQL按租户和环境批量聚合。
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -2942,9 +2988,25 @@ paths:
                 { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
             },
         }
+  /ops/runtime-environments/{id}/overview:
+    get:
+      operationId: getRuntimeEnvironmentOverview
+      description: 当前租户环境概览单次数据库快照。environment:read 权限，已删除/不存在/异租户环境不可读。data含environmentId、snapshotAt、thresholds、deployments互斥全量分类、nodes全量指标和riskNodes最多5条。未知或过期百分比为null。风险全局SQL排序后取前5，同级磁盘使用率降序再id。45秒心跳新鲜度，85/95仅磁盘容量展示阈值，不改变运行状态。snapshotAt是读取时间，不是引擎健康采样时间；running为最近确认状态与代次一致且节点心跳新鲜。详见运行环境概览读模型契约。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
   /ops/runtime-environments/{id}:
     get:
       operationId: getRuntimeEnvironment
+      description: projectCount为当前租户当前环境未删除部署总量；runningDeploymentCount为实际运行且所有引擎状态与代次收敛的部署数量，与环境列表口径一致。
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -3108,6 +3170,7 @@ paths:
   /ops/runtime-environments/{id}/foundation-services:
     get:
       operationId: listRuntimeEnvironmentFoundationServices
+      description: 返回 data.items 与 total。每项 observedStale 为服务端权威观测时效：按数据库时间超过或等于45秒或observedAt为空时为true，与环境汇总健康数一致；前端不得使用浏览器时间代替。
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -3265,6 +3328,7 @@ paths:
           { $ref: '#/components/parameters/OpsSearch' },
           { $ref: '#/components/parameters/OpsKeyword' },
           { $ref: '#/components/parameters/OpsProjectId' },
+          { $ref: '#/components/parameters/OpsEnvironmentId' },
         ]
       responses:
         {
@@ -3346,9 +3410,69 @@ paths:
                 { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
             },
         }
+  /ops/records:
+    get:
+      operationId: listOpsRecords
+      description: 统一只读运维记录；data.list 与 data.pagination{page,limit,total}。字段及状态语义见统一运维记录查询契约。部署 run 每任务一行；环境/基础服务/节点为事件，requested success 仅 accepted，不代表执行成功。逻辑删除对象保留摘要，taskRef 为空时不可展开。租户由会话决定；任务源需 node:read，事件源需 node:read 与 environment:read。节点三类镜像以 cluster 源为准，cluster 事件无历史环境归属，环境过滤不匹配。时间和 ID 稳定排序，搜索为字面包含匹配。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 20 } }
+        - { name: search, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: recordType, in: query, schema: { type: string, enum: [operation, event] } }
+        - { name: objectType, in: query, schema: { type: string, enum: [deployment, foundation, environment, node, cluster] } }
+        - { name: objectId, in: query, schema: { type: string, format: uuid } }
+        - { name: environmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [accepted, running, success, failed, warning, recovered, info] } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: sort, in: query, schema: { type: string, enum: [time_desc, time_asc], default: time_desc } }
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /ops/project-deployments/{id}/runs:
+    get:
+      operationId: listProjectDeploymentRuns
+      description: 当前租户未删除部署的操作历史，NodeRead 权限与部署详情一致。data.list 每项沿用 run 字段并增加 actorDisplayName（同租户用户 full_name 优先 username，缺失为未知用户）、durationMs（completedAt-startedAt 毫秒数且不小于零，未完成为 null）。data.pagination 为 page、limit、total。按 startedAt DESC、id DESC 稳定排序，固定批量查询。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 20 } }
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /ops/deployment-runs/{id}/events/page:
+    get:
+      operationId: listDeploymentRunEventsPage
+      description: 当前租户未删除部署的单次 run 事件，NodeRead 权限。data.list 为 id、deploymentRunId、stage、message、createdAt；data.pagination 为 page、limit、total。按 createdAt ASC、id ASC 稳定排序。旧 events 接口不变。不存在、跨租户或已删除部署均不可读取。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 20 } }
+      responses:
+        '200':
+          description: success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
   /ops/project-deployments/{id}/{action}:
     post:
       operationId: operateProjectDeployment
+      description: 整体生命周期操作。redeploy 重下发当前存储制品（含开发态 descriptor），不重新构建、不升级、不改模式/节点/端口、不清理数据；内部 run.operation 沿用 deploy，message 与 queued 事件注明重新部署。运行中任务及删除中的部署拒绝并发操作。
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -3358,7 +3482,7 @@ paths:
             name: action,
             in: path,
             required: true,
-            schema: { type: string, enum: [start, stop, restart] },
+            schema: { type: string, enum: [start, stop, restart, redeploy] },
           }
       responses:
         {
@@ -3574,6 +3698,13 @@ components:
         in: query,
         schema: { type: string, format: uuid },
         description: 精确筛选工程部署,
+      }
+    OpsEnvironmentId:
+      {
+        name: environmentId,
+        in: query,
+        schema: { type: string, format: uuid },
+        description: 在当前租户内精确筛选运行环境；items 与 total 使用相同条件,
       }
   securitySchemes:
     bearerAuth:
@@ -3796,6 +3927,12 @@ components:
       properties:
         name: { type: string }
         description: { type: string }
+    RestoreDevelopmentRequest:
+      type: object
+      required: [confirmation]
+      additionalProperties: false
+      properties:
+        confirmation: { type: string, enum: [RESTORE] }
     DeployRequest:
       type: object
       required: [nodeIds]
