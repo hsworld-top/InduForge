@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,12 +27,13 @@ type ProjectRepository interface {
 }
 
 type Config struct {
-	Image                    string
-	BindHost                 string
-	AllowedOrigins           string
-	VolumeName               string
-	DefaultTemplateProjectID string
-	DefaultTemplateID        string
+	Image                         string
+	BindHost                      string
+	AllowedOrigins                string
+	WorkspacePublicOriginTemplate string
+	VolumeName                    string
+	DefaultTemplateProjectID      string
+	DefaultTemplateID             string
 }
 
 type Status struct {
@@ -71,6 +73,7 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	config.Image = strings.TrimSpace(config.Image)
 	config.BindHost = strings.TrimSpace(config.BindHost)
 	config.AllowedOrigins = strings.TrimSpace(config.AllowedOrigins)
+	config.WorkspacePublicOriginTemplate = strings.TrimSpace(config.WorkspacePublicOriginTemplate)
 	config.VolumeName = strings.TrimSpace(config.VolumeName)
 	config.DefaultTemplateProjectID = strings.TrimSpace(config.DefaultTemplateProjectID)
 	config.DefaultTemplateID = strings.TrimSpace(config.DefaultTemplateID)
@@ -85,6 +88,9 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	}
 	if (config.DefaultTemplateProjectID == "") != (config.DefaultTemplateID == "") {
 		return nil, fmt.Errorf("默认工程模板配置不完整")
+	}
+	if _, err := workspacePublicHosts(config.WorkspacePublicOriginTemplate, "00000000-0000-0000-0000-000000000000"); err != nil {
+		return nil, err
 	}
 	return &Service{projects: projects, engine: engine, config: config, now: time.Now}, nil
 }
@@ -389,6 +395,18 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		}
 	}
 	environment := []string{"PNPM_HOME=/cache/pnpm", "npm_config_store_dir=/cache/pnpm-store", "XDG_CACHE_HOME=/cache"}
+	publicHosts, err := workspacePublicHosts(s.config.WorkspacePublicOriginTemplate, item.ID)
+	if err != nil {
+		return ContainerSpec{}, err
+	}
+	if len(publicHosts) > 0 {
+		// 仅在中心公开工作区模板启用时给两个开发服务注入自身的精确 Host。
+		// 不复用 Origin 白名单，更不能使用通配符，避免 DNS rebinding 扩大源码暴露面。
+		environment = append(environment,
+			"PI_WEB_ALLOWED_HOSTS="+publicHosts["ai"],
+			"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="+publicHosts["preview"],
+		)
+	}
 	if s.config.AllowedOrigins != "" {
 		// 工作区四入口由中心页面跨端口访问；来源清单随中心部署配置注入，
 		// 不能沿用镜像内仅供本机开发的 localhost 默认值。
@@ -415,6 +433,35 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "cache"), Target: "/cache"},
 		},
 	}, nil
+}
+
+// workspacePublicHosts 从受控公开 Origin 模板为一个工程生成服务自身的 Hostname。
+// URL 的端口属于网关/浏览器 Origin，不应传给 Pi Web 或 Vite 的 allowedHosts 配置。
+func workspacePublicHosts(template, projectID string) (map[string]string, error) {
+	template = strings.TrimSpace(template)
+	if template == "" {
+		return nil, nil
+	}
+	if !strings.Contains(template, "{projectId}") || !strings.Contains(template, "{service}") {
+		return nil, fmt.Errorf("工作区公开 Origin 模板必须包含 {projectId} 和 {service}")
+	}
+	if _, err := uuid.Parse(projectID); err != nil {
+		return nil, fmt.Errorf("工作区公开 Origin 模板工程 ID 无效: %w", err)
+	}
+	hosts := make(map[string]string, 2)
+	for _, serviceName := range []string{"ai", "preview"} {
+		origin := strings.NewReplacer("{projectId}", strings.ToLower(projectID), "{service}", serviceName).Replace(template)
+		parsed, err := url.Parse(origin)
+		if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+			return nil, fmt.Errorf("工作区公开 Origin 模板无效")
+		}
+		host := strings.ToLower(parsed.Hostname())
+		if strings.Contains(host, "*") {
+			return nil, fmt.Errorf("工作区公开 Origin 模板不得使用通配 Host")
+		}
+		hosts[serviceName] = host
+	}
+	return hosts, nil
 }
 
 func (s *Service) validateOwnership(state ContainerState, projectID string) error {

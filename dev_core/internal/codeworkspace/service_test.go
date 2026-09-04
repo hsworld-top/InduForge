@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/indu-forge/dev_core/internal/auth"
@@ -193,6 +194,37 @@ func TestBuiltinDemoWorkspaceReceivesOfficialDefaultTemplateOnly(t *testing.T) {
 	}
 	if _, err := NewService(fakeProjects{}, &fakeEngine{}, Config{Image: "image", VolumeName: "workspaces", DefaultTemplateProjectID: demoID}); err == nil {
 		t.Fatal("不完整默认模板配置必须拒绝")
+	}
+}
+
+func TestWorkspacePublicOriginInjectsExactAIAndViteHosts(t *testing.T) {
+	root := t.TempDir()
+	item := project.Project{ID: testProjectID, TenantID: "tenant", CreatedBy: "owner", Visibility: "private", WorkspacePath: filepath.Join(root, testProjectID, "workspace")}
+	engine := &fakeEngine{inspectErr: ErrContainerNotFound}
+	service, err := NewService(fakeProjects{item: item}, engine, Config{
+		Image: "image", VolumeName: "workspaces", WorkspacePublicOriginTemplate: "https://{service}-{projectId}.workspace.induforge.test:18443",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID); err != nil {
+		t.Fatal(err)
+	}
+	environment := engine.created[0].Environment
+	if !slices.Contains(environment, "PI_WEB_ALLOWED_HOSTS=ai-"+testProjectID+".workspace.induforge.test") ||
+		!slices.Contains(environment, "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=preview-"+testProjectID+".workspace.induforge.test") {
+		t.Fatalf("工作区未注入精确 AI/Vite Host: %#v", environment)
+	}
+	for _, value := range environment {
+		if strings.Contains(value, "workspace.induforge.test:") || strings.Contains(value, "*") {
+			t.Fatalf("服务允许 Host 不得携带端口或通配符: %#v", environment)
+		}
+	}
+}
+
+func TestWorkspacePublicOriginRejectsWildcardHost(t *testing.T) {
+	if _, err := NewService(fakeProjects{}, &fakeEngine{}, Config{Image: "image", VolumeName: "workspaces", WorkspacePublicOriginTemplate: "https://{service}-{projectId}.*.example.test"}); err == nil {
+		t.Fatal("工作区公开模板不得接受通配 Host")
 	}
 }
 

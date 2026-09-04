@@ -141,7 +141,7 @@ func main() {
 		os.Exit(1)
 	}
 	codeWorkspaceService, err := codeworkspace.NewService(projectRepository, workspaceEngine, codeworkspace.Config{
-		Image: cfg.CodeServerImage, BindHost: cfg.CodeServerBindHost, AllowedOrigins: cfg.CodeWorkspaceAllowedOrigins, VolumeName: cfg.CodeWorkspaceVolume,
+		Image: cfg.CodeServerImage, BindHost: cfg.CodeServerBindHost, AllowedOrigins: cfg.CodeWorkspaceAllowedOrigins, WorkspacePublicOriginTemplate: cfg.WorkspacePublicOriginTemplate, VolumeName: cfg.CodeWorkspaceVolume,
 		DefaultTemplateProjectID: platformdb.BuiltinDemoProjectID, DefaultTemplateID: "vite-vue-js",
 	})
 	if err != nil {

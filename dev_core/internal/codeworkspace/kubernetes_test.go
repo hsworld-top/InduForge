@@ -33,7 +33,7 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 	engine := &KubernetesEngine{namespace: "induforge-system", workspaceRoot: "/var/lib/induforge/center/workspaces", baseURL: server.URL, token: "test", client: server.Client()}
 	spec := ContainerSpec{
 		Name: "induforge-code-project-1", Image: "induforge/designer-code-server:test", Command: []string{"--bind-addr", "0.0.0.0:3000"}, WorkingDir: "/workspace",
-		Environment: []string{"PNPM_HOME=/cache/pnpm"}, Labels: map[string]string{"com.induforge.managed": "true"},
+		Environment: []string{"PNPM_HOME=/cache/pnpm", "PI_WEB_ALLOWED_HOSTS=ai-project-1.workspace.induforge.test", "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=preview-project-1.workspace.induforge.test"}, Labels: map[string]string{"com.induforge.managed": "true"},
 		Mounts: []Mount{
 			{Target: "/workspace", Subpath: "project-1/workspace"},
 			{Target: "/workspace/.induforge/context", Subpath: "project-1/context-state/current", ReadOnly: true},
@@ -59,6 +59,8 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 		`"mountPath":"/project/workspace/.induforge/context","name":"workspaces","readOnly":true,"subPath":"project-1/context-state/current"`,
 		`chown 1000:1000 /project/workspace/.induforge`,
 		`"INDUFORGE_KUBERNETES_WORKSPACE","value":"true"`,
+		`"PI_WEB_ALLOWED_HOSTS","value":"ai-project-1.workspace.induforge.test"`,
+		`"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS","value":"preview-project-1.workspace.induforge.test"`,
 		`"name":"code-workspace"`,
 	} {
 		if !strings.Contains(payload, expected) {

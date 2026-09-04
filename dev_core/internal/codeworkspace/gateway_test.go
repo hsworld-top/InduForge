@@ -66,7 +66,7 @@ func newGatewayForTest(t *testing.T, transport http.RoundTripper) (*Gateway, *ga
 	guard := &gatewayEpochGuard{current: "epoch-7"}
 	service.SetAuthoringEpochGuard(guard)
 	gateway, err := NewGateway(service, GatewayConfig{
-		PublicOriginTemplate: "https://{service}-{projectId}.workspace.induforge.test",
+		PublicOriginTemplate: "https://{service}-{projectId}.workspace.induforge.test:18443",
 		CenterPublicOrigin:   "https://center.induforge.test",
 		Namespace:            "induforge-system",
 		AllowedOrigins:       "https://center.induforge.test",
@@ -90,7 +90,7 @@ func TestGatewayExchangesOneTimeTicketAndStripsCredentials(t *testing.T) {
 	}
 	parsed, _ := url.Parse(publicURL)
 	ticket := parsed.Query().Get(workspaceTicketParameter)
-	if ticket == "" || parsed.Host != "code-"+testProjectID+".workspace.induforge.test" {
+	if ticket == "" || parsed.Host != "code-"+testProjectID+".workspace.induforge.test:18443" {
 		t.Fatalf("公开工作区 URL 不符合独立 Origin 契约: %s", publicURL)
 	}
 
@@ -127,6 +127,9 @@ func TestGatewayExchangesOneTimeTicketAndStripsCredentials(t *testing.T) {
 	}
 	if transport.request.URL.Host != "induforge-code-"+testProjectID+".induforge-system.svc.cluster.local:3000" || transport.request.URL.Path != "/folder/file" {
 		t.Fatalf("工作区上游不是固定白名单目标: %s", transport.request.URL)
+	}
+	if transport.request.Host != parsed.Host {
+		t.Fatalf("工作区上游请求必须保留已授权的公开 Host: got=%s want=%s", transport.request.Host, parsed.Host)
 	}
 	for _, header := range []string{"Authorization", "Cookie", "X-Forwarded-Host", "X-InduForge-Internal-Token"} {
 		if transport.request.Header.Get(header) != "" {
@@ -303,8 +306,8 @@ func TestGatewayWrapNeverFallsThroughWorkspaceShapedHost(t *testing.T) {
 	gateway, _, _ := newGatewayForTest(t, &recordingTransport{})
 	called := false
 	handler := gateway.Wrap(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
-	request := httptest.NewRequest(http.MethodGet, "https://code-"+testProjectID+".workspace.induforge.test/api/v1/auth/me", nil)
-	request.Host = "code-" + testProjectID + ".workspace.induforge.test"
+	request := httptest.NewRequest(http.MethodGet, "https://code-"+testProjectID+".workspace.induforge.test:18443/api/v1/auth/me", nil)
+	request.Host = "code-" + testProjectID + ".workspace.induforge.test:18443"
 	result := httptest.NewRecorder()
 	handler.ServeHTTP(result, request)
 	if called || result.Code != http.StatusUnauthorized {

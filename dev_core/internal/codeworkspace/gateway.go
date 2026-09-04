@@ -337,7 +337,9 @@ func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGra
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
-		req.Host = upstream.Host
+		// 上游连接固定为集群 Service，但应用层 Host 必须保持已由网关 Host 正则、
+		// 一次票据和会话校验绑定的公开 Origin，供 Pi Web/Vite 精确允许主机校验。
+		req.Host = grant.Host
 		stripWorkspaceCredentials(req.Header)
 	}
 	proxy.ModifyResponse = func(response *http.Response) error {
