@@ -5,10 +5,15 @@ export type MicroAppContext = {
   projectId?: string | undefined
   projectName?: string | undefined
   tenantId?: string | undefined
+  authoringEpoch?: string | undefined
   theme?: 'light' | 'dark' | undefined
   locale?: 'zh' | 'en' | undefined
   onRefreshAuth?: (() => Promise<boolean>) | undefined
   onAuthExpired?: (() => void) | undefined
+  onAuthoringStale?: ((payload: {
+    projectId: string
+    currentAuthoringEpoch?: string
+  }) => void) | undefined
   onStateChange?: ((payload: { title?: string; dirty?: boolean }) => void) | undefined
   onOpenWorkspace?: ((request: WorkspaceOpenRequest) => void) | undefined
   onCloseWorkspace?: ((request: WorkspaceCloseRequest) => void) | undefined
@@ -68,6 +73,10 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     projectId,
     projectName: typeof input.projectName === 'string' ? input.projectName.trim() : undefined,
     tenantId: typeof input.tenantId === 'string' ? input.tenantId : undefined,
+    authoringEpoch:
+      typeof input.authoringEpoch === 'string' && input.authoringEpoch.trim()
+        ? input.authoringEpoch.trim()
+        : undefined,
     theme: input.theme === 'dark' ? 'dark' : 'light',
     locale: input.locale === 'en' ? 'en' : 'zh',
     onRefreshAuth:
@@ -77,6 +86,10 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     onAuthExpired:
       typeof input.onAuthExpired === 'function'
         ? (input.onAuthExpired as MicroAppContext['onAuthExpired'])
+        : undefined,
+    onAuthoringStale:
+      typeof input.onAuthoringStale === 'function'
+        ? (input.onAuthoringStale as MicroAppContext['onAuthoringStale'])
         : undefined,
     onStateChange:
       typeof input.onStateChange === 'function'
@@ -124,6 +137,15 @@ export const getMicroAppContext = (): MicroAppContext | null => currentContext
 export const getCurrentProjectId = (): string | null => currentContext?.projectId ?? null
 export const getCurrentProjectName = (): string | null => currentContext?.projectName ?? null
 export const getCurrentTenantId = (): string | null => currentContext?.tenantId ?? null
+export const getCurrentAuthoringEpoch = (): string | null =>
+  currentContext?.authoringEpoch ?? null
+
+export const reportAuthoringStale = (payload: {
+  projectId: string
+  currentAuthoringEpoch?: string
+}): void => {
+  currentContext?.onAuthoringStale?.(payload)
+}
 
 export const subscribeSceneCommitted = (
   listener: (event: SceneCommittedEvent) => void,

@@ -14,7 +14,12 @@ import type {
 } from 'axios'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { getCurrentTenantId, getMicroAppContext } from '@/runtime/wujie-context'
+import {
+  getCurrentAuthoringEpoch,
+  getCurrentTenantId,
+  getMicroAppContext,
+  reportAuthoringStale,
+} from '@/runtime/wujie-context'
 
 const DEFAULT_BUSINESS_ERROR_CODE = 30000
 const DIGITS_ONLY_RE = /^\d+$/
@@ -30,6 +35,12 @@ type ErrorResponseData = {
 
 type AuthRetryRequestConfig = InternalAxiosRequestConfig & {
   _authRetried?: boolean
+  authoringProjectId?: string
+}
+
+export type AuthoringRequestConfig = AxiosRequestConfig & {
+  /** 明确声明本次写操作所属工程，避免从 URL 猜测工程身份。 */
+  authoringProjectId?: string
 }
 
 export interface ApiResponsePayload<T = unknown> {
@@ -48,11 +59,11 @@ export interface ApiErrorMeta {
 }
 
 export interface UnwrappedHttpClient {
-  get: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>
-  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
-  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
-  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
-  delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>
+  get: <T = unknown>(url: string, config?: AuthoringRequestConfig) => Promise<T>
+  post: <T = unknown>(url: string, data?: unknown, config?: AuthoringRequestConfig) => Promise<T>
+  put: <T = unknown>(url: string, data?: unknown, config?: AuthoringRequestConfig) => Promise<T>
+  patch: <T = unknown>(url: string, data?: unknown, config?: AuthoringRequestConfig) => Promise<T>
+  delete: <T = unknown>(url: string, config?: AuthoringRequestConfig) => Promise<T>
   interceptors: AxiosInstance['interceptors']
   defaults: AxiosInstance['defaults']
 }
@@ -224,6 +235,38 @@ const requestCore = axios.create({
 })
 
 let standaloneRefreshPromise: Promise<boolean> | null = null
+const standaloneAuthoringEpochs = new Map<string, string>()
+const standaloneAuthoringContextRequests = new Map<string, Promise<string>>()
+
+async function fetchStandaloneAuthoringEpoch(projectId: string): Promise<string> {
+  const cached = standaloneAuthoringEpochs.get(projectId)
+  if (cached) return cached
+  const pending = standaloneAuthoringContextRequests.get(projectId)
+  if (pending) return pending
+
+  const request = fetch(`/api/v1/projects/${encodeURIComponent(projectId)}/authoring-context`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  }).then(async (response) => {
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    const data = asRecord(payload?.data)
+    const epoch = typeof data?.authoringEpoch === 'string' ? data.authoringEpoch.trim() : ''
+    if (!response.ok || toNumericCode(payload?.code) !== 0 || !epoch) {
+      throw new Error('无法获取工程编辑上下文，请刷新后重试')
+    }
+    standaloneAuthoringEpochs.set(projectId, epoch)
+    return epoch
+  })
+  standaloneAuthoringContextRequests.set(projectId, request)
+  return request.finally(() => standaloneAuthoringContextRequests.delete(projectId))
+}
+
+async function resolveAuthoringEpoch(projectId: string): Promise<string> {
+  const hostEpoch = getCurrentAuthoringEpoch()
+  if (hostEpoch && getMicroAppContext()?.projectId === projectId) return hostEpoch
+  return fetchStandaloneAuthoringEpoch(projectId)
+}
 
 function refreshStandaloneSession(): Promise<boolean> {
   if (standaloneRefreshPromise) return standaloneRefreshPromise
@@ -259,10 +302,14 @@ function handleAuthExpired(): void {
 }
 
 requestCore.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: AuthRetryRequestConfig) => {
     const tenantId = getCurrentTenantId()
     if (tenantId) {
       config.headers['X-Tenant-ID'] = tenantId
+    }
+    const projectId = String(config.authoringProjectId || '').trim()
+    if (projectId) {
+      config.headers['X-InduForge-Authoring-Epoch'] = await resolveAuthoringEpoch(projectId)
     }
     return config
   },
@@ -286,6 +333,24 @@ requestCore.interceptors.response.use(
     const config = error.config as AuthRetryRequestConfig | undefined
     if (response) {
       const { status, data } = response
+
+      const staleData = asRecord(data?.data)
+      if (status === 409 && staleData?.action === 'reload') {
+        const projectId = String(config?.authoringProjectId || '').trim()
+        const currentAuthoringEpoch =
+          typeof staleData.currentAuthoringEpoch === 'string'
+            ? staleData.currentAuthoringEpoch.trim()
+            : undefined
+        if (projectId) {
+          standaloneAuthoringEpochs.delete(projectId)
+          reportAuthoringStale({
+            projectId,
+            ...(currentAuthoringEpoch ? { currentAuthoringEpoch } : {}),
+          })
+        }
+        notifyRequestError('工程内容已被恢复或更新，当前编辑会话已失效，请重新打开工程')
+        return Promise.reject(error)
+      }
 
       switch (status) {
         case 401: {

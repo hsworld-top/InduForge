@@ -390,6 +390,32 @@
 | `GET`    | `/api/v1/deployments/project/:projectId/nodes`        | 获取可部署节点列表 |
 | `GET`    | `/api/v1/deployments/node/:nodeId/history`            | 获取节点部署历史   |
 
+#### 正式运维工程部署 `/api/v1/ops/project-deployments`
+
+工程列表 `GET /api/v1/projects` 的每个当前页项目包含权威 `deploymentSummary`：`deploymentCount`、`environmentCount`、`operationInProgress`、`updatedAt`、`primarySelection`、`primaryDeployment`。部署摘要使用当前页 ID 一次租户隔离批量查询，列表总查询数固定，不逐工程请求运维部署。仅且必须在未删除部署数为 1 时返回 primary；无部署为 `none/null`，多部署为 `multiple/null`，默认环境或最近更新时间均不能代表多部署工程整体。primary 的 mode 对外为 `development|production`，状态沿用部署的 desired/observed 状态；不新增 `deploying` 枚举。pending run、删除请求，或非失败/非异常部署中未失败运行引擎的期望代次大于观测代次时，表达操作进行中；`primaryDeployment.updating` 保留代次更新细分。失败/异常部署、失败服务和观测代次反向领先均不视为持续更新，不能阻止用户处理异常。placements/services 仅为现有槽位节点预填，当前制品所需引擎仍须使用开发态 requirements 或正式版本清单。不完整/失败的摘要不能伪装成零部署。
+
+环境概览使用 `GET /api/v1/ops/runtime-environments/:id/overview` 获取全局统计与风险节点前五，口径见 [运行环境概览读模型契约](运行环境概览读模型契约.md)。不使用当前部署/节点分页推算全量指标。
+
+统一记录入口为 `GET /api/v1/ops/records`，详细字段、权限、分页过滤和任务/事件状态边界见 [统一运维记录查询契约](统一运维记录查询契约.md)。它只读聚合现有来源，不创建或补写基础服务任务。
+
+运维实时订阅与状态对账遵守 [统一运维实时协议](统一运维实时协议.md)。HTTP 查询保持权威快照，实时通知不替代租户与能力校验。
+
+运行环境列表和详情中的 `projectCount` 是当前租户、当前环境下未删除部署的总量，包含停止、失败及执行中的部署；`runningDeploymentCount` 仅包含期望与观测均为 `running`、至少有一个运行引擎且所有引擎的状态和代次已收敛的部署。历史停用引擎须已停止并确认自身代次，不要求再次启动。概览“运行中”必须使用后者，不得用部署总量或占位数字替代。
+
+| 方法 | 路径 | 功能概要 |
+| ---- | ---- | -------- |
+| `GET` | `/api/v1/ops/project-deployments` | 当前租户内分页查询；支持 `projectId`、`environmentId`、`search`，列表及 `total` 使用相同过滤条件 |
+| `GET` | `/api/v1/ops/project-deployments/:id/runs` | 当前租户未删除部署的任务历史；`page`/`limit` 分页，默认 1/20，上限 200；按 `startedAt DESC,id DESC` |
+| `GET` | `/api/v1/ops/deployment-runs/:id/events/page` | 当前租户未删除部署的指定任务事件；`page`/`limit` 同上；按 `createdAt ASC,id ASC`；旧 `/events` 不变 |
+| `POST` | `/api/v1/ops/project-deployments/:id/start` | 整体启动当前制品需要的工程引擎 |
+| `POST` | `/api/v1/ops/project-deployments/:id/stop` | 整体停止，不清理数据 |
+| `POST` | `/api/v1/ops/project-deployments/:id/restart` | 整体重启当前制品需要的工程引擎 |
+| `POST` | `/api/v1/ops/project-deployments/:id/redeploy` | 重新下发当前存储制品，不构建、不升级、不更换节点或端口、不清数据 |
+
+新增任务历史及事件分页接口采用 `data.list`、`data.pagination {page,limit,total}`；权限与部署详情同为 `node:read`，租户从鉴权会话取得。历史项沿用 run 字段，增加 `actorDisplayName`（同租户 `full_name` 优先 `username`，无匹配为“未知用户”）及 `durationMs`（已完成时取 `completedAt-startedAt` 的非负毫秒数，未完成为 null）。不返回用户 ID、邮箱等用户详情。任务和事件查询均关联未删除部署，跨租户或不存在返回相同未找到错误。每接口固定三次 SQL，不逐任务读取用户或事件。
+
+生命周期操作复用部署运维权限，返回 `{ deployment, run }` 于统一响应包络的 `data` 中。创建/升级与生命周期操作共享部署锁；有 `pending` 任务或正在删除时拒绝并发操作。`redeploy` 保留部署模式、固定版本及开发态 descriptor，内部 `run.operation` 沿用 `deploy`，`run.message` 和 `queued` 事件明确注明重新部署。历史版本曾需要而当前制品不再需要的引擎保持停止。结果通过 `/api/v1/ops/deployment-runs/:id` 及其 `/events` 查询；入队不代表完成。
+
 ### 4.13 发布模块 `/api/v1/publish`
 
 | 方法     | 路径                                      | 功能概要     |

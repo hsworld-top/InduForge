@@ -5,10 +5,14 @@ export type MicroAppContext = {
   instanceName?: string | undefined
   projectId?: string | undefined
   tenantId?: string | undefined
+  authoringEpoch?: string | undefined
   theme?: 'light' | 'dark' | undefined
   locale?: 'zh' | 'en' | undefined
   onRefreshAuth?: (() => Promise<boolean>) | undefined
   onAuthExpired?: (() => void) | undefined
+  onAuthoringStale?:
+    | ((payload: { projectId: string; currentAuthoringEpoch?: string; action: 'reload' }) => void)
+    | undefined
   onStateChange?: ((payload: { title?: string; dirty?: boolean }) => void) | undefined
 }
 
@@ -25,6 +29,10 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     instanceName: typeof input.instanceName === 'string' ? input.instanceName : undefined,
     projectId,
     tenantId: typeof input.tenantId === 'string' ? input.tenantId : undefined,
+    authoringEpoch:
+      typeof input.authoringEpoch === 'string'
+        ? input.authoringEpoch.trim() || undefined
+        : undefined,
     theme: input.theme === 'dark' ? 'dark' : 'light',
     locale: input.locale === 'en' ? 'en' : 'zh',
     onRefreshAuth:
@@ -34,6 +42,10 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     onAuthExpired:
       typeof input.onAuthExpired === 'function'
         ? (input.onAuthExpired as MicroAppContext['onAuthExpired'])
+        : undefined,
+    onAuthoringStale:
+      typeof input.onAuthoringStale === 'function'
+        ? (input.onAuthoringStale as MicroAppContext['onAuthoringStale'])
         : undefined,
     onStateChange:
       typeof input.onStateChange === 'function'
@@ -71,6 +83,7 @@ export const initializeWujieContext = (): MicroAppContext | null => {
 export const getMicroAppContext = (): MicroAppContext | null => currentContext
 export const getCurrentProjectId = (): string | null => currentContext?.projectId ?? null
 export const getCurrentTenantId = (): string | null => currentContext?.tenantId ?? null
+export const getCurrentAuthoringEpoch = (): string | null => currentContext?.authoringEpoch ?? null
 
 export const reportMicroAppState = (payload: { title?: string; dirty?: boolean }): void => {
   currentContext?.onStateChange?.(payload)

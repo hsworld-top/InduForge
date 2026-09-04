@@ -12,6 +12,7 @@ import request, {
   getApiErrorMessage,
   resolveApiError,
 } from '../src/utils/request'
+import { applyMicroAppContext } from '../src/runtime/wujie-context'
 
 const createSuccessAdapter =
   (data: unknown, status = 200) =>
@@ -191,5 +192,64 @@ describe('request 响应包络识别与错误契约', () => {
     assert.equal(refresh.mock.calls.length, 1)
     assert.equal(attempts, 2)
     assert.deepEqual(result.data, { renewed: true })
+  })
+
+  test('Wujie 工程写请求应携带宿主下发的 authoring epoch', async () => {
+    applyMicroAppContext({
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+      authoringEpoch: 'epoch-9',
+    })
+    let capturedHeaders: any
+    await request({
+      url: '/data/projects/project-1/connections',
+      method: 'post',
+      data: {},
+      projectId: 'project-1',
+      adapter: async (config: any) => {
+        capturedHeaders = config.headers
+        return createSuccessAdapter({ code: 0, msg: 'ok', data: {} })(config)
+      },
+    })
+
+    assert.equal(capturedHeaders['X-InduForge-Authoring-Epoch'], 'epoch-9')
+  })
+
+  test('stale 409 应交给宿主失效工程且不得自动重放', async () => {
+    const onAuthoringStale = vi.fn()
+    applyMicroAppContext({
+      projectId: 'project-1',
+      authoringEpoch: 'epoch-9',
+      onAuthoringStale,
+    })
+    let attempts = 0
+    await assert.rejects(() =>
+      request({
+        url: '/data/projects/project-1/connections/connection-1',
+        method: 'put',
+        data: {},
+        projectId: 'project-1',
+        adapter: async (config: any) => {
+          attempts += 1
+          return createHttpErrorAdapter(409, {
+            code: 40901,
+            msg: '开发内容已切换',
+            data: {
+              projectId: 'project-1',
+              currentAuthoringEpoch: 'epoch-10',
+              action: 'reload',
+            },
+          })(config)
+        },
+      }),
+    )
+
+    assert.equal(attempts, 1)
+    assert.equal(onAuthoringStale.mock.calls.length, 1)
+    assert.deepEqual(onAuthoringStale.mock.calls[0]?.[0], {
+      projectId: 'project-1',
+      currentAuthoringEpoch: 'epoch-10',
+      action: 'reload',
+    })
   })
 })

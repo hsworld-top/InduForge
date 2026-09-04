@@ -140,10 +140,16 @@ async function requestPreviewControl(
   path: string,
   options: RequestInit = {},
 ): Promise<unknown> {
-  const target = new URL(path, controlUrl)
+  const base = new URL(controlUrl)
+  const target = new URL(path, base)
+  // 正式环境的工作区 URL 携带 30-60 秒一次性票据。根路径 API 解析会
+  // 丢弃 base 查询参数，因此首次请求需显式转交票据；网关以 303 换取
+  // host-only HttpOnly 会话并从后续 URL 中移除它。
+  const workspaceTicket = base.searchParams.get('__if_workspace_ticket')
+  if (workspaceTicket) target.searchParams.set('__if_workspace_ticket', workspaceTicket)
   const response = await fetch(target, {
     ...options,
-    credentials: 'omit',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
       ...options.headers,
@@ -178,19 +184,14 @@ export const previewControlApi = {
     )
   },
   async workspaceStatus(controlUrl: string): Promise<WorkspaceInitializationState> {
-    return parseWorkspaceState(
-      await requestPreviewControl(controlUrl, '/api/v1/workspace/status'),
-    )
+    return parseWorkspaceState(await requestPreviewControl(controlUrl, '/api/v1/workspace/status'))
   },
   async templates(controlUrl: string): Promise<WorkspaceTemplateCatalog> {
     return parseTemplateCatalog(
       await requestPreviewControl(controlUrl, '/api/v1/workspace/templates'),
     )
   },
-  async initialize(
-    controlUrl: string,
-    templateId: string,
-  ): Promise<WorkspaceInitializationResult> {
+  async initialize(controlUrl: string, templateId: string): Promise<WorkspaceInitializationResult> {
     return parseInitializationResult(
       await requestPreviewControl(controlUrl, '/api/v1/workspace/initialize', {
         method: 'POST',

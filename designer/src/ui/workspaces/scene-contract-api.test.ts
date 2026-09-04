@@ -60,10 +60,14 @@ describe('sceneContractApi', () => {
         name: '主厂区',
       }),
     )
-    expect(request.post).toHaveBeenCalledWith('/projects/project%2Fa/scenes', {
-      kind: '3d',
-      name: '主厂区',
-      publicContract: { description: '', parameters: [], events: [], commands: [] },
-    })
+    expect(request.post).toHaveBeenCalledWith(
+      '/projects/project%2Fa/scenes',
+      {
+        kind: '3d',
+        name: '主厂区',
+        publicContract: { description: '', parameters: [], events: [], commands: [] },
+      },
+      { authoringProjectId: 'project/a' },
+    )
   })
 })

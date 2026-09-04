@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getEditorUiStore } from '@/stores/editor-ui-store'
 import {
   applyMicroAppContext,
+  getCurrentAuthoringEpoch,
   initializeWujieContext,
+  reportAuthoringStale,
   requestWorkspaceClose,
   requestWorkspaceOpen,
   subscribeSceneCommitted,
@@ -104,5 +106,21 @@ describe('Wujie 工程工具请求', () => {
       revision: 3,
     })
     unsubscribe()
+  })
+
+  it('保存宿主注入的编辑代际并将失效事件交还宿主处理', () => {
+    const onAuthoringStale = vi.fn()
+    applyMicroAppContext({
+      projectId: 'project-1',
+      authoringEpoch: ' epoch-7 ',
+      onAuthoringStale,
+    })
+
+    expect(getCurrentAuthoringEpoch()).toBe('epoch-7')
+    reportAuthoringStale({ projectId: 'project-1', currentAuthoringEpoch: 'epoch-8' })
+    expect(onAuthoringStale).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      currentAuthoringEpoch: 'epoch-8',
+    })
   })
 })

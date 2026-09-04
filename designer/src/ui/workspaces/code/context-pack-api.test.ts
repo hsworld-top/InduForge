@@ -12,6 +12,10 @@ describe('contextPackApi', () => {
     vi.mocked(request.post).mockResolvedValue({ code: 0, msg: 'ok', data: result })
 
     await expect(contextPackApi.refresh('project/1')).resolves.toEqual(result)
-    expect(request.post).toHaveBeenCalledWith('/projects/project%2F1/workspace-context/refresh')
+    expect(request.post).toHaveBeenCalledWith(
+      '/projects/project%2F1/workspace-context/refresh',
+      undefined,
+      { authoringProjectId: 'project/1' },
+    )
   })
 })

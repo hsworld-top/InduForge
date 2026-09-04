@@ -1,6 +1,11 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { getCurrentTenantId, getMicroAppContext } from '@/runtime/wujie-context'
+import {
+  getCurrentAuthoringEpoch,
+  getCurrentProjectId,
+  getCurrentTenantId,
+  getMicroAppContext,
+} from '@/runtime/wujie-context'
 
 /**
  * 统一响应契约：
@@ -179,12 +184,42 @@ const handleAuthExpired = () => {
   window.location.assign('/login')
 }
 
+const isMutation = (method) =>
+  ['post', 'put', 'patch', 'delete'].includes(String(method || 'get').toLowerCase())
+
+const resolveProjectId = (config) => {
+  const explicit = String(config?.projectId || '').trim()
+  if (explicit) return explicit
+  return getCurrentProjectId() || ''
+}
+
+const staleDetail = (error) => {
+  if (error?.response?.status !== 409 || !isMutation(error?.config?.method)) return null
+  const data = error.response?.data?.data
+  if (!data || typeof data !== 'object' || data.action !== 'reload') return null
+  const projectId = String(data.projectId || resolveProjectId(error.config)).trim()
+  if (!projectId) return null
+  return {
+    projectId,
+    currentAuthoringEpoch: data.currentAuthoringEpoch
+      ? String(data.currentAuthoringEpoch)
+      : undefined,
+    action: 'reload' as const,
+  }
+}
+
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
     const tenantId = getCurrentTenantId()
     if (tenantId) {
       config.headers['X-Tenant-ID'] = tenantId
+    }
+    if (isMutation(config.method)) {
+      const projectId = resolveProjectId(config)
+      const contextProjectId = getCurrentProjectId()
+      const epoch = projectId && projectId === contextProjectId ? getCurrentAuthoringEpoch() : null
+      if (epoch) config.headers['X-InduForge-Authoring-Epoch'] = epoch
     }
 
     return config
@@ -219,6 +254,11 @@ request.interceptors.response.use(
   async (error) => {
     const { response } = error
     const config = error.config
+    const authoringStale = staleDetail(error)
+    if (authoringStale) {
+      getMicroAppContext()?.onAuthoringStale?.(authoringStale)
+      return Promise.reject(error)
+    }
 
     if (response) {
       const { status, data } = response

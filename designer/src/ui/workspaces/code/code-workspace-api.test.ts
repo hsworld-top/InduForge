@@ -38,7 +38,11 @@ describe('codeWorkspaceApi', () => {
     vi.mocked(request.post).mockResolvedValue({ code: 0, msg: 'ok', data: workspace })
 
     await expect(codeWorkspaceApi[action]('project-1')).resolves.toEqual(workspace)
-    expect(request.post).toHaveBeenCalledWith(`/projects/project-1/code-workspace/${action}`)
+    expect(request.post).toHaveBeenCalledWith(
+      `/projects/project-1/code-workspace/${action}`,
+      undefined,
+      { authoringProjectId: 'project-1' },
+    )
   })
 
   it('缺少 data 时拒绝继续渲染', async () => {

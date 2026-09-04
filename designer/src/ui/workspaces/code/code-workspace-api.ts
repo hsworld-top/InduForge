@@ -129,19 +129,25 @@ export const codeWorkspaceApi = {
 
   async start(projectId: string): Promise<CodeWorkspaceState> {
     return unwrapWorkspace(
-      await request.post<CodeWorkspaceEnvelope>(`${workspacePath(projectId)}/start`),
+      await request.post<CodeWorkspaceEnvelope>(`${workspacePath(projectId)}/start`, undefined, {
+        authoringProjectId: projectId,
+      }),
     )
   },
 
   async stop(projectId: string): Promise<CodeWorkspaceState> {
     return unwrapWorkspace(
-      await request.post<CodeWorkspaceEnvelope>(`${workspacePath(projectId)}/stop`),
+      await request.post<CodeWorkspaceEnvelope>(`${workspacePath(projectId)}/stop`, undefined, {
+        authoringProjectId: projectId,
+      }),
     )
   },
 
   async rebuild(projectId: string): Promise<CodeWorkspaceState> {
     return unwrapWorkspace(
-      await request.post<CodeWorkspaceEnvelope>(`${workspacePath(projectId)}/rebuild`),
+      await request.post<CodeWorkspaceEnvelope>(`${workspacePath(projectId)}/rebuild`, undefined, {
+        authoringProjectId: projectId,
+      }),
     )
   },
 }

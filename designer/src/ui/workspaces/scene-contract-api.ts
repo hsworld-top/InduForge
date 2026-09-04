@@ -129,6 +129,7 @@ export const sceneContractApi = {
         name: input.name,
         publicContract: { description: '', parameters: [], events: [], commands: [] },
       },
+      { authoringProjectId: projectId },
     )
     if (!response.data) throw new Error('场景创建接口未返回 data')
     return toContract(response.data)
@@ -140,7 +141,7 @@ export const sceneContractApi = {
     const response = await request.put<ApiResponsePayload<SceneDocumentResponse>>(
       `/projects/${encodedProjectId}/scenes/${encodedSceneId}`,
       { name: contract.name, publicContract: publicContract(contract), baseDraftVersion: contract.draftVersion },
-      { params: { kind: contract.kind } },
+      { params: { kind: contract.kind }, authoringProjectId: projectId },
     )
     if (!response.data) throw new Error('场景公开契约保存接口未返回 data')
     return { contract: toContract(response.data), contextSync: { status: 'updated' } }
@@ -149,7 +150,7 @@ export const sceneContractApi = {
   async remove(projectId: string, kind: SceneKind, id: string): Promise<SceneContractDeleteResult> {
     const response = await request.delete<ApiResponsePayload<{ deleted: boolean }>>(
       `/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(id)}`,
-      { params: { kind } },
+      { params: { kind }, authoringProjectId: projectId },
     )
     if (!response.data) throw new Error('场景公开契约删除接口未返回 data')
     return { deleted: response.data.deleted, contextSync: { status: 'updated' } }
@@ -159,7 +160,7 @@ export const sceneContractApi = {
     const response = await request.post<ApiResponsePayload<{ revision: number }>>(
       `/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(id)}/commit`,
       { baseDraftVersion },
-      { params: { kind } },
+      { params: { kind }, authoringProjectId: projectId },
     )
     if (!response.data) throw new Error('场景提交接口未返回 data')
     return response.data
@@ -173,7 +174,7 @@ export const sceneContractApi = {
     const response = await request.post<ApiResponsePayload<EditorSessionResponse>>(
       `/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(id)}/editor-session`,
       undefined,
-      { params: { kind } },
+      { params: { kind }, authoringProjectId: projectId },
     )
     if (!response.data) throw new Error('编辑会话接口未返回 data')
     return response.data
