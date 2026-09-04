@@ -454,7 +454,7 @@ spec:
           command: ["/industrial_collector"]
           args: ["--artifact", "/work/artifact/collector-runtime-artifact.json", "--binding", "/etc/induforge/collector/binding.json", "--index", "/etc/induforge/collector/index.json", "--listen", "0.0.0.0:18080"]
           ports: [{name: http, containerPort: 18080}]
-          readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 3, periodSeconds: 3}
+          readinessProbe: {httpGet: {path: /ready, port: http}, initialDelaySeconds: 3, periodSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 15, periodSeconds: 10}
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
