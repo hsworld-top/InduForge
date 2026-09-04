@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
 import { htProductionPolicy } from './scripts/ht-editor/production-policy.mjs'
 import { createFrontendProxy } from '../scripts/dev/frontend-proxy.mjs'
+import { createFrontendWorkspaceProxy } from '../scripts/dev/frontend-workspace-proxy.mjs'
 
 const require = createRequire(import.meta.url)
 const Icons = require('unplugin-icons/vite').default
@@ -23,6 +24,9 @@ export default defineConfig(({ mode }) => {
     envDir,
     define: {
       __DESIGNER_DEBUG_ROUTE_ENABLED__: JSON.stringify(mode !== 'production'),
+      __FRONTEND_WORKSPACE_PROXY_SUFFIX__: JSON.stringify(
+        mode === 'frontend-linux' ? env.IF_FRONTEND_WORKSPACE_PROXY_SUFFIX || '' : '',
+      ),
     },
     plugins: [
       vue(),
@@ -41,7 +45,15 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.VITE_DESIGNER_PORT),
       host: true,
-      proxy: createFrontendProxy(env, { requireCenterTarget: mode === 'frontend-linux' }),
+      proxy: {
+        ...createFrontendProxy(env, { requireCenterTarget: mode === 'frontend-linux' }),
+        ...(mode === 'frontend-linux'
+          ? createFrontendWorkspaceProxy(env, {
+              requireConfig: true,
+              localPort: Number(env.VITE_DESIGNER_PORT),
+            })
+          : {}),
+      },
       fs: {
         allow: ['..'],
       },

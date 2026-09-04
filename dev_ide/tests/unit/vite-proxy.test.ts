@@ -8,18 +8,19 @@ describe('dev_ide vite proxy', () => {
     const designerSource = readFileSync('../designer/vite.config.js', 'utf8')
 
     expect(source).toContain('createFrontendProxy(env,')
+    expect(source).toContain('createFrontendWorkspaceProxy(env,')
     expect(source).toContain("requireCenterTarget: mode === 'frontend-linux'")
     expect(datacenterSource).toContain("requireCenterTarget: mode === 'frontend-linux'")
     expect(designerSource).toContain("requireCenterTarget: mode === 'frontend-linux'")
+    expect(designerSource).toContain('createFrontendWorkspaceProxy(env,')
     // IDE 仍然用本机的两个 Vite 子应用承载 Wujie，统一启动命令必须包含它们。
     expect(source).toContain("'/datacenter'")
     expect(source).toContain("'/designer'")
   })
 
   it('远程中心地址只由 Vite 进程读取，HTTP 和两个 Socket 路径都走同一个入口', async () => {
-    const { createFrontendProxy, resolveFrontendProxyTargets } = await import(
-      '../../../scripts/dev/frontend-proxy.mjs'
-    )
+    const { createFrontendProxy, resolveFrontendProxyTargets } =
+      await import('../../../scripts/dev/frontend-proxy.mjs')
     const remoteTarget = 'http://172.16.125.129:18080'
     const proxy = createFrontendProxy({
       IF_FRONTEND_PROXY_TARGET: remoteTarget,

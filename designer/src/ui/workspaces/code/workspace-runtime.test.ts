@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createDevelopmentWorkspaceState, resolveWorkspaceState } from './workspace-runtime'
+import {
+  createDevelopmentWorkspaceState,
+  resolveWorkspaceState,
+  rewriteFrontendLinuxWorkspaceState,
+} from './workspace-runtime'
 
 const stoppedWorkspace = {
   status: 'stopped' as const,
@@ -86,7 +90,15 @@ describe('Designer 工作空间运行模式', () => {
         },
         { get, start },
       ),
-    ).resolves.toEqual(runningWorkspace)
+    ).resolves.toMatchObject({
+      ...runningWorkspace,
+      services: {
+        ai: { url: 'https://ai.workspace.test/', hostPort: null },
+        code: { url: 'https://code.workspace.test/', hostPort: null },
+        preview: { url: 'https://preview.workspace.test/', hostPort: null },
+        previewControl: { url: 'https://control.workspace.test/', hostPort: null },
+      },
+    })
     expect(get).toHaveBeenCalledWith('project-1')
     expect(start).toHaveBeenCalledWith('project-1')
   })
@@ -98,5 +110,56 @@ describe('Designer 工作空间运行模式', () => {
         VITE_DESIGNER_AI_URL: 'http://127.0.0.1:33141',
       }),
     ).toThrow('开发环境必须配置')
+  })
+
+  it('frontend-linux 仅将四个受控远端工作区 URL 重写到当前 Vite 端口，并保留 path/query', () => {
+    const uuid = '123e4567-e89b-12d3-a456-426614174000'
+    const workspace = {
+      ...runningWorkspace,
+      services: {
+        ai: {
+          url: `http://ai-${uuid}.workspace.172.16.125.129.nip.io:18080/?ticket=ai`,
+          hostPort: 18080,
+        },
+        code: {
+          url: `http://code-${uuid}.workspace.172.16.125.129.nip.io:18080/editor?ticket=code`,
+          hostPort: 18080,
+        },
+        preview: {
+          url: `http://preview-${uuid}.workspace.172.16.125.129.nip.io:18080/app/`,
+          hostPort: 18080,
+        },
+        previewControl: {
+          url: `http://preview-control-${uuid}.workspace.172.16.125.129.nip.io:18080/api?ticket=control`,
+          hostPort: 18080,
+        },
+      },
+    }
+
+    expect(
+      rewriteFrontendLinuxWorkspaceState(
+        workspace,
+        'http://localhost:18601',
+        'workspace.172.16.125.129.nip.io',
+      ).services,
+    ).toEqual({
+      ai: { url: `http://ai-${uuid}.localhost:18601/?ticket=ai`, hostPort: 18080 },
+      code: { url: `http://code-${uuid}.localhost:18601/editor?ticket=code`, hostPort: 18080 },
+      preview: { url: `http://preview-${uuid}.localhost:18601/app/`, hostPort: 18080 },
+      previewControl: {
+        url: `http://preview-control-${uuid}.localhost:18601/api?ticket=control`,
+        hostPort: 18080,
+      },
+    })
+  })
+
+  it('不重写不受控的 URL，生产与常规开发仍保留后端返回地址', async () => {
+    expect(
+      rewriteFrontendLinuxWorkspaceState(
+        runningWorkspace,
+        'http://localhost:18601',
+        'workspace.172.16.125.129.nip.io',
+      ),
+    ).toEqual(runningWorkspace)
   })
 })
