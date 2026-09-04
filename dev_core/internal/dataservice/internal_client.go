@@ -146,6 +146,7 @@ func (c *InternalClient) writeAuthoringFence(ctx context.Context, method, projec
 		FenceToken     string    `json:"fenceToken"`
 		ExpiresAt      time.Time `json:"expiresAt"`
 		AuthoringEpoch string    `json:"authoringEpoch"`
+		Mode           string    `json:"mode"`
 	}
 	if strictDecode(raw, &result) != nil || result.FenceToken == "" || result.ExpiresAt.IsZero() {
 		return "", time.Time{}, "", fmt.Errorf("数据服务工程写栅栏响应无效")

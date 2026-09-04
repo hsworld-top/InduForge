@@ -11,9 +11,44 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+func TestInternalClientAcquireAuthoringFenceAcceptsDataServiceContract(t *testing.T) {
+	projectID, tenantID, ownerID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	expiresAt := time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("X-InduForge-Internal-Token") != "internal-token" {
+			t.Fatal("internal authoring fence request invalid")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"msg":  "success",
+			"data": map[string]any{
+				"fenceToken":     "fence-token",
+				"expiresAt":      expiresAt,
+				"authoringEpoch": "epoch-1",
+				"mode":           "capture",
+			},
+			"reqId": "data-request",
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewInternalClient(server.URL, "internal-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, expiry, err := client.AcquireAuthoringFence(context.Background(), projectID, tenantID, ownerID, "epoch-1", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "fence-token" || !expiry.Equal(expiresAt) {
+		t.Fatalf("unexpected fence response: token=%q expiry=%s", token, expiry)
+	}
+}
 
 func TestInternalClientEnsureProjectTenantBindingUsesInternalToken(t *testing.T) {
 	const token = "internal-test-token"
