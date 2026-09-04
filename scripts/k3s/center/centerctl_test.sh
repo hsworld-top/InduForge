@@ -150,6 +150,129 @@ if ! awk '/^[[:space:]]*doctor$/ { doctor_line=NR } /^[[:space:]]*persist_config
   exit 1
 fi
 
+fake_bin="$temp_dir/fake-bin"
+fake_root="$temp_dir/fake-center"
+mkdir -p "$fake_bin" "$fake_root/tls"
+printf 'test certificate\n' > "$fake_root/tls/center.crt"
+printf 'test key\n' > "$fake_root/tls/center.key"
+cat > "$temp_dir/center.env" <<'EOF'
+CENTER_PUBLIC_ORIGIN=https://center.induforge.test:18443
+WORKSPACE_PUBLIC_ORIGIN_TEMPLATE=https://{service}-{projectId}.workspace.induforge.test:18443
+CODE_WORKSPACE_ALLOWED_ORIGINS=https://center.induforge.test:18443
+DATA_SERVICE_COMPUTE_SANDBOX_TOKEN=0123456789abcdef0123456789abcdef
+EOF
+cat > "$fake_bin/id" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = -u ]; then echo 0; else exec /usr/bin/id "$@"; fi
+EOF
+cat > "$fake_bin/docker" <<'EOF'
+#!/bin/sh
+case "$1 $2" in
+  'volume inspect')
+    case " $* " in *' -f '*) printf 'none|bind|%s/workspaces\n' "$IF_CENTER_DATA_ROOT";; esac
+    ;;
+  'volume create'|'image inspect') exit 0 ;;
+esac
+EOF
+cat > "$fake_bin/openssl" <<'EOF'
+#!/bin/sh
+case "${1:-}" in
+  rand)
+    case " ${2:-} " in
+      ' -base64 ') printf 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=\n' ;;
+      *) printf '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n' ;;
+    esac
+    ;;
+  genpkey)
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = -out ]; then shift; printf 'fake-ed25519-key\n' > "$1"; exit 0; fi
+      shift
+    done
+    exit 1
+    ;;
+  pkey) exit 0 ;;
+  *) exit 1 ;;
+esac
+EOF
+cat > "$fake_bin/stat" <<'EOF'
+#!/bin/sh
+case " $* " in
+  *" -c %a "*) printf '600\n' ;;
+  *" -c %g "*) printf '998\n' ;;
+  *) exec /usr/bin/stat "$@" ;;
+esac
+EOF
+cat > "$fake_bin/k3s" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_K3S_LOG"
+if [ "${1:-}" = ctr ]; then
+  cat <<'IMAGES'
+docker.io/induforge/control:1.0.0
+docker.io/induforge/data:1.0.0
+docker.io/induforge/edge:1.0.0
+docker.io/induforge/compute-sandbox:1.0.0
+docker.io/induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-a8eafe26-arm64
+docker.io/timescale/timescaledb:2.26.4-pg16
+docker.io/library/redis:7.2-alpine
+docker.io/chrislusf/seaweedfs:3.85
+docker.io/rancher/mirrored-library-busybox:1.37.0
+IMAGES
+  exit 0
+fi
+shift
+case " $* " in
+  *' get deployment center-control '*) [ "${FAKE_DEPLOYMENT_EXISTS:-1}" = 1 ] ;;
+  *' get secret center-env '*) exit 1 ;;
+  *' create secret generic '*|*' create configmap '*) printf 'apiVersion: v1\nkind: Secret\n' ;;
+  *' apply -f - '*) cat >/dev/null; printf 'configured\n' ;;
+  *' get node '*'jsonpath='*) printf 'True' ;;
+  *' get deployment,statefulset '*'jsonpath='*) : ;;
+  *' get endpointslice '*) printf 'true' ;;
+  *) : ;;
+esac
+EOF
+chmod +x "$fake_bin/id" "$fake_bin/docker" "$fake_bin/openssl" "$fake_bin/stat" "$fake_bin/k3s"
+
+run_fake_apply() {
+  deployment_exists=$1
+  log_file=$2
+  : > "$log_file"
+  PATH="$fake_bin:$PATH" \
+  FAKE_K3S_LOG="$log_file" \
+  FAKE_DEPLOYMENT_EXISTS="$deployment_exists" \
+  IF_CENTER_CONFIG_FILE="$temp_dir/center-k3s.conf" \
+  IF_CENTER_K3S_BIN="$fake_bin/k3s" \
+  IF_CENTER_NODE_NAME=if-center-01 \
+  IF_CENTER_CONTROL_IMAGE=induforge/control:1.0.0 \
+  IF_CENTER_DATA_IMAGE=induforge/data:1.0.0 \
+  IF_CENTER_EDGE_IMAGE=induforge/edge:1.0.0 \
+  IF_CENTER_DATA_ROOT="$fake_root" \
+  IF_CENTER_DOCKER_GID=998 \
+    "$SCRIPT_DIR/centerctl" apply "$temp_dir/center.env" >/dev/null
+}
+
+upgrade_log="$temp_dir/upgrade.log"
+run_fake_apply 1 "$upgrade_log"
+stop_line=$(grep -n 'scale deployment/center-control --replicas=0' "$upgrade_log" | cut -d: -f1)
+stop_wait_line=$(grep -n 'rollout status deployment/center-control --timeout=180s' "$upgrade_log" | head -n 1 | cut -d: -f1)
+clear_line=$(grep -n 'set env deployment/center-control --containers=control CODE_WORKSPACE_ALLOWED_ORIGINS- CENTER_PUBLIC_ORIGIN- WORKSPACE_PUBLIC_ORIGIN_TEMPLATE-' "$upgrade_log" | cut -d: -f1)
+apply_line=$(grep -n 'apply -f .*/center-system.yaml' "$upgrade_log" | cut -d: -f1)
+bootstrap_line=$(grep -n 'apply -f .*/center-bootstrap-job.yaml' "$upgrade_log" | cut -d: -f1)
+start_line=$(grep -n 'scale deployment/center-control --replicas=1' "$upgrade_log" | cut -d: -f1)
+if [ -z "$stop_line" ] || [ -z "$stop_wait_line" ] || [ -z "$clear_line" ] || [ -z "$apply_line" ] || [ -z "$bootstrap_line" ] || [ -z "$start_line" ] || \
+  [ "$stop_wait_line" -le "$stop_line" ] || [ "$clear_line" -le "$stop_wait_line" ] || [ "$apply_line" -le "$clear_line" ] || \
+  [ "$bootstrap_line" -le "$apply_line" ] || [ "$start_line" -le "$bootstrap_line" ]; then
+  echo "center upgrade order must be stop, clear legacy env, apply, bootstrap, start" >&2
+  exit 1
+fi
+
+fresh_log="$temp_dir/fresh.log"
+run_fake_apply 0 "$fresh_log"
+if grep -Eq 'scale deployment/center-control --replicas=0|set env deployment/center-control' "$fresh_log"; then
+  echo "fresh center install must skip the legacy deployment preparation" >&2
+  exit 1
+fi
+
 if IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DATA_ROOT=/ IF_CENTER_DOCKER_GID=998 "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
   echo "unsafe data root was accepted" >&2
   exit 1
