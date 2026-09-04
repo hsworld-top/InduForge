@@ -21,16 +21,27 @@ func NewProjectTenantBindingHandler(bindingService *service.ProjectTenantBinding
 // Put 首次绑定项目租户；重复相同请求可安全重试，改绑被拒绝。
 func (h *ProjectTenantBindingHandler) Put(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
-		TenantID string `json:"tenantId"`
+		TenantID       string `json:"tenantId"`
+		AuthoringEpoch string `json:"authoringEpoch"`
 	}
 	if err := decodeJSONBody(r, &input); err != nil {
 		return err
 	}
 
-	created, err := h.service.Bind(r.Context(), r.PathValue("projectId"), input.TenantID)
+	created, err := h.service.Bind(r.Context(), r.PathValue("projectId"), input.TenantID, input.AuthoringEpoch)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"created": created})
+	return nil
+}
+
+func (h *ProjectTenantBindingHandler) Get(w http.ResponseWriter, r *http.Request) error {
+	projectID, tenantID := r.PathValue("projectId"), r.URL.Query().Get("tenantId")
+	epoch, err := h.service.Get(r.Context(), projectID, tenantID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"projectId": projectID, "tenantId": tenantID, "authoringEpoch": epoch})
 	return nil
 }

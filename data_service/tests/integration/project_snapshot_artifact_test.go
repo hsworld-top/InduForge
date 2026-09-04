@@ -36,12 +36,11 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 		t.Fatalf("bind project tenant failed: %v", err)
 	}
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
 		JWTSecret:                  secret,
-		DataServiceInternalToken:   "integration-internal-token",
 		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
 		ConnectionSecretKeyVersion: "v1",
 	})

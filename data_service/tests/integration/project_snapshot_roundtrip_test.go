@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -30,8 +31,11 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "snapshot-roundtrip-secret-01"
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_project_tenant_bindings(project_id,tenant_id) VALUES($1,'tenant-snapshot')`, projectID); err != nil {
+		t.Fatal(err)
+	}
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -86,9 +90,37 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, mqttConnection.ID, userID)
 	tagID := insertTestMqttTag(t, ctx, fixture, projectID, subscriptionID, userID)
 
+	computeFolderID, computeDependencyID := uuid.NewString(), uuid.NewString()
+	workbenchGroupID, mqttGroupID := uuid.NewString(), uuid.NewString()
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_compute_folders(id,project_id,name,created_by,updated_by) VALUES($1,$2,'计算目录',$3,$3);
+		INSERT INTO data_compute_dependencies(id,project_id,language,package_name,import_name,version,created_by) VALUES($4,$2,'js','lodash','lodash','4.17.21',$3);
+		INSERT INTO data_workbench_object_groups(id,project_id,connection_id,scope,name,sort_order,created_by,updated_by) VALUES($5,$2,$6,'query','查询目录',3,$3,$3);
+		UPDATE data_queries SET group_id=$5 WHERE id=$7;
+		INSERT INTO data_table_group_members(project_id,connection_id,table_name,group_id,updated_by) VALUES($2,$6,'public.metrics',$5,$3);
+		INSERT INTO data_mqtt_subscription_groups(id,project_id,connection_id,name,created_by,updated_by) VALUES($8,$2,$9,'订阅目录',$3,$3);
+		UPDATE data_mqtt_subscriptions SET group_id=$8,display_order=7 WHERE id=$10`, computeFolderID, projectID, userID, computeDependencyID, workbenchGroupID, relational.ID, query.ID, mqttGroupID, mqttConnection.ID, subscriptionID); err != nil {
+		t.Fatalf("seed complete authoring snapshot domains: %v", err)
+	}
+	kafka := mustCreateKafkaConfig(t, server.URL, token, projectID, map[string]any{"name": "kafka-main", "brokers": "127.0.0.1:9092", "topic": "factory.events", "consumerGroup": "snapshot-group", "startPosition": "earliest"})
+	httpConnection := mustCreateHTTPConfig(t, server.URL, token, projectID, map[string]any{"name": "http-main", "description": "workbench-owned"})
+	websocketConnection := mustCreateWebSocketConfig(t, server.URL, token, projectID, map[string]any{"name": "ws-main", "description": "workbench-owned"})
+	redis := mustCreateRedisConfig(t, server.URL, token, projectID, map[string]any{"name": "redis-main", "address": "127.0.0.1:6380", "keyPattern": "factory:*", "mode": "standalone"})
+	tdEnvelope := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, map[string]any{"name": "td-main", "protocol": "wss", "host": "td.example.local", "port": 6041, "username": "root", "databaseName": "factory", "timezone": "Asia/Shanghai", "tlsSkipVerify": true, "secrets": map[string]string{"password": "snapshot-secret"}})
+	var td protocolConnectionConnectionPayload
+	if err := json.Unmarshal(tdEnvelope.Data, &td); err != nil || td.ID == "" {
+		t.Fatalf("create tdengine for snapshot: %v", err)
+	}
+	kafkaTopicGroupID, kafkaMappingID, kafkaFieldGroupID, kafkaFieldID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_kafka_topic_groups(id,project_id,connection_id,name,sort_order,created_by,updated_by) VALUES($1,$2,$3,'Topic目录',2,$4,$4);
+		INSERT INTO data_kafka_topic_mappings(id,project_id,connection_id,group_id,name,topic,description,consumer_group,output_mode,raw_output_scope,partition_mode,start_position,decode,sample_limit,timeout_ms,sort_order,created_by,updated_by) VALUES($5,$2,$3,$1,'events','factory.events','desc','cg','field_mapping','value','all','earliest','json',50,4000,4,$4,$4);
+		INSERT INTO data_kafka_field_groups(id,project_id,connection_id,topic_mapping_id,name,description,sort_order,created_by,updated_by) VALUES($6,$2,$3,$5,'字段目录','desc',1,$4,$4);
+		INSERT INTO data_kafka_fields(id,project_id,connection_id,topic_mapping_id,group_id,name,value_path,key_path,data_type,enabled,description,sort_order,created_by,updated_by) VALUES($7,$2,$3,$5,$6,'temperature','["payload","temp"]','[]','float64',true,'温度',5,$4,$4)`, kafkaTopicGroupID, projectID, kafka.ID, userID, kafkaMappingID, kafkaFieldGroupID, kafkaFieldID); err != nil {
+		t.Fatalf("seed kafka snapshot domains: %v", err)
+	}
+
 	currentSnapshot := mustGetProjectSnapshot(t, server.URL, token, projectID)
-	if len(currentSnapshot.Connections) != 2 {
-		t.Fatalf("expected 2 connections in snapshot, got %d", len(currentSnapshot.Connections))
+	if len(currentSnapshot.Connections) != 7 {
+		t.Fatalf("expected 7 connections in snapshot, got %d", len(currentSnapshot.Connections))
 	}
 	if len(currentSnapshot.RelationalConfigs) != 1 {
 		t.Fatalf("expected 1 relational config in snapshot, got %d", len(currentSnapshot.RelationalConfigs))
@@ -110,6 +142,40 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	}
 	if len(currentSnapshot.MqttTags) != 1 || currentSnapshot.MqttTags[0].ID != tagID {
 		t.Fatalf("expected mqtt tag %q in snapshot", tagID)
+	}
+	if len(currentSnapshot.ComputeFolders) != 1 || currentSnapshot.ComputeFolders[0].ID != computeFolderID || len(currentSnapshot.ComputeDependencies) != 1 || currentSnapshot.ComputeDependencies[0].ID != computeDependencyID {
+		t.Fatal("compute folder/dependency missing from snapshot")
+	}
+	if len(currentSnapshot.WorkbenchObjectGroups) != 1 || currentSnapshot.Queries[0].GroupID == nil || *currentSnapshot.Queries[0].GroupID != workbenchGroupID || len(currentSnapshot.TableGroupMembers) != 1 {
+		t.Fatal("workbench grouping missing from snapshot")
+	}
+	if len(currentSnapshot.MqttSubscriptionGroups) != 1 || currentSnapshot.MqttSubscriptions[0].GroupID == nil || *currentSnapshot.MqttSubscriptions[0].GroupID != mqttGroupID || currentSnapshot.MqttSubscriptions[0].DisplayOrder != 7 {
+		t.Fatal("mqtt grouping/order missing from snapshot")
+	}
+	if len(currentSnapshot.KafkaConfigs) != 1 || currentSnapshot.KafkaConfigs[0].ConsumerGroup == nil || *currentSnapshot.KafkaConfigs[0].ConsumerGroup != "snapshot-group" || len(currentSnapshot.KafkaTopicGroups) != 1 || len(currentSnapshot.KafkaTopicMappings) != 1 || len(currentSnapshot.KafkaFieldGroups) != 1 || len(currentSnapshot.KafkaFields) != 1 {
+		t.Fatal("kafka authoring configuration missing from snapshot")
+	}
+	if !snapshotHasConnection(currentSnapshot.Connections, redis.ID, "redis-main") || !snapshotHasConnection(currentSnapshot.Connections, td.ID, "td-main") {
+		t.Fatal("redis/tdengine structured configuration missing from snapshot")
+	}
+
+	// 对同一完整快照执行覆盖后再次读取，验证所有目录、映射和专用配置表可无损往返。
+	doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/snapshot", token, currentSnapshot)
+	roundTripped := mustGetProjectSnapshot(t, server.URL, token, projectID)
+	if len(roundTripped.ComputeFolders) != 1 || len(roundTripped.KafkaFields) != 1 || len(roundTripped.MqttSubscriptionGroups) != 1 || len(roundTripped.TableGroupMembers) != 1 || roundTripped.Queries[0].GroupID == nil || !snapshotHasConnection(roundTripped.Connections, redis.ID, "redis-main") || !snapshotHasConnection(roundTripped.Connections, td.ID, "td-main") {
+		t.Fatal("complete authoring snapshot round trip lost configuration")
+	}
+	if !reflect.DeepEqual(currentSnapshot.RelationalConfigs, roundTripped.RelationalConfigs) ||
+		!reflect.DeepEqual(currentSnapshot.KafkaConfigs, roundTripped.KafkaConfigs) ||
+		!reflect.DeepEqual(currentSnapshot.KafkaTopicMappings, roundTripped.KafkaTopicMappings) ||
+		!reflect.DeepEqual(currentSnapshot.KafkaFields, roundTripped.KafkaFields) {
+		t.Fatalf("specialized relational/kafka configuration did not round trip losslessly:\nbefore relation=%#v\nafter relation=%#v\nbefore kafka=%#v\nafter kafka=%#v\nbefore mappings=%#v\nafter mappings=%#v\nbefore fields=%#v\nafter fields=%#v", currentSnapshot.RelationalConfigs, roundTripped.RelationalConfigs, currentSnapshot.KafkaConfigs, roundTripped.KafkaConfigs, currentSnapshot.KafkaTopicMappings, roundTripped.KafkaTopicMappings, currentSnapshot.KafkaFields, roundTripped.KafkaFields)
+	}
+	for _, connectionID := range []string{httpConnection.ID, websocketConnection.ID, redis.ID, td.ID} {
+		before, after := snapshotConnectionConfig(currentSnapshot.Connections, connectionID), snapshotConnectionConfig(roundTripped.Connections, connectionID)
+		if !reflect.DeepEqual(before, after) {
+			t.Fatalf("connection %s configuration changed during round trip: before=%#v after=%#v", connectionID, before, after)
+		}
 	}
 
 	replacementRelationalID := uuid.NewString()
@@ -252,6 +318,15 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	}
 }
 
+func snapshotConnectionConfig(connections []repository.ConnectionRecord, connectionID string) map[string]any {
+	for _, connection := range connections {
+		if connection.ID == connectionID {
+			return connection.Config
+		}
+	}
+	return nil
+}
+
 func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -265,8 +340,11 @@ func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "snapshot-roundtrip-secret-02"
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_project_tenant_bindings(project_id,tenant_id) VALUES($1,'tenant-snapshot')`, projectID); err != nil {
+		t.Fatal(err)
+	}
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -337,8 +415,11 @@ func TestProjectSnapshotReplaceRejectsUnsupportedConnectionType(t *testing.T) {
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "snapshot-roundtrip-secret-03"
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_project_tenant_bindings(project_id,tenant_id) VALUES($1,'tenant-snapshot')`, projectID); err != nil {
+		t.Fatal(err)
+	}
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -412,8 +493,11 @@ func TestProjectSnapshotReplacePreservesDataPointRuntimePermissions(t *testing.T
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "snapshot-roundtrip-secret-04"
+	if _, err := fixture.pool.Exec(ctx, `INSERT INTO data_project_tenant_bindings(project_id,tenant_id) VALUES($1,'tenant-snapshot')`, projectID); err != nil {
+		t.Fatal(err)
+	}
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

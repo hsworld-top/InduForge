@@ -29,7 +29,7 @@ func TestProtocolConnections(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "protocol-connections-secret-01"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

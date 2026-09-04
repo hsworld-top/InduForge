@@ -85,6 +85,16 @@ TDengine 通过独立 WebSocket 只读运行时提供真实开发态 SQL 工作�
 
 报警以 `data_alarm_items` 为事实来源，一条普通报警项只关联一个数据点，报警项 ID 同时是未来节点运行时的稳定报警身份。同一点可以分别配置越限、变化率、偏差、质量、陈旧和离线等多条报警；规范化显示名称和触发指纹在同一点内分别唯一。多点创建在一个事务中生成多条独立报警项，后续可分别维护。数值分级越限使用 `highest_matching`，一组高/高高/低/低低等级只产生一个当前生效等级。组合报警保存至少两个输入点、唯一别名、表达式和一个结果条件。开发态试算按带观测时间、源时间、质量和离线状态的序列运行三态状态机，输出活动/候选等级及延时；非良好质量或离线会暂停普通条件而不清除活动报警。通知采用工程默认与报警项覆盖，外部渠道密钥使用 AES-GCM 密文保存。工程级报警历史默认开启、保留 30 天并保存通知投递记录。工程快照与 Artifact 使用 `alarm.item.v1`，Artifact 只携带密钥引用并始终包含有效 `historyStorage`。本模块还提供 ID/筛选范围批量修改删除，以及普通报警 Excel 模板、导出、预览和事务导入；不执行节点侧报警判断、实例处置、历史写入或通知投递。
 
+发布控制面使用内部令牌调用 `/api/v1/internal/data/projects/{projectId}/snapshot` 导出或恢复完整数据域快照。完整快照覆盖连接及其协议专用配置、连接密钥密文、查询与分组、数据点、采集连接与点位、MQTT 订阅分组及顺序、Kafka 主题/映射/字段分组、计算目录/依赖/单元、历史存储策略、报警配置和工作台对象分组；不包含预览会话、采集诊断、运行值、计算运行记录、任务状态等运行或派生数据。HTTP 与 WebSocket 没有独立可编辑专用表，其固定默认配置由连接契约重建；关系库、Redis、TDengine 和 Kafka 的专用配置均显式往返或由同一规范化连接配置无损重建。
+
+控制面的 `projects.authoring_epoch` 是工程编辑代次主事实，数据域在 `data_project_tenant_bindings.authoring_epoch` 保存同步副本，对外统一使用不透明 `epoch-N`。项目绑定初始化必须同时提交 `tenantId` 和 `authoringEpoch`；既有绑定只接受完全一致的幂等重试，诊断 GET 可读取当前绑定上下文。所有普通工程配置写请求必须携带 `X-InduForge-Authoring-Epoch`，缺失、非法、过期或有效写保护存在时统一返回 409，`data` 包含 `projectId`、`currentAuthoringEpoch` 和 `action: reload`。
+
+恢复前，控制面必须通过 `/api/v1/internal/data/projects/{projectId}/authoring-fence` 携带 `expectedAuthoringEpoch` 和 `mode` 申请 60 秒写保护并每 20 秒续租；普通发布捕获使用 `capture`，租期过期自动解锁，恢复 Saga 使用 `restore`。申请在工程独占锁内核对数据域当前代次并回显 `authoringEpoch`。恢复 PUT 额外提交 `ownerId`、`fenceToken`、`expectedAuthoringEpoch`、`targetAuthoringEpoch` 和 `direction`，且只接受有效的 `restore` 写保护。`forward` 只允许 `N -> N+1`，`compensate` 只允许同一 owner/token 下 `N -> N-1`；服务在独占锁内用同一数据库事务完成令牌校验、完整快照覆盖和 epoch CAS。
+
+`restore` 行也是跨崩溃持久标记：即使 TTL 已过期，普通写仍返回 409且不同 owner 不得接管；同一恢复任务 owner 可按数据域实际 epoch 重新申请并旋转 token，然后继续 forward 或 compensate，最终必须显式释放。普通写的共享锁由独立有界连接池持有，不占用业务 SQL 连接；释放接口幂等，错误令牌不会释放仍有效的其他写保护。写保护只持久化令牌 SHA-256，不保存明文。
+
+`POST /api/v1/internal/data/projects/{projectId}/snapshot/artifacts` 接收 `tenantId`、非零 `capturedAt`、显式 `snapshot` 与可选 `collector` 参数，返回 `runtimeArtifact`、可选 `collectorArtifact` 和安全的 `collectorSourceSnapshot`。两类制品只从请求快照投影，不重读 live DB；`capturedAt` 固定运行制品生成时间，使同一请求可重复构建。内部接口不得记录包含连接、报警渠道密文的请求体，生产环境不得弱化 `DATA_SERVICE_INTERNAL_TOKEN` 校验。
+
 ## 质量关注点
 
 - 平台侧数据域定义与运行态数据域定义保持连续。

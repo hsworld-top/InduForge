@@ -39,9 +39,11 @@ SET default_table_access_method = heap;
 CREATE TABLE data_project_tenant_bindings (
     project_id uuid NOT NULL,
     tenant_id text NOT NULL,
+    authoring_epoch bigint DEFAULT 1 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_project_tenant_bindings_pkey PRIMARY KEY (project_id)
+    CONSTRAINT data_project_tenant_bindings_pkey PRIMARY KEY (project_id),
+    CONSTRAINT data_project_tenant_bindings_authoring_epoch_check CHECK (authoring_epoch >= 1)
 );
 
 --
@@ -554,6 +556,22 @@ CREATE TABLE data_compute_dependencies (
     CONSTRAINT data_compute_dependencies_version_check CHECK ((char_length(version) BETWEEN 1 AND 80)),
     CONSTRAINT data_compute_dependencies_project_package_key UNIQUE (project_id, language, package_name)
 );
+
+-- 发布/恢复控制面对开发态的短租约写保护。令牌仅保存 SHA-256 哈希，TTL 避免控制面异常后永久锁定。
+CREATE TABLE data_authoring_fences (
+    project_id uuid PRIMARY KEY,
+    tenant_id text NOT NULL,
+    owner_id uuid NOT NULL,
+    mode text DEFAULT 'capture' NOT NULL,
+    token_hash bytea NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_authoring_fences_token_hash_check CHECK (octet_length(token_hash) = 32),
+    CONSTRAINT data_authoring_fences_mode_check CHECK (mode = ANY (ARRAY['capture'::text, 'restore'::text]))
+);
+
+CREATE INDEX data_authoring_fences_expiry_idx ON data_authoring_fences (expires_at);
 
 CREATE INDEX data_compute_dependencies_project_language_idx ON data_compute_dependencies USING btree (project_id, language, package_name);
 

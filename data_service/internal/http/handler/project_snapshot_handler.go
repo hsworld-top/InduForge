@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -12,6 +13,8 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 	"github.com/indu-forge/data_service/internal/service"
 )
+
+const internalProjectSnapshotMaxBytes int64 = 512 << 20
 
 // ProjectSnapshotHandler 负责项目快照读写请求。
 type ProjectSnapshotHandler struct {
@@ -108,5 +111,110 @@ func (h *ProjectSnapshotHandler) Replace(w http.ResponseWriter, r *http.Request)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"updated": true})
+	return nil
+}
+
+func validateInternalSnapshotIdentity(projectID, tenantID, actorID string, actorRequired bool) error {
+	if _, err := uuid.Parse(projectID); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "项目 ID 非法")
+	}
+	if _, err := uuid.Parse(tenantID); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "租户 ID 非法")
+	}
+	if actorRequired {
+		if _, err := uuid.Parse(actorID); err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "操作人 ID 非法")
+		}
+	}
+	return nil
+}
+
+// GetInternal 为控制面返回完整项目数据域快照。
+func (h *ProjectSnapshotHandler) GetInternal(w http.ResponseWriter, r *http.Request) error {
+	projectID, tenantID := r.PathValue("projectId"), r.URL.Query().Get("tenantId")
+	if err := validateInternalSnapshotIdentity(projectID, tenantID, "", false); err != nil {
+		return err
+	}
+	result, err := h.service.Get(r.Context(), projectID, tenantID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// PutInternal 从控制面恢复完整项目数据域快照。
+func (h *ProjectSnapshotHandler) PutInternal(w http.ResponseWriter, r *http.Request) error {
+	r.Body = http.MaxBytesReader(w, r.Body, internalProjectSnapshotMaxBytes)
+	var input struct {
+		TenantID               string                     `json:"tenantId"`
+		ActorID                string                     `json:"actorId"`
+		OwnerID                string                     `json:"ownerId"`
+		FenceToken             string                     `json:"fenceToken"`
+		ExpectedAuthoringEpoch string                     `json:"expectedAuthoringEpoch"`
+		TargetAuthoringEpoch   string                     `json:"targetAuthoringEpoch"`
+		Direction              string                     `json:"direction"`
+		Snapshot               repository.ProjectSnapshot `json:"snapshot"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	projectID := r.PathValue("projectId")
+	if err := validateInternalSnapshotIdentity(projectID, input.TenantID, input.ActorID, true); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(input.OwnerID); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写保护所有者 ID 非法")
+	}
+	if err := h.service.ReplaceInternal(r.Context(), projectID, input.TenantID, input.ActorID, input.OwnerID, input.FenceToken, input.ExpectedAuthoringEpoch, input.TargetAuthoringEpoch, input.Direction, input.Snapshot); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"updated": true, "authoringEpoch": input.TargetAuthoringEpoch})
+	return nil
+}
+
+// BuildArtifactInternal 从请求快照纯构建运行制品，不把密文或请求体写入日志。
+func (h *ProjectSnapshotHandler) BuildArtifactInternal(w http.ResponseWriter, r *http.Request) error {
+	r.Body = http.MaxBytesReader(w, r.Body, internalProjectSnapshotMaxBytes)
+	var input struct {
+		TenantID string                     `json:"tenantId"`
+		Snapshot repository.ProjectSnapshot `json:"snapshot"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	projectID := r.PathValue("projectId")
+	if err := validateInternalSnapshotIdentity(projectID, input.TenantID, "", false); err != nil {
+		return err
+	}
+	result, err := h.service.BuildArtifactFromSnapshot(projectID, input.TenantID, input.Snapshot)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// BuildArtifactsInternal 纯函数式生成 runtime 与可选 collector 制品。
+func (h *ProjectSnapshotHandler) BuildArtifactsInternal(w http.ResponseWriter, r *http.Request) error {
+	r.Body = http.MaxBytesReader(w, r.Body, internalProjectSnapshotMaxBytes)
+	var input struct {
+		TenantID   string                            `json:"tenantId"`
+		CapturedAt time.Time                         `json:"capturedAt"`
+		Snapshot   repository.ProjectSnapshot        `json:"snapshot"`
+		Collector  *service.CollectorArtifactRequest `json:"collector"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	projectID := r.PathValue("projectId")
+	if err := validateInternalSnapshotIdentity(projectID, input.TenantID, "", false); err != nil {
+		return err
+	}
+	result, err := h.service.BuildArtifactsFromSnapshot(projectID, input.TenantID, input.CapturedAt, input.Snapshot, input.Collector)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }

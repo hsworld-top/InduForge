@@ -35,6 +35,15 @@ func WriteAppError(w http.ResponseWriter, statusCode int, requestID string, erro
 	WriteErrorCode(w, statusCode, requestID, errorCode.PublicCode(), message)
 }
 
+// WriteAppErrorData 仅用于需要向客户端返回恢复动作上下文的结构化冲突。
+func WriteAppErrorData(w http.ResponseWriter, statusCode int, requestID string, errorCode apperrors.ErrorCode, message string, data any) {
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		msg = "系统内部错误"
+	}
+	writeJSON(w, statusCode, ApiResponse{Code: errorCode.PublicCode(), Msg: msg, Data: data, ReqID: requestID})
+}
+
 // WriteErrorCode 使用公开整数错误码写出统一错误响应。
 func WriteErrorCode(w http.ResponseWriter, statusCode int, requestID string, code int, message string) {
 	msg := strings.TrimSpace(message)

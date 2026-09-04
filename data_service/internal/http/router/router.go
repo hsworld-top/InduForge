@@ -36,8 +36,19 @@ type options struct {
 	projectSnapshotHandler      *handler.ProjectSnapshotHandler
 	projectTenantBindingHandler *handler.ProjectTenantBindingHandler
 	collectorBindingHandler     *handler.CollectorBindingBundleHandler
+	authoringFenceHandler       *handler.AuthoringFenceHandler
+	authoringFenceChecker       middleware.AuthoringFenceChecker
 	internalToken               string
 	jwtValidator                *auth.JWTValidator
+}
+
+func WithAuthoringFenceRoutes(fenceHandler *handler.AuthoringFenceHandler, checker middleware.AuthoringFenceChecker, jwtValidator *auth.JWTValidator, internalToken string) Option {
+	return func(opts *options) {
+		opts.authoringFenceHandler = fenceHandler
+		opts.authoringFenceChecker = checker
+		opts.jwtValidator = jwtValidator
+		opts.internalToken = internalToken
+	}
 }
 
 // WithBuiltinRuntimeRoutes wires IF builtin runtime store routes.
@@ -216,6 +227,14 @@ func WithProjectSnapshotRoutes(projectSnapshotHandler *handler.ProjectSnapshotHa
 	}
 }
 
+// WithProjectSnapshotInternalRoutes wires control 面快照发布与恢复接口。
+func WithProjectSnapshotInternalRoutes(projectSnapshotHandler *handler.ProjectSnapshotHandler, internalToken string) Option {
+	return func(opts *options) {
+		opts.projectSnapshotHandler = projectSnapshotHandler
+		opts.internalToken = internalToken
+	}
+}
+
 // WithProjectTenantBindingInternalRoutes wires control 面专用的项目租户绑定内部路由。
 func WithProjectTenantBindingInternalRoutes(bindingHandler *handler.ProjectTenantBindingHandler, internalToken string) Option {
 	return func(opts *options) {
@@ -268,9 +287,38 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountPreviewRoutes(mux, opts)
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
+	mountProjectSnapshotInternalRoutes(mux, opts)
+	mountAuthoringFenceInternalRoutes(mux, opts)
 	mountProjectTenantBindingInternalRoutes(mux, opts)
 	mountCollectorBindingBundleInternalRoutes(mux, opts)
-	return mux
+	return middleware.AuthoringFenceGuard(opts.jwtValidator, opts.authoringFenceChecker)(mux)
+}
+
+func mountAuthoringFenceInternalRoutes(mux *http.ServeMux, opts options) {
+	if opts.authoringFenceHandler == nil {
+		return
+	}
+	internal := func(fn func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.RequireInternalToken(opts.internalToken)(middleware.ErrorHandler(fn))
+	}
+	base := "/api/v1/internal/data/projects/{projectId}/authoring-fence"
+	mux.Handle("POST "+base, internal(opts.authoringFenceHandler.Acquire))
+	mux.Handle("PUT "+base, internal(opts.authoringFenceHandler.Renew))
+	mux.Handle("DELETE "+base, internal(opts.authoringFenceHandler.Release))
+}
+
+func mountProjectSnapshotInternalRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.projectSnapshotHandler == nil {
+		return
+	}
+	internal := func(fn func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.RequireInternalToken(opts.internalToken)(middleware.ErrorHandler(fn))
+	}
+	base := "/api/v1/internal/data/projects/{projectId}"
+	mux.Handle("GET "+base+"/snapshot", internal(opts.projectSnapshotHandler.GetInternal))
+	mux.Handle("PUT "+base+"/snapshot", internal(opts.projectSnapshotHandler.PutInternal))
+	mux.Handle("POST "+base+"/artifact", internal(opts.projectSnapshotHandler.BuildArtifactInternal))
+	mux.Handle("POST "+base+"/snapshot/artifacts", internal(opts.projectSnapshotHandler.BuildArtifactsInternal))
 }
 
 func mountCollectorBindingBundleInternalRoutes(mux *http.ServeMux, opts options) {
@@ -288,6 +336,9 @@ func mountProjectTenantBindingInternalRoutes(mux *http.ServeMux, opts options) {
 	}
 	mux.Handle("PUT /api/v1/internal/data/project-bindings/{projectId}", middleware.RequireInternalToken(opts.internalToken)(
 		middleware.ErrorHandler(opts.projectTenantBindingHandler.Put),
+	))
+	mux.Handle("GET /api/v1/internal/data/project-bindings/{projectId}", middleware.RequireInternalToken(opts.internalToken)(
+		middleware.ErrorHandler(opts.projectTenantBindingHandler.Get),
 	))
 }
 

@@ -157,6 +157,19 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		joinCleanup(cleanupFns...)()
 		return nil, nil, err
 	}
+	// 工程写保护使用独立有界连接池持有会话级 advisory lock，避免共享锁占满业务池后
+	// handler 无连接可用而形成自锁或写饥饿。
+	authoringLockPool, err := postgres.NewPool(context.Background(), postgres.PoolConfig{
+		DatabaseURL: strings.TrimSpace(cfg.DatabaseURL),
+		SearchPath:  strings.TrimSpace(cfg.DatabaseSearchPath),
+		MaxConns:    4,
+		MinConns:    1,
+	})
+	if err != nil {
+		joinCleanup(cleanupFns...)()
+		return nil, nil, err
+	}
+	cleanupFns = append(cleanupFns, authoringLockPool.Close)
 
 	var devPool *pgxpool.Pool
 	if strings.TrimSpace(cfg.DevDatabaseURL) != "" {
@@ -193,6 +206,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool, connectionCipher)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
+	authoringFenceRepository := repository.NewAuthoringFenceRepository(pool, authoringLockPool)
 	projectTenantBindingRepository := repository.NewProjectTenantBindingRepository(pool)
 	protocolConnectionRepository := repository.NewProtocolConnectionRepository(pool, connectionCipher)
 	tdengineOPCRepository := repository.NewTDengineOPCRepository(pool, connectionCipher)
@@ -272,7 +286,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttService.SetSecretRepository(connectionSecretRepository)
 	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 	dataPointService.SetMqttPublisher(mqttService)
-	projectSnapshotService := service.NewProjectSnapshotServiceWithClockAndSchemaRoot(projectSnapshotRepository, time.Now, filepath.Join(config.ResolveCollectorProtocolCatalogPath(cfg.CollectorProtocolCatalogPath), "..", "runtime"))
+	projectSnapshotService := service.NewProjectSnapshotServiceWithClockAndSchemaRoot(projectSnapshotRepository, time.Now, filepath.Join(config.ResolveCollectorProtocolCatalogPath(cfg.CollectorProtocolCatalogPath), "..", "runtime")).WithAuthoringFences(authoringFenceRepository)
 	projectTenantBindingService := service.NewProjectTenantBindingService(projectTenantBindingRepository)
 	protocolConnectionService := service.NewProtocolConnectionService(protocolConnectionRepository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolConnectionRepository, service.NewDefaultProtocolPreviewAdapters())
@@ -312,6 +326,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
+	authoringFenceHandler := handler.NewAuthoringFenceHandler(authoringFenceRepository)
 	var collectorBindingBundleHandler *handler.CollectorBindingBundleHandler
 	if collectorBindingBundleBuilder != nil {
 		collectorBindingBundleHandler = handler.NewCollectorBindingBundleHandler(projectSnapshotService, collectorBindingBundleBuilder)
@@ -337,6 +352,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
+		router.WithProjectSnapshotInternalRoutes(projectSnapshotHandler, cfg.DataServiceInternalToken),
+		router.WithAuthoringFenceRoutes(authoringFenceHandler, authoringFenceRepository, jwtValidator, cfg.DataServiceInternalToken),
 		router.WithProjectTenantBindingInternalRoutes(projectTenantBindingHandler, cfg.DataServiceInternalToken),
 		router.WithCollectorBindingBundleInternalRoutes(collectorBindingBundleHandler, cfg.DataServiceInternalToken),
 		router.WithProtocolConnectionRoutes(protocolConnectionHandler, jwtValidator),

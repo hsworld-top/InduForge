@@ -17,8 +17,25 @@ import (
 // ProjectSnapshotService 承载项目级数据域快照读写。
 type ProjectSnapshotService struct {
 	repository *repository.ProjectSnapshotRepository
+	fences     *repository.AuthoringFenceRepository
 	now        func() time.Time
 	schemaRoot string
+}
+
+type CollectorArtifactRequest struct {
+	ArtifactID       string `json:"artifactId"`
+	Revision         int64  `json:"revision"`
+	CollectorVersion string `json:"collectorVersion"`
+}
+type SnapshotArtifacts struct {
+	RuntimeArtifact         *repository.RuntimeProjectArtifactV1   `json:"runtimeArtifact"`
+	CollectorArtifact       *repository.CollectorRuntimeArtifactV1 `json:"collectorArtifact,omitempty"`
+	CollectorSourceSnapshot json.RawMessage                        `json:"collectorSourceSnapshot,omitempty"`
+}
+
+func (s *ProjectSnapshotService) WithAuthoringFences(fences *repository.AuthoringFenceRepository) *ProjectSnapshotService {
+	s.fences = fences
+	return s
 }
 
 // BuildCollectorArtifact 从权威快照生成 collector 运行定义；请求中的 sourceSnapshot
@@ -102,6 +119,79 @@ func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID, ten
 	return repository.BuildRuntimeProjectArtifactV1(s.schemaRoot, projectID, snapshot, s.now().UTC())
 }
 
+// BuildArtifactFromSnapshot 基于调用方提供的完整快照纯构建运行制品，不读取或写入数据库。
+func (s *ProjectSnapshotService) BuildArtifactFromSnapshot(projectID, tenantID string, snapshot repository.ProjectSnapshot) (*repository.RuntimeProjectArtifactV1, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectID(tenantID); err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "租户 ID 非法")
+	}
+	normalized, err := validateAndNormalizeProjectSnapshot(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	return repository.BuildRuntimeProjectArtifactV1(s.schemaRoot, projectID, &normalized, s.now().UTC())
+}
+
+// BuildArtifactsFromSnapshot 只消费请求携带的不可变快照；该方法没有 context 和仓储访问，
+// 从类型边界上保证发布构建不会重新读取 live DB。
+func (s *ProjectSnapshotService) BuildArtifactsFromSnapshot(projectID, tenantID string, capturedAt time.Time, snapshot repository.ProjectSnapshot, collector *CollectorArtifactRequest) (*SnapshotArtifacts, error) {
+	if capturedAt.IsZero() {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照捕获时间不能为空")
+	}
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProjectID(tenantID); err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "租户 ID 非法")
+	}
+	normalized, err := validateAndNormalizeProjectSnapshot(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	runtimeArtifact, err := repository.BuildRuntimeProjectArtifactV1(s.schemaRoot, projectID, &normalized, capturedAt.UTC())
+	if err != nil {
+		return nil, err
+	}
+	result := &SnapshotArtifacts{RuntimeArtifact: runtimeArtifact}
+	if collector == nil {
+		return result, nil
+	}
+	if strings.TrimSpace(collector.ArtifactID) == "" || collector.Revision < 1 || strings.TrimSpace(collector.CollectorVersion) == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集制品参数无效")
+	}
+	artifact, err := repository.BuildCollectorRuntimeArtifactV1(s.schemaRoot, projectID, collector.ArtifactID, collector.Revision, collector.CollectorVersion, &normalized)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(artifact)
+	if err != nil {
+		return nil, err
+	}
+	result.CollectorArtifact = artifact
+	result.CollectorSourceSnapshot = json.RawMessage(raw)
+	return result, nil
+}
+
+// ReplaceInternal 校验租户绑定后复用正式 Replace 流程。
+func (s *ProjectSnapshotService) ReplaceInternal(ctx context.Context, projectID, tenantID, actorID, ownerID, fenceToken, expectedEpoch, targetEpoch, direction string, snapshot repository.ProjectSnapshot) error {
+	if err := validateProjectID(tenantID); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "租户 ID 非法")
+	}
+	if _, err := s.repository.GetByProject(ctx, projectID, tenantID); err != nil {
+		return err
+	}
+	if s.fences == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态写保护未配置")
+	}
+	normalized, err := validateAndNormalizeProjectSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	return s.fences.RestoreSnapshot(ctx, s.repository, projectID, tenantID, actorID, ownerID, fenceToken, expectedEpoch, targetEpoch, direction, normalized)
+}
+
 // Replace 用快照内容覆盖项目数据域数据。
 // 说明：snapshot/artifact 现在承载平台侧配置契约；工业协议仍只落配置，不在 data_service 内启动采集会话。
 func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID string, snapshot repository.ProjectSnapshot) error {
@@ -111,12 +201,20 @@ func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID
 	if err := validateUserID(actorID); err != nil {
 		return err
 	}
+	normalizedSnapshot, err := validateAndNormalizeProjectSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	return s.repository.ReplaceProjectData(ctx, projectID, actorID, normalizedSnapshot)
+}
+
+func validateAndNormalizeProjectSnapshot(snapshot repository.ProjectSnapshot) (repository.ProjectSnapshot, error) {
 	for _, record := range snapshot.Connections {
 		if record.Type == "" || record.Name == "" {
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照连接数据不完整")
+			return snapshot, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照连接数据不完整")
 		}
 		if err := validateSnapshotConnectionType(record.Type); err != nil {
-			return err
+			return snapshot, err
 		}
 	}
 
@@ -124,14 +222,14 @@ func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID
 	for index := range normalizedSnapshot.DataPoints {
 		attributes, err := normalizeDataPointAttributeDefaults(normalizedSnapshot.DataPoints[index].AttributeDefaults)
 		if err != nil {
-			return err
+			return snapshot, err
 		}
 		normalizedSnapshot.DataPoints[index].AttributeDefaults = attributes
 	}
 	if err := validateSnapshotAlarmItems(normalizedSnapshot); err != nil {
-		return err
+		return snapshot, err
 	}
-	return s.repository.ReplaceProjectData(ctx, projectID, actorID, normalizedSnapshot)
+	return normalizedSnapshot, nil
 }
 
 // validateSnapshotAlarmItems 保证快照不能绕过普通 API 的报警语义校验。

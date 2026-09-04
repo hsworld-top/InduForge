@@ -13,14 +13,29 @@ import (
 	"github.com/indu-forge/data_service/internal/service"
 )
 
-type routerProjectTenantBindingStore struct{ bindings map[string]string }
-
-func (s *routerProjectTenantBindingStore) BindIfUnbound(_ context.Context, projectID, tenantID string) (string, bool, error) {
-	if existing, ok := s.bindings[projectID]; ok {
-		return existing, false, nil
+type routerProjectTenantBindingStore struct {
+	bindings map[string]struct {
+		tenant string
+		epoch  int64
 	}
-	s.bindings[projectID] = tenantID
-	return tenantID, true, nil
+}
+
+func (s *routerProjectTenantBindingStore) BindIfUnbound(_ context.Context, projectID, tenantID string, epoch int64) (string, int64, bool, error) {
+	if existing, ok := s.bindings[projectID]; ok {
+		return existing.tenant, existing.epoch, false, nil
+	}
+	s.bindings[projectID] = struct {
+		tenant string
+		epoch  int64
+	}{tenantID, epoch}
+	return tenantID, epoch, true, nil
+}
+func (s *routerProjectTenantBindingStore) Get(_ context.Context, projectID, tenantID string) (int64, error) {
+	item, ok := s.bindings[projectID]
+	if !ok || item.tenant != tenantID {
+		return 0, context.Canceled
+	}
+	return item.epoch, nil
 }
 
 func TestNewRouterKafkaWorkbenchRoutesDoNotConflict(t *testing.T) {
@@ -104,7 +119,10 @@ func TestNewRouterAlarmRoutesDoNotConflict(t *testing.T) {
 }
 
 func TestInternalProjectTenantBindingRouteRejectsBearerToken(t *testing.T) {
-	bindingHandler := handler.NewProjectTenantBindingHandler(service.NewProjectTenantBindingService(&routerProjectTenantBindingStore{bindings: map[string]string{}}))
+	bindingHandler := handler.NewProjectTenantBindingHandler(service.NewProjectTenantBindingService(&routerProjectTenantBindingStore{bindings: map[string]struct {
+		tenant string
+		epoch  int64
+	}{}}))
 	router := NewRouter(WithProjectTenantBindingInternalRoutes(bindingHandler, "internal-token"))
 	projectID, tenantID := uuid.NewString(), uuid.NewString()
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/internal/data/project-bindings/"+projectID, bytes.NewBufferString(`{"tenantId":"`+tenantID+`"}`))
@@ -127,5 +145,24 @@ func TestInternalCollectorBindingRouteRejectsBearerToken(t *testing.T) {
 	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected ordinary bearer token to be rejected with 401, got %d", recorder.Code)
+	}
+}
+
+func TestProjectSnapshotInternalRoutesRequireInternalToken(t *testing.T) {
+	snapshotHandler := handler.NewProjectSnapshotHandler(nil)
+	router := NewRouter(WithProjectSnapshotInternalRoutes(snapshotHandler, "internal-token"))
+	cases := []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/internal/data/projects/11111111-1111-4111-8111-111111111111/snapshot?tenantId=22222222-2222-4222-8222-222222222222"},
+		{http.MethodPut, "/api/v1/internal/data/projects/11111111-1111-4111-8111-111111111111/snapshot"},
+		{http.MethodPost, "/api/v1/internal/data/projects/11111111-1111-4111-8111-111111111111/artifact"},
+		{http.MethodPost, "/api/v1/internal/data/projects/11111111-1111-4111-8111-111111111111/snapshot/artifacts"},
+	}
+	for _, item := range cases {
+		request := httptest.NewRequest(item.method, item.path, bytes.NewBufferString(`{}`))
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s status=%d", item.method, item.path, recorder.Code)
+		}
 	}
 }

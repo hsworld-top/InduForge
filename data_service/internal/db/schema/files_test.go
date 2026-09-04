@@ -28,6 +28,7 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 		"data_history_storage_targets",
 		"data_source_output_mappings",
 		"data_compute_dependencies",
+		"data_authoring_fences",
 		"data_compute_unit_outputs",
 		"data_connection_secrets",
 	} {
@@ -47,8 +48,8 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 			t.Fatalf("数据库最终基线仍包含旧字段或旧模型 %s", legacy)
 		}
 	}
-	if count := strings.Count(baseline, "CREATE TABLE "); count != 59 {
-		t.Fatalf("数据库最终基线表数量应为 59，实际为 %d", count)
+	if count := strings.Count(baseline, "CREATE TABLE "); count != 60 {
+		t.Fatalf("数据库最终基线表数量应为 60，实际为 %d", count)
 	}
 }
 

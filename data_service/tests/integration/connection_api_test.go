@@ -37,7 +37,7 @@ func TestConnectionsCRUD(t *testing.T) {
 	tenantID := "tenant-alpha"
 	secret := "connections-secret"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -202,7 +202,7 @@ func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "connections-phase2-secret"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -339,6 +339,7 @@ func doJSONRequest(t *testing.T, method, url, token string, payload any) apiEnve
 		t.Fatalf("创建请求失败: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-InduForge-Authoring-Epoch", "epoch-1")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-ID", "rid-connections-it")
 

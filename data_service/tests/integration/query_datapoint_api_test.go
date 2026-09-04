@@ -35,7 +35,7 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 
 	connectionID := insertTestConnection(t, ctx, fixture, projectID, userID)
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -191,7 +191,7 @@ func TestDataPointBatchDelete(t *testing.T) {
 
 	insertTestConnection(t, ctx, fixture, projectID, userID)
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -245,7 +245,7 @@ func TestQueryAndDataPointCRUD(t *testing.T) {
 
 	connectionID := insertTestConnection(t, ctx, fixture, projectID, userID)
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -719,7 +719,7 @@ func TestDataPointRuntimePermissionsListAndSave(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "runtime-permission-secret-01"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -786,6 +786,7 @@ func doJSONRequestWithStatus(t *testing.T, method, url, token string, payload an
 		t.Fatalf("create request failed: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-InduForge-Authoring-Epoch", "epoch-1")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-ID", "rid-query-datapoint-it")
 

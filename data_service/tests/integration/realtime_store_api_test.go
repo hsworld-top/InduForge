@@ -30,7 +30,7 @@ func TestRealtimeStoreListAfterConnectionCreate(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "realtime-store-secret"
 	redisServer := miniredis.RunT(t)
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -165,7 +165,7 @@ func TestRealtimeStoreDataPointRecreateDoesNotReuseDeletedMapping(t *testing.T) 
 	userID := uuid.NewString()
 	secret := "realtime-store-revive-secret"
 	redisServer := miniredis.RunT(t)
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

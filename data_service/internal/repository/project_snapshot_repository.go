@@ -18,17 +18,23 @@ import (
 
 // SnapshotRelationalConfigRecord 表示导入导出使用的关系库配置投影。
 type SnapshotRelationalConfigRecord struct {
-	ConnectionID string         `json:"connectionId"`
-	DBType       string         `json:"dbType"`
-	Host         string         `json:"host"`
-	Port         int            `json:"port"`
-	Database     string         `json:"database"`
-	Username     string         `json:"username"`
-	Schema       *string        `json:"schema"`
-	Charset      *string        `json:"charset"`
-	Timezone     *string        `json:"timezone"`
-	SSL          bool           `json:"ssl"`
-	SSLConfig    map[string]any `json:"sslConfig"`
+	ConnectionID     string         `json:"connectionId"`
+	DBType           string         `json:"dbType"`
+	Host             string         `json:"host"`
+	Port             int            `json:"port"`
+	Database         string         `json:"database"`
+	Username         string         `json:"username"`
+	Schema           *string        `json:"schema"`
+	Charset          *string        `json:"charset"`
+	Timezone         *string        `json:"timezone"`
+	SSL              bool           `json:"ssl"`
+	SSLConfig        map[string]any `json:"sslConfig"`
+	PoolMin          int            `json:"poolMin"`
+	PoolMax          int            `json:"poolMax"`
+	AcquireTimeoutMS int            `json:"acquireTimeoutMs"`
+	IdleTimeoutMS    int            `json:"idleTimeoutMs"`
+	QueryTimeoutMS   int            `json:"queryTimeoutMs"`
+	Options          map[string]any `json:"options"`
 }
 
 // SnapshotMqttConfigRecord 表示导入导出使用的 MQTT 配置投影。
@@ -57,11 +63,116 @@ type SnapshotMqttSubscriptionRecord struct {
 	Topic            string         `json:"topic"`
 	QOS              int            `json:"qos"`
 	UsageMode        string         `json:"usageMode"`
+	GroupID          *string        `json:"groupId"`
 	Description      *string        `json:"description"`
+	DisplayOrder     int            `json:"displayOrder"`
 	MessageRetention int            `json:"messageRetention"`
 	DefaultBatchRule map[string]any `json:"defaultBatchParseRule"`
 	CreatedAt        time.Time      `json:"createdAt"`
 	UpdatedAt        time.Time      `json:"updatedAt"`
+}
+
+type SnapshotMqttSubscriptionGroupRecord struct {
+	ID           string    `json:"id"`
+	ConnectionID string    `json:"connectionId"`
+	Name         string    `json:"name"`
+	ParentID     *string   `json:"parentId"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type SnapshotComputeFolderRecord struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	ParentID  *string   `json:"parentId"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type SnapshotComputeDependencyRecord struct {
+	ID          string    `json:"id"`
+	Language    string    `json:"language"`
+	PackageName string    `json:"packageName"`
+	ImportName  string    `json:"importName"`
+	Version     string    `json:"version"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type SnapshotKafkaConfigRecord struct {
+	ConnectionID  string         `json:"connectionId"`
+	Brokers       string         `json:"brokers"`
+	Topic         *string        `json:"topic"`
+	ConsumerGroup *string        `json:"consumerGroup"`
+	StartPosition string         `json:"startPosition"`
+	Options       map[string]any `json:"options"`
+}
+
+type SnapshotKafkaTopicGroupRecord struct {
+	ID           string  `json:"id"`
+	ConnectionID string  `json:"connectionId"`
+	ParentID     *string `json:"parentId"`
+	Name         string  `json:"name"`
+	SortOrder    int     `json:"sortOrder"`
+}
+
+type SnapshotKafkaTopicMappingRecord struct {
+	ID             string  `json:"id"`
+	ConnectionID   string  `json:"connectionId"`
+	GroupID        *string `json:"groupId"`
+	Name           string  `json:"name"`
+	Topic          string  `json:"topic"`
+	Description    string  `json:"description"`
+	ConsumerGroup  string  `json:"consumerGroup"`
+	OutputMode     string  `json:"outputMode"`
+	RawOutputScope string  `json:"rawOutputScope"`
+	PartitionMode  string  `json:"partitionMode"`
+	Partition      *int    `json:"partition"`
+	StartPosition  string  `json:"startPosition"`
+	StartOffset    *int64  `json:"startOffset"`
+	Decode         string  `json:"decode"`
+	SampleLimit    int     `json:"sampleLimit"`
+	TimeoutMS      int     `json:"timeoutMs"`
+	SortOrder      int     `json:"sortOrder"`
+}
+
+type SnapshotKafkaFieldGroupRecord struct {
+	ID             string  `json:"id"`
+	ConnectionID   string  `json:"connectionId"`
+	TopicMappingID string  `json:"topicMappingId"`
+	ParentID       *string `json:"parentId"`
+	Name           string  `json:"name"`
+	Description    string  `json:"description"`
+	SortOrder      int     `json:"sortOrder"`
+}
+
+type SnapshotKafkaFieldRecord struct {
+	ID             string  `json:"id"`
+	ConnectionID   string  `json:"connectionId"`
+	TopicMappingID string  `json:"topicMappingId"`
+	GroupID        *string `json:"groupId"`
+	Name           string  `json:"name"`
+	ValuePath      []any   `json:"valuePath"`
+	KeyPath        []any   `json:"keyPath"`
+	DataType       string  `json:"dataType"`
+	Enabled        bool    `json:"enabled"`
+	Description    string  `json:"description"`
+	SortOrder      int     `json:"sortOrder"`
+}
+
+type SnapshotWorkbenchObjectGroupRecord struct {
+	ID           string `json:"id"`
+	ConnectionID string `json:"connectionId"`
+	Scope        string `json:"scope"`
+	Name         string `json:"name"`
+	SortOrder    int    `json:"sortOrder"`
+}
+
+type SnapshotTableGroupMemberRecord struct {
+	ConnectionID string    `json:"connectionId"`
+	TableName    string    `json:"tableName"`
+	GroupID      string    `json:"groupId"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // SnapshotMqttTagRecord 表示导入导出使用的 MQTT 变量投影。
@@ -208,31 +319,41 @@ type SnapshotRealtimeKeyRecord struct {
 
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
-	Connections          []ConnectionRecord                  `json:"connections"`
-	ConnectionSecrets    []SnapshotConnectionSecretRecord    `json:"connectionSecrets"`
-	RelationalConfigs    []SnapshotRelationalConfigRecord    `json:"relationalConfigs"`
-	Queries              []QueryRecord                       `json:"queries"`
-	MqttConfigs          []SnapshotMqttConfigRecord          `json:"mqttConfigs"`
-	MqttSubscriptions    []SnapshotMqttSubscriptionRecord    `json:"mqttSubscriptions"`
-	MqttTags             []SnapshotMqttTagRecord             `json:"mqttTags"`
-	CollectorConnections []SnapshotCollectorConnectionRecord `json:"collectorConnections"`
-	CollectorSecrets     []SnapshotCollectorSecretRecord     `json:"collectorSecrets"`
-	CollectorPointGroups []SnapshotCollectorPointGroupRecord `json:"collectorPointGroups"`
-	CollectorPoints      []SnapshotCollectorPointRecord      `json:"collectorPoints"`
-	HTTPRequestGroups    []SnapshotHTTPRequestGroupRecord    `json:"httpRequestGroups"`
-	HTTPRequests         []SnapshotHTTPRequestRecord         `json:"httpRequests"`
-	WebSocketGroups      []SnapshotWebSocketGroupRecord      `json:"webSocketGroups"`
-	WebSocketSessions    []SnapshotWebSocketSessionRecord    `json:"webSocketSessions"`
-	RealtimeKeys         []SnapshotRealtimeKeyRecord         `json:"realtimeKeys"`
-	DataPoints           []DataPointRecord                   `json:"datapoints"`
-	ComputeUnits         []ComputeUnitRecord                 `json:"computeUnits"`
-	AlarmGroups          []AlarmGroupRecord                  `json:"alarmGroups"`
-	AlarmItems           []AlarmItemRecord                   `json:"alarmItems"`
-	AlarmSettings        *AlarmProjectSettingsRecord         `json:"alarmSettings"`
-	AlarmHistorySettings *AlarmHistorySettingsRecord         `json:"alarmHistorySettings"`
-	AlarmChannels        []AlarmNotificationChannelRecord    `json:"alarmChannels"`
-	AlarmChannelSecrets  []SnapshotAlarmChannelSecretRecord  `json:"alarmChannelSecrets"`
-	HistoryStorage       []HistoryStorageConfigRecord        `json:"historyStorage"`
+	Connections            []ConnectionRecord                    `json:"connections"`
+	ConnectionSecrets      []SnapshotConnectionSecretRecord      `json:"connectionSecrets"`
+	RelationalConfigs      []SnapshotRelationalConfigRecord      `json:"relationalConfigs"`
+	KafkaConfigs           []SnapshotKafkaConfigRecord           `json:"kafkaConfigs"`
+	KafkaTopicGroups       []SnapshotKafkaTopicGroupRecord       `json:"kafkaTopicGroups"`
+	KafkaTopicMappings     []SnapshotKafkaTopicMappingRecord     `json:"kafkaTopicMappings"`
+	KafkaFieldGroups       []SnapshotKafkaFieldGroupRecord       `json:"kafkaFieldGroups"`
+	KafkaFields            []SnapshotKafkaFieldRecord            `json:"kafkaFields"`
+	Queries                []QueryRecord                         `json:"queries"`
+	MqttConfigs            []SnapshotMqttConfigRecord            `json:"mqttConfigs"`
+	MqttSubscriptions      []SnapshotMqttSubscriptionRecord      `json:"mqttSubscriptions"`
+	MqttSubscriptionGroups []SnapshotMqttSubscriptionGroupRecord `json:"mqttSubscriptionGroups"`
+	MqttTags               []SnapshotMqttTagRecord               `json:"mqttTags"`
+	CollectorConnections   []SnapshotCollectorConnectionRecord   `json:"collectorConnections"`
+	CollectorSecrets       []SnapshotCollectorSecretRecord       `json:"collectorSecrets"`
+	CollectorPointGroups   []SnapshotCollectorPointGroupRecord   `json:"collectorPointGroups"`
+	CollectorPoints        []SnapshotCollectorPointRecord        `json:"collectorPoints"`
+	HTTPRequestGroups      []SnapshotHTTPRequestGroupRecord      `json:"httpRequestGroups"`
+	HTTPRequests           []SnapshotHTTPRequestRecord           `json:"httpRequests"`
+	WebSocketGroups        []SnapshotWebSocketGroupRecord        `json:"webSocketGroups"`
+	WebSocketSessions      []SnapshotWebSocketSessionRecord      `json:"webSocketSessions"`
+	RealtimeKeys           []SnapshotRealtimeKeyRecord           `json:"realtimeKeys"`
+	DataPoints             []DataPointRecord                     `json:"datapoints"`
+	ComputeUnits           []ComputeUnitRecord                   `json:"computeUnits"`
+	ComputeFolders         []SnapshotComputeFolderRecord         `json:"computeFolders"`
+	ComputeDependencies    []SnapshotComputeDependencyRecord     `json:"computeDependencies"`
+	WorkbenchObjectGroups  []SnapshotWorkbenchObjectGroupRecord  `json:"workbenchObjectGroups"`
+	TableGroupMembers      []SnapshotTableGroupMemberRecord      `json:"tableGroupMembers"`
+	AlarmGroups            []AlarmGroupRecord                    `json:"alarmGroups"`
+	AlarmItems             []AlarmItemRecord                     `json:"alarmItems"`
+	AlarmSettings          *AlarmProjectSettingsRecord           `json:"alarmSettings"`
+	AlarmHistorySettings   *AlarmHistorySettingsRecord           `json:"alarmHistorySettings"`
+	AlarmChannels          []AlarmNotificationChannelRecord      `json:"alarmChannels"`
+	AlarmChannelSecrets    []SnapshotAlarmChannelSecretRecord    `json:"alarmChannelSecrets"`
+	HistoryStorage         []HistoryStorageConfigRecord          `json:"historyStorage"`
 }
 
 // SnapshotConnectionSecretRecord 只往返接入源密文和密钥版本，禁止出现明文。
@@ -490,7 +611,16 @@ type ProjectArtifactV1 struct {
 
 // ProjectSnapshotRepository 负责项目级数据域快照读写。
 type ProjectSnapshotRepository struct {
-	pool *pgxpool.Pool
+	pool projectSnapshotTransactionStarter
+}
+
+type projectSnapshotTransactionStarter interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}
+
+type projectSnapshotQuerier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
 // NewProjectSnapshotRepository 创建快照仓储。
@@ -500,83 +630,103 @@ func NewProjectSnapshotRepository(pool *pgxpool.Pool) *ProjectSnapshotRepository
 
 // GetByProject 读取项目级完整快照。
 func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID, tenantID string) (*ProjectSnapshot, error) {
-	if err := r.requireProjectTenantBinding(ctx, projectID, tenantID); err != nil {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启快照读取事务失败", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	snapshot, err := r.getByProject(ctx, tx, projectID, tenantID)
+	if err != nil {
 		return nil, err
 	}
-	connections, err := r.listConnections(ctx, projectID)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交快照读取事务失败", err)
+	}
+	return snapshot, nil
+}
+
+func (r *ProjectSnapshotRepository) getByProject(ctx context.Context, queryer projectSnapshotQuerier, projectID, tenantID string) (*ProjectSnapshot, error) {
+	if err := r.requireProjectTenantBinding(ctx, queryer, projectID, tenantID); err != nil {
+		return nil, err
+	}
+	connections, err := r.listConnections(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
 	for index := range connections {
 		connections[index].Config = scrubArtifactConnectionSecrets(connections[index].Config)
 	}
-	connectionSecrets, err := r.listConnectionSecrets(ctx, projectID)
+	connectionSecrets, err := r.listConnectionSecrets(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	queries, err := r.listQueries(ctx, projectID)
+	queries, err := r.listQueries(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	datapoints, err := r.listDataPoints(ctx, projectID)
+	datapoints, err := r.listDataPoints(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	mqttConfigs, err := r.listMqttConfigs(ctx, projectID)
+	mqttConfigs, err := r.listMqttConfigs(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	mqttSubscriptions, err := r.listMqttSubscriptions(ctx, projectID)
+	mqttSubscriptions, err := r.listMqttSubscriptions(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	mqttTags, err := r.listMqttTags(ctx, projectID)
+	mqttTags, err := r.listMqttTags(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	collectorConnections, collectorSecrets, collectorGroups, collectorPoints, err := r.listCollectorSnapshot(ctx, projectID)
+	collectorConnections, collectorSecrets, collectorGroups, collectorPoints, err := r.listCollectorSnapshot(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	httpGroups, httpRequests, websocketGroups, websocketSessions, realtimeKeys, err := r.listWorkbenchSnapshot(ctx, projectID)
+	httpGroups, httpRequests, websocketGroups, websocketSessions, realtimeKeys, err := r.listWorkbenchSnapshot(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	computeUnits, err := r.listComputeUnits(ctx, projectID)
+	computeUnits, err := r.listComputeUnits(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	alarmRepository := NewAlarmRepository(r.pool)
-	alarmGroups, err := alarmRepository.ListAllGroups(ctx, projectID)
+	alarmGroups, err := listSnapshotAlarmGroups(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	alarmItems, err := alarmRepository.ListAllAlarmItems(ctx, projectID)
+	alarmItems, err := listSnapshotAlarmItems(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	alarmSettings, err := alarmRepository.GetProjectSettings(ctx, projectID)
+	alarmSettings, err := getSnapshotAlarmProjectSettings(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	alarmHistorySettings, err := alarmRepository.GetHistorySettings(ctx, projectID)
+	alarmHistorySettings, err := getSnapshotAlarmHistorySettings(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	alarmChannels, err := alarmRepository.ListChannels(ctx, projectID)
+	alarmChannels, err := listSnapshotAlarmChannels(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	alarmChannelSecrets, err := r.listAlarmChannelSecrets(ctx, projectID)
+	alarmChannelSecrets, err := r.listAlarmChannelSecrets(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	historyStorage, err := r.listHistoryStorageConfigs(ctx, projectID)
+	historyStorage, err := r.listHistoryStorageConfigs(ctx, queryer, projectID)
+	if err != nil {
+		return nil, err
+	}
+	additions, err := r.listCompleteAuthoringSnapshot(ctx, queryer, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &ProjectSnapshot{
+	snapshot := &ProjectSnapshot{
 		Connections:          connections,
 		ConnectionSecrets:    connectionSecrets,
 		RelationalConfigs:    deriveRelationalConfigs(connections),
@@ -602,13 +752,24 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID,
 		AlarmChannels:        alarmChannels,
 		AlarmChannelSecrets:  alarmChannelSecrets,
 		HistoryStorage:       historyStorage,
-	}, nil
+	}
+	additions.apply(snapshot)
+	explicitRelational := make(map[string]bool, len(snapshot.RelationalConfigs))
+	for _, item := range snapshot.RelationalConfigs {
+		explicitRelational[item.ConnectionID] = true
+	}
+	for _, item := range deriveRelationalConfigs(connections) {
+		if !explicitRelational[item.ConnectionID] {
+			snapshot.RelationalConfigs = append(snapshot.RelationalConfigs, item)
+		}
+	}
+	return snapshot, nil
 }
 
 // requireProjectTenantBinding 是所有正式快照与工件读取的租户边界；未绑定和跨租户均统一为不存在。
-func (r *ProjectSnapshotRepository) requireProjectTenantBinding(ctx context.Context, projectID, tenantID string) error {
+func (r *ProjectSnapshotRepository) requireProjectTenantBinding(ctx context.Context, queryer projectSnapshotQuerier, projectID, tenantID string) error {
 	var exists bool
-	err := r.pool.QueryRow(ctx, `
+	err := queryer.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM data_project_tenant_bindings
 			WHERE project_id = $1 AND tenant_id = $2
@@ -621,6 +782,126 @@ func (r *ProjectSnapshotRepository) requireProjectTenantBinding(ctx context.Cont
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "项目快照不存在")
 	}
 	return nil
+}
+
+func listSnapshotAlarmGroups(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]AlarmGroupRecord, error) {
+	rows, err := queryer.Query(ctx, `WITH RECURSIVE paths AS (
+        SELECT id,project_id,name,parent_id,description,sort_order,name::text AS full_path,created_at,updated_at FROM data_alarm_groups WHERE project_id=$1 AND parent_id IS NULL
+        UNION ALL SELECT c.id,c.project_id,c.name,c.parent_id,c.description,c.sort_order,(p.full_path || ' / ' || c.name),c.created_at,c.updated_at FROM data_alarm_groups c JOIN paths p ON p.id=c.parent_id WHERE c.project_id=$1
+    ) SELECT id,project_id,name,parent_id,description,sort_order,full_path,EXISTS(SELECT 1 FROM data_alarm_groups c WHERE c.parent_id=paths.id),created_at,updated_at FROM paths ORDER BY full_path`, projectID)
+	if err != nil {
+		return nil, wrapAlarmRepo("查询报警目录失败", err)
+	}
+	defer rows.Close()
+	items := make([]AlarmGroupRecord, 0)
+	for rows.Next() {
+		var item AlarmGroupRecord
+		if err := rows.Scan(&item.ID, &item.ProjectID, &item.Name, &item.ParentID, &item.Description, &item.SortOrder, &item.FullPath, &item.HasChildren, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, wrapAlarmRepo("读取报警目录失败", err)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func listSnapshotAlarmItems(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]AlarmItemRecord, error) {
+	rows, err := queryer.Query(ctx, alarmItemBaseSelect()+` WHERE ai.project_id=$1 ORDER BY ai.created_at`, projectID)
+	if err != nil {
+		return nil, wrapAlarmRepo("查询全部报警项失败", err)
+	}
+	defer rows.Close()
+	items, err := scanAlarmItemRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	for index := range items {
+		items[index].Inputs, err = listSnapshotAlarmItemInputs(ctx, queryer, items[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		items[index].Conditions, err = listSnapshotAlarmItemConditions(ctx, queryer, items[index].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return items, nil
+}
+
+func listSnapshotAlarmItemInputs(ctx context.Context, queryer projectSnapshotQuerier, id string) ([]AlarmItemInputRecord, error) {
+	rows, err := queryer.Query(ctx, `SELECT i.id,i.datapoint_id,p.path,p.name,p.data_type,i.input_key,i.sort_order FROM data_alarm_item_inputs i JOIN data_points p ON p.id=i.datapoint_id WHERE i.alarm_item_id=$1 ORDER BY i.sort_order,i.created_at`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]AlarmItemInputRecord, 0)
+	for rows.Next() {
+		var item AlarmItemInputRecord
+		if err := rows.Scan(&item.ID, &item.DatapointID, &item.Path, &item.Name, &item.DataType, &item.InputKey, &item.SortOrder); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func listSnapshotAlarmItemConditions(ctx context.Context, queryer projectSnapshotQuerier, id string) ([]AlarmItemConditionRecord, error) {
+	rows, err := queryer.Query(ctx, `SELECT id,kind,operator,label,severity,params,trigger_delay_ms,clear_delay_ms,deadband,sort_order FROM data_alarm_item_conditions WHERE alarm_item_id=$1 ORDER BY sort_order,created_at`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]AlarmItemConditionRecord, 0)
+	for rows.Next() {
+		var item AlarmItemConditionRecord
+		var raw []byte
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Operator, &item.Label, &item.Severity, &raw, &item.TriggerDelayMS, &item.ClearDelayMS, &item.Deadband, &item.SortOrder); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &item.Params); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func getSnapshotAlarmProjectSettings(ctx context.Context, queryer projectSnapshotQuerier, projectID string) (*AlarmProjectSettingsRecord, error) {
+	item, err := scanAlarmProjectSettings(queryer.QueryRow(ctx, `SELECT project_id,notify_on_raise,notify_on_clear,repeat_interval_seconds,default_message_template,default_channel_ids,severity_definitions,escalation_rules,created_at,updated_at FROM data_alarm_project_settings WHERE project_id=$1`, projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func getSnapshotAlarmHistorySettings(ctx context.Context, queryer projectSnapshotQuerier, projectID string) (*AlarmHistorySettingsRecord, error) {
+	item, err := scanAlarmHistorySettings(queryer.QueryRow(ctx, `SELECT project_id,is_enabled,retention_days,store_notification_deliveries,created_at,updated_at FROM data_alarm_history_settings WHERE project_id=$1`, projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func listSnapshotAlarmChannels(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]AlarmNotificationChannelRecord, error) {
+	rows, err := queryer.Query(ctx, `SELECT id,project_id,name,channel_type,config,secret_status,is_enabled,last_test_status,last_tested_at,last_test_duration_ms,last_test_message,created_at,updated_at FROM data_alarm_notification_channels WHERE project_id=$1 ORDER BY updated_at DESC`, projectID)
+	if err != nil {
+		return nil, wrapAlarmRepo("查询通知渠道失败", err)
+	}
+	defer rows.Close()
+	items := make([]AlarmNotificationChannelRecord, 0)
+	for rows.Next() {
+		item, scanErr := scanAlarmChannel(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 // ReplaceProjectData 用快照内容覆盖项目下的数据域数据。
@@ -640,6 +921,17 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+	if err := r.replaceProjectDataTx(ctx, tx, projectID, actorID, snapshot); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交快照写入事务失败", err)
+	}
+	return nil
+}
+
+// replaceProjectDataTx 允许恢复路径在同一数据库会话的独占 advisory lock 下执行完整覆盖事务。
+func (r *ProjectSnapshotRepository) replaceProjectDataTx(ctx context.Context, tx pgx.Tx, projectID, actorID string, snapshot ProjectSnapshot) error {
 	if err := lockComputeProject(ctx, tx, projectID); err != nil {
 		return err
 	}
@@ -657,6 +949,9 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 	if err := r.insertProtocolConnectionConfigs(ctx, tx, snapshot.Connections); err != nil {
 		return err
 	}
+	if err := r.insertExplicitRelationalAndKafkaConfigs(ctx, tx, snapshot); err != nil {
+		return err
+	}
 	if err := r.insertConnectionSecrets(ctx, tx, snapshot.ConnectionSecrets); err != nil {
 		return err
 	}
@@ -664,6 +959,9 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return err
 	}
 	if err := r.insertCollectorSnapshot(ctx, tx, projectID, actorID, snapshot); err != nil {
+		return err
+	}
+	if err := r.insertCompleteAuthoringGroups(ctx, tx, projectID, actorID, snapshot); err != nil {
 		return err
 	}
 	if err := r.insertQueries(ctx, tx, projectID, actorID, snapshot.Queries); err != nil {
@@ -709,9 +1007,6 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交快照写入事务失败", err)
-	}
 	return nil
 }
 
@@ -1182,8 +1477,8 @@ func artifactConfigInt(config map[string]any, key string, defaultValue int) int 
 	return defaultValue
 }
 
-func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]ConnectionRecord, error) {
+	rows, err := queryer.Query(ctx, `
 		SELECT id, project_id, name, type, category, is_enabled, metadata, display_order, 0,
 		       'not_tested'::text, NULL::timestamptz, NULL::integer, NULL::text, created_at, updated_at
         FROM data_connections
@@ -1209,8 +1504,8 @@ func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, project
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listQueries(ctx context.Context, projectID string) ([]QueryRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listQueries(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]QueryRecord, error) {
+	rows, err := queryer.Query(ctx, `
         SELECT id, project_id, connection_id, name, description, category, group_id, query_type, config, transformer,
                is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
         FROM data_queries
@@ -1234,7 +1529,7 @@ func (r *ProjectSnapshotRepository) listQueries(ctx context.Context, projectID s
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照查询失败", err)
 	}
 	for index := range result {
-		outputs, outputErr := listSourceOutputMappings(ctx, r.pool, "query", result[index].ID)
+		outputs, outputErr := listSourceOutputMappings(ctx, queryer, "query", result[index].ID)
 		if outputErr != nil {
 			return nil, outputErr
 		}
@@ -1243,9 +1538,9 @@ func (r *ProjectSnapshotRepository) listQueries(ctx context.Context, projectID s
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listCollectorSnapshot(ctx context.Context, projectID string) ([]SnapshotCollectorConnectionRecord, []SnapshotCollectorSecretRecord, []SnapshotCollectorPointGroupRecord, []SnapshotCollectorPointRecord, error) {
+func (r *ProjectSnapshotRepository) listCollectorSnapshot(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotCollectorConnectionRecord, []SnapshotCollectorSecretRecord, []SnapshotCollectorPointGroupRecord, []SnapshotCollectorPointRecord, error) {
 	connections := make([]SnapshotCollectorConnectionRecord, 0)
-	rows, err := r.pool.Query(ctx, `SELECT id::text,name,code,protocol_family,driver_id,driver_version,schema_version,
+	rows, err := queryer.Query(ctx, `SELECT id::text,name,code,protocol_family,driver_id,driver_version,schema_version,
 		config,metadata,is_enabled,default_acquisition,display_order,created_at,updated_at
 		FROM data_collector_connections WHERE project_id=$1 ORDER BY display_order,id`, projectID)
 	if err != nil {
@@ -1268,7 +1563,7 @@ func (r *ProjectSnapshotRepository) listCollectorSnapshot(ctx context.Context, p
 	rows.Close()
 
 	secrets := make([]SnapshotCollectorSecretRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT secret.connection_id::text,secret.secret_key,secret.encrypted_value,
+	rows, err = queryer.Query(ctx, `SELECT secret.connection_id::text,secret.secret_key,secret.encrypted_value,
 		secret.encryption_key_version,secret.created_at,secret.updated_at
 		FROM data_collector_connection_secrets secret
 		JOIN data_collector_connections connection ON connection.id=secret.connection_id
@@ -1291,7 +1586,7 @@ func (r *ProjectSnapshotRepository) listCollectorSnapshot(ctx context.Context, p
 	rows.Close()
 
 	groups := make([]SnapshotCollectorPointGroupRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT id::text,connection_id::text,parent_id::text,name,sort_order,metadata,created_at,updated_at
+	rows, err = queryer.Query(ctx, `SELECT id::text,connection_id::text,parent_id::text,name,sort_order,metadata,created_at,updated_at
 		FROM data_collector_point_groups WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
 	if err != nil {
 		return nil, nil, nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照工业点目录失败", err)
@@ -1311,7 +1606,7 @@ func (r *ProjectSnapshotRepository) listCollectorSnapshot(ctx context.Context, p
 	rows.Close()
 
 	points := make([]SnapshotCollectorPointRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT id::text,connection_id::text,group_id::text,code,name,description,address,address_text,
+	rows, err = queryer.Query(ctx, `SELECT id::text,connection_id::text,group_id::text,code,name,description,address,address_text,
 		address_schema_version,data_type,element_count,read_options,acquisition_mode,acquisition_overrides,enabled,
 		sort_order,metadata,created_at,updated_at FROM data_collector_points WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
 	if err != nil {
@@ -1334,9 +1629,9 @@ func (r *ProjectSnapshotRepository) listCollectorSnapshot(ctx context.Context, p
 	return connections, secrets, groups, points, nil
 }
 
-func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, projectID string) ([]SnapshotHTTPRequestGroupRecord, []SnapshotHTTPRequestRecord, []SnapshotWebSocketGroupRecord, []SnapshotWebSocketSessionRecord, []SnapshotRealtimeKeyRecord, error) {
+func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotHTTPRequestGroupRecord, []SnapshotHTTPRequestRecord, []SnapshotWebSocketGroupRecord, []SnapshotWebSocketSessionRecord, []SnapshotRealtimeKeyRecord, error) {
 	httpGroups := make([]SnapshotHTTPRequestGroupRecord, 0)
-	rows, err := r.pool.Query(ctx, `SELECT id::text,connection_id::text,parent_id::text,name,sort_order FROM data_http_request_groups WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
+	rows, err := queryer.Query(ctx, `SELECT id::text,connection_id::text,parent_id::text,name,sort_order FROM data_http_request_groups WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
 	if err != nil {
 		return nil, nil, nil, nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 HTTP 分组失败", err)
 	}
@@ -1355,7 +1650,7 @@ func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, p
 	rows.Close()
 
 	httpRequests := make([]SnapshotHTTPRequestRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT id::text,connection_id::text,group_id::text,name,method,url,params,headers,auth,body_type,body,settings,enabled,sort_order FROM data_http_requests WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
+	rows, err = queryer.Query(ctx, `SELECT id::text,connection_id::text,group_id::text,name,method,url,params,headers,auth,body_type,body,settings,enabled,sort_order FROM data_http_requests WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
 	if err != nil {
 		return nil, nil, nil, nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 HTTP 请求失败", err)
 	}
@@ -1374,14 +1669,14 @@ func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, p
 	}
 	rows.Close()
 	for index := range httpRequests {
-		httpRequests[index].Outputs, err = listSourceOutputMappings(ctx, r.pool, "http", httpRequests[index].ID)
+		httpRequests[index].Outputs, err = listSourceOutputMappings(ctx, queryer, "http", httpRequests[index].ID)
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
 	}
 
 	websocketGroups := make([]SnapshotWebSocketGroupRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT id::text,connection_id::text,parent_id::text,name,sort_order FROM data_websocket_session_groups WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
+	rows, err = queryer.Query(ctx, `SELECT id::text,connection_id::text,parent_id::text,name,sort_order FROM data_websocket_session_groups WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
 	if err != nil {
 		return nil, nil, nil, nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 WebSocket 分组失败", err)
 	}
@@ -1400,7 +1695,7 @@ func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, p
 	rows.Close()
 
 	websocketSessions := make([]SnapshotWebSocketSessionRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT id::text,connection_id::text,group_id::text,name,url,headers,auth,protocols,messages,settings,enabled,sort_order FROM data_websocket_sessions WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
+	rows, err = queryer.Query(ctx, `SELECT id::text,connection_id::text,group_id::text,name,url,headers,auth,protocols,messages,settings,enabled,sort_order FROM data_websocket_sessions WHERE project_id=$1 ORDER BY connection_id,sort_order,id`, projectID)
 	if err != nil {
 		return nil, nil, nil, nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 WebSocket 会话失败", err)
 	}
@@ -1419,14 +1714,14 @@ func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, p
 	}
 	rows.Close()
 	for index := range websocketSessions {
-		websocketSessions[index].Outputs, err = listSourceOutputMappings(ctx, r.pool, "websocket", websocketSessions[index].ID)
+		websocketSessions[index].Outputs, err = listSourceOutputMappings(ctx, queryer, "websocket", websocketSessions[index].ID)
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
 	}
 
 	realtimeKeys := make([]SnapshotRealtimeKeyRecord, 0)
-	rows, err = r.pool.Query(ctx, `SELECT id::text,connection_id::text,provider,key_path,redis_type,value_type,default_ttl_seconds,description FROM data_realtime_keys WHERE project_id=$1 ORDER BY connection_id,key_path,id`, projectID)
+	rows, err = queryer.Query(ctx, `SELECT id::text,connection_id::text,provider,key_path,redis_type,value_type,default_ttl_seconds,description FROM data_realtime_keys WHERE project_id=$1 ORDER BY connection_id,key_path,id`, projectID)
 	if err != nil {
 		return nil, nil, nil, nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照实时 Key 失败", err)
 	}
@@ -1443,7 +1738,7 @@ func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, p
 	}
 	rows.Close()
 	for index := range realtimeKeys {
-		realtimeKeys[index].Outputs, err = listSourceOutputMappings(ctx, r.pool, "realtime", realtimeKeys[index].ID)
+		realtimeKeys[index].Outputs, err = listSourceOutputMappings(ctx, queryer, "realtime", realtimeKeys[index].ID)
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
@@ -1451,8 +1746,8 @@ func (r *ProjectSnapshotRepository) listWorkbenchSnapshot(ctx context.Context, p
 	return httpGroups, httpRequests, websocketGroups, websocketSessions, realtimeKeys, nil
 }
 
-func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectID string) ([]DataPointRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]DataPointRecord, error) {
+	rows, err := queryer.Query(ctx, `
         SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1
@@ -1477,8 +1772,8 @@ func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectI
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, projectID string) ([]ComputeUnitRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]ComputeUnitRecord, error) {
+	rows, err := queryer.Query(ctx, `
 		SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config,
 		       input_bindings, dependencies, timeout_ms, is_enabled, revision, created_at, updated_at
         FROM data_compute_units
@@ -1503,15 +1798,45 @@ func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, projec
 	}
 	rows.Close()
 	for index := range result {
-		if err := hydrateComputeOutputsFromPool(ctx, r.pool, &result[index]); err != nil {
+		if err := hydrateSnapshotComputeOutputs(ctx, queryer, &result[index]); err != nil {
 			return nil, err
 		}
 	}
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listAlarmChannelSecrets(ctx context.Context, projectID string) ([]SnapshotAlarmChannelSecretRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func hydrateSnapshotComputeOutputs(ctx context.Context, queryer projectSnapshotQuerier, unit *ComputeUnitRecord) error {
+	if unit == nil {
+		return nil
+	}
+	rows, err := queryer.Query(ctx, `
+		SELECT output.id::text,output.datapoint_id::text,output.output_key,point.name,point.description,point.default_value,
+		       output.path,output.data_type,output.unit,output.precision_num,output.null_policy,output.sort_order
+		FROM data_compute_unit_outputs output
+		JOIN data_points point ON point.id=output.datapoint_id
+		WHERE output.project_id=$1 AND output.compute_unit_id=$2
+		ORDER BY output.sort_order,output.id
+	`, unit.ProjectID, unit.ID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询计算输出失败", err)
+	}
+	defer rows.Close()
+	unit.Outputs = make([]ComputeOutputRecord, 0)
+	for rows.Next() {
+		var output ComputeOutputRecord
+		if err := rows.Scan(&output.ID, &output.DatapointID, &output.OutputKey, &output.Name, &output.Description, &output.DefaultValue, &output.Path, &output.DataType, &output.Unit, &output.PrecisionNum, &output.NullPolicy, &output.SortOrder); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取计算输出失败", err)
+		}
+		unit.Outputs = append(unit.Outputs, output)
+	}
+	if err := rows.Err(); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历计算输出失败", err)
+	}
+	return nil
+}
+
+func (r *ProjectSnapshotRepository) listAlarmChannelSecrets(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotAlarmChannelSecretRecord, error) {
+	rows, err := queryer.Query(ctx, `
         SELECT secret.channel_id, secret.secret_key, secret.encrypted_value,
                secret.encryption_key_version, secret.created_at, secret.updated_at
         FROM data_alarm_notification_channel_secrets secret
@@ -1538,8 +1863,8 @@ func (r *ProjectSnapshotRepository) listAlarmChannelSecrets(ctx context.Context,
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listConnectionSecrets(ctx context.Context, projectID string) ([]SnapshotConnectionSecretRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listConnectionSecrets(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotConnectionSecretRecord, error) {
+	rows, err := queryer.Query(ctx, `
 		SELECT secret.connection_id, secret.secret_key, secret.encrypted_value,
 		       secret.encryption_key_version, secret.created_at, secret.updated_at
 		FROM data_connection_secrets secret
@@ -1562,8 +1887,8 @@ func (r *ProjectSnapshotRepository) listConnectionSecrets(ctx context.Context, p
 	return result, rows.Err()
 }
 
-func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, projectID string) ([]SnapshotMqttConfigRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotMqttConfigRecord, error) {
+	rows, err := queryer.Query(ctx, `
         SELECT
             cfg.connection_id,
             cfg.broker_url,
@@ -1619,9 +1944,9 @@ func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, project
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, projectID string) ([]SnapshotMqttSubscriptionRecord, error) {
-	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, connection_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, created_at, updated_at
+func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotMqttSubscriptionRecord, error) {
+	rows, err := queryer.Query(ctx, `
+		SELECT id, project_id, connection_id, name, topic, qos, usage_mode, group_id, description, display_order, message_retention, default_batch_parse_rule, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -1643,7 +1968,9 @@ func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, p
 			&record.Topic,
 			&record.QOS,
 			&record.UsageMode,
+			&record.GroupID,
 			&record.Description,
+			&record.DisplayOrder,
 			&record.MessageRetention,
 			&defaultBatchRuleBytes,
 			&record.CreatedAt,
@@ -1660,8 +1987,8 @@ func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, p
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID string) ([]SnapshotMqttTagRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]SnapshotMqttTagRecord, error) {
+	rows, err := queryer.Query(ctx, `
         SELECT id, project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
                default_value, unit, transform, validation, display_order, created_at, updated_at
         FROM data_mqtt_tags
@@ -1706,8 +2033,8 @@ func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID 
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listHistoryStorageConfigs(ctx context.Context, projectID string) ([]HistoryStorageConfigRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+historyStorageConfigColumns+`
+func (r *ProjectSnapshotRepository) listHistoryStorageConfigs(ctx context.Context, queryer projectSnapshotQuerier, projectID string) ([]HistoryStorageConfigRecord, error) {
+	rows, err := queryer.Query(ctx, `SELECT `+historyStorageConfigColumns+`
         FROM data_history_storage_configs WHERE project_id=$1 ORDER BY created_at,id`, projectID)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照历史存储配置失败", err)
@@ -1719,7 +2046,7 @@ func (r *ProjectSnapshotRepository) listHistoryStorageConfigs(ctx context.Contex
 		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "解析快照历史存储配置失败", err)
 		}
-		config.Targets, err = r.listHistoryStorageTargets(ctx, projectID, config.ID)
+		config.Targets, err = r.listHistoryStorageTargets(ctx, queryer, projectID, config.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -1731,8 +2058,8 @@ func (r *ProjectSnapshotRepository) listHistoryStorageConfigs(ctx context.Contex
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listHistoryStorageTargets(ctx context.Context, projectID, configID string) ([]HistoryStorageTargetRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT target.id,target.project_id,target.config_id,target.connection_id,
+func (r *ProjectSnapshotRepository) listHistoryStorageTargets(ctx context.Context, queryer projectSnapshotQuerier, projectID, configID string) ([]HistoryStorageTargetRecord, error) {
+	rows, err := queryer.Query(ctx, `SELECT target.id,target.project_id,target.config_id,target.connection_id,
         connection.name,connection.type,'unknown',target.is_primary,target.sort_order,target.retention_days,
         target.created_at,target.updated_at
       FROM data_history_storage_targets target
@@ -1818,6 +2145,8 @@ func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, t
 		`DELETE FROM data_alarm_config_sync_requests WHERE project_id = $1`,
 		`DELETE FROM data_alarm_config_sync_state WHERE project_id = $1`,
 		`DELETE FROM data_compute_units WHERE project_id = $1`,
+		`DELETE FROM data_compute_dependencies WHERE project_id = $1`,
+		`DELETE FROM data_compute_folders WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_tags WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_subscriptions WHERE project_id = $1`,
 		`DELETE FROM data_points WHERE project_id = $1`,
@@ -2032,11 +2361,11 @@ func (r *ProjectSnapshotRepository) insertQueries(ctx context.Context, tx pgx.Tx
 		updatedAt := coalesceTime(query.UpdatedAt)
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_queries (
-                id, project_id, connection_id, name, description, category, query_type, config, transformer,
+                id, project_id, connection_id, group_id, name, description, category, query_type, config, transformer,
                 is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        `, query.ID, projectID, query.ConnectionID, query.Name, query.Description, query.Category, query.QueryType, string(configBytes), query.Transformer, query.IsEnabled, query.TimeoutMS, query.CacheEnabled, query.CacheTtlSeconds, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        `, query.ID, projectID, query.ConnectionID, query.GroupID, query.Name, query.Description, query.Category, query.QueryType, string(configBytes), query.Transformer, query.IsEnabled, query.TimeoutMS, query.CacheEnabled, query.CacheTtlSeconds, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照查询失败", err)
 		}
 	}
@@ -2246,11 +2575,11 @@ func (r *ProjectSnapshotRepository) insertMqttSubscriptions(ctx context.Context,
 		}
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_mqtt_subscriptions (
-                id, project_id, connection_id, name, topic, qos, usage_mode, description,
+                id, project_id, connection_id, name, topic, qos, usage_mode, group_id, description, display_order,
                 message_retention, default_batch_parse_rule, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        `, subscription.ID, projectID, subscription.ConnectionID, subscription.Name, subscription.Topic, subscription.QOS, usageMode, subscription.Description, subscription.MessageRetention, nullableJSONString(defaultBatchRuleBytes), actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        `, subscription.ID, projectID, subscription.ConnectionID, subscription.Name, subscription.Topic, subscription.QOS, usageMode, subscription.GroupID, subscription.Description, subscription.DisplayOrder, subscription.MessageRetention, nullableJSONString(defaultBatchRuleBytes), actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照 MQTT 订阅失败", err)
 		}
 	}
@@ -2576,27 +2905,43 @@ func translateAlarmSnapshotError(message string, err error) error {
 }
 
 func deriveRelationalConfigs(connections []ConnectionRecord) []SnapshotRelationalConfigRecord {
+	defaultInt := func(value any, fallback int) int {
+		if parsed := parseSnapshotInt(value); parsed > 0 {
+			return parsed
+		}
+		return fallback
+	}
 	result := make([]SnapshotRelationalConfigRecord, 0)
 	for _, connection := range connections {
 		if connection.Type != "relational" {
 			continue
 		}
 		port := 5432
+		defaultCharset := "utf8mb4"
 		if parsed := parseSnapshotInt(connection.Config["port"]); parsed > 0 {
 			port = parsed
 		}
 		record := SnapshotRelationalConfigRecord{
-			ConnectionID: connection.ID,
-			DBType:       parseSnapshotString(connection.Config["dbType"], "postgresql"),
-			Host:         parseSnapshotString(connection.Config["host"], ""),
-			Port:         port,
-			Database:     parseSnapshotString(connection.Config["database"], ""),
-			Username:     parseSnapshotString(connection.Config["username"], ""),
-			Schema:       parseSnapshotOptionalString(connection.Config["schema"]),
-			Charset:      parseSnapshotOptionalString(connection.Config["charset"]),
-			Timezone:     parseSnapshotOptionalString(connection.Config["timezone"]),
-			SSL:          parseSnapshotBool(connection.Config["ssl"]),
-			SSLConfig:    parseSnapshotObject(connection.Config["sslConfig"]),
+			ConnectionID:     connection.ID,
+			DBType:           parseSnapshotString(connection.Config["dbType"], "postgresql"),
+			Host:             parseSnapshotString(connection.Config["host"], ""),
+			Port:             port,
+			Database:         parseSnapshotString(connection.Config["database"], ""),
+			Username:         parseSnapshotString(connection.Config["username"], ""),
+			Schema:           parseSnapshotOptionalString(connection.Config["schema"]),
+			Charset:          &defaultCharset,
+			Timezone:         parseSnapshotOptionalString(connection.Config["timezone"]),
+			SSL:              parseSnapshotBool(connection.Config["ssl"]),
+			SSLConfig:        parseSnapshotObject(connection.Config["sslConfig"]),
+			PoolMin:          defaultInt(connection.Config["poolMin"], 2),
+			PoolMax:          defaultInt(connection.Config["poolMax"], 10),
+			AcquireTimeoutMS: defaultInt(connection.Config["acquireTimeoutMs"], 60000),
+			IdleTimeoutMS:    defaultInt(connection.Config["idleTimeoutMs"], 30000),
+			QueryTimeoutMS:   defaultInt(connection.Config["queryTimeoutMs"], 60000),
+			Options:          parseSnapshotObject(connection.Config["options"]),
+		}
+		if charset := parseSnapshotOptionalString(connection.Config["charset"]); charset != nil {
+			record.Charset = charset
 		}
 		result = append(result, record)
 	}

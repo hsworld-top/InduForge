@@ -30,7 +30,7 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "mqtt-lifecycle-secret-01"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -112,7 +112,7 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "mqtt-chinese-subscription-secret-01"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -200,7 +200,7 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "mqtt-subscription-no-config-secret-01"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -264,7 +264,7 @@ func TestMqttTagsListSupportsPaginationAndSearch(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "mqtt-tag-pagination-secret-01"
 
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -319,7 +319,7 @@ func TestMqttTagCreateRollsBackWhenGeneratedPointConflicts(t *testing.T) {
 	}
 	projectID, userID := uuid.NewString(), uuid.NewString()
 	secret := "mqtt-tag-transaction-secret-01"
-	srv, err := app.NewServer(config.Config{
+	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret,
 		ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1",
 	})
