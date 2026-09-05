@@ -220,7 +220,9 @@ func installedActivationFixture(t *testing.T, collector bool) (InstalledRelease,
 	foundation := runtimeFoundationFixture(t)
 	// 该夹具同时会交给 Planner 做真实“当前时刻”校验，不能依赖已经过期的示例日期。
 	future := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	for index := range foundation.Secrets { foundation.Secrets[index].ExpiresAt = future }
+	for index := range foundation.Secrets {
+		foundation.Secrets[index].ExpiresAt = future
+	}
 	return installed, raw, foundation
 }
 
@@ -265,5 +267,44 @@ func materializePlanCapabilities(t *testing.T, installRoot, arch string, collect
 		if err := os.WriteFile(path, []byte("binary"), 0700); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestSealedReleaseRejectsWritableOrLinkedMaterializedArtifact(t *testing.T) {
+	for _, kind := range []string{"writable", "symlink", "unexpected"} {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, "runtime-artifact")
+			if err := os.Mkdir(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "runtime-project-artifact.json")
+			if kind == "symlink" {
+				if err := os.Symlink(os.Args[0], path); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				mode := os.FileMode(0444)
+				if kind == "writable" {
+					mode = 0644
+				}
+				if kind == "unexpected" {
+					path = filepath.Join(dir, "unexpected.json")
+				}
+				if err := os.WriteFile(path, []byte("{}"), mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Chmod(dir, 0555); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(root, 0555); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(root, 0700); _ = os.Chmod(dir, 0700) })
+			if err := requireSealedReleaseTree(root); err == nil {
+				t.Fatal("接受了非法物化文件")
+			}
+		})
 	}
 }

@@ -285,6 +285,7 @@ func main() {
 		reconciler.SetRuntimeContextLoader(opsRepository)
 		reconciler.SetDeploymentSecretManager(ops.NewDeploymentSecretManager(reconciler))
 		reconciler.SetCollectorBindingBundleClient(dataServiceClient)
+		opsService.SetNativeCollectorProvider(reconciler)
 		go runProjectWorkloadReconciler(signalCtx, opsRepository, reconciler, logger)
 	}
 

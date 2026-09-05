@@ -7,6 +7,26 @@ using System.Text.Json;
 public sealed class CollectorRuntimeV1Tests
 {
     [Fact]
+    public async Task DevelopmentSecretResolverReadsNativeFilesWithoutReadOnlyMount()
+    {
+        // Linux 普通开发目录不是只读挂载，开发模式仍须能从同目录解析最小凭据。
+        if (!OperatingSystem.IsLinux()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "induforge-native-secret-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var index = Path.Combine(directory, "index.json");
+            await File.WriteAllTextAsync(index, """{"schemaVersion":"collector-runtime-index.v1","resources":{},"secrets":{"secret://test":"secret.json"}}""");
+            await File.WriteAllTextAsync(Path.Combine(directory, "secret.json"), """{"token":"test-only"}""");
+            using var resolver = await StrictCollectorIndexResolver.OpenAsync(index, production: false);
+            using var secret = await resolver.ResolveSecretAsync("secret://test", CancellationToken.None);
+            Assert.DoesNotContain("test-only", secret.ToString(), StringComparison.Ordinal);
+            await Assert.ThrowsAsync<CollectorRuntimeConfigurationException>(() => StrictCollectorIndexResolver.OpenAsync(index, production: true));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
     public void ValueNormalizerRejectsLossyIntegerAndUnspecifiedDateTime()
     {
         Assert.Throws<InvalidCastException>(() => CollectorValueNormalizer.Normalize(1.5d, "int32"));

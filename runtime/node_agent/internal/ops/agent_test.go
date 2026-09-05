@@ -564,3 +564,22 @@ func writeSuccess(t *testing.T, writer http.ResponseWriter, data any) {
 		t.Fatal(err)
 	}
 }
+
+func TestFormalKubernetesStopDoesNotBlockNativeCollectorCommands(t *testing.T) {
+	for _, engine := range []string{"base", "compute", "alarm"} {
+		t.Run(engine, func(t *testing.T) {
+			agent := formalAgent(t, "https://unused.invalid", t.TempDir(), make(ed25519.PublicKey, ed25519.PublicKeySize))
+			command := formalCommand()
+			command.ServiceType = engine
+			command.Operation = "stop"
+			command.DesiredStatus = "stopped"
+			command.Generation = 2
+			if err := agent.Reconcile(command); err != nil {
+				t.Fatalf("K3s 停止命令阻塞节点协调: %v", err)
+			}
+			if status, _ := agent.supervisor.Status(command.ServiceID); status.Generation != 0 {
+				t.Fatal("NodeAgent 修改了 K3s 服务状态")
+			}
+		})
+	}
+}

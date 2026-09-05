@@ -556,6 +556,10 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 		if lookupErr != nil {
 			return n, nil, lookupErr
 		}
+		// 采集由 Agent 唯一观测；其他引擎由 Kubernetes 调和器确认，节点制品准备不能覆盖运行状态。
+		if serviceType != ServiceCollector {
+			continue
+		}
 		// 即使服务观测重复也重试汇总，修复上一次独立心跳SQL成功、后续汇总失败的可恢复窗口。
 		affected[deploymentID] = struct{}{}
 		// 用户访问地址只由已登记节点管理 IP 与中心分配端口生成；Agent/Kubernetes
@@ -910,7 +914,7 @@ func (r *PostgreSQLRepository) AgentCommands(ctx context.Context, id, hash strin
 	}
 	out := make([]AgentCommand, 0, len(services))
 	for _, s := range services {
-		metadata, binding, err := r.agentDeploymentAccess(ctx, n.ID, hash, s.ProjectDeploymentID, s.ID)
+		metadata, binding, err := r.agentDeploymentCommandAccess(ctx, n.ID, hash, s.ProjectDeploymentID, s.ID, s.DesiredStatus == "stopped")
 		if err != nil {
 			return nil, fmt.Errorf("读取节点制品命令失败: %w", err)
 		}
@@ -949,12 +953,19 @@ type bindingMetadata struct {
 
 // agentDeploymentAccess 将节点令牌、节点状态、Deployment、Release 和 Binding 放进同一查询。
 // 任何关联缺失都按未授权处理，不能让节点探测其他节点或工程的 Release。
+const agentDeploymentStatePredicate = `(d.desired_status='running' OR ($5::boolean AND d.desired_status='stopped' AND s.desired_status='stopped'))`
+
 func (r *PostgreSQLRepository) agentDeploymentAccess(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string) (releaseMetadata, bindingMetadata, error) {
+	return r.agentDeploymentCommandAccess(ctx, nodeID, tokenHash, deploymentID, serviceID, false)
+}
+
+// 停止/删除命令仍需要原绑定的身份元数据，但不授予停止工程下载制品或凭据的权限。
+func (r *PostgreSQLRepository) agentDeploymentCommandAccess(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string, allowStopped bool) (releaseMetadata, bindingMetadata, error) {
 	var metadata releaseMetadata
 	var binding bindingMetadata
 	var mode string
 	var descriptor []byte
-	err := r.pool.QueryRow(ctx, `SELECT d.mode,COALESCE(v.id::text,''),COALESCE(v.version,''),COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),COALESCE(v.manifest,'{}'::jsonb),b.artifact_descriptor,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM host_nodes n JOIN deployment_services s ON s.node_id=n.id JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=n.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding,artifact_descriptor FROM deployment_bindings WHERE deployment_service_id=s.id AND node_id=n.id AND artifact_mode=CASE WHEN d.mode='development' THEN 'development' ELSE 'release' END ORDER BY revision DESC LIMIT 1) b ON true WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' AND n.approved_at IS NOT NULL AND d.id=$3 AND s.id=$4 AND d.desired_status='running' AND (d.mode='development' OR (v.status='ready' AND v.deleted_at IS NULL))`, nodeID, tokenHash, deploymentID, serviceID).Scan(&mode, &metadata.ID, &metadata.Version, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &descriptor, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
+	err := r.pool.QueryRow(ctx, `SELECT d.mode,COALESCE(v.id::text,''),COALESCE(v.version,''),COALESCE(v.artifact_key,''),COALESCE(v.artifact_hash,''),COALESCE(v.manifest_hash,''),COALESCE(v.checksums_hash,''),COALESCE(v.signing_key_id,''),COALESCE(v.artifact_size,0),COALESCE(v.manifest,'{}'::jsonb),b.artifact_descriptor,b.id::text,b.tenant_id::text,b.project_id::text,b.revision,b.binding FROM host_nodes n JOIN deployment_services s ON s.node_id=n.id JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=n.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id JOIN LATERAL (SELECT id,tenant_id,project_id,revision,binding,artifact_descriptor FROM deployment_bindings WHERE deployment_service_id=s.id AND node_id=n.id AND artifact_mode=CASE WHEN d.mode='development' THEN 'development' ELSE 'release' END ORDER BY revision DESC LIMIT 1) b ON true WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' AND n.approved_at IS NOT NULL AND d.id=$3 AND s.id=$4 AND `+agentDeploymentStatePredicate+` AND (d.mode='development' OR (v.status='ready' AND v.deleted_at IS NULL))`, nodeID, tokenHash, deploymentID, serviceID, allowStopped).Scan(&mode, &metadata.ID, &metadata.Version, &metadata.ArtifactKey, &metadata.ArtifactHash, &metadata.ManifestHash, &metadata.ChecksumsHash, &metadata.SigningKeyID, &metadata.ArtifactSize, &metadata.Manifest, &descriptor, &binding.ID, &binding.TenantID, &binding.ProjectID, &binding.Revision, &binding.Content)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return releaseMetadata{}, bindingMetadata{}, ErrAgentUnauthorized
 	}
@@ -1034,6 +1045,10 @@ var reservedDeploymentPorts = map[int]struct{}{
 }
 
 func isReservedDeploymentPort(port int) bool {
+	// Kubernetes 默认 NodePort 区间用于宿主采集访问基础消息服务，工程入口不能抢占。
+	if port >= 30000 && port <= 32767 {
+		return true
+	}
 	_, reserved := reservedDeploymentPorts[port]
 	return reserved
 }

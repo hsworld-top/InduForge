@@ -69,6 +69,7 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Post("/agent/nodes/{id}/heartbeat", h.heartbeat)
 		r.Get("/agent/nodes/{id}/commands", h.commands)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/binding", h.agentBinding)
+		r.Get("/agent/nodes/{id}/deployments/{deployment}/collector", h.agentNativeCollector)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/release", h.agentRelease)
 	})
 }

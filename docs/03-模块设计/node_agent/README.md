@@ -26,6 +26,9 @@ Server，其他 Linux 节点作为工作节点加入，并由中心节点应用�
 - 固定 schema 的运行底座与基础服务计划、离线资产双重摘要校验、真实工作负载观测、故障回传、
   同分配重新部署 / 修复，以及受边界约束的完整卸载清理。
 - 本机声明式服务组 allowlist、进程 PID 持久化、回环 HTTP 健康探测和 SIGTERM drain。
+- Supervisor 的部署级启动原语 `ActivateWorkload`：按 serviceId 保存独立配置，串行启停，
+  同代次幂等，候选启动失败后恢复旧配置，并保留仍在运行的旧进程 PID 和 generation。
+  该原语已有本机进程测试，尚未接入中心的原生 Collector 配置下发链路。
 - `ReleaseStore` 安装原语：输入不可信的 tar.zst 流、预期 outer SHA-256、受信 Ed25519 公钥和
   key ID；它限额落盘到 `incoming/*.partial`，安全解包，验证签名/摘要，内容寻址保存并原子写入
   `current.json`。
@@ -73,7 +76,7 @@ current，也不应据此报告服务运行。
 
 - 工程 Release 已能按节点主动下载 Binding 和同源流并完成本地信任校验，但 Secret 装配与正式
   launcher 尚未交付，因此还不能形成端到端工程运行。
-- 每 deployment 的端口、Secret、资源与进程隔离。
+- 每 deployment 的端口、Secret、资源隔离与原生 Collector 调和接线；Supervisor 部署级进程隔离原语已具备。
 - Linux RuntimeEngine 所需的真实只读 mount，以及启动失败后的服务级回滚编排。
 - Windows 的 Gateway/Runtime API/RuntimeEngine。当前 Windows 包只声明 Collector，其他服务组
   必须 fail-closed。

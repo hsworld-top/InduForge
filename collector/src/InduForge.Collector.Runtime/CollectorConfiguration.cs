@@ -45,10 +45,12 @@ public sealed class StrictCollectorIndexResolver : ICollectorResourceResolver, I
     private readonly Dictionary<string, CollectorResource> _resources;
     private readonly Dictionary<string, string> _secrets;
     private readonly string _directory;
+    private readonly bool _production;
 
-    private StrictCollectorIndexResolver(string directory, Dictionary<string, CollectorResource> resources, Dictionary<string, string> secrets)
+    private StrictCollectorIndexResolver(string directory, Dictionary<string, CollectorResource> resources, Dictionary<string, string> secrets, bool production)
     {
         _directory = directory;
+        _production = production;
         _resources = resources;
         _secrets = secrets;
     }
@@ -80,7 +82,7 @@ public sealed class StrictCollectorIndexResolver : ICollectorResourceResolver, I
             if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains('\0') || relative.Split(['/', '\\']).Any(segment => segment is "" or "." or "..")) throw ConfigurationError.Invalid();
             secrets.Add(entry.Name, relative);
         }
-        return new StrictCollectorIndexResolver(Path.GetDirectoryName(Path.GetFullPath(indexPath))!, resources, secrets);
+        return new StrictCollectorIndexResolver(Path.GetDirectoryName(Path.GetFullPath(indexPath))!, resources, secrets, production);
     }
 
     public ValueTask<CollectorResource> ResolveResourceAsync(string reference, CancellationToken cancellationToken)
@@ -95,7 +97,7 @@ public sealed class StrictCollectorIndexResolver : ICollectorResourceResolver, I
         if (!_secrets.TryGetValue(reference, out var relative)) throw ConfigurationError.Invalid();
         var path = Path.GetFullPath(Path.Combine(_directory, relative));
         if (!path.StartsWith(_directory + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw ConfigurationError.Invalid();
-        var bytes = await SecureFile.ReadAsync(path, MaximumResourceBytes, requireReadOnly: true, cancellationToken).ConfigureAwait(false);
+        var bytes = await SecureFile.ReadAsync(path, MaximumResourceBytes, requireReadOnly: _production, cancellationToken).ConfigureAwait(false);
         return new CollectorSecret(StrictJson.Parse(bytes));
     }
 

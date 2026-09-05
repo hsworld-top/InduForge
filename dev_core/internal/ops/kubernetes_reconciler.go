@@ -228,7 +228,7 @@ type ProjectDeploymentDeleter interface {
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT d.tenant_id::text,s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.tenant_id::text,s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE s.service_type<>'collector' AND s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
@@ -287,7 +287,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 // ReconcileStoppedProjectDeployments 与运行态调和器成对工作。停止不能只更新
 // desired_status，否则 K3s 工作负载会继续运行且 deployment run 永远 pending。
 func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Context, stopper ProjectDeploymentStopper) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.tenant_id::text,d.deletion_requested_at IS NOT NULL,COALESCE((SELECT max(desired_generation) FROM deployment_services WHERE project_deployment_id=d.id),0) FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation)) ORDER BY d.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.tenant_id::text,d.deletion_requested_at IS NOT NULL,COALESCE((SELECT max(desired_generation) FROM deployment_services WHERE project_deployment_id=d.id),0) FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM deployment_services c WHERE c.project_deployment_id=d.id AND c.service_type='collector' AND (c.observed_status<>'stopped' OR c.observed_generation<>c.desired_generation)) AND (d.deletion_requested_at IS NOT NULL OR EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation))) ORDER BY d.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
@@ -569,46 +569,15 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
 // Kubernetes RollingUpdate 接管。403 明确暴露为 RBAC 配置错误，不能伪报已运行。
 func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload ProjectWorkload) error {
+	if workload.Engine == ServiceCollector {
+		return fmt.Errorf("采集生命周期由 NodeAgent 管理，拒绝创建采集 Pod")
+	}
 	if r.hostNodes != nil {
 		if err := r.EnsureHostNodeLabels(ctx, []string{workload.NodeID}); err != nil {
 			return fmt.Errorf("工程节点标签预检失败: %w", err)
 		}
 	}
-	if workload.Engine == ServiceCollector {
-		if r.runtimeContext == nil || r.collectorBundle == nil || r.secretManager == nil {
-			return fmt.Errorf("collector-binding 阶段依赖未配置")
-		}
-		runtimeContext, err := r.runtimeContext.LoadProjectRuntimeContext(ctx, workload.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("collector-binding 加载运行上下文失败")
-		}
-		if len(runtimeContext.CollectorSourceSnapshot) == 0 {
-			return fmt.Errorf("collector-binding 缺少 Release 冻结 sourceSnapshot")
-		}
-		collectorPath, err := collectorArtifactPath(runtimeContext.Release.Manifest)
-		if err != nil {
-			return fmt.Errorf("collector-binding Release 工件无效")
-		}
-		bundle, err := r.collectorBundle.BuildCollectorBindingBundle(ctx, dataservice.CollectorBindingBundleRequest{TenantID: runtimeContext.TenantID, ProjectID: runtimeContext.ProjectID, DeploymentID: workload.DeploymentID, EnvironmentID: workload.EnvironmentID, NodeID: workload.NodeID, ReleaseID: workload.ReleaseID, Revision: int64(runtimeContext.BindingRevision), SourceSnapshot: runtimeContext.CollectorSourceSnapshot, AccountID: runtimeAccountID(runtimeContext.ProjectID, workload.DeploymentID), NATSEndpoint: runtimeContext.Support.NATSEndpoint, NATSResourceRef: runtimeContext.Support.NATSResourceRef, NATSCredentialSecretRef: runtimeContext.Support.NATSCredentialSecretRef})
-		if err != nil {
-			return fmt.Errorf("collector-binding 构建失败")
-		}
-		namespace, nsErr := projectNamespace(workload.EnvironmentID)
-		if nsErr != nil {
-			return nsErr
-		}
-		secretName, err := r.secretManager.EnsureCollector(ctx, namespace, workload.DeploymentID, runtimeContext.Support, bundle.SecretFiles)
-		if err != nil {
-			return fmt.Errorf("collector-binding 准备 Secret 失败")
-		}
-		if err = r.applyCollectorBindingConfigMap(ctx, workload, bundle); err != nil {
-			return fmt.Errorf("collector-binding 写入 ConfigMap 失败")
-		}
-		workload.CollectorBindingChecksum = bundle.BindingSHA256 + ":" + bundle.IndexSHA256
-		workload.CollectorSecretName = secretName
-		workload.BindingRevision = runtimeContext.BindingRevision
-		workload.CollectorArtifactPath = collectorPath
-	}
+
 	if workload.Engine == ServiceBase || workload.Engine == ServiceCompute || workload.Engine == ServiceAlarm {
 		if r.runtimeContext == nil {
 			return fmt.Errorf("运行绑定上下文加载器未配置")
@@ -708,7 +677,7 @@ func (r *KubernetesProjectReconciler) StopDeployment(ctx context.Context, enviro
 	if err != nil {
 		return err
 	}
-	roles := []string{ServiceBase, ServiceCompute, ServiceAlarm, ServiceCollector}
+	roles := []string{ServiceBase, ServiceCompute, ServiceAlarm}
 	for _, role := range roles {
 		name, nameErr := projectWorkloadName(deploymentID, role)
 		if nameErr != nil {
@@ -739,9 +708,6 @@ func (r *KubernetesProjectReconciler) StopDeployment(ctx context.Context, enviro
 			return err
 		}
 		binding := name + "-runtime-binding"
-		if role == ServiceCollector {
-			binding = name + "-collector-binding"
-		}
 		if err = r.deleteProjectResource(ctx, namespace, "ConfigMap", "configmaps", binding); err != nil {
 			return err
 		}
@@ -753,11 +719,7 @@ func (r *KubernetesProjectReconciler) StopDeployment(ctx context.Context, enviro
 	if err = r.deleteProjectResource(ctx, namespace, "Secret", "secrets", secretName); err != nil {
 		return err
 	}
-	collectorSecret, err := collectorBundleSecretName(deploymentID)
-	if err != nil {
-		return err
-	}
-	return r.deleteProjectResource(ctx, namespace, "Secret", "secrets", collectorSecret)
+	return nil
 }
 
 // DeleteDeployment 仅在 K3s 资源确认停止后清理该 deployment 专属 JetStream

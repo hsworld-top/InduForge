@@ -184,6 +184,7 @@ type ReleaseStore interface {
 	Open(context.Context, string) (objectstore.ObjectReader, error)
 }
 type Service struct {
+	nativeCollector         NativeCollectorProvider
 	repository              Repository
 	packages                PackageStore
 	releases                ReleaseStore

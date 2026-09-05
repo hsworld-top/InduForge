@@ -40,6 +40,7 @@ type AgentConfig struct {
 
 // OpsConfig 是运维控制面连接配置；包安装器会写入 serverUrl/code，身份凭据单独持久化。
 type OpsConfig struct {
+	SecurityMode   string                  `mapstructure:"securityMode"`
 	Enabled        bool                    `mapstructure:"enabled"`
 	ServerURL      string                  `mapstructure:"serverUrl"`
 	EnrollmentCode string                  `mapstructure:"enrollmentCode"`
@@ -468,7 +469,7 @@ func newOpsAgent(config Config, supervisor *ops.Supervisor, defaultDataDir strin
 	if err != nil {
 		return nil, fmt.Errorf("ops heartbeatEvery 无效: %w", err)
 	}
-	return ops.NewAgent(ops.Config{Enabled: true, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, AgentVersion: config.Agent.Ops.AgentVersion, HeartbeatEvery: interval, DataDir: defaultDataDir, HostdSocket: config.Agent.Ops.HostdSocket, HostDataDir: config.Agent.Ops.HostDataDir, NodeIP: config.Agent.Ops.NodeIP, TrustKeys: config.Agent.Ops.TrustKeys, RuntimeVersion: config.Agent.Ops.RuntimeVersion, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }, ReconcileError: func(err error) { fileLogger.Warn("节点协调失败: " + err.Error()) }}, supervisor)
+	return ops.NewAgent(ops.Config{Enabled: true, InstallRoot: filepath.Dir(filepath.Dir(nodeAgentExecutable())), SecurityMode: config.Agent.Ops.SecurityMode, ServerURL: config.Agent.Ops.ServerURL, EnrollmentCode: config.Agent.Ops.EnrollmentCode, AgentVersion: config.Agent.Ops.AgentVersion, HeartbeatEvery: interval, DataDir: defaultDataDir, HostdSocket: config.Agent.Ops.HostdSocket, HostDataDir: config.Agent.Ops.HostDataDir, NodeIP: config.Agent.Ops.NodeIP, TrustKeys: config.Agent.Ops.TrustKeys, RuntimeVersion: config.Agent.Ops.RuntimeVersion, ClearEnrollmentCode: func() error { return pkgConfig.ClearOpsEnrollmentCode(pkgConfig.GetConfigPath()) }, ReconcileError: func(err error) { fileLogger.Warn("节点协调失败: " + err.Error()) }}, supervisor)
 }
 
 // notifyCenterOffline 在 Agent 正常退出时主动通知运维中心离线。

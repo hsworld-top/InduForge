@@ -53,6 +53,21 @@ Supervisor 解析 `releaseRoot/current`，确认它位于根内、是目录且�
 参数的接口。运维人员仍须以受控方式提供本地服务配置。RuntimeEngine v2 额外要求实际只读的
 release 挂载，普通可写目录会被拒绝。
 
+### 4.1 部署级进程配置
+
+节点内部的 `ActivateWorkload(serviceId, group, generation, services, restart)` 在静态安装能力
+allowlist 内派生部署级配置；它不是 HTTP 接口，中心不能调用它传递任意可执行路径或参数。
+配置按 serviceId 与进程状态一起写入权限 0600 的 `managed-processes.json`，不会随心跳返回。
+Agent 重建 Supervisor 时检查本机已安装组件，再恢复各部署的配置和已存 PID 状态。
+
+启停及候选版本切换串行执行，读取状态仍可并行。候选配置必须先通过 Release 和路径预检，
+然后停止旧进程、启动候选、等待健康检查。同一 generation 已运行时，重复 restart 不会再次
+启动进程。候选启动失败且旧部署先前正在运行时，恢复旧配置；恢复成功后仍上报旧 generation，
+并记录本次错误，不能把恢复旧版本伪报为新版本发布成功。
+
+目前这是节点内部原语；Collector 的中心配置/凭据交付、正式命令调用和 Linux/Windows
+端到端部署仍需接入验证。持久化 PID 的恢复也不等同于已完成宿主重启或 PID 重用验收。
+
 ## 5. ReleaseStore 安装原语（已交付，尚未接入调和）
 
 `runtime/node_agent/internal/ops` 已提供 `ReleaseStore`/`ReleaseInstaller`。调用者必须为每个

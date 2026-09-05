@@ -4,6 +4,8 @@ agent:
     { type: process, process: { workDir: ./runtime, logDir: ./logs, binary: runtime_engine } }
   ops:
     enabled: true
+    # 节点安全模式独立于工程开发版/发布版；生产部署显式改为 production。
+    securityMode: development
     serverUrl: ''
     enrollmentCode: ''
     agentVersion: '__BUILD_VERSION__'

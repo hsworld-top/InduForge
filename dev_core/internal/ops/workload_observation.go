@@ -93,7 +93,7 @@ func recordStoppedTransaction(ctx context.Context, tx pgx.Tx, did string, genera
 	if len(message) > 1024 {
 		message = message[:1024]
 	}
-	tag, err := tx.Exec(ctx, `UPDATE deployment_services SET observed_status=$1,last_message=$2,replicas_observed=CASE WHEN $1='stopped' THEN 0 ELSE replicas_observed END,observed_generation=CASE WHEN $1='stopped' THEN desired_generation ELSE observed_generation END,observed_at=now(),updated_at=now() WHERE project_deployment_id=$3 AND desired_status='stopped' AND (observed_status,COALESCE(last_message,''),observed_generation) IS DISTINCT FROM ($1,$2,CASE WHEN $1='stopped' THEN desired_generation ELSE observed_generation END)`, observed, message, did)
+	tag, err := tx.Exec(ctx, `UPDATE deployment_services SET observed_status=$1,last_message=$2,replicas_observed=CASE WHEN $1='stopped' THEN 0 ELSE replicas_observed END,observed_generation=CASE WHEN $1='stopped' THEN desired_generation ELSE observed_generation END,observed_at=now(),updated_at=now() WHERE project_deployment_id=$3 AND service_type<>'collector' AND desired_status='stopped' AND (observed_status,COALESCE(last_message,''),observed_generation) IS DISTINCT FROM ($1,$2,CASE WHEN $1='stopped' THEN desired_generation ELSE observed_generation END)`, observed, message, did)
 	if err != nil {
 		return deploymentReconciliation{}, err
 	}

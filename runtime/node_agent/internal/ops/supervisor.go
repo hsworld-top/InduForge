@@ -37,21 +37,22 @@ func validServiceGroup(group ServiceGroup) bool {
 // ServiceConfig is operator-owned local configuration. It deliberately holds
 // command line, environment and release identity instead of DesiredWorkload.
 type ServiceConfig struct {
-	Group         ServiceGroup      `yaml:"group"`
-	Component     string            `yaml:"component"`
-	Installed     bool              `yaml:"installed"`
-	Enabled       bool              `yaml:"enabled"`
-	ReleaseRoot   string            `yaml:"releaseRoot"`
-	Current       string            `yaml:"current"`
-	ReleaseDigest string            `yaml:"releaseDigest"`
-	Executable    string            `yaml:"executable"`
-	Arguments     []string          `yaml:"arguments"`
-	Environment   map[string]string `yaml:"environment"`
-	WorkingDir    string            `yaml:"workingDir"`
-	HealthURL     string            `yaml:"healthUrl"`
-	PublicURL     string            `yaml:"publicUrl"`
-	HealthTimeout time.Duration     `yaml:"healthTimeout"`
-	DrainTimeout  time.Duration     `yaml:"drainTimeout"`
+	CapabilityRoot string            `yaml:"capabilityRoot"`
+	Group          ServiceGroup      `yaml:"group"`
+	Component      string            `yaml:"component"`
+	Installed      bool              `yaml:"installed"`
+	Enabled        bool              `yaml:"enabled"`
+	ReleaseRoot    string            `yaml:"releaseRoot"`
+	Current        string            `yaml:"current"`
+	ReleaseDigest  string            `yaml:"releaseDigest"`
+	Executable     string            `yaml:"executable"`
+	Arguments      []string          `yaml:"arguments"`
+	Environment    map[string]string `yaml:"environment"`
+	WorkingDir     string            `yaml:"workingDir"`
+	HealthURL      string            `yaml:"healthUrl"`
+	PublicURL      string            `yaml:"publicUrl"`
+	HealthTimeout  time.Duration     `yaml:"healthTimeout"`
+	DrainTimeout   time.Duration     `yaml:"drainTimeout"`
 }
 
 type SupervisorConfig struct {
@@ -86,11 +87,13 @@ type managedProcess struct {
 // restart can inspect/stop an already-running configured child, but never
 // adopts a command received from the centre.
 type Supervisor struct {
+	opMu      sync.Mutex // 串行化启停和配置切换，健康检查期间仍允许读取状态。
 	mu        sync.Mutex
 	stateDir  string
 	logDir    string
 	services  map[ServiceGroup][]ServiceConfig
 	installed map[ServiceGroup][]ServiceConfig
+	workloads map[string][]ServiceConfig
 	processes map[string]*managedProcess
 	client    *http.Client
 }
@@ -114,7 +117,7 @@ func NewSupervisorWithConfig(config SupervisorConfig) (*Supervisor, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Supervisor{stateDir: stateDir, logDir: logDir, services: make(map[ServiceGroup][]ServiceConfig), installed: make(map[ServiceGroup][]ServiceConfig), processes: make(map[string]*managedProcess), client: &http.Client{Timeout: 2 * time.Second}}
+	s := &Supervisor{stateDir: stateDir, logDir: logDir, services: make(map[ServiceGroup][]ServiceConfig), installed: make(map[ServiceGroup][]ServiceConfig), workloads: make(map[string][]ServiceConfig), processes: make(map[string]*managedProcess), client: &http.Client{Timeout: 2 * time.Second}}
 	for _, service := range config.Services {
 		service.Group = ServiceGroup(strings.TrimSpace(string(service.Group)))
 		if err := validateServiceTemplate(service); err != nil {
@@ -218,10 +221,16 @@ func safeRelativePath(value string) bool {
 }
 
 func (s *Supervisor) Start(workloadID string, group ServiceGroup, generation int64) (ProcessStatus, error) {
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+	return s.start(workloadID, group, generation)
+}
+
+func (s *Supervisor) start(workloadID string, group ServiceGroup, generation int64) (ProcessStatus, error) {
 	if err := validateWorkload(workloadID, group); err != nil {
 		return ProcessStatus{}, err
 	}
-	services, enabled := s.services[group]
+	services, enabled := s.servicesForWorkload(workloadID, group)
 	if !enabled {
 		return ProcessStatus{}, fmt.Errorf("本节点未显式分配服务组: %s", group)
 	}
@@ -261,12 +270,19 @@ func (s *Supervisor) Start(workloadID string, group ServiceGroup, generation int
 	}
 	for index, child := range process.children {
 		if err := s.waitHealthy(child, services[index]); err != nil {
-			_, _ = s.Stop(workloadID, generation)
+			_, _ = s.stop(workloadID, generation)
 			s.RecordFailure(workloadID, group, generation, err)
 			return ProcessStatus{}, err
 		}
 	}
 	s.mu.Lock()
+	if process.status.State == "failed" || !anyChildAlive(process) {
+		s.mu.Unlock()
+		_, _ = s.stop(workloadID, generation)
+		err := fmt.Errorf("服务组 %s 在启动确认前退出", group)
+		s.RecordFailure(workloadID, group, generation, err)
+		return ProcessStatus{}, err
+	}
 	if s.processes[workloadID] == process {
 		process.status.State, process.status.LastError = "running", ""
 		_ = s.saveLocked()
@@ -401,9 +417,20 @@ func (s *Supervisor) reapComponent(workloadID string, parent, child *managedProc
 }
 
 func (s *Supervisor) Stop(workloadID string, generation int64) (ProcessStatus, error) {
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+	return s.stop(workloadID, generation)
+}
+
+func (s *Supervisor) stop(workloadID string, generation int64) (ProcessStatus, error) {
 	s.mu.Lock()
 	process := s.processes[workloadID]
-	if process == nil || process.process == nil || !processAlive(process.process) {
+	if process != nil && generation > 0 && generation < process.status.Generation {
+		status := withObservedReplicas(process.status)
+		s.mu.Unlock()
+		return status, nil
+	}
+	if process == nil || !anyChildAlive(process) {
 		now := time.Now().UTC()
 		if process == nil {
 			process = &managedProcess{status: ProcessStatus{WorkloadID: workloadID, State: "stopped", Generation: generation, StoppedAt: &now, LogPath: s.logPath(workloadID)}}
@@ -419,7 +446,7 @@ func (s *Supervisor) Stop(workloadID string, generation int64) (ProcessStatus, e
 		s.mu.Unlock()
 		return status, nil
 	}
-	services, enabled := s.services[process.status.Role]
+	services, enabled := s.servicesForWorkload(workloadID, process.status.Role)
 	if !enabled {
 		s.mu.Unlock()
 		return ProcessStatus{}, fmt.Errorf("服务组未配置: %s", process.status.Role)
@@ -485,10 +512,12 @@ func anyChildAlive(process *managedProcess) bool {
 }
 
 func (s *Supervisor) Restart(workloadID string, group ServiceGroup, generation int64) (ProcessStatus, error) {
-	if _, err := s.Stop(workloadID, generation); err != nil {
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+	if _, err := s.stop(workloadID, generation); err != nil {
 		return ProcessStatus{}, err
 	}
-	return s.Start(workloadID, group, generation)
+	return s.start(workloadID, group, generation)
 }
 func (s *Supervisor) Status(workloadID string) (ProcessStatus, error) {
 	if workloadID == "" {
@@ -610,6 +639,12 @@ func (s *Supervisor) RecordFailure(workloadID string, group ServiceGroup, genera
 		s.processes[workloadID] = process
 	}
 	if generation >= process.status.Generation {
+		// 新版本准备失败不代表旧版本已退出；保留实际 PID 和旧 generation，中心才能识别尚未完成更新。
+		if anyChildAlive(process) {
+			process.status.LastError = err.Error()
+			_ = s.saveLocked()
+			return
+		}
 		process.status.Generation, process.status.State, process.status.LastError, process.status.PID = generation, "failed", err.Error(), 0
 		_ = s.saveLocked()
 	}
@@ -673,8 +708,24 @@ func resolveReleaseService(service ServiceConfig) (string, string, error) {
 	if !strings.EqualFold("sha256:"+hex.EncodeToString(digest[:]), service.ReleaseDigest) {
 		return "", "", fmt.Errorf("服务组 %s releaseDigest 不匹配", service.Group)
 	}
-	executable := filepath.Join(release, service.Executable)
-	if !within(release, executable) {
+	executableRoot := release
+	if service.CapabilityRoot != "" {
+		if service.Group != ServiceCollector || service.Component != "collector" {
+			return "", "", fmt.Errorf("只有采集组件允许使用本机能力目录")
+		}
+		executableRoot, err = filepath.EvalSymlinks(service.CapabilityRoot)
+		if err != nil {
+			return "", "", fmt.Errorf("采集能力目录不可用")
+		}
+	}
+	executable := filepath.Join(executableRoot, service.Executable)
+	if service.CapabilityRoot != "" {
+		executable, err = filepath.EvalSymlinks(executable)
+		if err != nil {
+			return "", "", fmt.Errorf("采集能力文件不可用")
+		}
+	}
+	if !within(executableRoot, executable) {
 		return "", "", fmt.Errorf("服务组 %s executable 越界", service.Group)
 	}
 	if info, err := os.Stat(executable); err != nil || info.IsDir() {
@@ -705,15 +756,36 @@ func (s *Supervisor) recover() error {
 	if err != nil {
 		return err
 	}
-	var statuses []ProcessStatus
+	var statuses []persistedProcess
 	if err := json.Unmarshal(data, &statuses); err != nil {
 		return fmt.Errorf("读取进程状态失败: %w", err)
 	}
-	for _, status := range statuses {
+	for _, saved := range statuses {
+		status := saved.ProcessStatus
+		if len(saved.Services) > 0 {
+			for _, service := range saved.Services {
+				if service.Group != status.Role {
+					return fmt.Errorf("持久化部署服务类型不匹配")
+				}
+				if err := validateServiceConfig(service); err != nil {
+					return err
+				}
+				installed := false
+				for _, template := range s.installed[service.Group] {
+					if template.Component == service.Component {
+						installed = true
+					}
+				}
+				if !installed {
+					return fmt.Errorf("持久化部署组件未安装: %s", service.Component)
+				}
+			}
+			s.workloads[status.WorkloadID] = saved.Services
+		}
 		if !validServiceGroup(status.Role) {
 			continue
 		}
-		if services := s.services[status.Role]; len(services) == 0 {
+		if services, _ := s.servicesForWorkload(status.WorkloadID, status.Role); len(services) == 0 {
 			continue
 		}
 		if status.PID > 0 && (status.State == "running" || status.State == "starting" || status.State == "stopping") {
@@ -741,7 +813,10 @@ func (s *Supervisor) recover() error {
 			}
 		}
 		now := time.Now().UTC()
-		status.State, status.PID, status.StoppedAt = "failed", 0, &now
+		if status.State != "stopped" {
+			status.State = "failed"
+		}
+		status.PID, status.StoppedAt = 0, &now
 		s.processes[status.WorkloadID] = &managedProcess{status: status}
 	}
 	return s.saveLocked()
@@ -750,9 +825,9 @@ func (s *Supervisor) saveLocked() error {
 	if err := os.MkdirAll(s.stateDir, 0700); err != nil {
 		return err
 	}
-	statuses := make([]ProcessStatus, 0, len(s.processes))
+	statuses := make([]persistedProcess, 0, len(s.processes))
 	for _, process := range s.processes {
-		statuses = append(statuses, process.status)
+		statuses = append(statuses, persistedProcess{ProcessStatus: process.status, Services: s.workloads[process.status.WorkloadID]})
 	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].WorkloadID < statuses[j].WorkloadID })
 	data, err := json.Marshal(statuses)

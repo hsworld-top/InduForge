@@ -29,6 +29,8 @@ import (
 // Config 是 ops Agent 的最小持久配置。enrollmentCode 只在未领取身份时使用，
 // 成功后只保存 node id/token，不会把 enrollment code 长期写入磁盘。
 type Config struct {
+	InstallRoot         string              `yaml:"-"`
+	SecurityMode        string              `yaml:"securityMode"`
 	Enabled             bool                `yaml:"enabled"`
 	ServerURL           string              `yaml:"serverUrl"`
 	EnrollmentCode      string              `yaml:"enrollmentCode"`
@@ -105,6 +107,9 @@ type Agent struct {
 }
 
 func NewAgent(cfg Config, supervisor *Supervisor) (*Agent, error) {
+	if cfg.SecurityMode != "" && cfg.SecurityMode != "development" && cfg.SecurityMode != "production" {
+		return nil, fmt.Errorf("securityMode 只允许 development 或 production")
+	}
 	if supervisor == nil {
 		return nil, fmt.Errorf("supervisor 不能为空")
 	}
@@ -394,13 +399,28 @@ func (a *Agent) reconcile(ctx context.Context, command AgentCommand) error {
 	} else if !validServiceGroup(group) {
 		return fmt.Errorf("不支持的服务类型: %s", command.ServiceType)
 	}
+	if formal && group == ServiceCollector {
+		err := a.reconcileNativeCollector(ctx, command)
+		if err != nil {
+			a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
+		}
+		return err
+	}
+	if formal && engineCommand && !commandRequiresRunningRelease(command) {
+		// K3s 服务的停止由中心执行；不能尝试停止不存在的本机服务组，
+		// 否则会阻塞同批次中真正由 NodeAgent 管理的原生采集停止命令。
+		if !strings.EqualFold(strings.TrimSpace(command.DesiredStatus), "stopped") {
+			return fmt.Errorf("不支持的引擎期望状态: %s", command.DesiredStatus)
+		}
+		return a.saveApplied(command.ServiceID, command.Generation)
+	}
 	if formal && commandRequiresRunningRelease(command) {
 		if err := a.installBoundRelease(ctx, command, group); err != nil {
 			a.supervisor.RecordFailure(command.ServiceID, group, command.Generation, err)
 			return err
 		}
 		if engineCommand {
-			// 四类工程引擎由中心 K3s 调和器唯一启动；NodeAgent 只验证并原子准备
+			// 基础、计算和报警引擎由中心 K3s 调和器唯一启动；NodeAgent 只验证并原子准备
 			// 节点制品，不能回退到旧原生 Supervisor 形成第二份活动实例。
 			return a.saveApplied(command.ServiceID, command.Generation)
 		}
@@ -701,6 +721,9 @@ func (a *Agent) nodeIP() string {
 }
 
 func (a *Agent) request(ctx context.Context, method, path, token string, payload any, destination any) error {
+	return a.requestLimited(ctx, method, path, token, payload, destination, maxCenterResponseBytes)
+}
+func (a *Agent) requestLimited(ctx context.Context, method, path, token string, payload any, destination any, responseLimit int) error {
 	var body *bytes.Reader
 	if payload != nil {
 		data, err := json.Marshal(payload)
@@ -735,12 +758,12 @@ func (a *Agent) request(ctx context.Context, method, path, token string, payload
 		Msg  string          `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maxCenterResponseBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(response.Body, int64(responseLimit)+1))
 	if err != nil {
 		return fmt.Errorf("读取中心响应失败: %w", err)
 	}
-	if len(raw) > maxCenterResponseBytes {
-		return fmt.Errorf("中心响应超过 %d 字节上限", maxCenterResponseBytes)
+	if len(raw) > responseLimit {
+		return fmt.Errorf("中心响应超过 %d 字节上限", responseLimit)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	if err := decoder.Decode(&envelope); err != nil {

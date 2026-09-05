@@ -50,7 +50,9 @@ func DeriveRuntimeActivation(input RuntimeActivationDerivationInput) (DerivedRun
 		return DerivedRuntimeActivation{}, fmt.Errorf("DeploymentBinding 原始 JSON 无效: %w", err)
 	}
 	now := input.Now.UTC()
-	if now.IsZero() { now = time.Now().UTC() }
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	if err := validateActivationBinding(binding, now); err != nil {
 		return DerivedRuntimeActivation{}, err
 	}
@@ -210,6 +212,18 @@ func requireSealedReleaseTree(root string) error {
 	}
 	for _, entry := range entries {
 		entryInfo, statErr := os.Lstat(filepath.Join(root, entry.Name()))
+		// 安装器会物化唯一的 runtime-artifact 子目录；只接受固定布局，仍拒绝可写文件和链接。
+		if statErr == nil && entry.Name() == "runtime-artifact" && entryInfo.IsDir() && entryInfo.Mode().Perm()&0o222 == 0 {
+			children, err := os.ReadDir(filepath.Join(root, entry.Name()))
+			if err != nil || len(children) != 1 || children[0].Name() != "runtime-project-artifact.json" {
+				return errors.New("已安装 runtime artifact 目录结构无效")
+			}
+			child, err := os.Lstat(filepath.Join(root, entry.Name(), children[0].Name()))
+			if err != nil || !child.Mode().IsRegular() || child.Mode().Perm()&0o222 != 0 {
+				return errors.New("已安装 runtime artifact 不是只读普通文件")
+			}
+			continue
+		}
 		if statErr != nil || !entryInfo.Mode().IsRegular() || entryInfo.Mode()&os.ModeSymlink != 0 || entryInfo.Mode().Perm()&0o222 != 0 {
 			return fmt.Errorf("已安装 Release 包含非只读普通文件: %s", entry.Name())
 		}
