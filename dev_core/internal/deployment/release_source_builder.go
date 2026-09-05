@@ -180,6 +180,17 @@ func (b *ProjectReleaseSourceBuilder) buildReleaseSourceFromFrozen(ctx context.C
 }
 
 func (b *ProjectReleaseSourceBuilder) buildReleaseSourceFromCaptured(ctx context.Context, project Project, version Version, artifact map[string]any, runtimeJSON, collector, collectorSourceSnapshot []byte) (ReleaseSource, error) {
+	if len(collector) > 0 {
+		captured, err := canonicalJSON(collector)
+		snapshot, snapshotErr := canonicalJSON(collectorSourceSnapshot)
+		if err != nil || snapshotErr != nil || !bytes.Equal(captured, snapshot) {
+			return ReleaseSource{}, fmt.Errorf("冻结采集产物与源快照不一致")
+		}
+		collector, collectorSourceSnapshot, err = b.packFrozenCollectorArtifact(project.ID, captured)
+		if err != nil {
+			return ReleaseSource{}, err
+		}
+	}
 	frontend, err := b.frontend.BuildProjectFrontend(ctx, project, version)
 	if err != nil {
 		return ReleaseSource{}, fmt.Errorf("构建工程前端失败: %w", err)
@@ -249,14 +260,31 @@ func (b *ProjectReleaseSourceBuilder) fetchCollectorArtifact(ctx context.Context
 	if result.SHA256 != "sha256:"+hex.EncodeToString(sum[:]) {
 		return nil, nil, fmt.Errorf("采集工件摘要不匹配")
 	}
-	var artifact struct {
+	var metadata struct {
 		SchemaVersion    string `json:"schemaVersion"`
 		ProjectID        string `json:"projectId"`
 		ArtifactRevision int64  `json:"artifactRevision"`
 	}
-	if json.Unmarshal(result.Artifact, &artifact) != nil || artifact.SchemaVersion != result.SchemaVersion || artifact.ProjectID != project.ID || artifact.ArtifactRevision != result.ArtifactRevision {
+	if json.Unmarshal(result.Artifact, &metadata) != nil || metadata.SchemaVersion != result.SchemaVersion || metadata.ProjectID != result.ProjectID || metadata.ArtifactRevision != result.ArtifactRevision {
 		return nil, nil, fmt.Errorf("采集工件内容无效")
 	}
+	return b.packFrozenCollectorArtifact(project.ID, result.Artifact)
+}
+
+// packFrozenCollectorArtifact 统一活动快照与冻结快照的交付格式：签名前归档并绑定内容摘要。
+func (b *ProjectReleaseSourceBuilder) packFrozenCollectorArtifact(projectID string, raw []byte) ([]byte, []byte, error) {
+	var result struct {
+		SchemaVersion    string          `json:"schemaVersion"`
+		ProjectID        string          `json:"projectId"`
+		ArtifactRevision int64           `json:"artifactRevision"`
+		SHA256           string          `json:"sha256"`
+		Size             int64           `json:"size"`
+		Artifact         json.RawMessage `json:"artifact"`
+	}
+	if len(raw) == 0 || int64(len(raw)) > b.archiveLimit || json.Unmarshal(raw, &result) != nil || result.SchemaVersion != "collector-runtime-artifact.v1" || result.ProjectID != projectID || result.ArtifactRevision < 1 {
+		return nil, nil, fmt.Errorf("冻结采集工件内容无效")
+	}
+	result.Artifact = raw
 	// application_versions.manifest 使用 JSONB 保存。签名前必须把嵌套 artifact 与
 	// sourceSnapshot 都规范化，否则 JSONB 读回后的字段重排会让两层字节摘要失效。
 	canonicalArtifact, err := canonicalJSON(result.Artifact)

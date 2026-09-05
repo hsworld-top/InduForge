@@ -100,10 +100,16 @@ func (c *InternalClient) BuildArtifactsFromSnapshot(ctx context.Context, project
 		return result.RuntimeArtifact, nil, nil, nil
 	}
 	var coll struct {
-		SchemaVersion    string `json:"schemaVersion"`
-		ProjectID        string `json:"projectId"`
-		ArtifactRevision int64  `json:"artifactRevision"`
+		SchemaVersion    string          `json:"schemaVersion"`
+		ArtifactID       string          `json:"artifactId"`
+		ProjectID        string          `json:"projectId"`
+		ArtifactRevision int64           `json:"artifactRevision"`
+		CollectorVersion string          `json:"collectorVersion"`
+		Connections      json.RawMessage `json:"connections"`
+		PointMappings    json.RawMessage `json:"pointMappings"`
+		WAL              json.RawMessage `json:"wal"`
 	}
+	// 严格解码必须覆盖数据域完整的 V1 契约；只声明身份字段会把正常的连接和点位当成未知字段。
 	if strictDecode(result.CollectorArtifact, &coll) != nil || coll.SchemaVersion != "collector-runtime-artifact.v1" || coll.ProjectID != projectID || coll.ArtifactRevision != 1 || len(result.CollectorSourceSnapshot) == 0 || !json.Valid(result.CollectorSourceSnapshot) {
 		return nil, nil, nil, fmt.Errorf("数据服务冻结采集产物响应无效")
 	}

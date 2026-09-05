@@ -133,3 +133,27 @@ func TestInternalClientDoesNotLeakTokenOnFailure(t *testing.T) {
 		t.Fatalf("failure leaked token: %v", err)
 	}
 }
+
+func TestBuildArtifactsFromSnapshotAcceptsCompleteCollectorContract(t *testing.T) {
+	projectID := uuid.NewString()
+	collector := map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "artifactId": "collector-release", "artifactRevision": 1, "projectId": projectID, "collectorVersion": "1.0.0", "connections": []any{}, "pointMappings": []any{}, "wal": map[string]any{"maxBytes": 1048576}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "msg": "success", "reqId": "test", "data": map[string]any{"runtimeArtifact": map[string]any{}, "collectorArtifact": collector, "collectorSourceSnapshot": collector}})
+	}))
+	defer server.Close()
+	client, err := NewInternalClient(server.URL, "internal-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, artifact, snapshot, err := client.BuildArtifactsFromSnapshot(context.Background(), projectID, uuid.NewString(), "release", time.Now(), json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(artifact) == 0 || len(snapshot) == 0 {
+		t.Fatal("丢失采集冻结产物")
+	}
+	collector["projectId"] = uuid.NewString()
+	if _, _, _, err = client.BuildArtifactsFromSnapshot(context.Background(), projectID, uuid.NewString(), "release", time.Now(), json.RawMessage(`{}`)); err == nil {
+		t.Fatal("接受了其他工程的采集产物")
+	}
+}

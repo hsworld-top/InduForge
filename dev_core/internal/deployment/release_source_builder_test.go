@@ -292,3 +292,28 @@ func mapKeys(values map[string][]byte) []string {
 	}
 	return keys
 }
+
+func TestCapturedCollectorIsPackedWithVerifiableFrozenSnapshot(t *testing.T) {
+	workspace, dist := releaseSourceDirectories(t)
+	artifact := runtimeArtifact(releaseSourceProjectID, "collector.point", false)
+	runtimeJSON, _ := json.Marshal(artifact)
+	collector, _ := json.Marshal(map[string]any{"schemaVersion": "collector-runtime-artifact.v1", "artifactId": "collector-captured", "artifactRevision": 1, "projectId": releaseSourceProjectID, "collectorVersion": "1.0.0", "connections": []any{}, "pointMappings": []any{}, "wal": map[string]any{}})
+	builder := releaseSourceBuilder(t, "http://unused.invalid", fakeFrontendRunner{directory: dist})
+	source, err := builder.buildReleaseSourceFromCaptured(context.Background(), Project{ID: releaseSourceProjectID, Code: "demo", WorkspacePath: workspace}, Version{ID: "22222222-2222-4222-8222-222222222222", Version: "1.0.0"}, artifact, runtimeJSON, collector, collector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := unpackReleaseSource(t, source.Collector)["collector-runtime-artifact.json"]
+	var frozen struct {
+		Artifact json.RawMessage `json:"artifact"`
+		SHA256   string          `json:"sha256"`
+		Size     int             `json:"size"`
+	}
+	if err = json.Unmarshal(source.CollectorSourceSnapshot, &frozen); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	if !bytes.Equal(payload, frozen.Artifact) || frozen.Size != len(payload) || frozen.SHA256 != "sha256:"+hex.EncodeToString(sum[:]) {
+		t.Fatal("冻结采集快照与归档不一致")
+	}
+}
