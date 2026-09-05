@@ -2,8 +2,6 @@
 .agents
 .codex-logs
 .playwright-mcp
-.superpower
-.superpowers
 .worktrees
 
 .env

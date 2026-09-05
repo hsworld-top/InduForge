@@ -30,7 +30,7 @@
 交付内容：
 
 - 提交当前 `datacenter` UI 改造与本计划文档。
-- 不提交 `data_service`、`dev_core`、既有 docs 脏文件和 `.superpowers/` 临时设计稿。
+- 不提交 `data_service`、`dev_core` 和既有 docs 脏文件。
 - 在主分支保留一个可回溯的 UI 基线提交。
 
 验收方式：

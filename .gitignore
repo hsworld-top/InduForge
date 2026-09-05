@@ -83,8 +83,6 @@ collector/artifacts/
 # 项目过程文档与本地工作区
 # ============================================
 .agents/
-.superpower/
-.superpowers/
 .worktrees/
 .venv/
 .venv-industrial-sim/

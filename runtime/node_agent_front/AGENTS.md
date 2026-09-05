@@ -4,11 +4,14 @@
 
 - `runtime/node_agent_front` 是节点本地管理前端，负责节点状态、配置、日志与本地运维界面展示。
 
-## 进入前先看
+## 按任务查阅
 
-- `runtime/node_agent_front/package.json`
-- `runtime/node_agent_front/src/`
-- `docs/03-模块设计/node_agent_front/README.md`
+以下路径和命令均从仓库根目录解析，只读取任务涉及的文件与章节。
+
+- 页面、状态与日志交互：定位 `runtime/node_agent_front/src/` 中对应视图、状态存储或 API 文件。
+- 模块职责与本地管理边界：`docs/03-模块设计/node_agent_front/README.md`。
+- 状态或接口语义：核对 `runtime/node_agent_front/src/api/nodeApi.js` 和 `runtime/node_agent/internal/web/handler/routes.go`；展示被托管组件状态时，再查 `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`。
+- 依赖或构建、校验脚本：`runtime/node_agent_front/package.json`。
 
 ## 开发约束
 
@@ -23,11 +26,8 @@
 - 不要把运行时页面渲染能力混入 NodeAgent Front。
 - 不要提交 `dist/`、日志或本地缓存。
 
-## 验证命令
+## 按影响面验证
 
-- `pnpm --dir runtime/node_agent_front build`
-
-## 相关契约
-
-- `docs/03-模块设计/node_agent_front/README.md`
-- `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`
+- JS/Vue 逻辑的静态检查入口为 `pnpm lint:node-agent-front`；页面、依赖或构建改动需要打包验证时使用 `pnpm build:node-agent-front`。
+- 初始化、状态轮询或日志链路变化，使用已运行的服务验证受影响交互与失败状态；无可用服务时按根规则说明未验证项。
+- 按需选择入口，不要求每次全部执行；纯文档改动不运行业务构建。
