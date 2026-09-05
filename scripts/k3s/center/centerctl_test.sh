@@ -225,7 +225,15 @@ EOF
 else
   echo "skip nginx syntax test: Docker is unavailable" >&2
 fi
-if [ "$(grep -Fc 'location /api/v1/data' "$SCRIPT_DIR/nginx.conf")" -ne 2 ] || [ "$(grep -Fc 'proxy_pass http://center-data:18102;' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
+if [ "$(grep -Fc 'location /socket.io' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
+  echo "center data Socket.IO is not exposed on both edge listeners" >&2
+  exit 1
+fi
+if [ "$(awk '/location \/socket.io/ { socket=1 } socket && /proxy_set_header Host \$http_host;/ { count++ } socket && /}/ { socket=0 } END { print count+0 }' "$SCRIPT_DIR/nginx.conf")" -ne 2 ]; then
+  echo "data Socket.IO must preserve the Host port for WebSocket Origin checks" >&2
+  exit 1
+fi
+if [ "$(grep -Fc 'location /api/v1/data' "$SCRIPT_DIR/nginx.conf")" -ne 2 ] || [ "$(grep -Fc 'proxy_pass http://center-data:18102;' "$SCRIPT_DIR/nginx.conf")" -ne 4 ]; then
   echo "center data API is not exposed on both edge listeners" >&2
   exit 1
 fi

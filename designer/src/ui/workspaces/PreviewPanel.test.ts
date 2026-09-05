@@ -1,6 +1,22 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PreviewPanel from './PreviewPanel.vue'
+import request from '@/utils/request'
+
+vi.mock('@/utils/request', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/request')>()
+  return {
+    ...actual,
+    default: {
+      post: vi.fn(async (url: string, body: unknown) => {
+        const response = await fetch(`/api/v1${url}`, {
+          method: 'POST', body: JSON.stringify(body),
+        })
+        return response.json()
+      }),
+    },
+  }
+})
 
 const { viewerSessionMock, ioMock, socketEmitMock, socketHandlers } = vi.hoisted(() => ({
   viewerSessionMock: vi.fn(),
@@ -39,6 +55,7 @@ function installFrameWindow(frame: HTMLIFrameElement) {
 
 describe('PreviewPanel', () => {
   beforeEach(() => {
+    vi.mocked(request.post).mockClear()
     delete window.$wujie
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => runningState }))
@@ -330,6 +347,11 @@ describe('PreviewPanel', () => {
       '/api/v1/data/projects/project-1/datapoints/values',
       expect.objectContaining({ method: 'POST' }),
     )
+    expect(request.post).toHaveBeenCalledWith(
+      '/data/projects/project-1/datapoints/values',
+      { paths: ['db.IF关系库.demo.temperature'] },
+      { authoringProjectId: 'project-1' },
+    )
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'RESULT',
@@ -338,6 +360,44 @@ describe('PreviewPanel', () => {
       }),
       'https://preview.workspace.test',
     )
+  })
+
+  it('页面写入携带工程上下文，服务端拒绝时不伪造成功或订阅值', async () => {
+    vi.mocked(request.post).mockRejectedValueOnce(new Error('工程开发态已变化，请刷新后重试'))
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow, postMessage } = installFrameWindow(frame)
+    window.dispatchEvent(new MessageEvent('message', {
+      source: contentWindow,
+      origin: 'https://preview.workspace.test',
+      data: {
+        channel: 'induforge-page-runtime', version: 1, type: 'REQUEST',
+        requestId: 'write-stale', domain: 'point', operation: 'set', path: 'demo.setpoint', args: [81],
+      },
+    }))
+    await flushPromises()
+    expect(request.post).toHaveBeenCalledWith(
+      '/data/projects/project-1/datapoints/write-by-path',
+      { path: 'demo.setpoint', value: 81 },
+      { authoringProjectId: 'project-1' },
+    )
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'write-stale',
+        result: expect.objectContaining({ code: 50031, msg: '工程开发态已变化，请刷新后重试' }),
+      }),
+      'https://preview.workspace.test',
+    )
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'EVENT' }), expect.anything())
+    wrapper.unmount()
   })
 
   it('页面订阅复用数据预览 Socket 并转发变化事件', async () => {
@@ -382,6 +442,11 @@ describe('PreviewPanel', () => {
       expect.objectContaining({
         auth: { projectId: 'project-1', previewSessionId: 'preview-session-1' },
       }),
+    )
+    expect(request.post).toHaveBeenCalledWith(
+      '/data/projects/project-1/preview/sessions',
+      { meta: { consumer: 'designer-preview' } },
+      { authoringProjectId: 'project-1' },
     )
     expect(socketEmitMock).toHaveBeenCalledWith(
       'datapoint:subscribe',

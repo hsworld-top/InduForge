@@ -8,7 +8,7 @@ import IconLucideMonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import IconLucidePower from '~icons/lucide/power'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideRotateCcw from '~icons/lucide/rotate-ccw'
-import { getApiErrorMessage, resolveApiError } from '@/utils/request'
+import request, { getApiErrorMessage, resolveApiError } from '@/utils/request'
 import { sceneContractApi, type SceneKind } from './scene-contract-api'
 import { previewControlApi, type PreviewControlState } from './code/preview-control-api'
 
@@ -329,18 +329,13 @@ async function handleRuntimeMessage(event: MessageEvent): Promise<void> {
   }
 }
 
-async function dataEnvelope(response: Response): Promise<unknown> {
-  const payload = (await response.json().catch(() => null)) as {
-    code?: number
-    msg?: string
-    data?: unknown
-  } | null
-  if (!response.ok || !payload || payload.code !== 0) {
-    const error = new Error(payload?.msg || '预览数据操作失败') as Error & { code?: number }
-    if (typeof payload?.code === 'number') error.code = payload.code
-    throw error
-  }
-  return payload.data
+// 预览数据同样属于工程开发态。统一请求封装负责租户、登录续期和开发代次，
+// 避免恢复工程后缺失代次的 POST 被写栅栏拒绝。
+async function requestPreviewData(path: string, body?: unknown): Promise<unknown> {
+  const response = await request.post<{ data?: unknown }>(path, body, {
+    authoringProjectId: props.projectId,
+  })
+  return response.data
 }
 
 async function ensureDataSocket(): Promise<Socket> {
@@ -356,21 +351,16 @@ async function ensureDataSocket(): Promise<Socket> {
 
 async function connectDataSocket(): Promise<Socket> {
   if (!dataPreviewSessionId) {
-    const data = (await dataEnvelope(
-      await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/preview/sessions`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meta: { consumer: 'designer-preview' } }),
-      }),
+    const data = (await requestPreviewData(
+      `/data/projects/${encodeURIComponent(props.projectId)}/preview/sessions`,
+      { meta: { consumer: 'designer-preview' } },
     )) as { id?: string; sessionId?: string }
     dataPreviewSessionId = String(data.sessionId || data.id || '')
     if (!dataPreviewSessionId) throw new Error('数据预览会话响应无效')
     dataHeartbeatTimer = window.setInterval(() => {
-      void fetch(
-        `/api/v1/data/preview/sessions/${encodeURIComponent(dataPreviewSessionId)}/heartbeat`,
-        { method: 'POST', credentials: 'same-origin' },
-      )
+      void requestPreviewData(
+        `/data/preview/sessions/${encodeURIComponent(dataPreviewSessionId)}/heartbeat`,
+      ).catch(() => {})
     }, 10 * 60 * 1000)
   }
   dataSocket = io(window.location.origin, {
@@ -485,25 +475,17 @@ function pageRuntimeResult(code: number, msg: string, data: unknown, reqId?: str
 }
 
 async function readPageDatapoint(path: string): Promise<unknown> {
-  const data = (await dataEnvelope(
-    await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/values`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: [path] }),
-    }),
+  const data = (await requestPreviewData(
+    `/data/projects/${encodeURIComponent(props.projectId)}/datapoints/values`,
+    { paths: [path] },
   )) as { values?: Record<string, unknown> }
   return data.values?.[path] ?? null
 }
 
 async function writePageDatapoint(path: string, value: unknown): Promise<unknown> {
-  return dataEnvelope(
-    await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/write-by-path`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, value }),
-    }),
+  return requestPreviewData(
+    `/data/projects/${encodeURIComponent(props.projectId)}/datapoints/write-by-path`,
+    { path, value },
   )
 }
 
@@ -591,8 +573,8 @@ async function handlePageRuntimeRequest(
     }
     respond(pageRuntimeResult(50031, `开发态预览尚未提供 point.${operation}() 能力`, null))
   } catch (error) {
-    const code = Number((error as { code?: number }).code) || 50031
-    respond(pageRuntimeResult(code, error instanceof Error ? error.message : String(error), null))
+    const resolved = resolveApiError(error, '预览数据操作失败')
+    respond(pageRuntimeResult(resolved.code || 50031, resolved.msg, null, resolved.reqId))
   }
 }
 
@@ -614,21 +596,11 @@ async function handleSceneDataRequest(message: Record<string, unknown>, targetOr
   }
   try {
     if (operation === 'get') {
-      const data = (await dataEnvelope(
-        await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/values`, {
-          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [path] }),
-        }),
-      )) as { values?: Record<string, unknown> }
-      respond({ value: data.values?.[path] })
+      respond({ value: await readPageDatapoint(path) })
       return
     }
     if (operation === 'set') {
-      const data = await dataEnvelope(
-        await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/write-by-path`, {
-          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, value: message.value }),
-        }),
-      )
-      respond(data)
+      respond(await writePageDatapoint(path, message.value))
       return
     }
     const socket = await ensureDataSocket()

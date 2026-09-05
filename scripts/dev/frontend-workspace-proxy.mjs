@@ -138,6 +138,36 @@ export function createFrontendWorkspaceProxy(env = {}, options = {}) {
         proxy.on('proxyRes', (proxyResponse, request) => {
           const workspace = resolveRequest(request)
           if (!workspace) return
+          // localhost 与各工作区子域在浏览器中属于跨站；Lax Cookie 会在票据换会话时被
+          // 拒绝。仅本地可信回环代理将工作区会话改为按顶层站点分区的 Cookie，保留
+          // host-only、HttpOnly 和有效期；远端生产网关的 Cookie 策略不受影响。
+          const cookies = proxyResponse.headers['set-cookie']
+          if (Array.isArray(cookies)) {
+            proxyResponse.headers['set-cookie'] = cookies.map((cookie) => {
+              if (!/^if_workspace_session_(ai|code|preview|preview-control)=/.test(cookie)) {
+                return cookie
+              }
+              const attributes = cookie
+                .split(';')
+                .filter(
+                  (attribute, index) =>
+                    index === 0 || !/^(samesite\s*=|secure$|partitioned$)/i.test(attribute.trim()),
+                )
+              return `${attributes.join(';')}; SameSite=None; Secure; Partitioned`
+            })
+          }
+          // 网关与工作区可能各写一次相同 Origin；浏览器拒绝逗号分隔的重复值。
+          // 仅折叠完全一致的值，不扩大上游允许的来源集合。
+          const rawAllowOrigin = proxyResponse.headers['access-control-allow-origin']
+          const origins = (
+            Array.isArray(rawAllowOrigin) ? rawAllowOrigin.join(',') : String(rawAllowOrigin || '')
+          )
+            .split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean)
+          if (origins.length > 1 && origins.every((origin) => origin === origins[0])) {
+            proxyResponse.headers['access-control-allow-origin'] = origins[0]
+          }
           const allowOrigin = proxyResponse.headers['access-control-allow-origin']
           if (String(allowOrigin || '').toLowerCase() === workspace.remoteOrigin) {
             proxyResponse.headers['access-control-allow-origin'] = workspace.localOrigin

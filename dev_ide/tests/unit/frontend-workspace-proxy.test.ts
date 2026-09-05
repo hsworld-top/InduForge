@@ -12,6 +12,65 @@ const suffix = 'workspace.172.16.125.129.nip.io'
 const uuid = '123e4567-e89b-12d3-a456-426614174000'
 
 describe('frontend-linux 工作区 Host 代理', () => {
+  it('合并网关和工作区完全相同的 CORS Origin，拒绝把不同授权来源合并', () => {
+    const proxy = createFrontendWorkspaceProxy({
+      IF_FRONTEND_PROXY_TARGET: target,
+      IF_FRONTEND_WORKSPACE_PROXY_SUFFIX: suffix,
+    })['^/.*']
+    const handlers: Record<string, Function> = {}
+    proxy.configure({ on: (name: string, handler: Function) => (handlers[name] = handler) })
+    const request = { headers: { host: `preview-control-${uuid}.localhost:18604` } }
+    for (const value of [
+      'http://localhost:18601, http://localhost:18601',
+      ['http://localhost:18601', 'http://localhost:18601'],
+    ]) {
+      const response = { headers: { 'access-control-allow-origin': value } }
+      handlers.proxyRes(response, request)
+      expect(response.headers['access-control-allow-origin']).toBe('http://localhost:18601')
+    }
+    const mixed = {
+      headers: { 'access-control-allow-origin': 'http://localhost:18601, https://evil.example' },
+    }
+    handlers.proxyRes(mixed, request)
+    expect(mixed.headers['access-control-allow-origin']).toBe(
+      'http://localhost:18601, https://evil.example',
+    )
+  })
+
+  it('本地跨站工作区会话使用分区 Cookie，保留 HttpOnly 且不改写其他 Cookie', () => {
+    const proxy = createFrontendWorkspaceProxy({
+      IF_FRONTEND_PROXY_TARGET: target,
+      IF_FRONTEND_WORKSPACE_PROXY_SUFFIX: suffix,
+    })['^/.*']
+    const handlers: Record<string, Function> = {}
+    proxy.configure({ on: (name: string, handler: Function) => (handlers[name] = handler) })
+    const cookies = [
+      'if_workspace_session_preview-control=session; Path=/; Max-Age=900; HttpOnly; SameSite=Lax',
+      'other=value; Path=/; SameSite=Lax',
+    ]
+    const response = { headers: { 'set-cookie': [...cookies] } }
+    handlers.proxyRes(response, { headers: { host: `preview-control-${uuid}.localhost:18604` } })
+    expect(response.headers['set-cookie']).toEqual([
+      'if_workspace_session_preview-control=session; Path=/; Max-Age=900; HttpOnly; SameSite=None; Secure; Partitioned',
+      cookies[1],
+    ])
+    // 重复处理不会叠加属性；注销 Cookie 也使用相同分区。
+    handlers.proxyRes(response, { headers: { host: `preview-control-${uuid}.localhost:18604` } })
+    expect(response.headers['set-cookie'][0].match(/Partitioned/g)).toHaveLength(1)
+    const logout = {
+      headers: {
+        'set-cookie': ['if_workspace_session_ai=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'],
+      },
+    }
+    handlers.proxyRes(logout, { headers: { host: `ai-${uuid}.localhost:18604` } })
+    expect(logout.headers['set-cookie'][0]).toContain(
+      'Max-Age=0; HttpOnly; SameSite=None; Secure; Partitioned',
+    )
+    const rejected = { headers: { 'set-cookie': [...cookies] } }
+    handlers.proxyRes(rejected, { headers: { host: 'evil.example:18604' } })
+    expect(rejected.headers['set-cookie']).toEqual(cookies)
+  })
+
   it('只接受四个服务的 UUID.localhost Host，并构造固定远端 Host', () => {
     expect(
       resolveLocalWorkspaceRequest(`preview-${uuid}.localhost:18604`, 18604, suffix, target),
