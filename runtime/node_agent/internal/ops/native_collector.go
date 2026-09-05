@@ -110,6 +110,10 @@ func (a *Agent) prepareNativeCollector(command AgentCommand, bundle nativeCollec
 	if err != nil {
 		return ServiceConfig{}, err
 	}
+	wal, err := prepareNativeCollectorWAL(a.cfg.DataDir, command.DeploymentID)
+	if err != nil {
+		return ServiceConfig{}, err
+	}
 	releaseRoot := filepath.Join(root, "release")
 	current := filepath.Join("releases", "sha256-"+strings.TrimPrefix(command.ArchiveSHA256, "sha256:"))
 	manifestRaw, err := os.ReadFile(filepath.Join(releaseRoot, current, "release-manifest.json"))
@@ -140,19 +144,6 @@ func (a *Agent) prepareNativeCollector(command AgentCommand, bundle nativeCollec
 	raw, _ := json.Marshal(bundle)
 	configRoot := filepath.Join(root, "collector-config", strings.TrimPrefix(digestBytes(raw), "sha256:"))
 	if err := writeNativeCollectorFiles(configRoot, artifact, bundle); err != nil {
-		return ServiceConfig{}, err
-	}
-	wal, err := collectorWALPath(a.cfg.DataDir, command.DeploymentID)
-	if err != nil {
-		return ServiceConfig{}, err
-	}
-	if err = os.MkdirAll(wal, 0700); err != nil {
-		return ServiceConfig{}, err
-	}
-	if info, err := os.Lstat(wal); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return ServiceConfig{}, fmt.Errorf("采集 WAL 目录无效")
-	}
-	if err = os.Chmod(wal, 0700); err != nil {
 		return ServiceConfig{}, err
 	}
 	capabilityRoot, executable, err := nativeCollectorCapability(a.cfg.InstallRoot, runtime.GOOS, runtime.GOARCH)

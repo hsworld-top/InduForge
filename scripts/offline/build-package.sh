@@ -36,7 +36,6 @@ REQUIRED_IMAGES=(
   "induforge/project-runtime-api:1.0.0"
   "induforge/runtime-engine:1.0.32"
   "induforge/compute-sandbox:1.0.8"
-  "induforge/collector-engine:1.0.0"
 )
 
 PRODUCT_IMAGE_SOURCES=(

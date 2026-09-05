@@ -206,10 +206,7 @@ func (a *Agent) installBoundRelease(ctx context.Context, command AgentCommand, g
 	if err != nil {
 		return err
 	}
-	if bindingEnablesService(binding, ServiceCollector) {
-		_, err = ensureCollectorWAL(a.cfg.DataDir, command.DeploymentID)
-	}
-	return err
+	return nil
 }
 
 func validateDeploymentBinding(binding deploymentBinding, command AgentCommand, nodeID string, supervisor *Supervisor) error {

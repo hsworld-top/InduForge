@@ -55,7 +55,6 @@ ARM64_RUNTIME_IMAGES=(
   "induforge/project-runtime-api:1.0.0"
   "induforge/runtime-engine:1.0.32"
   "induforge/compute-sandbox:1.0.8"
-  "induforge/collector-engine:1.0.0"
 )
 
 ARM64_RUNTIME_DOCKERFILES=(
@@ -63,7 +62,6 @@ ARM64_RUNTIME_DOCKERFILES=(
   "runtime/runtime_api/Dockerfile"
   "runtime/runtime_engine/Dockerfile"
   "compute_sandbox/Dockerfile"
-  "runtime/collector_engine/Dockerfile"
 )
 
 ARM64_RUNTIME_CONTEXTS=(
@@ -71,7 +69,6 @@ ARM64_RUNTIME_CONTEXTS=(
   "runtime/runtime_api"
   "runtime/runtime_engine"
   "compute_sandbox"
-  "runtime/collector_engine"
 )
 
 PACKAGE_IMAGES=(
@@ -87,7 +84,6 @@ PACKAGE_IMAGES=(
   "induforge/project-runtime-api:1.0.0"
   "induforge/runtime-engine:1.0.32"
   "induforge/compute-sandbox:1.0.8"
-  "induforge/collector-engine:1.0.0"
 )
 
 image_tar_name() {

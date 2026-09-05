@@ -82,26 +82,6 @@ func TestBuildResolverSecretFilesKeepsResolverShapeInMemory(t *testing.T) {
 	}
 }
 
-func TestDeploymentSecretManagerEnsuresCollectorFilesWithoutOverwritingOtherKeys(t *testing.T) {
-	deploymentID := "99999999-9999-4999-8999-999999999999"
-	name, err := collectorBundleSecretName(deploymentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &memorySecretClient{values: sourceSecrets()}
-	client.values["project/"+name] = map[string]string{"runtime-db-password": "preserve", "connection-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.json": "obsolete"}
-	manager := NewDeploymentSecretManager(client)
-	support := RuntimeSupportResources{NATSCredentialSource: KubernetesSecretSource{Namespace: "runtime", Name: "nats", Keys: map[string]string{"credential": "token"}}}
-	_, err = manager.EnsureCollector(context.Background(), "project", deploymentID, support, map[string][]byte{"connection-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.json": []byte(`{"host":"modbus"}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := client.values["project/"+name]
-	if files["runtime-db-password"] != "preserve" || !strings.Contains(files[resolverNATSFile], "test-token") || files["connection-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.json"] == "" || files["connection-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.json"] != "" {
-		t.Fatalf("collector secret was not controlled per key: %#v", files)
-	}
-}
-
 func TestDeploymentSecretManagerBuildsBaseRuntimeAPIFilesWithoutBootstrapLeak(t *testing.T) {
 	client := &memorySecretClient{values: map[string]map[string]string{"runtime/nats": {"token": "environment-token"}, "runtime/postgres": {"password": "admin-password"}}}
 	manager := NewDeploymentSecretManager(client)

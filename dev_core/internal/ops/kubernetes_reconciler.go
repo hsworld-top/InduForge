@@ -844,41 +844,6 @@ func (r *KubernetesProjectReconciler) waitProjectDeploymentDeleted(ctx context.C
 	}
 }
 
-func collectorArtifactPath(raw []byte) (string, error) {
-	var manifest deployableReleaseManifest
-	if json.Unmarshal(raw, &manifest) != nil || manifest.Artifacts.Collector == nil || manifest.Artifacts.Collector.File != collectorArtifactFile {
-		return "", fmt.Errorf("collector artifact 缺失")
-	}
-	return manifest.Artifacts.Collector.File, nil
-}
-
-func (r *KubernetesProjectReconciler) applyCollectorBindingConfigMap(ctx context.Context, workload ProjectWorkload, bundle *dataservice.CollectorBindingBundle) error {
-	namespace, err := projectNamespace(workload.EnvironmentID)
-	if err != nil {
-		return err
-	}
-	name, err := projectWorkloadName(workload.DeploymentID, ServiceCollector)
-	if err != nil {
-		return err
-	}
-	manifest := fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: %s-collector-binding\n  namespace: %s\n  annotations: {induforge.io/binding-sha256: %q, induforge.io/index-sha256: %q}\ndata:\n  binding.json: %q\n  index.json: %q\n", name, namespace, bundle.BindingSHA256, bundle.IndexSHA256, string(bundle.Binding), string(bundle.Index))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.endpoint+"/api/v1/namespaces/"+namespace+"/configmaps/"+name+"-collector-binding?fieldManager=induforge-center&force=true", strings.NewReader(manifest))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+r.token)
-	req.Header.Set("Content-Type", "application/apply-patch+yaml")
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return nil
-}
-
 func (r *KubernetesProjectReconciler) applyRuntimeBindingConfigMap(ctx context.Context, workload ProjectWorkload, input []byte) error {
 	namespace, err := projectNamespace(workload.EnvironmentID)
 	if err != nil {

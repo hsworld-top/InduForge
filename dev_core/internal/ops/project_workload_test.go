@@ -75,15 +75,6 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(alarm, "sandbox.json") || strings.Contains(alarm, "sandbox-token") || strings.Contains(alarm, "sandbox-secret") {
 		t.Fatalf("alarm must not receive sandbox Secret: %s", alarm)
 	}
-	collector, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", NodeID: testNodeID, Engine: ServiceCollector, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
-	for _, expected := range []string{"image: induforge/collector-engine:1.0.7", `command: ["/collector_artifact_unpack"]`, `command: ["/industrial_collector"]`, `"--artifact"`, `"--binding"`, `"--index"`, `"--listen"`, "readinessProbe: {httpGet: {path: /ready, port: http}", "livenessProbe: {httpGet: {path: /health, port: http}", "mountPath: /etc/induforge/collector/secrets", "mountPath: /var/lib/induforge/collector/wal", `hostPath: {path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/state/collector-wal", type: Directory}`, "maxUnavailable: 1, maxSurge: 0"} {
-		if err != nil || !strings.Contains(collector, expected) {
-			t.Fatalf("collector workload missing %q: %v\n%s", expected, err, collector)
-		}
-	}
-	if strings.Contains(collector, "runtime-binding-prepare") || strings.Contains(collector, `command: ["runtime-engine"]`) || strings.Contains(collector, "if-runtime-provisioner") || strings.Contains(collector, "emptyDir: {sizeLimit: \"1Gi\"}") || strings.Contains(collector, "--secrets-dir") || strings.Contains(collector, "--wal-dir") {
-		t.Fatalf("collector workload must not reuse runtime-engine init/config: %v\n%s", err, collector)
-	}
 	compute, err = RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 2})
 	for _, expected := range []string{"name: compute-sandbox", "image: induforge/compute-sandbox:1.0.8", "secretKeyRef", "COMPUTE_SANDBOX_TOKEN", "readOnly: true"} {
 		if err != nil || !strings.Contains(compute, expected) {
@@ -94,6 +85,13 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute manifest missing sandbox runtime contract %q: %s", expected, compute)
 		}
+	}
+}
+
+func TestRenderProjectWorkloadManifestRejectsNativeCollector(t *testing.T) {
+	manifest, err := RenderProjectWorkloadManifest(ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", NodeID: testNodeID, Engine: ServiceCollector, ReleaseID: testVersionID, ReleaseDigest: "sha256:" + strings.Repeat("a", 64), Generation: 2})
+	if err == nil || !strings.Contains(err.Error(), "NodeAgent") || manifest != "" {
+		t.Fatalf("原生采集不得生成 Kubernetes 工作负载: err=%v manifest=%q", err, manifest)
 	}
 }
 

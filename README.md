@@ -39,7 +39,7 @@ go -C dev_core test ./internal/project
 | scripts                                                                | 开发、交付与验证脚本                |
 | docs                                                                   | 有效产品、架构、契约与规范          |
 
-runtime/collector_engine 仍有 Go 采集实现，与 .NET Runtime 的生产职责重叠，尚未收敛。designer/pi-web 是上游项目，本次目录治理保持原位。目标目录映射和模块开发要求见 [仓库结构与模块规范](docs/05-研发与交付/仓库结构与模块规范.md)，源码尚未按目标目录迁移。
+生产采集统一使用 collector 中的 .NET Runtime，由 NodeAgent 托管原生进程；驱动支持和目标平台交付分别验收。designer/pi-web 是上游项目，保持原位。目标目录映射和模块开发要求见 [仓库结构与模块规范](docs/05-研发与交付/仓库结构与模块规范.md)，源码尚未按目标目录迁移。
 
 ## 交付与维护
 

@@ -6,13 +6,6 @@ import (
 	"path/filepath"
 )
 
-// collectorContainerUID/GID 对应 collector_engine Dockerfile 的 distroless nonroot。
-// 节点 Agent 由受管宿主以特权身份运行，目录由 Agent 创建而非让 Kubelet 猜测 owner。
-const (
-	collectorContainerUID = 65532
-	collectorContainerGID = 65532
-)
-
 // collectorWALPath 只从节点数据根和已验证 deployment UUID 派生路径，中心不能提供
 // 任意宿主路径。
 func collectorWALPath(dataRoot, deploymentID string) (string, error) {
@@ -31,40 +24,27 @@ func collectorWALPath(dataRoot, deploymentID string) (string, error) {
 	return path, nil
 }
 
-// ensureCollectorWAL 在 Release 安装成功后幂等准备宿主持久目录。目录不存在或离线
-// 节点没有完成物化时，Kubernetes hostPath Directory 会拒绝启动新 Pod，而不会悄悄用
-// 错误 owner 创建空目录。
-func ensureCollectorWAL(dataRoot, deploymentID string) (string, error) {
-	return ensureCollectorWALWithChown(dataRoot, deploymentID, os.Chown)
-}
-
-func ensureCollectorWALWithChown(dataRoot, deploymentID string, chown func(string, int, int) error) (string, error) {
+// 原生采集沿用节点服务账户，以私有目录保存 WAL。逐层验证工程状态目录，
+// 避免父目录软链把待确认数据写到工程之外；不再设置容器 UID/GID。
+func prepareNativeCollectorWAL(dataRoot, deploymentID string) (string, error) {
 	path, err := collectorWALPath(dataRoot, deploymentID)
 	if err != nil {
 		return "", err
 	}
-	if err = os.MkdirAll(path, 0o770); err != nil {
-		return "", fmt.Errorf("创建 collector WAL 目录失败")
+	deploymentRoot := filepath.Dir(filepath.Dir(path))
+	if err = os.MkdirAll(filepath.Dir(deploymentRoot), 0700); err != nil {
+		return "", err
 	}
-	for _, current := range []string{filepath.Join(filepath.Dir(filepath.Dir(path))), filepath.Dir(path), path} {
-		info, statErr := os.Lstat(current)
-		if statErr != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("collector WAL 目录不安全")
+	for _, current := range []string{deploymentRoot, filepath.Dir(path), path} {
+		if err = os.Mkdir(current, 0700); err != nil && !os.IsExist(err) {
+			return "", fmt.Errorf("创建采集 WAL 目录失败")
+		}
+		if info, err := os.Lstat(current); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("采集 WAL 目录无效")
 		}
 	}
-	if err = os.Chmod(path, 0o770); err != nil {
-		return "", fmt.Errorf("设置 collector WAL 权限失败")
-	}
-	if chown == nil {
-		return "", fmt.Errorf("设置 collector WAL owner 失败")
-	}
-	if err = chown(path, collectorContainerUID, collectorContainerGID); err != nil {
-		// 正常 Linux 节点的 Agent 以 induforge 服务账户运行，不能自行 chown。
-		// 该路径刚由自身创建，工作负载模板会把固定的服务组 1000 加入 collector
-		// Pod；保留 owner 并使用 0770，比放宽到 world-writable 更安全。
-		if os.Geteuid() == 0 {
-			return "", fmt.Errorf("设置 collector WAL owner 失败")
-		}
+	if err = os.Chmod(path, 0700); err != nil {
+		return "", err
 	}
 	return path, nil
 }

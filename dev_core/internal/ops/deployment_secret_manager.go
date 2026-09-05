@@ -141,64 +141,6 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 	return name, nil
 }
 
-// EnsureCollector 仅更新 collector 自己拥有的 nats.json 与 connection-*.json 键。
-// 这避免 Collector 发布覆盖 compute/alarm 的 runtime、sandbox 与 bootstrap 凭据。
-func (m *DeploymentSecretManager) EnsureCollector(ctx context.Context, ns, deploymentID string, support RuntimeSupportResources, connectionFiles map[string][]byte) (string, error) {
-	if m == nil || m.client == nil {
-		return "", fmt.Errorf("部署 Secret 管理器未初始化")
-	}
-	natsToken, err := m.sourceValue(ctx, support.NATSCredentialSource, "credential")
-	if err != nil {
-		return "", fmt.Errorf("读取 NATS 凭据失败")
-	}
-	nats, err := json.Marshal(map[string]string{"schemaVersion": "nats-credential.v1", "authType": "token", "token": natsToken})
-	if err != nil {
-		return "", fmt.Errorf("构造 NATS 凭据失败")
-	}
-	name, err := collectorBundleSecretName(deploymentID)
-	if err != nil {
-		return "", err
-	}
-	data, exists, err := m.client.GetSecret(ctx, ns, name)
-	if err != nil {
-		return "", fmt.Errorf("读取部署 Secret 失败")
-	}
-	if !exists {
-		data = map[string]string{}
-	}
-	changed := data[resolverNATSFile] != string(nats)
-	data[resolverNATSFile] = string(nats)
-	for key := range data {
-		if strings.HasPrefix(key, "connection-") && strings.HasSuffix(key, ".json") {
-			delete(data, key)
-			changed = true
-		}
-	}
-	for name, content := range connectionFiles {
-		if !safeCollectorSecretFileName(name) || len(content) > 1<<20 {
-			return "", fmt.Errorf("collector secret 文件无效")
-		}
-		value := string(content)
-		if data[name] != value {
-			data[name] = value
-			changed = true
-		}
-	}
-	if !exists || changed {
-		if err = m.client.ApplySecret(ctx, ns, name, data); err != nil {
-			return "", fmt.Errorf("写入部署 Secret 失败")
-		}
-	}
-	return name, nil
-}
-
-func collectorBundleSecretName(deploymentID string) (string, error) {
-	name, err := projectWorkloadName(deploymentID, ServiceCollector)
-	if err != nil {
-		return "", err
-	}
-	return name + "-secrets", nil
-}
 func safeCollectorSecretFileName(name string) bool {
 	if !strings.HasPrefix(name, "connection-") || !strings.HasSuffix(name, ".json") || strings.ContainsAny(name, "/\\\x00") {
 		return false
