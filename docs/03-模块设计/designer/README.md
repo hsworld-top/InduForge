@@ -26,12 +26,12 @@ Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直
 
 ## 嵌入方式
 
-| 关系 | 方式 |
-| --- | --- |
-| `dev_ide -> Designer` | Wujie，注入工程上下文与工具回调。 |
-| `Designer -> Pi Web` | 原生 iframe。 |
-| `Designer -> Vite Preview` | 原生 iframe。 |
-| `Designer -> code-server` | 原生 iframe。 |
+| 关系                                | 方式                                              |
+| ----------------------------------- | ------------------------------------------------- |
+| `dev_ide -> Designer`               | Wujie，注入工程上下文与工具回调。                 |
+| `Designer -> Pi Web`                | 原生 iframe。                                     |
+| `Designer -> Vite Preview`          | 原生 iframe。                                     |
+| `Designer -> code-server`           | 原生 iframe。                                     |
 | `dev_ide -> InduForge 2D/3D Studio` | 独立保活 iframe 标签；浏览器不感知内部 Provider。 |
 
 Preview 与 code-server iframe 初始化后始终存在。页面、2D、3D、编辑器切换只改变可见性和交互状态，不能修改
@@ -50,8 +50,13 @@ services: {
 }
 ```
 
-开发环境从根 `.env` 读取四个地址并直连 WSL 容器。生产环境由 `dev_core` 和 Traefik 返回受控
-URL，前端不得推导端口或域名。
+根目录前端启动命令默认使用 `frontend-linux` 模式：Designer 通过工作区 API 读取 `dev_core`
+返回的四服务地址，再由 `workspace-runtime.ts` 改写为本地工作区代理地址。显式本地开发模式
+才从根 `.env` 读取四个固定地址，连接本机映射的工作区服务。
+
+生产环境使用控制面返回的受控服务 URL，页面不得自行推导端口或域名。各模式的配置和代理边界见
+[工程开发工作空间网络架构](../../02-系统设计/工程开发工作空间网络架构.md)。代码提供了这些路径，
+目标环境的 Cookie、跨域、WebSocket 和 iframe 加载仍需分别验收。
 
 ## 开发链路
 

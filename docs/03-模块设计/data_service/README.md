@@ -42,7 +42,8 @@ TDengine 通过独立 WebSocket 只读运行时提供真实开发态 SQL 工作�
 - `artifact v1` 输出平台侧配置契约，包含 `mqtt`、`protocols.kafka/http/websocket/redis` 与工业协议配置。
 - `preview socket`、预览会话与统一协议 preview 只服务开发态调试，不承担长期采集。
 - `kafka/http/websocket/redis` 的统一协议 preview 是一次性短任务，请求结束即释放连接，不创建节点侧运行任务。
-- `opcua/s7/modbus/tdengine` 本轮只保存配置与 artifact，不在 data_service 内做真实工业协议 preview。
+- `opcua/s7/modbus/opcda` 的真实连接、读取与诊断通过独立开发调试代理执行；中心负责配置、命令编排与 Artifact 投影。
+- `tdengine` 已有基于官方 WebSocket 驱动的开发态连接和有界 SQL 查询实现，查询结束后释放连接，不承担节点长期采集。代码与本地测试覆盖不等于现场数据库连通性验收，实际可用性仍需在目标环境验证。
 
 ## 正式边界
 

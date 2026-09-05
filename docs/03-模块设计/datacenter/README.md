@@ -60,21 +60,21 @@
 
 ### 正式入口
 
-- 正式入口由 `dev_ide` 宿主通过 Wujie 打开，工程、租户、主题与会话回调通过子应用上下文注入。
-- 正式入口不再依赖 URL 里的 `token`、`refreshToken`、`theme`、`pid`、`tenant` 作为主链路上下文。
+- 正式入口由 `dev_ide` 宿主通过 Wujie 打开，工程、租户、编辑代次、主题、语言与会话回调通过当前子应用上下文注入。
+- 浏览器认证使用同源 HttpOnly Cookie，前端不存储、读取或通过 URL 传递 JWT。
 - 数据中心收到 `401` 时调用宿主的统一续租任务并重试原请求；续租失败时通知宿主统一退出，不在子应用内自行跳转。
 
 ### 独立调试
 
 - 需要单独调试数据中心时，使用 `/datacenter/debug`。
-- `/datacenter/debug` 允许脱离 IDE 运行，但只用于本地调试；正式入口 `/datacenter/` 在缺少本地 token 或 projectId 时会回跳 `dev_ide`。
-- 调试正式链路时，应从 `dev_ide` 内打开数据中心标签页，再检查 bootstrap 消息、主题同步和续租回传是否正确。
+- `/datacenter/debug` 允许脱离 IDE 运行，仅用于调试。该入口解析调试工程信息，数据 API 仍按实际登录会话和工程权限校验。
+- 正式入口 `/datacenter/` 缺少 Wujie 宿主或当前工程上下文时回到 `/dashboard`，本地缓存不能替代宿主上下文。
+- 调试正式链路时，从 `dev_ide` 打开数据中心标签页，核对 Wujie props、上下文更新、主题语言同步和会话续租。
 
-### `handoff` 与恢复
+### 新窗口与恢复
 
-- 子应用被单独打开成浏览器标签页后，只要本地仍保留可复用的 token 与工程上下文，就允许继续独立运行；缺少上下文时仍会依赖 `handoff` 回附 IDE。
-- `handoff` 只保存恢复映射，不保存 token 等敏感信息；丢失或过期时会降级回 IDE 首页。
-- 子应用内部组件应优先从本地上下文读取 `projectId`、`tenantId` 等工程信息，避免重新依赖旧的 URL 参数。
+- 正式新窗口使用 IDE 路由 `/workspace/:projectId/datacenter`，由宿主校验工程并重新注入上下文。
+- 组件从当前 Wujie 上下文读取工程、租户和编辑代次；刷新或工程恢复后由宿主重建实例及上下文。
 
 ## 关联文档
 
@@ -89,8 +89,6 @@
 - [数据点设计](./datapoint-design.md)
 - [数据点与报警开发上下文 SDK 设计](./数据点与报警开发上下文SDK设计.md)
 - [数据点与报警 SDK 用户教程](./数据点与报警SDK用户教程.md)
-- [数据中心 UI 初版设计（已归档）](../../归档/旧入口/datacenter-ui-initial-design-旧入口.md)
 - [IF 内置运行库设计](./IF内置运行库设计.md)
 - [Compute/Alarm 设计](./compute-alarm-design.md)
-- [数据中心实现 Review 与整改清单](./数据中心实现Review与整改清单.md)
 - [IDE 管理端概览](../dev_ide/README.md)

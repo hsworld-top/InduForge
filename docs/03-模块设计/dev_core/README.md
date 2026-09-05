@@ -10,14 +10,16 @@
 - 数据库：PostgreSQL + `pgx/v5` + sqlc，只维护从零创建最终结构的建库基线。
 - 缓存：Redis，用于登录滑块挑战、Token 吊销和节点在线 TTL。
 - 对象存储：SeaweedFS S3，设计资源与 `.ifp` 工件使用独立桶。
-- 实时事件：Socket.IO v4 协议，路径 `/socket.io`，按认证用户的租户隔离房间。
+- 实时事件：Socket.IO v4 协议，路径 `/control-socket.io`，按认证用户的租户和能力隔离订阅。
 - 工程源码：`CODE_WORKSPACE_ROOT/{projectId}/workspace`。`dev_core` 只创建空目录，客户侧工程进入开发容器后从四套官方 Vue/React Vite 模板中首次选择。
 
 ## 能力边界
 
 - 保留 `dev_ide` 当前使用的 74 个控制面 REST 操作，契约源位于 `dev_core/api/openapi.yaml`。
-- 当前支持 NodeAgent 一次性接入码、claim、审批、心跳、命令轮询和 Demo 工作负载状态回报；离线
-  文件注册、mTLS、证书轮换及生产发布控制器尚未实现，边界见
+- 当前代码支持 NodeAgent 一次性接入码、claim、审批、心跳、命令轮询和工作负载状态回报，
+  并已装配正式 Release 发布与 K3s 工程工作负载调和器。发布依赖构建器、签名和对象存储配置，
+  K3s 调和器按集群环境启用。代码实现不等同于现场验收；离线文件注册、mTLS、证书轮换等能力
+  也不能据此视为已交付，具体范围与环境验收见
   [运维体系实现与验收](../../06-运维与安全/运维体系实现与验收.md)。
 - 发布时构建工程 Vite 源码，聚合前端静态产物、HT 运行资源、数据与采集配置，生成不可变 Release 并上传对象存储。
 - 审计中间件不读取请求体，不记录密码、Token、节点密钥或上传文件内容。
@@ -32,7 +34,12 @@
 - `ops:project:metrics`
 - `ops:deploy:status`
 
-客户端使用 Access Token 建立连接，并发送 `ops:subscribe`。服务端忽略客户端声明的租户归属，只允许加入 Token 对应租户的房间。
+浏览器通过同源 HttpOnly 会话 Cookie 连接 `/control-socket.io`，服务端从 Cookie 校验身份；
+前端不读取或传递 Access Token。上述事件通过 `ops:subscribe` 订阅，服务端按会话身份核对租户和能力。
+
+运维控制台使用 `ops:watch` / `ops:unwatch` 按主题及实体订阅，通过 `ops:ready`、`ops:change` 和
+`ops:auth` 同步订阅状态、变更通知与鉴权结果。HTTP 查询是状态事实来源，重连后重新订阅并对账。
+数据预览的 `/socket.io` 属于 `data_service`，与控制面实时入口分开。
 
 ## 开发验证
 

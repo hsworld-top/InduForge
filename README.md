@@ -1,335 +1,56 @@
-# InduForge - 工业应用 AI 开发与运行平台
+# InduForge
 
-## 项目简介
+InduForge 是私有化部署优先的工业应用开发与交付平台，面向为各行业工厂提供应用的集成商，也支持工厂购买整个平台自行开发。
 
-InduForge 是面向工业互联网场景的多模块单仓平台，覆盖 AI 页面开发、HT 2D/3D 场景、数据域、工程构建发布、节点运行和运维管理。工程页面使用标准 Vue/React Vite 源码，开发时应按模块职责处理，而不是把整仓当成单一应用。
+产品提供两种交付方式：交付带独立用户体系的工程应用，或交付完整开发平台。它们是产品目标；当前实现与交付缺口见 [产品定义](docs/01-产品与架构/产品定义.md) 和 [平台系统架构](docs/01-产品与架构/平台系统架构.md)。
 
-## 核心特性
+## 开发入口
 
-- **AI 页面开发** - Pi Web 修改 Vue/React Vite 源码，Designer 通过受控 Vite iframe 实时预览
-- **HT 场景编辑** - 独立维护 2D/3D 场景、模型、材质和资源
-- 📊 **数据中心** - 多数据源管理，支持 MySQL、PostgreSQL、SQL Server
-- 🔧 **工程管理** - 项目、租户、用户统一管理
-- **工程源码编辑** - 通过 code-server 直接维护标准前端工程
-- **Runtime SDK** - 统一接入鉴权、权限、数据点和场景能力
-- **不可变 Release** - 构建、签名、部署和回滚按工程版本管理
+在仓库根目录安装 Node 依赖，工具链版本以 [package.json](package.json) 为准；Go 版本见各模块 go.mod，Collector 使用 .NET 工程。
 
-## 整体架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Nginx 反向代理                            │
-│  - 统一域名访问                                              │
-│  - 静态资源服务                                              │
-│  - API 代理                                                  │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-│   IDE 主应用  │  数据中心     │  设计中心     │  控制面后端    │  数据域服务    │
-│   (dev_ide)  │ (datacenter) │  (designer)  │  (dev_core)  │ (data_service)│
-│              │              │              │              │              │
-│  - 工程管理   │  - 数据连接   │  - AI 对话    │  - 用户认证   │  - 数据连接   │
-│  - 用户管理   │  - SQL 查询   │  - Vite 预览  │  - 租户管理   │  - 查询与数据点│
-│  - 部署运维   │  - MQTT/数据点│  - 开发工作台 │  - 发布部署   │  - 协议与预览 │
-│              │              │              │              │              │
-│  Vue 3       │  Vue 3       │  Vue 3       │  Node.js     │  Go          │
-│ Port: 18601  │ Port: 18602  │ Port: 18603  │ Port: 18101  │ Port: 18102  │
-└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
-```
-
-## 技术栈
-
-### 前端
-
-- **框架**: Vue 3 + Vite
-- **状态管理**: Pinia
-- **UI 组件**: Element Plus
-- **样式**: Tailwind CSS
-- **工程开发**: Pi Web + code-server + Vite
-- **工业场景**: HT 2D/3D 编辑器
-- **运行接入**: `@induforge/runtime-sdk`
-
-### 平台与服务
-
-- **控制面**: Go (`dev_core`)
-- **平台元数据**: PostgreSQL/TimescaleDB（开发环境由 Docker 提供）
-- **认证**: JWT
-
-### 数据域与运行时
-
-- **数据域服务**: Go (`data_service`)
-- **节点执行器**: Go (`runtime/node_agent`)
-- **本地运维前端**: Vue 3 + Vite (`runtime/node_agent_front`)
-- **对象存储**: SeaweedFS S3 兼容接口
-- **缓存与消息**: Redis、EMQX MQTT（开发环境由 Docker 提供）
-
-## 当前模块现状
-
-- `dev_core/`：Go 平台控制面后端，负责认证、工程管理、发布部署、节点调度和聚合 API。
-- `data_service/`：平台侧与开发态数据域服务，负责连接、查询、数据点、协议接入、计算与预览会话。
-- `dev_ide/`：平台管理与运维前端。
-- `datacenter/`：数据接入、查询管理与数据语义建模前端。
-- `designer/`：AI 页面开发工作台，嵌入仓库内维护的 Pi Web、受控 Vite 预览和单实例 code-server。
-- `runtime/node_agent/`：节点执行器后端，独立部署在节点侧。
-- `runtime/node_agent_front/`：节点本地管理前端。
-- `scripts/`：本地开发、基础设施、离线打包、安装卸载和模拟数据脚本。
-
-## 默认端口总览
-
-| 模块                       | 服务类型         | 环境变量                                      | 默认端口 | 默认访问地址             |
-| -------------------------- | ---------------- | --------------------------------------------- | -------- | ------------------------ |
-| `dev_ide`                  | 平台管理前端     | `VITE_IDE_PORT`                               | `18601`  | `http://localhost:18601` |
-| `datacenter`               | 数据中心前端     | `VITE_DATACENTER_PORT`                        | `18602`  | `http://localhost:18602` |
-| `designer`                 | 设计器前端       | `VITE_DESIGNER_PORT`                          | `18603`  | `http://localhost:18603` |
-| `runtime/node_agent_front` | 节点本地管理前端 | `VITE_NODE_AGENT_FRONT_PORT`                  | `18604`  | `http://localhost:18604` |
-| `dev_core`                 | 平台控制面后端   | `PORT`                                        | `18101`  | `http://localhost:18101` |
-| `data_service`             | 数据域服务       | `DATA_SERVICE_ADDR` / `VITE_DATA_SERVICE_URL` | `18102`  | `http://localhost:18102` |
-| `runtime/node_agent`       | 节点执行器后端   | `NODE_AGENT_PORT`                             | `18103`  | `http://localhost:18103` |
-
-## 快速开始
-
-### 环境要求
-
-- Node.js `24.19.0`（LTS）
-- npm `11.17.0`
-- pnpm `11.21.0`
-- Go >= 1.25.0（用于 `data_service` 与 `runtime/node_agent`）
-- Docker 与 Docker Compose（用于开发基础设施和离线交付验证）
-
-### Windows 开发说明
-
-- 当前开发环境默认以 Windows + PowerShell 为主，下面示例优先使用 PowerShell 写法。
-- 若需要同时启动多个模块，建议为每个模块单独打开一个 PowerShell 窗口。
-- Windows + WSL2 开发时，WSL2 只承载 Docker 基础设施；`pnpm install` 和业务项目启动建议在 Windows 侧执行。
-- 默认端口以根 `.env`、`.env.development.example`、`.env.production.example` 和 [环境端口规划](./docs/06-运维与安全/环境端口规划.md) 为准。
-
-### 安装依赖
-
-```powershell
-# 只在仓库根目录执行一次
+```sh
 pnpm install
 ```
 
-Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，并只提交根目录 `pnpm-lock.yaml`。pnpm 可能会在各 workspace 子目录生成 `node_modules/` 链接或提升目录，这是安装产物，不表示子项目独立安装；不要在 `dev_ide/`、`datacenter/`、`designer/`、`runtime/node_agent_front/` 下单独执行 `pnpm install`。
+当前默认前端开发模式连接 Linux 中心与工程工作区，配置和启动步骤见 [开发脚本说明](scripts/dev/README.md)。根 pnpm dev:frontend 会启动前端组合和工作区代理；显式本地后端模式使用 dev:frontend:local 等对应入口。不要混用两套环境与会话配置。
 
-Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 公共全局变量、忽略目录和基础规则放在根目录 `eslint.shared.mjs`；`dev_ide`、`datacenter`、`designer` 都从各自模块的 `eslint.config.*` 引入共享配置。
+检查按改动模块选择，例如：
 
-```powershell
-# 检查格式、静态规则和默认测试（均不修改文件）
-pnpm format:check
-pnpm lint
-pnpm test
-
-# 显式修复 lint 和格式问题
-pnpm fix
+```sh
+pnpm typecheck:ide
+pnpm test:designer
+go -C dev_core test ./internal/project
 ```
 
-```powershell
-# 初始化 Go 模块依赖
-Set-Location .\data_service
-go mod download
+默认 build、test、lint、typecheck 是部分模块的聚合入口，不代表覆盖整仓；.NET、安装脚本和目标系统验收需单独选择。端口与暴露边界见 [环境端口规划](docs/06-运维与安全/环境端口规划.md)，不在此复制一份端口表。
 
-Set-Location ..\runtime\node_agent
-go mod download
+## 当前源码导航
 
-Set-Location ..\..
-```
+| 路径                                                                   | 职责                                |
+| ---------------------------------------------------------------------- | ----------------------------------- |
+| dev_core / dev_ide                                                     | 控制面与管理工作台                  |
+| data_service / datacenter                                              | 数据建模、开发调试与数据工作台      |
+| designer / designer/code-workspace                                     | 应用创作工作台与受控代码工作区      |
+| collector                                                              | .NET 驱动、开发调试代理与生产采集器 |
+| runtime/node_agent / runtime/node_agent_front                          | 节点管理与本机控制台                |
+| runtime/project_gateway / runtime/runtime_api / runtime/runtime_engine | 工程入口、运行 API 与数据执行       |
+| compute_sandbox                                                        | 隔离计算执行                        |
+| runtime/web-sdk / contracts                                            | 工程 SDK、机器契约和模板            |
+| scripts                                                                | 开发、交付与验证脚本                |
+| docs                                                                   | 有效产品、架构、契约与规范          |
 
-### 初始化基础设施
+runtime/collector_engine 仍有 Go 采集实现，与 .NET Runtime 的生产职责重叠，尚未收敛。designer/pi-web 是上游项目，本次目录治理保持原位。目标目录映射和模块开发要求见 [仓库结构与模块规范](docs/05-研发与交付/仓库结构与模块规范.md)，源码尚未按目标目录迁移。
 
-开发基础设施由 Linux/WSL2 侧 Docker 承载：
+## 交付与维护
 
-```bash
-./scripts/dev/init-linux.sh
-```
+中心已有 [K3s 部署入口](scripts/k3s/center/README.md)，工作区与 Release 构建仍依赖 Docker。scripts/offline 中仍有整个平台的 Compose 安装流程；这些入口尚未收敛为一致的客户交付清单，不能将其视为独立工程应用离线包。
 
-`dev_core` 启动时会根据根目录 `.env` 中的 `DB_AUTO_SCHEMA_SYNC=true` 自动同步 `if_core` 表结构和初始数据。
+工程用户交付、生产采集安全配置、离线冷安装、升级与备份恢复必须分别验收。静态检查或制品生成成功不代表这些链路已交付。
 
-该脚本只启动基础设施容器，创建 `if_core`、`if_data`、`if_dev_data`，并为开发态数据域库启用时序扩展；不会安装 Node 依赖，也不会启动 `dev_core`、`data_service` 或前端项目。
+- [文档中心](docs/README.md)
+- [开发规范](docs/05-研发与交付/开发规范.md)
+- [仓库协作规则](AGENTS.md)
+- [视觉与体验](PRODUCT.md)
+- [脚本入口](scripts/README.md)
 
-控制面和设计中心长期共用 `dev_core` 与 `if_core`，不再创建或预留 `if_design`。控制面最终结构基线位于 `dev_core/db/schema/core-schema.sql`，开发环境由服务启动同步空库，生产和离线安装由镜像内 `dev_core init` 命令初始化。
-
-### 启动开发服务器
-
-```powershell
-# 1. 启动平台控制面后端
-pnpm dev:core
-
-# 2. 启动数据域服务（新终端，可选）
-pnpm dev:data
-
-# 3. 启动 IDE（新终端）
-pnpm dev:ide
-
-# 4. 启动数据中心（新终端）
-pnpm dev:datacenter
-
-# 5. 启动设计中心（新终端）
-pnpm dev:designer
-
-# 6. 启动节点本地管理前端（新终端，可选）
-pnpm dev:node-agent-front
-```
-
-访问地址：
-
-- IDE: http://localhost:18601
-- 数据中心: http://localhost:18602
-- 设计中心: http://localhost:18603
-- 节点本地管理前端: http://localhost:18604
-- 平台控制面后端: http://localhost:18101
-- 数据域服务: http://localhost:18102
-- 节点执行器后端: http://localhost:18103
-
-### 默认账号
-
-- 超级管理员: `superadmin` / `admin123`
-- 系统管理员: `admin` / `admin123`
-
-## 项目结构
-
-```
-InduForge/
-├── dev_core/      # Go 后端 API 服务
-│   ├── cmd/            # 命令入口
-│   ├── internal/       # 内部领域实现
-│   ├── db/             # 数据库最终结构基线
-│   └── api/            # OpenAPI 契约
-├── data_service/       # 平台侧与开发态数据域服务（Go）
-│   ├── cmd/            # 启动入口
-│   ├── internal/       # 内部领域实现
-│   └── tests/          # 测试目录
-├── dev_ide/            # IDE 主应用
-│   ├── src/            # 源代码
-│   └── public/         # 静态资源
-├── datacenter/         # 数据中心应用
-│   ├── src/            # 源代码
-│   └── public/         # 静态资源
-├── designer/           # AI 页面开发工作台
-│   ├── src/            # 工作台前端源码
-│   └── code-workspace/ # Pi Web、code-server 与 Vite 开发容器定义
-├── runtime/            # 运行时相关模块
-│   ├── node_agent/     # 节点执行器后端（Go）
-│   └── node_agent_front/ # 节点本地管理前端
-├── scripts/            # 辅助脚本与基础设施配置
-│   ├── dev/            # 开发环境初始化入口
-│   ├── docker/         # Compose、产品体系镜像和镜像缓存
-│   ├── nginx/          # Nginx 配置
-│   ├── offline/        # 离线安装包安装/卸载入口
-│   ├── release/        # 离线安装包构建入口
-│   └── test/           # 模拟数据和协议联调脚本
-└── docs/               # 项目文档
-```
-
-## 文档导航
-
-- [InduForge 文档中心](./docs/README.md)
-- [产品定义](./docs/01-产品与架构/产品定义.md)
-- [平台系统架构](./docs/01-产品与架构/平台系统架构.md)
-- [系统设计入口](./docs/02-系统设计/README.md)
-- [模块设计入口](./docs/03-模块设计/README.md)
-- [契约与规范入口](./docs/04-契约与规范/README.md)
-- [研发与交付入口](./docs/05-研发与交付/README.md)
-- [运维与安全入口](./docs/06-运维与安全/README.md)
-
-### 脚本与交付
-
-- [scripts 目录说明](./scripts/README.md)
-- [开发环境初始化](./scripts/dev/README.md)
-- [测试打包说明](./scripts/release/README.md)
-- [离线交付包说明](./scripts/offline/README.md)
-
-## 开发指南
-
-### 代码规范
-
-- 使用 ESLint 进行代码检查
-- 使用 Prettier 进行代码格式化
-- 遵循 Vue 3 Composition API 风格
-- 组件命名使用 PascalCase
-- 文件命名使用 kebab-case
-
-### Git 提交规范
-
-```
-feat: 新功能
-fix: 修复 bug
-docs: 文档更新
-style: 代码格式调整
-refactor: 重构
-test: 测试相关
-chore: 构建/工具链相关
-```
-
-### 分支管理
-
-- `main` - 主分支，稳定版本
-- `develop` - 开发分支
-- `feature/*` - 功能分支
-- `hotfix/*` - 紧急修复分支
-
-## 部署指南
-
-### 生产环境构建
-
-```powershell
-# 构建所有前端应用
-pnpm build:frontend
-```
-
-### Nginx 配置
-
-参考 `scripts/nginx/nginx.conf` 配置文件，主要配置：
-
-- 静态资源路径
-- API 代理
-- 域名和端口
-
-### 端口迁移提醒
-
-如果你的本地环境还在使用历史端口，需要同步更新根目录 `.env`。开发环境宿主机端口已经统一切换到 `18xxx` 段；生产和离线环境默认只暴露 `IF_EDGE_HOST_PORT`，其他服务通过 Docker 内部网络访问。
-
-### 后端部署
-
-生产和离线环境通过 Docker 镜像与安装脚本交付，不使用历史 Node.js `pnpm start` 或 PM2 入口。具体流程以 `scripts/release/` 与 `scripts/offline/` 文档为准。
-
-## 常见问题
-
-### 1. 数据库连接失败
-
-先执行 `./scripts/dev/init-linux.sh` 确认开发基础设施容器已经启动，再检查根目录 `.env` 中的 `IF_META_STORE_*` 配置。开发环境 `dev_core` 启动时会自动同步 `if_core` 表结构。
-
-### 2. 端口被占用
-
-修改各模块的 `vite.config.js` 或 `.env` 文件中的端口配置。
-
-### 3. 跨域问题
-
-确保 Nginx 配置了正确的 CORS 头，或在开发环境使用代理。
-
-### 4. Windows 下脚本无法直接执行
-
-优先使用 PowerShell 执行业务项目命令；Docker 基础设施建议在 WSL2 内执行 `./scripts/dev/init-linux.sh`。
-
-## 贡献指南
-
-欢迎贡献代码和文档！请遵循以下步骤：
-
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'feat: Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-## 许可证
-
-本项目为 hsworld-top 的个人专有闭源项目，不适用 ISC、MIT、Apache 等开源许可证。未经授权禁止复制、分发、发布、出售或商业使用。详见 [LICENSE](./LICENSE)。
-
-## 联系方式
-
-如有问题或建议，请提交 Issue 或联系开发团队。
-
----
-
-**版本**: 2.0.0  
-**最后更新**: 2026-05-24
+历史版本和过程记录通过 Git 与任务对话查询，不维护文档归档。项目为专有闭源软件，授权边界见 [LICENSE](LICENSE)；第三方组件保留各自许可与来源。

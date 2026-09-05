@@ -9,6 +9,8 @@ Runtime API 是发布工程的动态 HTTP/WebSocket 接口，必须只监听同�
 
 除 `/health` 与 `/api/v1/status` 外，所有 Runtime API HTTP/WS 路径都会核对这两个值；不匹配返回 `403 / code=40301`。调用成功的响应均为 `{code,msg,data,reqId}`，只有 `code=0` 成功。
 
+以下接口描述 Runtime API 自身能力。当前 Project Gateway 仅允许白名单中的数据查询与点位/报警订阅，移除客户端 Authorization 并使用服务端 `viewer` token；会话接口、写入、报警确认、人工计算及其他未开放的运行路径返回 `403 / code=40301`。发布页面尚无经 Gateway 完成用户登录和授权动作的链路，不能以 API 单测通过代替该入口验收。
+
 ## 2. 会话
 
 | 方法和路径                       | 当前行为                                                                           |
@@ -17,9 +19,11 @@ Runtime API 是发布工程的动态 HTTP/WebSocket 接口，必须只监听同�
 | `GET /api/v1/runtime/session`    | 返回当前会话身份                                                                   |
 | `DELETE /api/v1/runtime/session` | 撤销当前会话                                                                       |
 
-无有效 Bearer token 或会话 Cookie 时返回 `401 / code=40101`。token 只用于建立会话；发布前端应由 Runtime SDK 使用同源 Cookie，不应保存 PostgreSQL、NATS 或部署 Secret。
+Runtime API 的受保护请求当前接受有效 Bearer token 或会话 Cookie，均无效时返回 `401 / code=40101`。Bearer token 对照本地凭据文件中的 SHA-256 摘要得到 subject 与 roles；会话保存在进程内，最长 8 小时且不超过凭据有效期，重启后失效。当前 Gateway 的 viewer 代理使用服务端 Bearer，不向浏览器公开该凭据。
 
-## 3. 当前只读数据面
+中心工程用户表、密码哈希、角色与 grants 已有管理实现，但当前部署只生成 `deployment-user / viewer` token，未发布工程用户身份、禁用状态及自定义角色权限。用户名密码登录及身份更新、撤销仍是待接通的目标能力。正式用户链路应由 Runtime SDK 使用同源会话，受控发布运行身份并验证角色授权、账号禁用和审计；前端不得保存 PostgreSQL、NATS 或部署 Secret，不能用开放 viewer 写权限替代工程身份发布。
+
+## 3. 数据与受控操作
 
 | 方法和路径                                  | 当前行为                                              |
 | ------------------------------------------- | ----------------------------------------------------- |
@@ -43,7 +47,11 @@ Runtime API 是发布工程的动态 HTTP/WebSocket 接口，必须只监听同�
 
 `GET /ws/v1/alarms` 的首帧必须为 `{"action":"subscribe"}`，成功回 `{"type":"subscribed"}`；后续以 `{"type":"alarm","data":...}` 推送经过 deployment/account 过滤的 `alarm.event.v1` `alarm-transition`。SDK 默认在非主动断开时有限重连，调用方仍可通过关闭函数终止订阅。
 
-`POST /api/v1/runtime/computes/{id}/run` 仍返回 `501 / code=50031`；设备写入、发布及其他动作在其各自受控命令/审计契约冻结前不得由 SDK 或 Gateway 伪造成功。
+`POST /api/v1/runtime/computes/{id}/run` 已实现受控人工计算请求：计算单元必须存在、启用且 trigger 为 `manual`，请求身份必须具有 `admin` 或 `operator` 角色；不存在返回 `404 / code=40401`，不满足执行条件返回 `403 / code=40301`。body 仅接受 16 至 128 字节的 `idempotencyKey`，非法请求返回 `400 / code=40001`。API 先持久化含请求身份和 binding epoch 的幂等命令记录，再向当前 deployment 的 `compute.command.<deploymentId>` 发布 `compute-command.v1`。成功返回 `accepted`、`commandId` 和 `status`，重复请求还标记 `idempotent`；成功受理不表示执行完成。审计或发布不可用返回 `503 / code=50031`，发布失败的命令可用相同幂等键重试。
+
+`GET /api/v1/runtime/compute-commands/{id}` 返回当前 deployment 的命令记录与状态，命令不存在返回 `404 / code=40401`。该查询和人工计算提交均尚未进入 Gateway 的 viewer 白名单。
+
+以上人工数据写入、报警确认和人工计算是 API 层已实现的权限边界，后续用户身份与 Gateway 动作链路接通时仍须遵守。工业设备写入、发布及其他未实现动作需先明确各自受控命令与审计契约，SDK 或 Gateway 不得伪造成功。
 
 ## 4. 运行依赖和安全文件
 
