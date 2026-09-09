@@ -33,7 +33,7 @@ REQUIRED_IMAGES=(
   "induforge/message-hub:latest"
   "induforge/object-store:latest"
   "induforge/project-gateway:1.0.2"
-  "induforge/project-runtime-api:1.0.0"
+  "induforge/project-runtime-api:1.0.1"
   "induforge/runtime-engine:1.0.32"
   "induforge/compute-sandbox:1.0.8"
 )

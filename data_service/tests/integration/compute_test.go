@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -34,7 +33,7 @@ func TestComputeRunTimeout(t *testing.T) {
 	secret := "compute-timeout-secret-01"
 	sandbox := newComputeSandboxStub(t)
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -95,7 +94,7 @@ func TestComputeRunJSPython(t *testing.T) {
 	secret := "compute-jspy-secret-01"
 	sandbox := newComputeSandboxStub(t)
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -167,7 +166,7 @@ func TestComputeSchedulePreviewReturnsNormalizedRunsAndFieldErrors(t *testing.T)
 		t.Fatalf("schema initialization failed: %v", err)
 	}
 	projectID, userID, secret := uuid.NewString(), uuid.NewString(), "compute-schedule-preview-secret"
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret,
 		ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1",
 	})
@@ -267,7 +266,7 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "compute-output-datapoint-secret-01"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -341,7 +340,7 @@ func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "compute-rename-move-secret-01"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -453,7 +452,7 @@ func TestDataPointListDoesNotMutateValidityAfterRead(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "datapoint-validity-secret-01"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

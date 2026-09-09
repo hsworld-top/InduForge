@@ -13,7 +13,8 @@ import (
 
 const countAuditLogs = `-- name: CountAuditLogs :one
 SELECT count(*) FROM audit_logs l
-WHERE l.tenant_id = $1
+WHERE (l.method IS DISTINCT FROM 'GET' OR l.action = 'export')
+  AND l.tenant_id = $1
   AND ($2::text = '' OR l.level = $2)
   AND ($3::text = '' OR COALESCE(l.action, '') = $3)
   AND ($4::text = '' OR COALESCE(l.resource, '') = $4)
@@ -105,7 +106,8 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 
 const deleteAuditLogsBefore = `-- name: DeleteAuditLogsBefore :execrows
 DELETE FROM audit_logs
-WHERE tenant_id = $1 AND created_at < $2
+WHERE (method IS DISTINCT FROM 'GET' OR action = 'export')
+  AND tenant_id = $1 AND created_at < $2
 `
 
 type DeleteAuditLogsBeforeParams struct {
@@ -125,7 +127,8 @@ const exportAuditLogs = `-- name: ExportAuditLogs :many
 SELECT l.id, l.tenant_id, l.user_id, l.level, l.action, l.resource, l.resource_id, l.message, l.request_id, l.method, l.path, l.result, l.ip, l.user_agent, l.metadata, l.created_at, u.username, u.full_name
 FROM audit_logs l
 LEFT JOIN users u ON u.id = l.user_id
-WHERE l.tenant_id = $1
+WHERE (l.method IS DISTINCT FROM 'GET' OR l.action = 'export')
+  AND l.tenant_id = $1
   AND ($2::text = '' OR l.level = $2)
   AND ($3::text = '' OR COALESCE(l.action, '') = $3)
   AND ($4::text = '' OR COALESCE(l.resource, '') = $4)
@@ -133,7 +136,7 @@ WHERE l.tenant_id = $1
   AND ($6::text = '' OR l.message ILIKE '%' || $6 || '%' OR COALESCE(l.action, '') ILIKE '%' || $6 || '%' OR COALESCE(l.resource, '') ILIKE '%' || $6 || '%')
   AND ($7::timestamptz IS NULL OR l.created_at >= $7)
   AND ($8::timestamptz IS NULL OR l.created_at <= $8)
-ORDER BY l.created_at DESC
+ORDER BY l.created_at DESC, l.id DESC
 LIMIT 10000
 `
 
@@ -280,7 +283,8 @@ func (q *Queries) GetAuditLog(ctx context.Context, arg GetAuditLogParams) (GetAu
 const getAuditLogActionStats = `-- name: GetAuditLogActionStats :many
 SELECT COALESCE(action, '') AS action, count(*) AS count
 FROM audit_logs
-WHERE tenant_id = $1
+WHERE (method IS DISTINCT FROM 'GET' OR action = 'export')
+  AND tenant_id = $1
   AND ($2::timestamptz IS NULL OR created_at >= $2)
   AND ($3::timestamptz IS NULL OR created_at <= $3)
 GROUP BY action
@@ -322,7 +326,8 @@ func (q *Queries) GetAuditLogActionStats(ctx context.Context, arg GetAuditLogAct
 const getAuditLogLevelStats = `-- name: GetAuditLogLevelStats :many
 SELECT level, count(*) AS count
 FROM audit_logs
-WHERE tenant_id = $1
+WHERE (method IS DISTINCT FROM 'GET' OR action = 'export')
+  AND tenant_id = $1
   AND ($2::timestamptz IS NULL OR created_at >= $2)
   AND ($3::timestamptz IS NULL OR created_at <= $3)
 GROUP BY level
@@ -362,7 +367,8 @@ func (q *Queries) GetAuditLogLevelStats(ctx context.Context, arg GetAuditLogLeve
 const getAuditLogTrendStats = `-- name: GetAuditLogTrendStats :many
 SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS date, count(*) AS count
 FROM audit_logs
-WHERE tenant_id = $1
+WHERE (method IS DISTINCT FROM 'GET' OR action = 'export')
+  AND tenant_id = $1
   AND created_at >= COALESCE($2::timestamptz, now() - interval '7 days')
   AND ($3::timestamptz IS NULL OR created_at <= $3)
 GROUP BY date_trunc('day', created_at)
@@ -404,7 +410,8 @@ const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT l.id, l.tenant_id, l.user_id, l.level, l.action, l.resource, l.resource_id, l.message, l.request_id, l.method, l.path, l.result, l.ip, l.user_agent, l.metadata, l.created_at, u.username, u.full_name
 FROM audit_logs l
 LEFT JOIN users u ON u.id = l.user_id
-WHERE l.tenant_id = $1
+WHERE (l.method IS DISTINCT FROM 'GET' OR l.action = 'export')
+  AND l.tenant_id = $1
   AND ($2::text = '' OR l.level = $2)
   AND ($3::text = '' OR COALESCE(l.action, '') = $3)
   AND ($4::text = '' OR COALESCE(l.resource, '') = $4)
@@ -412,7 +419,7 @@ WHERE l.tenant_id = $1
   AND ($6::text = '' OR l.message ILIKE '%' || $6 || '%' OR COALESCE(l.action, '') ILIKE '%' || $6 || '%' OR COALESCE(l.resource, '') ILIKE '%' || $6 || '%')
   AND ($7::timestamptz IS NULL OR l.created_at >= $7)
   AND ($8::timestamptz IS NULL OR l.created_at <= $8)
-ORDER BY l.created_at DESC
+ORDER BY l.created_at DESC, l.id DESC
 LIMIT $10 OFFSET $9
 `
 
@@ -504,11 +511,12 @@ const listRecentAuditActivities = `-- name: ListRecentAuditActivities :many
 SELECT l.id, l.action, l.resource, l.path, l.created_at, u.id AS user_id, u.username, u.full_name
 FROM audit_logs l
 LEFT JOIN users u ON u.id = l.user_id
-WHERE l.tenant_id = $1
+WHERE (l.method IS DISTINCT FROM 'GET' OR l.action = 'export')
+  AND l.tenant_id = $1
   AND l.result = 'success'
   AND l.action IN ('create', 'update', 'delete')
   AND l.resource NOT IN ('auth', 'logs')
-ORDER BY l.created_at DESC
+ORDER BY l.created_at DESC, l.id DESC
 LIMIT $2
 `
 

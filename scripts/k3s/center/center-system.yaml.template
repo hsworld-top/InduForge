@@ -298,6 +298,12 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -311,6 +317,40 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: induforge-center-control-node-labeler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: induforge-center-control-runtime-reconciler
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: induforge-center-control-runtime-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: center-control
+    namespace: induforge-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: induforge-center-control-runtime-reconciler
 ---
 apiVersion: v1
 kind: Service
@@ -448,7 +488,7 @@ spec:
             - |
               until nc -z center-meta-store 18432; do sleep 2; done
               until nc -z center-cache-store 18379; do sleep 2; done
-        # IF 时序库固定使用 if_dev_data；在 data_service 启动和内置教程 seed 前完成空库与扩展准备。
+        # 使用安装配置指定的开发时序库，在 data_service 启动前完成空库与扩展准备。
         - name: initialize-dev-timeseries
           image: docker.io/timescale/timescaledb:2.26.4-pg16
           imagePullPolicy: Never
@@ -496,6 +536,8 @@ spec:
               value: production
             - name: DB_AUTO_SCHEMA_SYNC
               value: "false"
+            - name: DEV_CORE_URL
+              value: http://center-control:18101
             - name: DATA_SERVICE_ADDR
               value: :18102
             - name: DATA_SERVICE_COMPUTE_SANDBOX_URL
@@ -633,6 +675,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: IF_OPS_CENTER_NODE_NAME
+              value: __CENTER_NODE_NAME__
+            - name: IF_OPS_CENTER_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: IF_OPS_CENTER_DATA_PATH
+              value: __DATA_ROOT__
             - name: CODE_SERVER_DOCKER_HOST
               value: unix:///var/run/docker.sock
             # K3s 工作区镜像由离线安装包导入 containerd；不能沿用本地 Docker 的开发标签。
@@ -664,6 +714,14 @@ spec:
                   key: CODE_WORKSPACE_ALLOWED_ORIGINS
             - name: CODE_WORKSPACE_VOLUME
               value: __RELEASE_WORKSPACE_VOLUME__
+            - name: NODE_CONNECTION_URL
+              value: "__NODE_CONNECTION_URL__"
+            - name: NODE_PACKAGE_DIRECTORY
+              value: /var/lib/induforge/node-packages
+            - name: IF_CENTER_RELEASE_ROOT
+              value: /var/lib/induforge/center-releases
+            - name: IF_CENTER_RELEASE_HOST_ROOT
+              value: __DATA_ROOT__/center-releases
             - name: RELEASE_BUILDER_ENABLED
               value: "true"
             - name: RELEASE_BUILDER_IMAGE
@@ -728,6 +786,15 @@ spec:
               mountPath: /var/run/induforge/release-signing-key.pem
               subPath: release-signing-key.pem
               readOnly: true
+            - name: node-packages
+              mountPath: /var/lib/induforge/node-packages
+              readOnly: true
+            - name: center-releases
+              mountPath: /var/lib/induforge/center-releases
+            - name: image-cache
+              mountPath: /var/lib/induforge/image-cache
+            - name: image-service
+              mountPath: /run/induforge-center
       volumes:
         - name: workspaces
           hostPath:
@@ -747,6 +814,22 @@ spec:
           secret:
             secretName: release-signing-key
             defaultMode: 0400
+        - name: node-packages
+          hostPath:
+            path: __DATA_ROOT__/node-packages
+            type: Directory
+        - name: image-cache
+          hostPath:
+            path: /var/lib/induforge/image-cache
+            type: Directory
+        - name: image-service
+          hostPath:
+            path: /run/induforge-center
+            type: Directory
+        - name: center-releases
+          hostPath:
+            path: __DATA_ROOT__/center-releases
+            type: Directory
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -28,6 +28,7 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 }
 
 type ManagerConfig struct {
+	ImageCacheDir    string
 	AssetsDir        string
 	BinaryPath       string
 	ConfigDir        string
@@ -132,9 +133,8 @@ func (m *Manager) Apply(ctx context.Context, plan ClusterPlan) (ClusterState, er
 
 	assetBinary := filepath.Join(m.cfg.AssetsDir, m.cfg.RuntimeArch, "k3s")
 	assetImages := filepath.Join(m.cfg.AssetsDir, m.cfg.RuntimeArch, "k3s-airgap-images-"+m.cfg.RuntimeArch+".tar.zst")
-	foundationImages := filepath.Join(m.cfg.AssetsDir, m.cfg.RuntimeArch, "induforge-foundation-images-"+m.cfg.RuntimeArch+".tar.gz")
 	checksums := filepath.Join(m.cfg.AssetsDir, m.cfg.RuntimeArch, "SHA256SUMS")
-	if err := verifyAssets(checksums, assetBinary, assetImages, foundationImages); err != nil {
+	if err := verifyAssets(checksums, assetBinary, assetImages); err != nil {
 		return ClusterState{}, err
 	}
 	if err := ensureRealDirectory(plan.DataDir, 0700); err != nil {
@@ -155,9 +155,6 @@ func (m *Manager) Apply(ctx context.Context, plan ClusterPlan) (ClusterState, er
 	}
 	if err := copyAtomic(assetImages, filepath.Join(imageDir, filepath.Base(assetImages)), 0600); err != nil {
 		return ClusterState{}, fmt.Errorf("安装 K3s 离线镜像失败: %w", err)
-	}
-	if err := copyAtomic(foundationImages, filepath.Join(imageDir, filepath.Base(foundationImages)), 0600); err != nil {
-		return ClusterState{}, fmt.Errorf("安装基础服务离线镜像失败: %w", err)
 	}
 	if err := writeAtomic(filepath.Join(m.cfg.ConfigDir, "config.yaml"), []byte(plan.RenderK3sConfig()), 0600); err != nil {
 		return ClusterState{}, fmt.Errorf("写入 K3s 配置失败: %w", err)

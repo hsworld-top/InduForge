@@ -22,10 +22,10 @@ func TestHasCapability(t *testing.T) {
 		{name: "工程管理员可以读取运行环境", role: "PROJECT_ADMIN", capability: auth.CapabilityEnvironmentRead, allowed: true},
 		{name: "工程管理员不能管理运行环境", role: "PROJECT_ADMIN", capability: auth.CapabilityEnvironmentManage, allowed: false},
 		{name: "用户管理员不能读取工程", role: "USER_ADMIN", capability: auth.CapabilityProjectRead, allowed: false},
-		{name: "开发人员可以修改工程", role: "DEVELOPER", capability: auth.CapabilityProjectWrite, allowed: true},
+		{name: "工程人员可以修改工程", role: "PROJECT_ADMIN", capability: auth.CapabilityProjectWrite, allowed: true},
 		{name: "开发人员不能执行正式部署", role: "DEVELOPER", capability: auth.CapabilityDeploymentExecute, allowed: false},
-		{name: "操作员可以操作已有部署", role: "OPERATOR", capability: auth.CapabilityDeploymentOperate, allowed: true},
-		{name: "观察员只能读取工程", role: "VIEWER", capability: auth.CapabilityProjectRead, allowed: true},
+		{name: "运维人员可以操作已有部署", role: "OPS_ADMIN", capability: auth.CapabilityDeploymentOperate, allowed: true},
+		{name: "已删除角色不能读取工程", role: "VIEWER", capability: auth.CapabilityProjectRead, allowed: false},
 		{name: "观察员不能修改工程", role: "VIEWER", capability: auth.CapabilityProjectWrite, allowed: false},
 		{name: "未知角色没有能力", role: "UNKNOWN", capability: auth.CapabilityProjectRead, allowed: false},
 	}
@@ -53,9 +53,9 @@ func TestCanAssignRole(t *testing.T) {
 		targetRole string
 		allowed    bool
 	}{
-		{actorRole: "USER_ADMIN", targetRole: "DEVELOPER", allowed: true},
-		{actorRole: "USER_ADMIN", targetRole: "OPERATOR", allowed: true},
-		{actorRole: "USER_ADMIN", targetRole: "VIEWER", allowed: true},
+		{actorRole: "USER_ADMIN", targetRole: "DEVELOPER", allowed: false},
+		{actorRole: "USER_ADMIN", targetRole: "OPERATOR", allowed: false},
+		{actorRole: "USER_ADMIN", targetRole: "VIEWER", allowed: false},
 		{actorRole: "USER_ADMIN", targetRole: "PROJECT_ADMIN", allowed: false},
 		{actorRole: "SYSTEM_ADMIN", targetRole: "OPS_ADMIN", allowed: true},
 		{actorRole: "SYSTEM_ADMIN", targetRole: "SUPER_ADMIN", allowed: false},
@@ -74,11 +74,11 @@ func TestCanAssignRole(t *testing.T) {
 	}
 }
 
-func TestIsPlatformAdmin(t *testing.T) {
-	if !auth.IsPlatformAdmin("SUPER_ADMIN") || !auth.IsPlatformAdmin("SYSTEM_ADMIN") {
-		t.Fatal("SUPER_ADMIN 和 SYSTEM_ADMIN 应为平台管理员")
+func TestIsTenantAdministrator(t *testing.T) {
+	if auth.IsTenantAdministrator("SUPER_ADMIN") || !auth.IsTenantAdministrator("SYSTEM_ADMIN") {
+		t.Fatal("仅租户 SYSTEM_ADMIN 可管理租户工程")
 	}
-	if auth.IsPlatformAdmin("PROJECT_ADMIN") {
+	if auth.IsTenantAdministrator("PROJECT_ADMIN") {
 		t.Fatal("PROJECT_ADMIN 不应绕过工程可见性")
 	}
 }

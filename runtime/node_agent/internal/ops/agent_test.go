@@ -33,6 +33,14 @@ func TestClusterStatePayloadDoesNotExposeHostPaths(t *testing.T) {
 	}
 }
 
+func TestResourceSummaryReportsConfiguredDataPath(t *testing.T) {
+	agent := &Agent{cfg: Config{DataDir: "/var/lib/induframe/agent", HostDataDir: "/data/induframe/k3s"}}
+	system, ok := agent.resourceSummary()["system"].(map[string]any)
+	if !ok || system["dataPath"] != "/data/induframe/k3s" {
+		t.Fatalf("节点摘要应上报安装指定的数据目录: %#v", system)
+	}
+}
+
 func TestNewAgentValidatesCenterServerURL(t *testing.T) {
 	valid := []string{
 		"https://center.example",
@@ -312,7 +320,7 @@ func TestControlPlaneContractRoundTrip(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&heartbeat); err != nil || len(heartbeat.Services) != 1 || heartbeat.Services[0].ServiceID != "service-a" || heartbeat.Services[0].Endpoint != "" {
 				t.Fatalf("heartbeat payload=%+v err=%v", heartbeat, err)
 			}
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"node":{"id":"node-a"},"services":[]}}`))
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"node":{"id":"node-a","observedStatus":"online"},"services":[]}}`))
 		case "/api/v1/ops/agent/nodes/node-a/commands":
 			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"commands":[{"nodeId":"node-a","serviceId":"service-a","serviceType":"collector","desiredStatus":"running","generation":1}]}}`))
 		default:
@@ -581,5 +589,57 @@ func TestFormalKubernetesStopDoesNotBlockNativeCollectorCommands(t *testing.T) {
 				t.Fatal("NodeAgent 修改了 K3s 服务状态")
 			}
 		})
+	}
+}
+
+func TestHeartbeatAcknowledgementRequiredForInstall(t *testing.T) {
+	for _, state := range []string{"offline", "online"} {
+		t.Run(state, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"node": map[string]string{"id": "node-test", "observedStatus": state}}})
+			}))
+			defer server.Close()
+			dir := t.TempDir()
+			agent, err := NewAgent(Config{Enabled: true, ServerURL: server.URL, DataDir: dir}, configuredSupervisor(t, ServiceCollector))
+			if err != nil {
+				t.Fatal(err)
+			}
+			agent.identity = Identity{NodeID: "node-test", AgentToken: "test"}
+			err = agent.Heartbeat(context.Background())
+			_, fileErr := os.Stat(filepath.Join(dir, "ops-center-connection.json"))
+			if state == "online" {
+				if err != nil || fileErr != nil {
+					t.Fatalf("missing acknowledgement %v %v", err, fileErr)
+				}
+			} else if err == nil || !os.IsNotExist(fileErr) {
+				t.Fatalf("unconfirmed heartbeat accepted: %v %v", err, fileErr)
+			}
+		})
+	}
+}
+
+func TestNotifyUninstalledRequiresCenterAcknowledgement(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "ops-agent-identity.json"), []byte(`{"nodeId":"node-one","agentToken":"test-token"}`), 0600)
+	status := "offline"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Error("missing identity")
+		}
+		var input map[string]any
+		json.NewDecoder(r.Body).Decode(&input)
+		if input["uninstalled"] != true {
+			t.Error("missing uninstall confirmation")
+		}
+		json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"node": map[string]any{"observedStatus": status}}})
+	}))
+	defer server.Close()
+	cfg := Config{ServerURL: server.URL, DataDir: dir}
+	if NotifyUninstalled(context.Background(), cfg) == nil {
+		t.Fatal("must not accept ordinary heartbeat acknowledgement")
+	}
+	status = "uninstalled"
+	if err := NotifyUninstalled(context.Background(), cfg); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -14,7 +14,6 @@ BACKUP_PARENT=${IF_CENTER_BACKUP_ROOT:-/var/backups/induforge}
 CENTER_NODE_NAME=${IF_CENTER_NODE_NAME:-}
 CONTROL_IMAGE=${IF_CENTER_CONTROL_IMAGE:-induforge/control:latest}
 EDGE_IMAGE=${IF_CENTER_EDGE_IMAGE:-induforge/edge:latest}
-AGENT_SERVER_URL=${IF_CENTER_AGENT_SERVER_URL:-}
 NODE_AGENT_CONFIG=${IF_CENTER_NODE_AGENT_CONFIG:-/etc/induforge/node-agent/config.yaml}
 K3S_BIN=${IF_CENTER_K3S_BIN:-/usr/local/bin/k3s}
 KUBECONFIG_PATH=${IF_CENTER_KUBECONFIG:-/var/lib/induforge/k3s/server/cred/admin.kubeconfig}
@@ -30,10 +29,6 @@ case "$DATA_ROOT" in
 esac
 case "$CENTER_NODE_NAME" in
   ''|*[!a-zA-Z0-9._-]*) echo "IF_CENTER_NODE_NAME is missing or invalid" >&2; exit 1 ;;
-esac
-case "$AGENT_SERVER_URL" in
-  https://*:*|https://* ) ;;
-  *) echo "IF_CENTER_AGENT_SERVER_URL must be an HTTPS Center URL" >&2; exit 1 ;;
 esac
 for port in "$HTTP_PORT" "$HTTPS_PORT"; do
   case "$port" in ''|*[!0-9]*) echo "center edge port is invalid" >&2; exit 1 ;; esac
@@ -153,20 +148,14 @@ IF_CENTER_DATA_ROOT="$DATA_ROOT" \
 IF_CENTER_NODE_NAME="$CENTER_NODE_NAME" IF_CENTER_CONTROL_IMAGE="$CONTROL_IMAGE" IF_CENTER_EDGE_IMAGE="$EDGE_IMAGE" IF_CENTER_DATA_ROOT="$DATA_ROOT" \
   /opt/induforge/center-k3s/centerctl doctor
 
-# 中心内置节点也必须经正式 HTTPS 入口访问控制面，不能依赖已经退出的宿主机 18101 端口。
-if [ ! -f "$NODE_AGENT_CONFIG" ]; then
-  echo "NodeAgent config does not exist: $NODE_AGENT_CONFIG" >&2
-  exit 1
+# 新中心直接把已有 K3s Server 映射为逻辑内置节点。旧版中心 Agent 不再参与
+# K3s、基础服务或工程调和；迁移时保留配置备份后停用，避免同一主机重复注册。
+if [ -f "$NODE_AGENT_CONFIG" ]; then
+  cp -a "$NODE_AGENT_CONFIG" "$backup_dir/node-agent-config.yaml"
 fi
-cp -a "$NODE_AGENT_CONFIG" "$backup_dir/node-agent-config.yaml"
-install -m 0644 "$DATA_ROOT/tls/center.crt" /usr/local/share/ca-certificates/induforge-center.crt
-update-ca-certificates >/dev/null
-sed -i -E "s|^([[:space:]]*serverUrl:).*|\\1 $AGENT_SERVER_URL|" "$NODE_AGENT_CONFIG"
-if ! grep -Fq "serverUrl: $AGENT_SERVER_URL" "$NODE_AGENT_CONFIG"; then
-  echo "failed to update center NodeAgent serverUrl" >&2
-  exit 1
+if systemctl list-unit-files induforge-node-agent.service >/dev/null 2>&1; then
+  systemctl disable --now induforge-node-agent.service >/dev/null
 fi
-systemctl restart induforge-node-agent.service
 
 systemctl disable induforge-center.service >/dev/null
 docker update --restart=no induforge-center-meta-store induforge-center-cache-store induforge-center-object-store induforge-center-edge >/dev/null

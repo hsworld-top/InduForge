@@ -20,6 +20,8 @@ type Querier interface {
 	CountFilteredTenants(ctx context.Context, arg CountFilteredTenantsParams) (int64, error)
 	CountNodes(ctx context.Context, arg CountNodesParams) (int64, error)
 	CountProjects(ctx context.Context, arg CountProjectsParams) (int64, error)
+	CountRuntimeRoles(ctx context.Context, arg CountRuntimeRolesParams) (int64, error)
+	CountRuntimeUsers(ctx context.Context, arg CountRuntimeUsersParams) (int64, error)
 	CountTenantUsers(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountTenants(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context, arg CountUsersParams) (int64, error)
@@ -96,6 +98,8 @@ type Querier interface {
 	MarkApplicationVersionFailed(ctx context.Context, arg MarkApplicationVersionFailedParams) (ApplicationVersion, error)
 	MarkApplicationVersionReady(ctx context.Context, arg MarkApplicationVersionReadyParams) (ApplicationVersion, error)
 	MarkNodeCommandIssued(ctx context.Context, commandID pgtype.UUID) error
+	PageRuntimeRoles(ctx context.Context, arg PageRuntimeRolesParams) ([]PageRuntimeRolesRow, error)
+	PageRuntimeUsers(ctx context.Context, arg PageRuntimeUsersParams) ([]PageRuntimeUsersRow, error)
 	RecoverStaleNodeCommand(ctx context.Context, arg RecoverStaleNodeCommandParams) (int64, error)
 	RecoverStaleNodeCommands(ctx context.Context) (int64, error)
 	RegisterNode(ctx context.Context, arg RegisterNodeParams) (Node, error)
@@ -107,8 +111,10 @@ type Querier interface {
 	SetRefreshTokenReplacement(ctx context.Context, arg SetRefreshTokenReplacementParams) error
 	SetTenantStatus(ctx context.Context, arg SetTenantStatusParams) (Tenant, error)
 	SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectParams) (int64, error)
+	UpdateAuthUserAvatar(ctx context.Context, arg UpdateAuthUserAvatarParams) (pgtype.Text, error)
 	UpdateAuthUserLogin(ctx context.Context, arg UpdateAuthUserLoginParams) error
-	UpdateAuthUserPassword(ctx context.Context, arg UpdateAuthUserPasswordParams) error
+	UpdateAuthUserPassword(ctx context.Context, arg UpdateAuthUserPasswordParams) (int64, error)
+	UpdateAuthUserProfile(ctx context.Context, arg UpdateAuthUserProfileParams) (int64, error)
 	UpdateDashboardNote(ctx context.Context, arg UpdateDashboardNoteParams) (TenantDashboardNote, error)
 	UpdateManagedUser(ctx context.Context, arg UpdateManagedUserParams) (User, error)
 	UpdateNodeDeploymentState(ctx context.Context, arg UpdateNodeDeploymentStateParams) (NodeDeployment, error)

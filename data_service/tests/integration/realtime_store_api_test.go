@@ -11,7 +11,6 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 )
@@ -30,7 +29,7 @@ func TestRealtimeStoreListAfterConnectionCreate(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "realtime-store-secret"
 	redisServer := miniredis.RunT(t)
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -165,7 +164,7 @@ func TestRealtimeStoreDataPointRecreateDoesNotReuseDeletedMapping(t *testing.T) 
 	userID := uuid.NewString()
 	secret := "realtime-store-revive-secret"
 	redisServer := miniredis.RunT(t)
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

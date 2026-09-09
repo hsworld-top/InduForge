@@ -105,7 +105,7 @@ func TestOpsHubReadyPrecedesChangesAndSequenceIncreases(t *testing.T) {
 	}
 }
 
-func TestOpsHubMetricsAreMergedOnceForManyClients(t *testing.T) {
+func TestOpsHubMetricsAreMergedOnceForManyClientsAndKeepThousandNodeIDs(t *testing.T) {
 	h := testOpsHub(t)
 	probes := make([]*hubProbe, 64)
 	for i := range probes {
@@ -134,8 +134,21 @@ func TestOpsHubMetricsAreMergedOnceForManyClients(t *testing.T) {
 			t.Fatalf("expected one merged delivery, got %d", len(p.packets))
 		}
 		change := p.packets[1].payload.(opsChange)
-		if change.Sequence != 1 || len(change.EntityIDs) != 0 {
-			t.Fatalf("overflow must broaden IDs: %+v", change)
+		if change.Sequence != 1 || len(change.EntityIDs) != 1000 {
+			t.Fatalf("thousand-node batch lost entity scope: sequence=%d ids=%d", change.Sequence, len(change.EntityIDs))
+		}
+	}
+	for i := 0; i <= maxOpsEntityIDs; i++ {
+		h.publish("tenant", []string{"nodes"}, []string{"overflow-" + fmt.Sprint(i)}, false)
+	}
+	h.mu.Lock()
+	h.pending["tenant"].due = time.Now().Add(-time.Second)
+	h.mu.Unlock()
+	h.flush()
+	h.drain()
+	for _, p := range probes {
+		if len(p.packets) != 3 || len(p.packets[2].payload.(opsChange).EntityIDs) != 0 {
+			t.Fatal("hard entity limit must fall back to broad notification")
 		}
 	}
 }
@@ -280,4 +293,21 @@ func waitUntil(t *testing.T, condition func() bool) {
 		time.Sleep(time.Millisecond * 5)
 	}
 	t.Fatal("condition did not become true")
+}
+
+func TestOpsHubLargeBatchClipsToVisibleNodes(t *testing.T) {
+	h := testOpsHub(t)
+	p := addProbe(t, h, "page", "tenant", "OPS_ADMIN")
+	h.watch("page", opsWatch{SubscriptionID: "page", Topics: []string{"nodes"}, EntityIDs: []string{"7", "8"}}, false)
+	h.drain()
+	for i := 0; i < 1000; i++ {
+		h.publish("tenant", []string{"nodes"}, []string{fmt.Sprint(i)}, false)
+	}
+	h.pending["tenant"].due = time.Now().Add(-time.Second)
+	h.flush()
+	h.drain()
+	change := p.packets[1].payload.(opsChange)
+	if !reflect.DeepEqual(change.EntityIDs, []string{"7", "8"}) {
+		t.Fatalf("unexpected IDs: %v", change.EntityIDs)
+	}
 }

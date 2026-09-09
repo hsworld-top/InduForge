@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/indu-forge/data_service/internal/auth"
 )
 
 const defaultAddr = ":18102"
@@ -21,6 +23,7 @@ type Config struct {
 	DatabaseURL                  string
 	DatabaseSearchPath           string
 	JWTSecret                    string
+	DevCoreURL                   string
 	RedisAddr                    string
 	RedisPassword                string
 	RedisDB                      int
@@ -30,7 +33,6 @@ type Config struct {
 	MessageHubAddr               string
 	MessageHubUsername           string
 	MessageHubPassword           string
-	MessageHubTopicPrefix        string
 	CollectorSecretKey           []byte
 	CollectorSecretKeyVersion    string
 	AlarmSecretKey               []byte
@@ -81,7 +83,13 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATA_SERVICE_INTERNAL_TOKEN 不能为空")
 	}
 
+	devCoreURL := strings.TrimSpace(os.Getenv("DEV_CORE_URL"))
+	if err := auth.ValidateCenterURL(devCoreURL); err != nil {
+		return Config{}, err
+	}
+
 	return Config{
+		DevCoreURL:                   devCoreURL,
 		Addr:                         addr,
 		DatabaseURL:                  buildDatabaseURL(),
 		DevDatabaseURL:               buildDevDatabaseURL(),
@@ -95,7 +103,6 @@ func Load() (Config, error) {
 		MessageHubAddr:               buildMessageHubAddr(),
 		MessageHubUsername:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_USERNAME")),
 		MessageHubPassword:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
-		MessageHubTopicPrefix:        firstEnvWithDefault("IF_MESSAGE_HUB_TOPIC_PREFIX", "ifdev"),
 		CollectorSecretKey:           collectorSecretKey,
 		CollectorSecretKeyVersion:    firstEnvWithDefault("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v1"),
 		AlarmSecretKey:               alarmSecretKey,

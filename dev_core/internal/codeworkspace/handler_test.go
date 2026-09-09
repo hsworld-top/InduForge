@@ -57,7 +57,7 @@ func TestCodeWorkspaceHTTPRoutes(t *testing.T) {
 
 func newCodeWorkspaceHTTPTestApp(t *testing.T) (*app.App, string) {
 	t.Helper()
-	authService, token, actor := testsupport.NewAuth(t, "DEVELOPER")
+	authService, token, actor := testsupport.NewAuth(t, "PROJECT_ADMIN")
 	root := t.TempDir()
 	item := project.Project{
 		ID: testProjectID, TenantID: actor.TenantID, CreatedBy: actor.ID, Visibility: "private",

@@ -80,6 +80,8 @@ type AuthoringRestoreTask struct {
 	ApplicationVersionID   pgtype.UUID        `json:"application_version_id"`
 	RequestedBy            pgtype.UUID        `json:"requested_by"`
 	CurrentProjectRevision pgtype.Text        `json:"current_project_revision"`
+	ExpectedAuthoringEpoch int64              `json:"expected_authoring_epoch"`
+	TargetAuthoringEpoch   int64              `json:"target_authoring_epoch"`
 	State                  string             `json:"state"`
 	Stage                  string             `json:"stage"`
 	BackupSchema           pgtype.Text        `json:"backup_schema"`
@@ -89,6 +91,10 @@ type AuthoringRestoreTask struct {
 	BackupCipherHash       pgtype.Text        `json:"backup_cipher_hash"`
 	BackupSize             pgtype.Int8        `json:"backup_size"`
 	BackupKeyID            pgtype.Text        `json:"backup_key_id"`
+	BackupProjectRevision  pgtype.Text        `json:"backup_project_revision"`
+	RolledBack             bool               `json:"rolled_back"`
+	WorkspaceWasRunning    pgtype.Bool        `json:"workspace_was_running"`
+	CleanupCompletedAt     pgtype.Timestamptz `json:"cleanup_completed_at"`
 	ErrorMessage           pgtype.Text        `json:"error_message"`
 	StartedAt              pgtype.Timestamptz `json:"started_at"`
 	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
@@ -404,6 +410,8 @@ type RefreshToken struct {
 	TenantID          pgtype.UUID        `json:"tenant_id"`
 	UserID            pgtype.UUID        `json:"user_id"`
 	TokenHash         string             `json:"token_hash"`
+	RememberMe        bool               `json:"remember_me"`
+	CredentialVersion int64              `json:"credential_version"`
 	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
 	ReplacedByTokenID pgtype.UUID        `json:"replaced_by_token_id"`
@@ -703,6 +711,9 @@ type SceneRevisionFile struct {
 }
 
 type Tenant struct {
+	Initialized              bool               `json:"initialized"`
+	IsDefault                bool               `json:"is_default"`
+	AdminUserID              pgtype.UUID        `json:"admin_user_id"`
 	ID                       pgtype.UUID        `json:"id"`
 	Name                     string             `json:"name"`
 	Code                     string             `json:"code"`
@@ -737,20 +748,22 @@ type TenantDashboardNote struct {
 }
 
 type User struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          pgtype.UUID        `json:"tenant_id"`
-	Username          string             `json:"username"`
-	PasswordHash      string             `json:"password_hash"`
-	Email             pgtype.Text        `json:"email"`
-	Phone             pgtype.Text        `json:"phone"`
-	FullName          pgtype.Text        `json:"full_name"`
-	Avatar            pgtype.Text        `json:"avatar"`
-	Role              string             `json:"role"`
-	Status            string             `json:"status"`
-	Preferences       []byte             `json:"preferences"`
-	LastLoginAt       pgtype.Timestamptz `json:"last_login_at"`
-	LastLoginIp       pgtype.Text        `json:"last_login_ip"`
-	PasswordChangedAt pgtype.Timestamptz `json:"password_changed_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	MustChangePassword bool               `json:"must_change_password"`
+	CredentialVersion  int64              `json:"credential_version"`
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	Username           string             `json:"username"`
+	PasswordHash       string             `json:"password_hash"`
+	Email              pgtype.Text        `json:"email"`
+	Phone              pgtype.Text        `json:"phone"`
+	FullName           pgtype.Text        `json:"full_name"`
+	Avatar             pgtype.Text        `json:"avatar"`
+	Role               string             `json:"role"`
+	Status             string             `json:"status"`
+	Preferences        []byte             `json:"preferences"`
+	LastLoginAt        pgtype.Timestamptz `json:"last_login_at"`
+	LastLoginIp        pgtype.Text        `json:"last_login_ip"`
+	PasswordChangedAt  pgtype.Timestamptz `json:"password_changed_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }

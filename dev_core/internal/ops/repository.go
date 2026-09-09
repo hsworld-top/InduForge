@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/indu-forge/dev_core/internal/imagecatalog"
 	"io"
 	"net"
 	"strings"
@@ -17,14 +18,12 @@ import (
 )
 
 type PostgreSQLRepository struct {
-	pool       *pgxpool.Pool
-	k3sAPIPort int
-	events     ChangePublisher
-	observer   changeObserver
+	imageCatalog       *imagecatalog.Catalog
+	centerImageWorkers *centerImageWorkers
+	pool               *pgxpool.Pool
+	events             ChangePublisher
+	observer           changeObserver
 }
-
-const defaultK3sVersion = "v1.36.4+k3s1"
-const defaultRuntimeEnvironmentCode = "default-runtime"
 
 // deploymentSelect 不从 project_deployments 推断节点；节点归属是 deployment_services 的属性。
 const deploymentSelect = `SELECT d.id,d.tenant_id,d.project_id,p.name,d.environment_id,e.name,COALESCE(d.application_version_id::text,''),COALESCE(v.version,CASE WHEN d.mode='development' THEN '__DEV__' ELSE '' END),COALESCE((SELECT id::text FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),COALESCE((SELECT operation FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),''),d.mode,d.access_port,d.desired_status,d.observed_status,COALESCE((SELECT progress FROM deployment_runs WHERE project_deployment_id=d.id ORDER BY started_at DESC,id DESC LIMIT 1),0),COALESCE(d.last_ready_mode,''),COALESCE(d.last_ready_application_version_id::text,''),COALESCE(lv.version,CASE WHEN d.last_ready_mode='development' THEN '__DEV__' ELSE '' END),COALESCE(d.last_ready_generation,0),d.last_ready_at,d.created_at,d.updated_at FROM project_deployments d JOIN projects p ON p.id=d.project_id AND p.tenant_id=d.tenant_id JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.tenant_id=d.tenant_id LEFT JOIN application_versions lv ON lv.id=d.last_ready_application_version_id AND lv.tenant_id=d.tenant_id`
@@ -46,107 +45,16 @@ const pendingServicesSQL = `SELECT s.id,s.tenant_id,s.project_deployment_id,s.no
 
 const (
 	lockDeploymentProjectSQL = `SELECT id FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE`
-	lockDeploymentNodeSQL    = `SELECT approved_at IS NOT NULL AND desired_status='active' AND observed_status='online' AND last_heartbeat_at>now()-interval '45 seconds' AND capabilities @> $3::jsonb FROM host_nodes WHERE tenant_id=$1 AND id=$2 FOR UPDATE`
+	lockDeploymentNodeSQL    = `SELECT approved_at IS NOT NULL AND desired_status='active' AND observed_status='online' AND (node_source='built_in' OR last_heartbeat_at>now()-interval '45 seconds') AND capabilities @> $3::jsonb FROM host_nodes WHERE tenant_id=$1 AND id=$2 FOR UPDATE`
 )
 
 func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
-	return &PostgreSQLRepository{pool: pool, k3sAPIPort: 6443}
-}
-
-// SetK3sAPIPort 注入安装配置中的 K3s API 端口。端口属于整套中心集群，
-// 不能由单个节点自行决定，否则工作节点会加入错误的控制面地址。
-func (r *PostgreSQLRepository) SetK3sAPIPort(port int) {
-	if port >= 1 && port <= 65535 {
-		r.k3sAPIPort = port
-	}
-}
-
-// EnsureRuntimeCluster 由中心安装流程调用，把指定的已审批 Linux 节点固化为唯一中心节点。
-// 重复调用是幂等的；已存在其他中心节点时拒绝覆盖，避免误把工作节点提升为控制面。
-func (r *PostgreSQLRepository) EnsureRuntimeCluster(ctx context.Context, centerNodeID string) error {
-	if _, err := uuid.Parse(centerNodeID); err != nil {
-		return fmt.Errorf("中心节点 ID 无效: %w", err)
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	var tenantID, nodeName, platform, actorID string
-	var approved bool
-	if err := tx.QueryRow(ctx, `SELECT n.tenant_id::text,n.display_name,n.platform,n.approved_at IS NOT NULL,e.created_by::text FROM host_nodes n JOIN node_enrollments e ON e.id=n.enrollment_id WHERE n.id=$1 AND n.desired_status='active' FOR UPDATE OF n`, centerNodeID).Scan(&tenantID, &nodeName, &platform, &approved, &actorID); err != nil {
-		return mapNotFound(err)
-	}
-	if platform != "linux" || !approved {
-		return fmt.Errorf("中心节点必须是已审批的 Linux 节点")
-	}
-
-	var clusterID string
-	var persistedAPIPort int
-	if err := tx.QueryRow(ctx, `INSERT INTO runtime_clusters(tenant_id,k3s_version,api_port) VALUES($1,$2,$3) ON CONFLICT (tenant_id) DO UPDATE SET updated_at=runtime_clusters.updated_at RETURNING id::text,api_port`, tenantID, defaultK3sVersion, r.k3sAPIPort).Scan(&clusterID, &persistedAPIPort); err != nil {
-		return err
-	}
-	if persistedAPIPort != r.k3sAPIPort {
-		return fmt.Errorf("K3s API 端口已在首次安装时固化为 %d，不能通过重启中心改为 %d", persistedAPIPort, r.k3sAPIPort)
-	}
-	var existingCenterID string
-	err = tx.QueryRow(ctx, `SELECT node_id::text FROM runtime_cluster_nodes WHERE cluster_id=$1 AND node_kind='center' FOR UPDATE`, clusterID).Scan(&existingCenterID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if existingCenterID != "" && existingCenterID != centerNodeID {
-		return fmt.Errorf("中心运行集群已绑定其他中心节点 %s", existingCenterID)
-	}
-	if existingCenterID == "" {
-		if _, err := tx.Exec(ctx, `DELETE FROM runtime_cluster_nodes WHERE node_id=$1 AND node_kind='worker'`, centerNodeID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO runtime_cluster_nodes(tenant_id,cluster_id,node_id,node_kind) VALUES($1,$2,$3,'center')`, tenantID, clusterID, centerNodeID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO runtime_cluster_events(tenant_id,cluster_id,node_id,event_type,name,target,result,message) VALUES($1,$2,$3,'center_initialized','中心运行集群已初始化',$4,'success','中心节点将安装 K3s Server，并作为运行环境的统一控制面')`, tenantID, clusterID, centerNodeID, nodeName); err != nil {
-			return err
-		}
-	}
-	// 默认运行范围是平台初始化的一部分。普通用户进入运维管理时直接使用它，
-	// 不需要先理解或手工创建“运行环境”。
-	environmentID, err := ensureDefaultRuntimeEnvironment(ctx, tx, tenantID, actorID)
-	if err != nil {
-		return err
-	}
-	if err := assignNodeToDefaultRuntimeEnvironment(ctx, tx, tenantID, environmentID, centerNodeID, nodeName, actorID); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func ensureDefaultRuntimeEnvironment(ctx context.Context, tx pgx.Tx, tenantID, actorID string) (string, error) {
-	var environmentID string
-	err := tx.QueryRow(ctx, `INSERT INTO runtime_environments(tenant_id,name,code,is_default,created_by) VALUES($1,'默认运行范围',$2,true,$3) ON CONFLICT (tenant_id,code) DO NOTHING RETURNING id::text`, tenantID, defaultRuntimeEnvironmentCode, actorID).Scan(&environmentID)
-	if err == nil {
-		_, err = tx.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message,created_by) VALUES($1,$2,'default_environment_created','默认运行范围已初始化','平台','success','平台已创建默认运行范围，后续接入的 Linux 运行节点将自动加入',$3)`, tenantID, environmentID, actorID)
-		return environmentID, err
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
-	}
-	err = tx.QueryRow(ctx, `SELECT id::text FROM runtime_environments WHERE tenant_id=$1 AND code=$2 AND is_default AND deleted_at IS NULL FOR UPDATE`, tenantID, defaultRuntimeEnvironmentCode).Scan(&environmentID)
-	return environmentID, err
-}
-
-func assignNodeToDefaultRuntimeEnvironment(ctx context.Context, tx pgx.Tx, tenantID, environmentID, nodeID, nodeName, actorID string) error {
-	tag, err := tx.Exec(ctx, `INSERT INTO runtime_environment_nodes(tenant_id,environment_id,node_id,created_by) VALUES($1,$2,$3,$4) ON CONFLICT (environment_id,node_id) DO NOTHING`, tenantID, environmentID, nodeID, actorID)
-	if err != nil || tag.RowsAffected() == 0 {
-		return err
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message,created_by) VALUES($1,$2,'node_auto_assigned','物理节点已加入默认运行范围',$3,'success','节点接入后由平台自动纳入默认调度范围',$4)`, tenantID, environmentID, nodeName, actorID)
-	return err
+	return &PostgreSQLRepository{pool: pool}
 }
 
 func (r *PostgreSQLRepository) ListEnrollments(ctx context.Context, tenant string, f PageFilter) ([]Enrollment, int64, error) {
 	_, _ = r.pool.Exec(ctx, `UPDATE node_enrollments SET status='expired',updated_at=now() WHERE tenant_id=$1 AND status='created' AND expires_at<=now()`, tenant)
-	rows, e := r.pool.Query(ctx, `SELECT id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at FROM node_enrollments WHERE tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR platform ILIKE '%'||$2||'%') ORDER BY created_at DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
+	rows, e := r.pool.Query(ctx, `SELECT id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at FROM node_enrollments WHERE deleted_at IS NULL AND tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR platform ILIKE '%'||$2||'%') ORDER BY created_at DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -161,65 +69,39 @@ func (r *PostgreSQLRepository) ListEnrollments(ctx context.Context, tenant strin
 		items = append(items, x)
 	}
 	var total int64
-	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM node_enrollments WHERE tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR platform ILIKE '%'||$2||'%')`, tenant, f.Search).Scan(&total)
+	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM node_enrollments WHERE deleted_at IS NULL AND tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR platform ILIKE '%'||$2||'%')`, tenant, f.Search).Scan(&total)
 	return items, total, e
 }
 func (r *PostgreSQLRepository) CreateEnrollment(ctx context.Context, tenant, user string, in CreateEnrollmentInput, hash string) (Enrollment, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Enrollment{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err = reserveNodeName(ctx, tx, tenant, in.DisplayName); err != nil {
+		return Enrollment{}, err
+	}
 	caps, _ := json.Marshal(in.Capabilities)
-	return scanEnrollment(r.pool.QueryRow(ctx, `INSERT INTO node_enrollments(tenant_id,platform,capabilities,display_name,code_hash,expires_at,created_by) VALUES($1,$2,$3,$4,$5,now()+$6::interval,$7) RETURNING id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, tenant, in.Platform, caps, in.DisplayName, hash, in.TTL.String(), user))
+	item, err := scanEnrollment(tx.QueryRow(ctx, `INSERT INTO node_enrollments(tenant_id,platform,capabilities,display_name,code_hash,expires_at,created_by) VALUES($1,$2,$3,$4,$5,now()+$6::interval,$7) RETURNING id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, tenant, in.Platform, caps, in.DisplayName, hash, in.TTL.String(), user))
+	if err != nil {
+		return Enrollment{}, err
+	}
+	return item, tx.Commit(ctx)
 }
 func (r *PostgreSQLRepository) GetEnrollment(ctx context.Context, tenant, id string) (Enrollment, error) {
 	_, _ = r.pool.Exec(ctx, `UPDATE node_enrollments SET status='expired',updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status='created' AND expires_at<=now()`, tenant, id)
-	x, e := scanEnrollment(r.pool.QueryRow(ctx, `SELECT id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at FROM node_enrollments WHERE tenant_id=$1 AND id=$2`, tenant, id))
+	x, e := scanEnrollment(r.pool.QueryRow(ctx, `SELECT id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at FROM node_enrollments WHERE deleted_at IS NULL AND tenant_id=$1 AND id=$2`, tenant, id))
 	if e != nil {
 		return x, mapNotFound(e)
 	}
 	r.attachEnrollmentNode(ctx, &x)
 	return x, nil
 }
-func (r *PostgreSQLRepository) ApproveEnrollment(ctx context.Context, tenant, id, user string, approve bool) (Enrollment, error) {
-	tx, e := r.pool.Begin(ctx)
-	if e != nil {
-		return Enrollment{}, e
+func (r *PostgreSQLRepository) RevokeEnrollment(ctx context.Context, tenant, id, user string) (Enrollment, error) {
+	x, err := scanEnrollment(r.pool.QueryRow(ctx, `UPDATE node_enrollments SET status='rejected',rejected_at=now(),rejected_by=$1,updated_at=now() WHERE tenant_id=$2 AND id=$3 AND status='created' AND expires_at>now() RETURNING id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, user, tenant, id))
+	if err != nil {
+		return x, mapNotFound(err)
 	}
-	defer tx.Rollback(ctx)
-	status := "approved"
-	field := "approved"
-	if !approve {
-		status = "rejected"
-		field = "rejected"
-	}
-	x, e := scanEnrollment(tx.QueryRow(ctx, `UPDATE node_enrollments SET status=$1,`+field+`_at=now(),`+field+`_by=$2,updated_at=now() WHERE tenant_id=$3 AND id=$4 AND status='claimed' RETURNING id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, status, user, tenant, id))
-	if e != nil {
-		return x, mapNotFound(e)
-	}
-	if approve {
-		_, e = tx.Exec(ctx, `UPDATE host_nodes SET observed_status='offline',approved_at=now(),approved_by=$1,updated_at=now() WHERE enrollment_id=$2`, user, id)
-		if e == nil {
-			_, e = tx.Exec(ctx, `INSERT INTO runtime_cluster_nodes(tenant_id,cluster_id,node_id,node_kind) SELECT n.tenant_id,c.id,n.id,'worker' FROM host_nodes n JOIN runtime_clusters c ON c.tenant_id=n.tenant_id WHERE n.enrollment_id=$1 ON CONFLICT (node_id) DO NOTHING`, id)
-		}
-		if e == nil {
-			_, e = tx.Exec(ctx, `INSERT INTO runtime_cluster_events(tenant_id,cluster_id,node_id,event_type,name,target,result,message,created_by) SELECT n.tenant_id,c.id,n.id,'worker_join_requested','运行节点接入任务已创建',n.display_name,'success','节点审批通过，等待加入中心运行集群',$2 FROM host_nodes n JOIN runtime_clusters c ON c.tenant_id=n.tenant_id WHERE n.enrollment_id=$1`, id, user)
-		}
-		if e == nil {
-			var environmentID, nodeID, nodeName string
-			e = tx.QueryRow(ctx, `SELECT e.id::text,n.id::text,n.display_name FROM host_nodes n JOIN runtime_environments e ON e.tenant_id=n.tenant_id AND e.is_default AND e.deleted_at IS NULL WHERE n.enrollment_id=$1 AND n.platform='linux' AND n.capabilities @> '["project_entry","data_runtime"]'::jsonb`, id).Scan(&environmentID, &nodeID, &nodeName)
-			if errors.Is(e, pgx.ErrNoRows) {
-				e = nil
-			} else if e == nil {
-				e = assignNodeToDefaultRuntimeEnvironment(ctx, tx, tenant, environmentID, nodeID, nodeName, user)
-			}
-		}
-	} else {
-		_, e = tx.Exec(ctx, `UPDATE host_nodes SET desired_status='revoked',observed_status='revoked',agent_token_hash='revoked:'||id::text,updated_at=now() WHERE enrollment_id=$1`, id)
-	}
-	if e != nil {
-		return x, e
-	}
-	if e = tx.Commit(ctx); e != nil {
-		return x, e
-	}
-	r.attachEnrollmentNode(ctx, &x)
 	return x, nil
 }
 func (r *PostgreSQLRepository) ClaimEnrollment(ctx context.Context, in ClaimEnrollmentInput, agentHash string) (Enrollment, Node, error) {
@@ -228,11 +110,11 @@ func (r *PostgreSQLRepository) ClaimEnrollment(ctx context.Context, in ClaimEnro
 		return Enrollment{}, Node{}, e
 	}
 	defer tx.Rollback(ctx)
-	en, e := scanEnrollment(tx.QueryRow(ctx, `UPDATE node_enrollments SET status='claimed',claimed_at=now(),updated_at=now() WHERE code_hash=$1 AND status='created' AND expires_at>now() RETURNING id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, hashToken(in.Code)))
+	en, e := scanEnrollment(tx.QueryRow(ctx, `UPDATE node_enrollments SET status='claimed',claimed_at=now(),updated_at=now() WHERE code_hash=$1 AND deleted_at IS NULL AND status='created' AND expires_at>now() RETURNING id,tenant_id,platform,capabilities,COALESCE(display_name,''),status,expires_at,claimed_at,COALESCE(claimed_by_node_id::text,''),approved_at,rejected_at,created_at,updated_at`, hashToken(in.Code)))
 	if e != nil {
 		return Enrollment{}, Node{}, ErrEnrollmentUnavailable
 	}
-	if en.Platform != in.Platform || !sameStrings(in.Capabilities, en.Capabilities) {
+	if !enrollmentMatches(in, en.Platform, en.Capabilities) {
 		return Enrollment{}, Node{}, fmt.Errorf("NodeAgent 平台或能力与接入任务不匹配")
 	}
 	name := en.DisplayName
@@ -242,12 +124,21 @@ func (r *PostgreSQLRepository) ClaimEnrollment(ctx context.Context, in ClaimEnro
 	if name == "" {
 		name = in.Hostname
 	}
+	name = strings.TrimSpace(name)
+	if err := reserveNodeName(ctx, tx, en.TenantID, name); err != nil {
+		return Enrollment{}, Node{}, err
+	}
 	caps, _ := json.Marshal(in.Capabilities)
-	n, e := scanNode(tx.QueryRow(ctx, `INSERT INTO host_nodes(tenant_id,enrollment_id,display_name,hostname,platform,architecture,agent_version,machine_fingerprint,ip_address,agent_token_hash,capabilities) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,tenant_id,enrollment_id,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at`, en.TenantID, en.ID, name, in.Hostname, in.Platform, in.Architecture, in.AgentVersion, in.MachineFingerprint, in.IPAddress, agentHash, caps))
+	n, e := scanNode(tx.QueryRow(ctx, `INSERT INTO host_nodes(tenant_id,enrollment_id,display_name,hostname,platform,architecture,agent_version,machine_fingerprint,ip_address,agent_token_hash,capabilities,approved_at,approved_by,observed_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now(),(SELECT created_by FROM node_enrollments WHERE id=$2),'offline') RETURNING id,tenant_id,node_source,enrollment_id::text,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at`, en.TenantID, en.ID, name, in.Hostname, in.Platform, in.Architecture, in.AgentVersion, in.MachineFingerprint, in.IPAddress, agentHash, caps))
 	if e != nil {
 		return Enrollment{}, Node{}, e
 	}
 	_, e = tx.Exec(ctx, `UPDATE node_enrollments SET claimed_by_node_id=$1 WHERE id=$2`, n.ID, en.ID)
+	if e != nil {
+		return Enrollment{}, Node{}, e
+	}
+	// 接入码颁发即授权；身份、集群登记与接入码消费在同一事务完成。
+	_, e = tx.Exec(ctx, `INSERT INTO runtime_cluster_nodes(tenant_id,cluster_id,node_id,node_kind) SELECT $1,id,$2,'worker' FROM runtime_clusters WHERE tenant_id=$1 ON CONFLICT(node_id) DO NOTHING`, n.TenantID, n.ID)
 	if e != nil {
 		return Enrollment{}, Node{}, e
 	}
@@ -258,7 +149,7 @@ func (r *PostgreSQLRepository) ClaimEnrollment(ctx context.Context, in ClaimEnro
 	return en, n, nil
 }
 func (r *PostgreSQLRepository) ListNodes(ctx context.Context, tenant string, f PageFilter) ([]Node, int64, error) {
-	rows, e := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND ($2='' OR n.display_name ILIKE '%'||$2||'%' OR n.hostname ILIKE '%'||$2||'%') ORDER BY n.created_at DESC,n.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
+	rows, e := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.node_source,COALESCE(n.enrollment_id::text,''),n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND n.desired_status<>'revoked' AND ($2='' OR n.display_name ILIKE '%'||$2||'%' OR n.hostname ILIKE '%'||$2||'%') ORDER BY n.created_at DESC,n.id DESC LIMIT $3 OFFSET $4`, tenant, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -279,17 +170,39 @@ func (r *PostgreSQLRepository) ListNodes(ctx context.Context, tenant string, f P
 		return nil, 0, e
 	}
 	var total int64
-	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM host_nodes WHERE tenant_id=$1 AND ($2='' OR display_name ILIKE '%'||$2||'%' OR hostname ILIKE '%'||$2||'%')`, tenant, f.Search).Scan(&total)
+	e = r.pool.QueryRow(ctx, `SELECT count(*) FROM host_nodes WHERE tenant_id=$1 AND desired_status<>'revoked' AND ($2='' OR display_name ILIKE '%'||$2||'%' OR hostname ILIKE '%'||$2||'%')`, tenant, f.Search).Scan(&total)
 	return items, total, e
+}
+
+// ListNodeMetrics 只读取实时列表需要的安全投影，避免高频指标通知重复执行
+// 工程、环境和集群关联查询。
+func (r *PostgreSQLRepository) ListNodeMetrics(ctx context.Context, tenant string, ids []string) ([]Node, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id::text,node_source,desired_status,observed_status,resource_summary,last_heartbeat_at FROM host_nodes WHERE tenant_id=$1 AND desired_status<>'revoked' AND id=ANY($2::uuid[]) ORDER BY id`, tenant, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Node, 0, len(ids))
+	for rows.Next() {
+		var item Node
+		var summary []byte
+		if err := rows.Scan(&item.ID, &item.NodeSource, &item.DesiredStatus, &item.ObservedStatus, &summary, &item.LastHeartbeatAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(summary, &item.ResourceSummary)
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 // LoadHostNodeAddresses 为 Kubernetes 身份标签提供唯一、已登记的管理地址。
 func (r *PostgreSQLRepository) LoadHostNodeAddresses(ctx context.Context, ids []string) (map[string]string, error) {
-	result := make(map[string]string, len(ids))
-	if len(ids) == 0 {
+	uniqueIDs := uniqueNodeIDs(ids)
+	result := make(map[string]string, len(uniqueIDs))
+	if len(uniqueIDs) == 0 {
 		return result, nil
 	}
-	rows, err := r.pool.Query(ctx, `SELECT id::text,COALESCE(ip_address,'') FROM host_nodes WHERE id=ANY($1::uuid[])`, ids)
+	rows, err := r.pool.Query(ctx, `SELECT id::text,COALESCE(ip_address,'') FROM host_nodes WHERE id=ANY($1::uuid[])`, uniqueIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -304,13 +217,60 @@ func (r *PostgreSQLRepository) LoadHostNodeAddresses(ctx context.Context, ids []
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(result) != len(ids) {
+	if len(result) != len(uniqueIDs) {
+		return nil, fmt.Errorf("存在未登记的物理节点")
+	}
+	return result, nil
+}
+
+func uniqueNodeIDs(ids []string) []string {
+	unique := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	return unique
+}
+
+type HostNodeSchedulingTarget struct {
+	NodeSource string
+	Hostname   string
+	IPAddress  string
+}
+
+func (r *PostgreSQLRepository) LoadHostNodeSchedulingTargets(ctx context.Context, ids []string) (map[string]HostNodeSchedulingTarget, error) {
+	uniqueIDs := uniqueNodeIDs(ids)
+	result := make(map[string]HostNodeSchedulingTarget, len(uniqueIDs))
+	if len(uniqueIDs) == 0 {
+		return result, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id::text,node_source,hostname,COALESCE(ip_address,'') FROM host_nodes WHERE id=ANY($1::uuid[])`, uniqueIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var target HostNodeSchedulingTarget
+		if err := rows.Scan(&id, &target.NodeSource, &target.Hostname, &target.IPAddress); err != nil {
+			return nil, err
+		}
+		result[id] = target
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(result) != len(uniqueIDs) {
 		return nil, fmt.Errorf("存在未登记的物理节点")
 	}
 	return result, nil
 }
 func (r *PostgreSQLRepository) GetNode(ctx context.Context, tenant, id string) (Node, error) {
-	x, e := scanNodeWithAssignments(r.pool.QueryRow(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND n.id=$2`, tenant, id))
+	x, e := scanNodeWithAssignments(r.pool.QueryRow(ctx, `SELECT n.id,n.tenant_id,n.node_source,COALESCE(n.enrollment_id::text,''),n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),COALESCE(env.id::text,''),COALESCE(env.name,'') FROM host_nodes n LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id LEFT JOIN LATERAL (SELECT e.id,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.deleted_at IS NULL WHERE en.node_id=n.id ORDER BY en.created_at DESC LIMIT 1) env ON true WHERE n.tenant_id=$1 AND n.id=$2`, tenant, id))
 	if e != nil {
 		return x, mapNotFound(e)
 	}
@@ -322,9 +282,8 @@ func (r *PostgreSQLRepository) RemoveNode(ctx context.Context, tenant, id, user 
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var clusterID, nodeName, nodeKind, desiredAction, observedStatus string
-	var lastHeartbeat *time.Time
-	err = tx.QueryRow(ctx, `SELECT cn.cluster_id::text,n.display_name,cn.node_kind,cn.desired_action,n.observed_status,n.last_heartbeat_at FROM runtime_cluster_nodes cn JOIN host_nodes n ON n.id=cn.node_id WHERE cn.tenant_id=$1 AND cn.node_id=$2 FOR UPDATE OF cn,n`, tenant, id).Scan(&clusterID, &nodeName, &nodeKind, &desiredAction, &observedStatus, &lastHeartbeat)
+	var clusterID, nodeName, nodeKind string
+	err = tx.QueryRow(ctx, `SELECT cn.cluster_id::text,n.display_name,cn.node_kind FROM runtime_cluster_nodes cn JOIN host_nodes n ON n.id=cn.node_id WHERE cn.tenant_id=$1 AND cn.node_id=$2 FOR UPDATE OF cn,n`, tenant, id).Scan(&clusterID, &nodeName, &nodeKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -334,8 +293,19 @@ func (r *PostgreSQLRepository) RemoveNode(ctx context.Context, tenant, id, user 
 	if nodeKind == "center" {
 		return ErrCenterNodeProtected
 	}
-	if desiredAction == "removing" {
-		return tx.Commit(ctx)
+	var offline bool
+	if err = tx.QueryRow(ctx, `SELECT observed_status<>'online' FROM host_nodes WHERE id=$1`, id).Scan(&offline); err != nil {
+		return err
+	}
+	if offline {
+		if _, err = tx.Exec(ctx, `UPDATE host_nodes SET resource_summary=resource_summary||jsonb_build_object('cleanupRequested',true,'removeAfterCleanup',true),agent_token_hash='revoked:'||id::text,updated_at=now() WHERE id=$1`, id); err != nil {
+			return err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return err
+		}
+		r.publish(tenant, []string{"nodes", "events"}, []string{id}, true)
+		return nil
 	}
 	var environmentCount, deploymentCount int
 	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM runtime_environment_nodes WHERE node_id=$1),(SELECT count(*) FROM deployment_services WHERE node_id=$1)`, id).Scan(&environmentCount, &deploymentCount); err != nil {
@@ -347,23 +317,43 @@ func (r *PostgreSQLRepository) RemoveNode(ctx context.Context, tenant, id, user 
 	if deploymentCount > 0 {
 		return ErrNodeDeploymentInUse
 	}
-	if observedStatus != "online" || lastHeartbeat == nil || time.Since(*lastHeartbeat) > 45*time.Second {
-		return ErrNodeOfflineForRemoval
-	}
-	if _, err := tx.Exec(ctx, `UPDATE runtime_cluster_nodes SET desired_action='removing',cluster_status='removing',cluster_message='等待运行节点退出中心集群' WHERE node_id=$1`, id); err != nil {
+	// 中心移除只撤销登记，绝不下发远端卸载或删除数据任务。
+	if _, err := tx.Exec(ctx, `INSERT INTO runtime_cluster_events(tenant_id,cluster_id,node_id,event_type,name,target,result,message,created_by) VALUES($1,$2,$3,'worker_removed','节点登记已移除',$4,'success','管理员移除中心登记并撤销接入凭据；本机程序和数据不受影响',$5)`, tenant, clusterID, id, nodeName, user); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO runtime_cluster_events(tenant_id,cluster_id,node_id,event_type,name,target,result,message,created_by) VALUES($1,$2,$3,'worker_remove_requested','运行节点移除任务已创建',$4,'success','等待节点卸载 K3s Agent 并撤销接入凭据',$5)`, tenant, clusterID, id, nodeName, user); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM runtime_cluster_nodes WHERE node_id=$1`, id); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if _, err := tx.Exec(ctx, `UPDATE host_nodes SET desired_status='revoked',observed_status='revoked',agent_token_hash='revoked:'||id::text,updated_at=now() WHERE id=$1 AND tenant_id=$2`, id, tenant); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	r.publish(tenant, []string{"nodes", "environments", "events"}, []string{id}, true)
+	return nil
 }
 func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, in HeartbeatInput) (Node, []DeploymentService, error) {
+	// 卸载确认使用节点自身凭据，保留最后指标；普通心跳会覆盖此标记以支持重新安装。
+	if in.Uninstalled {
+		n, err := scanNode(r.pool.QueryRow(ctx, `UPDATE host_nodes SET observed_status='offline',resource_summary=COALESCE(resource_summary,'{}'::jsonb)||jsonb_build_object('uninstalledAt',now(),'cleanupRequested',true),updated_at=now() WHERE id=$1 AND node_source='agent' AND agent_token_hash=$2 RETURNING id,tenant_id,node_source,enrollment_id::text,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at`, id, hash))
+		if err != nil {
+			return Node{}, nil, ErrAgentUnauthorized
+		}
+		r.publish(n.TenantID, []string{"nodes", "environments", "events"}, []string{n.ID}, true)
+		return n, nil, nil
+	}
+	if in.ResourceSummary == nil {
+		in.ResourceSummary = map[string]any{}
+	}
+	if in.ImageState != nil {
+		in.ResourceSummary["imageState"] = in.ImageState
+	}
 	summary, _ := json.Marshal(in.ResourceSummary)
 	var previousStatus string
 	var previousSummary []byte
 	_ = r.pool.QueryRow(ctx, `SELECT observed_status,resource_summary FROM host_nodes WHERE id=$1 AND agent_token_hash=$2`, id, hash).Scan(&previousStatus, &previousSummary)
-	n, e := scanNode(r.pool.QueryRow(ctx, `UPDATE host_nodes SET observed_status=CASE WHEN desired_status='revoked' THEN 'revoked' WHEN observed_status='pending_approval' THEN 'pending_approval' ELSE 'online' END,resource_summary=$1,agent_version=COALESCE(NULLIF($2,''),agent_version),ip_address=COALESCE(NULLIF($3,''),ip_address),last_heartbeat_at=now(),updated_at=now() WHERE id=$4 AND agent_token_hash=$5 RETURNING id,tenant_id,enrollment_id,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at`, summary, in.AgentVersion, in.IPAddress, id, hash))
+	n, e := scanNode(r.pool.QueryRow(ctx, `UPDATE host_nodes SET observed_status=CASE WHEN desired_status='revoked' THEN 'revoked' ELSE 'online' END,resource_summary=$1,agent_version=COALESCE(NULLIF($2,''),agent_version),ip_address=COALESCE(NULLIF($3,''),ip_address),last_heartbeat_at=now(),updated_at=now() WHERE id=$4 AND node_source='agent' AND agent_token_hash=$5 RETURNING id,tenant_id,node_source,enrollment_id::text,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at`, summary, in.AgentVersion, in.IPAddress, id, hash))
 	if e != nil {
 		return Node{}, nil, ErrAgentUnauthorized
 	}
@@ -540,31 +530,53 @@ func (r *PostgreSQLRepository) Heartbeat(ctx context.Context, id, hash string, i
 			r.publish(n.TenantID, []string{"environments", "events"}, []string{environmentID, n.ID}, observedStatus != "pending")
 		}
 	}
+	type heartbeatServiceTarget struct {
+		serviceType, managedNodeAddress, deploymentID string
+		publicPort                                    int
+	}
+	targets := make(map[string]heartbeatServiceTarget, len(in.Services))
+	if len(in.Services) > 0 {
+		serviceIDs := make([]string, 0, len(in.Services))
+		for _, observation := range in.Services {
+			serviceIDs = append(serviceIDs, observation.ServiceID)
+		}
+		rows, queryErr := r.pool.Query(ctx, `SELECT s.id::text,s.service_type,COALESCE(s.public_port,0),COALESCE(n.ip_address,''),s.project_deployment_id::text FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.id=ANY($1::uuid[]) AND s.node_id=$2`, serviceIDs, n.ID)
+		if queryErr != nil {
+			return n, nil, queryErr
+		}
+		for rows.Next() {
+			var serviceID string
+			var target heartbeatServiceTarget
+			if queryErr = rows.Scan(&serviceID, &target.serviceType, &target.publicPort, &target.managedNodeAddress, &target.deploymentID); queryErr != nil {
+				rows.Close()
+				return n, nil, queryErr
+			}
+			targets[serviceID] = target
+		}
+		queryErr = rows.Err()
+		rows.Close()
+		if queryErr != nil {
+			return n, nil, queryErr
+		}
+	}
 	affected := map[string]struct{}{}
 	for _, o := range in.Services {
-		var serviceType string
-		var publicPort int
-		var managedNodeAddress string
-		var deploymentID string
-		lookupErr := r.pool.QueryRow(ctx, `SELECT s.service_type,COALESCE(s.public_port,0),COALESCE(n.ip_address,''),s.project_deployment_id::text FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.id=$1 AND s.node_id=$2`, o.ServiceID, n.ID).Scan(&serviceType, &publicPort, &managedNodeAddress, &deploymentID)
-		if errors.Is(lookupErr, pgx.ErrNoRows) {
+		target, exists := targets[o.ServiceID]
+		if !exists {
 			if o.Endpoint != "" {
 				return n, nil, fmt.Errorf("节点不能为未知工程服务上报访问地址")
 			}
 			continue
 		}
-		if lookupErr != nil {
-			return n, nil, lookupErr
-		}
 		// 采集由 Agent 唯一观测；其他引擎由 Kubernetes 调和器确认，节点制品准备不能覆盖运行状态。
-		if serviceType != ServiceCollector {
+		if target.serviceType != ServiceCollector {
 			continue
 		}
 		// 即使服务观测重复也重试汇总，修复上一次独立心跳SQL成功、后续汇总失败的可恢复窗口。
-		affected[deploymentID] = struct{}{}
+		affected[target.deploymentID] = struct{}{}
 		// 用户访问地址只由已登记节点管理 IP 与中心分配端口生成；Agent/Kubernetes
 		// PodIP 均不是受控用户入口，不能通过心跳覆盖该地址。
-		endpoint := deploymentObservedEndpoint(managedNodeAddress, serviceType, publicPort)
+		endpoint := deploymentObservedEndpoint(target.managedNodeAddress, target.serviceType, target.publicPort)
 		var did string
 		e = r.pool.QueryRow(ctx, `UPDATE deployment_services s SET observed_status=$1,replicas_observed=$2,observed_generation=$3,last_message=$4,endpoint=CASE WHEN s.service_type='base' THEN $5 ELSE s.endpoint END,observed_at=now(),updated_at=now() WHERE s.id=$6 AND s.desired_generation=$3 AND s.node_id=$7 AND (s.observed_status,s.replicas_observed,s.observed_generation,COALESCE(s.last_message,'')) IS DISTINCT FROM ($1,$2,$3,$4) RETURNING s.project_deployment_id`, o.ObservedStatus, o.ReplicasObserved, o.ObservedGeneration, o.Message, endpoint, o.ServiceID, n.ID).Scan(&did)
 		if e == nil {
@@ -662,7 +674,7 @@ func (r *PostgreSQLRepository) ReconcileNodeLiveness(ctx context.Context) (int64
 	var changed []byte
 	err := r.pool.QueryRow(ctx, `WITH offline AS (
 		UPDATE host_nodes SET observed_status='offline',updated_at=now()
-		WHERE observed_status='online' AND desired_status<>'revoked' AND last_heartbeat_at<now()-interval '45 seconds'
+		WHERE node_source='agent' AND observed_status='online' AND desired_status<>'revoked' AND last_heartbeat_at<now()-interval '45 seconds'
 		RETURNING id,tenant_id,display_name
 	), cluster_events AS (
 		INSERT INTO runtime_cluster_events(tenant_id,cluster_id,node_id,event_type,name,target,result,message)
@@ -691,10 +703,107 @@ func (r *PostgreSQLRepository) ReconcileNodeLiveness(ctx context.Context) (int64
 	return int64(len(nodes)), nil
 }
 
+type builtInNodeObservation struct {
+	HostStatus, ClusterStatus, Message, IPAddress string
+	ResourceSummary                               map[string]any
+}
+
+func observeBuiltInNode(hostname string, nodes []KubernetesNode) builtInNodeObservation {
+	for _, node := range nodes {
+		if node.Name != hostname || node.Labels["induforge.io/center-node"] != "true" {
+			continue
+		}
+		if node.Ready {
+			return builtInNodeObservation{HostStatus: "online", ClusterStatus: "ready", Message: "中心 K3s 节点已就绪", IPAddress: node.InternalIP, ResourceSummary: node.ResourceSummary}
+		}
+		return builtInNodeObservation{HostStatus: "offline", ClusterStatus: "failed", Message: "中心 K3s 节点未就绪", IPAddress: node.InternalIP}
+	}
+	return builtInNodeObservation{HostStatus: "offline", ClusterStatus: "failed", Message: "未找到带中心标识的 K3s 节点"}
+}
+
+// ReconcileBuiltInNodeStatus 由中心控制面直接观测实际 K3s 节点，并同步所有组织
+// 映射出的逻辑内置节点。中心节点没有 Agent 心跳，不能沿用外部节点的离线判定。
+func (r *PostgreSQLRepository) ReconcileBuiltInNodeStatus(ctx context.Context, nodes []KubernetesNode) (int64, error) {
+	rows, err := r.pool.Query(ctx, `SELECT n.id::text,n.tenant_id::text,n.hostname,n.observed_status,COALESCE(n.ip_address,''),cn.cluster_id::text,cn.cluster_status FROM host_nodes n JOIN runtime_cluster_nodes cn ON cn.node_id=n.id AND cn.node_kind='center' WHERE n.node_source='built_in' AND n.desired_status='active' ORDER BY n.id`)
+	if err != nil {
+		return 0, err
+	}
+	type target struct {
+		nodeID, tenantID, hostname, hostStatus, ipAddress, clusterID, clusterStatus string
+	}
+	targets := make([]target, 0)
+	for rows.Next() {
+		var item target
+		if err = rows.Scan(&item.nodeID, &item.tenantID, &item.hostname, &item.hostStatus, &item.ipAddress, &item.clusterID, &item.clusterStatus); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		targets = append(targets, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, err
+	}
+
+	var changed int64
+	for _, target := range targets {
+		observation := observeBuiltInNode(target.hostname, nodes)
+		address := target.ipAddress
+		if net.ParseIP(observation.IPAddress) != nil {
+			address = observation.IPAddress
+		}
+		stateChanged := target.hostStatus != observation.HostStatus || target.clusterStatus != observation.ClusterStatus
+		if observation.ResourceSummary == nil {
+			observation.ResourceSummary = map[string]any{}
+		}
+		summary, marshalErr := json.Marshal(observation.ResourceSummary)
+		if marshalErr != nil {
+			return changed, marshalErr
+		}
+		tx, beginErr := r.pool.Begin(ctx)
+		if beginErr != nil {
+			return changed, beginErr
+		}
+		if _, err = tx.Exec(ctx, `UPDATE host_nodes SET observed_status=$2,ip_address=NULLIF($3,''),resource_summary=resource_summary||$4::jsonb,last_heartbeat_at=now(),updated_at=now() WHERE id=$1 AND node_source='built_in'`, target.nodeID, observation.HostStatus, address, summary); err != nil {
+			_ = tx.Rollback(ctx)
+			return changed, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE runtime_cluster_nodes SET cluster_status=$2,cluster_message=$3,observed_generation=desired_generation,cluster_observed_at=now() WHERE node_id=$1 AND node_kind='center'`, target.nodeID, observation.ClusterStatus, observation.Message); err != nil {
+			_ = tx.Rollback(ctx)
+			return changed, err
+		}
+		if stateChanged {
+			name, result := "中心内置节点已就绪", "success"
+			if observation.ClusterStatus != "ready" {
+				name, result = "中心内置节点异常", "failed"
+			}
+			if _, err = tx.Exec(ctx, `INSERT INTO runtime_cluster_events(tenant_id,cluster_id,node_id,event_type,name,target,result,message) VALUES($1,$2,$3,'center_state_changed',$4,'中心内置节点',$5,$6)`, target.tenantID, target.clusterID, target.nodeID, name, result, observation.Message); err != nil {
+				_ = tx.Rollback(ctx)
+				return changed, err
+			}
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return changed, err
+		}
+		// 资源指标只使节点投影失效，按租户合并后再通知；环境与事件只有在
+		// 节点/集群状态变化时才需要立即刷新。
+		r.observedChange(target.tenantID, []string{"nodes"}, []string{target.nodeID}, stateChanged, struct {
+			HostStatus, ClusterStatus, Address string
+			Summary                            map[string]any
+		}{observation.HostStatus, observation.ClusterStatus, address, observation.ResourceSummary})
+		if stateChanged {
+			r.publish(target.tenantID, []string{"environments", "events"}, []string{target.nodeID}, true)
+		}
+		changed++
+	}
+	return changed, nil
+}
+
 func (r *PostgreSQLRepository) AgentClusterPlan(ctx context.Context, id, hash string) (*ClusterPlan, error) {
 	var plan ClusterPlan
-	var nodeKind, serverIP, serverStatus, status string
-	err := r.pool.QueryRow(ctx, `SELECT cn.cluster_id::text,cn.node_id::text,cn.node_kind,cn.desired_generation,n.ip_address,cn.cluster_status,c.k3s_version,c.api_port,COALESCE(center.ip_address,''),COALESCE(center_cn.cluster_status,'') FROM host_nodes n JOIN runtime_cluster_nodes cn ON cn.node_id=n.id JOIN runtime_clusters c ON c.id=cn.cluster_id LEFT JOIN runtime_cluster_nodes center_cn ON center_cn.cluster_id=cn.cluster_id AND center_cn.node_kind='center' LEFT JOIN host_nodes center ON center.id=center_cn.node_id WHERE n.id=$1 AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.approved_at IS NOT NULL AND cn.desired_action='active' AND c.desired_status='active'`, id, hash).Scan(&plan.ClusterID, &plan.NodeID, &nodeKind, &plan.Generation, &plan.NodeIP, &status, &plan.K3sVersion, &plan.APIPort, &serverIP, &serverStatus)
+	var serverIP, serverStatus, status string
+	err := r.pool.QueryRow(ctx, `SELECT cn.cluster_id::text,cn.node_id::text,cn.desired_generation,n.ip_address,cn.cluster_status,c.k3s_version,c.api_port,COALESCE(center.ip_address,''),COALESCE(center_cn.cluster_status,'') FROM host_nodes n JOIN runtime_cluster_nodes cn ON cn.node_id=n.id AND cn.node_kind='worker' JOIN runtime_clusters c ON c.id=cn.cluster_id JOIN runtime_cluster_nodes center_cn ON center_cn.cluster_id=cn.cluster_id AND center_cn.node_kind='center' JOIN host_nodes center ON center.id=center_cn.node_id AND center.node_source='built_in' WHERE n.id=$1 AND n.node_source='agent' AND n.agent_token_hash=$2 AND n.desired_status='active' AND n.observed_status='online' AND n.approved_at IS NOT NULL AND cn.desired_action='active' AND c.desired_status='active'`, id, hash).Scan(&plan.ClusterID, &plan.NodeID, &plan.Generation, &plan.NodeIP, &status, &plan.K3sVersion, &plan.APIPort, &serverIP, &serverStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if _, tokenErr := r.GetNodeByToken(ctx, id, hash); tokenErr != nil {
 			return nil, ErrAgentUnauthorized
@@ -710,15 +819,11 @@ func (r *PostgreSQLRepository) AgentClusterPlan(ctx context.Context, id, hash st
 	plan.SchemaVersion = "induforge.cluster-plan.v1"
 	plan.VXLANPort = 8472
 	plan.KubeletPort = 10250
-	if nodeKind == "center" {
-		plan.Operation = "init-server"
-	} else {
-		if serverIP == "" || serverStatus != "ready" {
-			return nil, nil
-		}
-		plan.Operation = "join-agent"
-		plan.ServerURL = "https://" + net.JoinHostPort(serverIP, fmt.Sprintf("%d", plan.APIPort))
+	if serverIP == "" || serverStatus != "ready" {
+		return nil, nil
 	}
+	plan.Operation = "join-agent"
+	plan.ServerURL = "https://" + net.JoinHostPort(serverIP, fmt.Sprintf("%d", plan.APIPort))
 	return &plan, nil
 }
 
@@ -927,7 +1032,7 @@ func (r *PostgreSQLRepository) AgentCommands(ctx context.Context, id, hash strin
 	return out, nil
 }
 func (r *PostgreSQLRepository) GetNodeByToken(ctx context.Context, id, hash string) (Node, error) {
-	x, e := scanNode(r.pool.QueryRow(ctx, `SELECT id,tenant_id,enrollment_id,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at FROM host_nodes WHERE id=$1 AND agent_token_hash=$2`, id, hash))
+	x, e := scanNode(r.pool.QueryRow(ctx, `SELECT id,tenant_id,node_source,enrollment_id::text,display_name,hostname,platform,architecture,COALESCE(agent_version,''),COALESCE(machine_fingerprint,''),COALESCE(ip_address,''),desired_status,observed_status,capabilities,resource_summary,last_heartbeat_at,approved_at,created_at,updated_at FROM host_nodes WHERE id=$1 AND node_source='agent' AND agent_token_hash=$2`, id, hash))
 	return x, e
 }
 func (r *PostgreSQLRepository) GetAgentDeploymentBinding(ctx context.Context, nodeID, tokenHash, deploymentID, serviceID string) (DeploymentBinding, error) {
@@ -1007,7 +1112,7 @@ func (r *PostgreSQLRepository) ValidateDeploymentTargets(ctx context.Context, te
 	}
 	for _, engine := range required {
 		var ready bool
-		err = r.pool.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds' FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
+		err = r.pool.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND (n.node_source='built_in' OR n.last_heartbeat_at>now()-interval '45 seconds') FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -1129,7 +1234,7 @@ func (r *PostgreSQLRepository) CreateDeployment(ctx context.Context, tenant, use
 	for _, engine := range required {
 		var ready bool
 		var address string
-		err = tx.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds',COALESCE(n.ip_address,'') FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3 FOR UPDATE OF n`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready, &address)
+		err = tx.QueryRow(ctx, `SELECT n.approved_at IS NOT NULL AND n.desired_status='active' AND n.observed_status='online' AND (n.node_source='built_in' OR n.last_heartbeat_at>now()-interval '45 seconds'),COALESCE(n.ip_address,'') FROM host_nodes n JOIN runtime_environment_nodes en ON en.node_id=n.id WHERE n.tenant_id=$1 AND en.environment_id=$2 AND n.id=$3 FOR UPDATE OF n`, tenant, in.EnvironmentID, in.Placements[engine]).Scan(&ready, &address)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ProjectDeployment{}, DeploymentRun{}, ErrNotFound
 		}
@@ -1475,7 +1580,7 @@ func scanNode(s scanner) (Node, error) {
 	return x, e
 }
 func nodeScanArgs(x *Node, caps, summary *[]byte) []any {
-	return []any{&x.ID, &x.TenantID, &x.EnrollmentID, &x.DisplayName, &x.Hostname, &x.Platform, &x.Architecture, &x.AgentVersion, &x.MachineFingerprint, &x.IPAddress, &x.DesiredStatus, &x.ObservedStatus, caps, summary, &x.LastHeartbeatAt, &x.ApprovedAt, &x.CreatedAt, &x.UpdatedAt}
+	return []any{&x.ID, &x.TenantID, &x.NodeSource, &x.EnrollmentID, &x.DisplayName, &x.Hostname, &x.Platform, &x.Architecture, &x.AgentVersion, &x.MachineFingerprint, &x.IPAddress, &x.DesiredStatus, &x.ObservedStatus, caps, summary, &x.LastHeartbeatAt, &x.ApprovedAt, &x.CreatedAt, &x.UpdatedAt}
 }
 func hydrateNode(x *Node, caps, summary []byte) {
 	_ = json.Unmarshal(caps, &x.Capabilities)
@@ -1825,3 +1930,61 @@ func mapDeploymentCreateError(e error) error {
 	}
 	return e
 }
+
+// ValidateEnrollment 只读验证接入码，不领取身份、不消耗一次性凭据。
+func (r *PostgreSQLRepository) ValidateEnrollment(ctx context.Context, in ClaimEnrollmentInput) error {
+	var platform string
+	var raw []byte
+	err := r.pool.QueryRow(ctx, `SELECT platform,capabilities FROM node_enrollments WHERE code_hash=$1 AND deleted_at IS NULL AND status='created' AND expires_at>now()`, hashToken(in.Code)).Scan(&platform, &raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEnrollmentUnavailable
+	}
+	if err != nil {
+		return err
+	}
+	var required []string
+	if err = json.Unmarshal(raw, &required); err != nil {
+		return err
+	}
+	if !enrollmentMatches(in, platform, required) {
+		return fmt.Errorf("节点平台或已安装能力不满足接入要求，请选择匹配的接入码")
+	}
+	return nil
+}
+
+func enrollmentMatches(in ClaimEnrollmentInput, platform string, required []string) bool {
+	return in.Platform == platform && containsAll(in.Capabilities, required)
+}
+
+// 同一组织的名称分配串行化，避免同时生成接入码或领取节点时出现重名。
+func reserveNodeName(ctx context.Context, tx pgx.Tx, tenant, name string) error {
+	if strings.TrimSpace(name) == "" {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "node-name:"+tenant); err != nil {
+		return err
+	}
+	var exists bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM host_nodes WHERE tenant_id=$1 AND desired_status<>'revoked' AND lower(btrim(display_name))=lower(btrim($2)) UNION ALL SELECT 1 FROM node_enrollments WHERE deleted_at IS NULL AND tenant_id=$1 AND status='created' AND expires_at>now() AND lower(btrim(display_name))=lower(btrim($2)))`, tenant, name).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrNodeNameExists
+	}
+	return nil
+}
+
+// 仅删除接入码记录，保留状态与节点关联供审计；不注销已接入节点。
+func (r *PostgreSQLRepository) DeleteEnrollment(ctx context.Context, tenant, id, user string) error {
+	result, err := r.pool.Exec(ctx, `UPDATE node_enrollments SET deleted_at=now(),deleted_by=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL`, tenant, id, user)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+var ErrNodeNameExists = errors.New("节点名称已存在或已有待接入节点使用该名称，请更换名称")

@@ -2,13 +2,12 @@ package ops
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/indu-forge/dev_core/internal/imagecatalog"
 	"log"
 	"net"
 	"net/url"
@@ -48,12 +47,15 @@ var (
 )
 
 type Repository interface {
+	ValidateEnrollment(context.Context, ClaimEnrollmentInput) error
 	ListEnrollments(context.Context, string, PageFilter) ([]Enrollment, int64, error)
 	CreateEnrollment(context.Context, string, string, CreateEnrollmentInput, string) (Enrollment, error)
 	GetEnrollment(context.Context, string, string) (Enrollment, error)
-	ApproveEnrollment(context.Context, string, string, string, bool) (Enrollment, error)
+	RevokeEnrollment(context.Context, string, string, string) (Enrollment, error)
+	DeleteEnrollment(context.Context, string, string, string) error
 	ClaimEnrollment(context.Context, ClaimEnrollmentInput, string) (Enrollment, Node, error)
 	ListNodes(context.Context, string, PageFilter) ([]Node, int64, error)
+	ListNodeMetrics(context.Context, string, []string) ([]Node, error)
 	GetNode(context.Context, string, string) (Node, error)
 	RemoveNode(context.Context, string, string, string) error
 	ListRuntimeEnvironments(context.Context, string, PageFilter) ([]RuntimeEnvironment, int64, error)
@@ -141,7 +143,7 @@ func (s *Service) DeployRuntimeEnvironmentFoundation(ctx context.Context, actor 
 			ids = append(ids, id)
 		}
 		if err := s.foundationNodePreflight.EnsureHostNodeLabels(ctx, ids); err != nil {
-			return nil, fmt.Errorf("基础服务节点标签预检失败: %w", err)
+			return nil, &nodePreflightError{cause: err}
 		}
 	}
 	return s.repository.DeployRuntimeEnvironmentFoundation(ctx, actor.TenantID, environmentID, actor.ID, input.Assignments)
@@ -170,7 +172,7 @@ func (s *Service) MigrateRuntimeEnvironmentFoundation(ctx context.Context, actor
 			ids = append(ids, id)
 		}
 		if err := s.foundationNodePreflight.EnsureHostNodeLabels(ctx, ids); err != nil {
-			return nil, fmt.Errorf("基础服务节点标签预检失败: %w", err)
+			return nil, &nodePreflightError{cause: err}
 		}
 	}
 	return s.repository.MigrateRuntimeEnvironmentFoundation(ctx, actor.TenantID, environmentID, actor.ID, input.Assignments)
@@ -184,11 +186,12 @@ type ReleaseStore interface {
 	Open(context.Context, string) (objectstore.ObjectReader, error)
 }
 type Service struct {
+	imageCatalog            *imagecatalog.Catalog
 	nativeCollector         NativeCollectorProvider
 	repository              Repository
 	packages                PackageStore
 	releases                ReleaseStore
-	clusterTokenKey         []byte
+	clusterJoinToken        string
 	developmentBuilder      DevelopmentArtifactBuilder
 	developmentRequirements DevelopmentRequirementsBuilder
 	foundationNodePreflight interface {
@@ -202,10 +205,10 @@ func (s *Service) SetFoundationNodePreflight(preflight interface {
 	s.foundationNodePreflight = preflight
 }
 
-// SetClusterTokenKey 配置集群令牌派生根密钥。调用方使用已有控制面密钥，避免
-// 新增配置导致开发热启动失败；派生结果按环境隔离且不落库。
-func (s *Service) SetClusterTokenKey(key []byte) {
-	s.clusterTokenKey = append([]byte(nil), key...)
+// SetClusterJoinToken 接收中心安装器从 K3s 受限 token 文件注入的实际加入令牌。
+// 该值只返回已认证的外部 NodeAgent，不写数据库或日志。
+func (s *Service) SetClusterJoinToken(token string) {
+	s.clusterJoinToken = strings.TrimSpace(token)
 }
 
 func (s *Service) SetDevelopmentArtifactBuilder(builder DevelopmentArtifactBuilder) {
@@ -260,11 +263,11 @@ func (s *Service) GetEnrollment(ctx context.Context, actor auth.User, id string)
 	}
 	return s.repository.GetEnrollment(ctx, actor.TenantID, id)
 }
-func (s *Service) ApproveEnrollment(ctx context.Context, actor auth.User, id string, approve bool) (Enrollment, error) {
+func (s *Service) RevokeEnrollment(ctx context.Context, actor auth.User, id string) (Enrollment, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityNodeApprove); err != nil {
 		return Enrollment{}, err
 	}
-	return s.repository.ApproveEnrollment(ctx, actor.TenantID, id, actor.ID, approve)
+	return s.repository.RevokeEnrollment(ctx, actor.TenantID, id, actor.ID)
 }
 func (s *Service) ClaimEnrollment(ctx context.Context, input ClaimEnrollmentInput) (Enrollment, Node, string, error) {
 	input.Platform = strings.ToLower(strings.TrimSpace(input.Platform))
@@ -293,6 +296,28 @@ func (s *Service) ListNodes(ctx context.Context, actor auth.User, f PageFilter) 
 		return nil, 0, err
 	}
 	return s.repository.ListNodes(ctx, actor.TenantID, normalizePage(f))
+}
+func (s *Service) ListNodeMetrics(ctx context.Context, actor auth.User, ids []string) ([]Node, error) {
+	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 || len(ids) > 100 {
+		return nil, fmt.Errorf("节点指标查询必须包含 1 到 100 个节点 ID")
+	}
+	seen := make(map[string]struct{}, len(ids))
+	unique := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if !validUUID(id) {
+			return nil, fmt.Errorf("节点 ID 格式无效")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	return s.repository.ListNodeMetrics(ctx, actor.TenantID, unique)
 }
 func (s *Service) GetNode(ctx context.Context, actor auth.User, id string) (Node, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityNodeRead); err != nil {
@@ -494,12 +519,10 @@ func (s *Service) AgentClusterPlan(ctx context.Context, nodeID, token string) (*
 	if err != nil || plan == nil {
 		return plan, err
 	}
-	if len(s.clusterTokenKey) < 16 {
-		return nil, fmt.Errorf("控制面集群令牌密钥未配置")
+	if s.clusterJoinToken == "" {
+		return nil, fmt.Errorf("中心 K3s 加入令牌未配置")
 	}
-	mac := hmac.New(sha256.New, s.clusterTokenKey)
-	_, _ = mac.Write([]byte("induforge:k3s:v1:" + plan.ClusterID))
-	plan.Token = base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	plan.Token = s.clusterJoinToken
 	return plan, nil
 }
 
@@ -523,7 +546,7 @@ func (s *Service) AgentFoundationPlan(ctx context.Context, nodeID, token string)
 		ids = append(ids, id)
 	}
 	if err := s.foundationNodePreflight.EnsureHostNodeLabels(ctx, ids); err != nil {
-		return nil, fmt.Errorf("基础服务节点标签预检失败: %w", err)
+		return nil, &nodePreflightError{cause: err}
 	}
 	return plan, nil
 }
@@ -757,4 +780,24 @@ func randomToken(bytes int) (string, error) {
 func hashToken(v string) string {
 	h := sha256.Sum256([]byte(strings.TrimSpace(v)))
 	return hex.EncodeToString(h[:])
+}
+
+func (s *Service) ValidateEnrollment(ctx context.Context, in ClaimEnrollmentInput) error {
+	if strings.TrimSpace(in.Code) == "" || len(in.Code) > 512 || !validPlatform(in.Platform) {
+		return fmt.Errorf("接入码或平台无效")
+	}
+	if err := validateCapabilities(in.Capabilities); err != nil {
+		return err
+	}
+	return s.repository.ValidateEnrollment(ctx, in)
+}
+
+func (s *Service) DeleteEnrollment(ctx context.Context, actor auth.User, id string) error {
+	if err := auth.RequireCapability(actor, auth.CapabilityNodeApprove); err != nil {
+		return err
+	}
+	if !validUUID(id) {
+		return ErrNotFound
+	}
+	return s.repository.DeleteEnrollment(ctx, actor.TenantID, id, actor.ID)
 }

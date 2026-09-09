@@ -1,6 +1,7 @@
 -- name: ListTenants :many
 SELECT
   t.*,
+  COALESCE((SELECT username FROM users admin WHERE admin.id=t.admin_user_id AND admin.tenant_id=t.id), '')::text AS admin_username,
   (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
@@ -18,6 +19,7 @@ WHERE (sqlc.arg(keyword)::text = '' OR t.name ILIKE '%' || sqlc.arg(keyword) || 
 -- name: GetTenantByIdentifier :one
 SELECT
   t.*,
+  COALESCE((SELECT username FROM users admin WHERE admin.id=t.admin_user_id AND admin.tenant_id=t.id), '')::text AS admin_username,
   (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
@@ -117,25 +119,28 @@ WHERE u.tenant_id = sqlc.arg(tenant_id)
   AND (sqlc.arg(status)::text = '' OR u.status = sqlc.arg(status));
 
 -- name: GetManagedUser :one
-SELECT * FROM users WHERE id = sqlc.arg(user_id) AND tenant_id = sqlc.arg(tenant_id) LIMIT 1;
+SELECT * FROM users WHERE users.id = sqlc.arg(user_id) AND users.tenant_id = sqlc.arg(tenant_id) LIMIT 1;
 
 -- name: CreateManagedUser :one
-INSERT INTO users (tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences)
+INSERT INTO users (tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, must_change_password)
 VALUES (sqlc.arg(tenant_id), sqlc.arg(username), sqlc.arg(password_hash), sqlc.narg(email),
         sqlc.narg(phone), sqlc.narg(full_name), sqlc.narg(avatar), sqlc.arg(role),
-        sqlc.arg(status), sqlc.arg(preferences))
+        sqlc.arg(status), sqlc.arg(preferences), true)
 RETURNING *;
 
 -- name: UpdateManagedUser :one
 UPDATE users
 SET email = sqlc.narg(email), phone = sqlc.narg(phone), full_name = sqlc.narg(full_name),
-    avatar = sqlc.narg(avatar), role = sqlc.arg(role), status = sqlc.arg(status),
+    role = sqlc.arg(role), status = sqlc.arg(status),
     preferences = sqlc.arg(preferences), updated_at = now()
-WHERE id = sqlc.arg(user_id) AND tenant_id = sqlc.arg(tenant_id)
+WHERE users.id = sqlc.arg(user_id) AND users.tenant_id = sqlc.arg(tenant_id)
+  AND (NOT EXISTS (SELECT 1 FROM tenants WHERE admin_user_id = users.id)
+       OR (sqlc.arg(role)::text = 'SYSTEM_ADMIN' AND sqlc.arg(status)::text = 'active'))
 RETURNING *;
 
 -- name: DeleteManagedUser :execrows
-DELETE FROM users WHERE id = sqlc.arg(user_id) AND tenant_id = sqlc.arg(tenant_id);
+DELETE FROM users WHERE users.id = sqlc.arg(user_id) AND users.tenant_id = sqlc.arg(tenant_id)
+  AND NOT EXISTS (SELECT 1 FROM tenants WHERE admin_user_id = users.id);
 
 -- name: CountTenantUsers :one
 SELECT count(*) FROM users WHERE tenant_id = sqlc.arg(tenant_id) AND role <> 'SUPER_ADMIN';

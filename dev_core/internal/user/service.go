@@ -14,6 +14,7 @@ var (
 	ErrNotFound      = errors.New("用户不存在")
 	ErrAlreadyExists = errors.New("用户名已存在")
 	ErrDeleteSelf    = errors.New("不能删除当前登录用户")
+	ErrInvalidInput  = errors.New("用户资料无效")
 	ErrModifySelf    = errors.New("不能修改当前登录用户的角色或状态")
 )
 
@@ -36,16 +37,16 @@ type User struct {
 }
 
 type Input struct {
-	TenantID    *string
-	Username    *string
-	Password    *string
-	Email       *string
-	Phone       *string
-	FullName    *string
-	Avatar      *string
-	Role        *string
-	Status      *string
-	Preferences map[string]any
+	TenantID   *string
+	Username   *string
+	Password   *string
+	Email      *string
+	Phone      *string
+	FullName   *string
+	Role       *string
+	Status     *string
+	Gender     *string
+	Attributes map[string]string
 }
 
 type ListFilter struct {
@@ -88,14 +89,20 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input Input) (Use
 	if input.TenantID != nil && actor.Role == "SUPER_ADMIN" && strings.TrimSpace(*input.TenantID) != "" {
 		tenantID = strings.TrimSpace(*input.TenantID)
 	}
-	item := User{TenantID: tenantID, Role: "VIEWER", Status: "active", Preferences: map[string]any{}}
+	item := User{TenantID: tenantID, Status: "active", Preferences: map[string]any{}}
 	applyInput(&item, input)
+	if input.Role == nil || strings.TrimSpace(*input.Role) == "" {
+		return User{}, fmt.Errorf("%w: 请选择角色", ErrInvalidInput)
+	}
+	if err := validateUser(item); err != nil {
+		return User{}, err
+	}
 	item.Role = strings.ToUpper(strings.TrimSpace(item.Role))
 	if !auth.CanAssignRole(actor.Role, item.Role) {
 		return User{}, auth.ErrPermissionDenied
 	}
-	if item.Username == "" || input.Password == nil || len(*input.Password) < 8 {
-		return User{}, fmt.Errorf("用户名不能为空且密码至少 8 位")
+	if input.Password == nil || strings.TrimSpace(*input.Password) == "" {
+		return User{}, fmt.Errorf("%w: 初始密码不能为空", ErrInvalidInput)
 	}
 	hash, err := auth.HashPassword(*input.Password)
 	if err != nil {
@@ -119,13 +126,22 @@ func (s *Service) Update(ctx context.Context, actor auth.User, userID string, in
 		}
 		input.Role = &targetRole
 	}
+	if input.Username != nil && strings.TrimSpace(*input.Username) != item.Username {
+		return User{}, fmt.Errorf("%w: 用户名不能修改", ErrInvalidInput)
+	}
+	if input.Password != nil || input.TenantID != nil {
+		return User{}, fmt.Errorf("%w: 请使用专门的密码重置入口", ErrInvalidInput)
+	}
 	applyInput(&item, input)
+	if err := validateUser(item); err != nil {
+		return User{}, err
+	}
 	return s.repository.Update(ctx, item)
 }
 
 func (s *Service) UpdatePassword(ctx context.Context, actor auth.User, userID, password string) error {
-	if len(password) < 8 {
-		return fmt.Errorf("新密码至少 8 位")
+	if strings.TrimSpace(password) == "" {
+		return fmt.Errorf("%w: 临时密码不能为空", ErrInvalidInput)
 	}
 	if _, _, err := s.repository.Get(ctx, actor.TenantID, userID); err != nil {
 		return err
@@ -160,18 +176,29 @@ func applyInput(item *User, input Input) {
 	if input.FullName != nil {
 		item.FullName = strings.TrimSpace(*input.FullName)
 	}
-	if input.Avatar != nil {
-		item.Avatar = strings.TrimSpace(*input.Avatar)
-	}
 	if input.Role != nil {
 		item.Role = strings.TrimSpace(*input.Role)
 	}
 	if input.Status != nil {
 		item.Status = strings.TrimSpace(*input.Status)
 	}
-	if input.Preferences != nil {
-		item.Preferences = input.Preferences
+
+	if input.Gender != nil || input.Attributes != nil {
+		preferences := make(map[string]any, len(item.Preferences)+1)
+		for key, value := range item.Preferences {
+			preferences[key] = value
+		}
+		profile := extendedProfile(*item)
+		if input.Gender != nil {
+			profile["gender"] = strings.TrimSpace(*input.Gender)
+		}
+		if input.Attributes != nil {
+			profile["attributes"] = input.Attributes
+		}
+		preferences["profile"] = profile
+		item.Preferences = preferences
 	}
+
 }
 
 func normalizePage(page, limit int) (int, int) {

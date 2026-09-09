@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -43,7 +41,7 @@ const runtimeEnvironmentProjectionSQL = `
 	LEFT JOIN (` + runtimeEnvironmentDeploymentCountsSQL + `) ds ON ds.tenant_id=e.tenant_id AND ds.environment_id=e.id
 	LEFT JOIN LATERAL (
 		SELECT count(*)::int AS node_count,
-			count(*) FILTER (WHERE n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds')::int AS online_count
+			count(*) FILTER (WHERE n.desired_status='active' AND n.observed_status='online' AND (n.node_source='built_in' OR n.last_heartbeat_at>now()-interval '45 seconds'))::int AS online_count
 		FROM runtime_environment_nodes en
 		JOIN host_nodes n ON n.id=en.node_id AND n.tenant_id=e.tenant_id
 		WHERE en.environment_id=e.id
@@ -97,8 +95,20 @@ func (r *PostgreSQLRepository) CreateRuntimeEnvironment(ctx context.Context, ten
 		return RuntimeEnvironment{}, err
 	}
 	defer tx.Rollback(ctx)
+	// 串行化同一组织的创建请求，首个环境成为默认环境，避免并发创建多个默认项。
+	var lockedTenant string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM tenants WHERE id=$1 FOR UPDATE`, tenant).Scan(&lockedTenant); err != nil {
+		return RuntimeEnvironment{}, err
+	}
+	var isDefault bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM runtime_environments WHERE tenant_id=$1 AND deleted_at IS NULL)`, tenant).Scan(&isDefault); err != nil {
+		return RuntimeEnvironment{}, err
+	}
+	if isDefault {
+		code = "default-runtime"
+	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO runtime_environments(tenant_id,name,code,created_by) VALUES($1,$2,$3,$4) RETURNING id`, tenant, input.Name, code, user).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO runtime_environments(tenant_id,name,code,created_by,is_default) VALUES($1,$2,$3,$4,$5) RETURNING id`, tenant, input.Name, code, user, isDefault).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -217,7 +227,7 @@ func (r *PostgreSQLRepository) ListRuntimeEnvironmentNodes(ctx context.Context, 
 	if err := r.requireRuntimeEnvironment(ctx, tenant, environmentID); err != nil {
 		return nil, 0, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.enrollment_id,n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),e.id::text,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.tenant_id=$1 JOIN host_nodes n ON n.id=en.node_id AND n.tenant_id=e.tenant_id LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id WHERE en.environment_id=$2 AND ($3='' OR n.display_name ILIKE '%'||$3||'%' OR n.hostname ILIKE '%'||$3||'%') ORDER BY en.created_at DESC,n.id DESC LIMIT $4 OFFSET $5`, tenant, environmentID, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
+	rows, err := r.pool.Query(ctx, `SELECT n.id,n.tenant_id,n.node_source,COALESCE(n.enrollment_id::text,''),n.display_name,n.hostname,n.platform,n.architecture,COALESCE(n.agent_version,''),COALESCE(n.machine_fingerprint,''),COALESCE(n.ip_address,''),n.desired_status,n.observed_status,n.capabilities,n.resource_summary,n.last_heartbeat_at,n.approved_at,n.created_at,n.updated_at,COALESCE(d.id::text,''),COALESCE(d.project_id::text,''),COALESCE(p.name,''),e.id::text,e.name FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id AND e.tenant_id=$1 JOIN host_nodes n ON n.id=en.node_id AND n.tenant_id=e.tenant_id LEFT JOIN LATERAL (SELECT d.id,d.project_id FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id AND d.tenant_id=s.tenant_id WHERE s.tenant_id=n.tenant_id AND s.node_id=n.id ORDER BY d.created_at DESC,d.id DESC LIMIT 1) d ON true LEFT JOIN projects p ON p.id=d.project_id AND p.tenant_id=n.tenant_id WHERE en.environment_id=$2 AND ($3='' OR n.display_name ILIKE '%'||$3||'%' OR n.hostname ILIKE '%'||$3||'%') ORDER BY en.created_at DESC,n.id DESC LIMIT $4 OFFSET $5`, tenant, environmentID, f.Search, f.PageSize, (f.Page-1)*f.PageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -316,18 +326,21 @@ func (r *PostgreSQLRepository) RemoveRuntimeEnvironmentNode(ctx context.Context,
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var nodeName, environmentStatus string
+	var nodeName, nodeSource, environmentStatus string
 	var serviceInUse, deploymentInUse bool
-	err = tx.QueryRow(ctx, `SELECT n.display_name,e.desired_status,
+	err = tx.QueryRow(ctx, `SELECT n.display_name,n.node_source,e.desired_status,
 		EXISTS(SELECT 1 FROM runtime_environment_services s WHERE s.environment_id=en.environment_id AND s.node_id=en.node_id),
 		EXISTS(SELECT 1 FROM deployment_services s WHERE s.node_id=en.node_id)
 		FROM runtime_environment_nodes en JOIN runtime_environments e ON e.id=en.environment_id JOIN host_nodes n ON n.id=en.node_id
-		WHERE e.tenant_id=$1 AND e.id=$2 AND n.id=$3 AND e.deleted_at IS NULL FOR UPDATE OF en,e,n`, tenant, environmentID, nodeID).Scan(&nodeName, &environmentStatus, &serviceInUse, &deploymentInUse)
+			WHERE e.tenant_id=$1 AND e.id=$2 AND n.id=$3 AND e.deleted_at IS NULL FOR UPDATE OF en,e,n`, tenant, environmentID, nodeID).Scan(&nodeName, &nodeSource, &environmentStatus, &serviceInUse, &deploymentInUse)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
+	}
+	if nodeSource == "built_in" {
+		return ErrCenterNodeProtected
 	}
 	if environmentStatus == "deleting" {
 		return ErrEnvironmentDeleting
@@ -442,7 +455,7 @@ func (r *PostgreSQLRepository) MigrateRuntimeEnvironmentFoundation(ctx context.C
 		return nil, ErrEnvironmentDeleting
 	}
 	var activeOperations int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_services WHERE environment_id=$1 AND (desired_generation<>observed_generation OR observed_status<>'running')`, environmentID).Scan(&activeOperations); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_services WHERE environment_id=$1 AND observed_status='pending'`, environmentID).Scan(&activeOperations); err != nil {
 		return nil, err
 	}
 	if activeOperations > 0 {
@@ -466,10 +479,13 @@ func (r *PostgreSQLRepository) MigrateRuntimeEnvironmentFoundation(ctx context.C
 		return nil, fmt.Errorf("基础服务尚未完整部署")
 	}
 	nodeSet, changed := map[string]struct{}{}, 0
-	newClaims := map[string]string{}
+
 	for _, assignment := range assignments {
 		nodeSet[assignment.NodeID] = struct{}{}
 		if current[assignment.ServiceType] != assignment.NodeID {
+			if assignment.ServiceType != "nginx" {
+				return nil, ErrFoundationMoveUnsupported
+			}
 			changed++
 		}
 	}
@@ -481,7 +497,7 @@ func (r *PostgreSQLRepository) MigrateRuntimeEnvironmentFoundation(ctx context.C
 		nodeIDs = append(nodeIDs, nodeID)
 	}
 	var readyCount int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_nodes en JOIN host_nodes n ON n.id=en.node_id JOIN runtime_cluster_nodes cn ON cn.node_id=n.id WHERE en.environment_id=$1 AND en.node_id=ANY($2::uuid[]) AND cn.desired_action='active' AND cn.cluster_status='ready' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds'`, environmentID, nodeIDs).Scan(&readyCount); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_nodes en JOIN host_nodes n ON n.id=en.node_id JOIN runtime_cluster_nodes cn ON cn.node_id=n.id WHERE en.environment_id=$1 AND en.node_id=ANY($2::uuid[]) AND cn.desired_action='active' AND cn.cluster_status='ready' AND n.observed_status='online' AND (n.node_source='built_in' OR n.last_heartbeat_at>now()-interval '45 seconds')`, environmentID, nodeIDs).Scan(&readyCount); err != nil {
 		return nil, err
 	}
 	if readyCount != len(nodeIDs) {
@@ -491,29 +507,17 @@ func (r *PostgreSQLRepository) MigrateRuntimeEnvironmentFoundation(ctx context.C
 	if err := tx.QueryRow(ctx, `SELECT max(desired_generation)+1 FROM runtime_environment_services WHERE environment_id=$1`, environmentID).Scan(&nextGeneration); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, advanceFoundationGenerationSQL, nextGeneration, environmentID); err != nil {
-		return nil, err
-	}
-	// 八项服务共享新代次，但只把实际移动项置为 pending。未移动服务继续显示
-	// 当前观测状态，Hostd 下一次完整上报会一起确认新代次并刷新观测时间。
+	// 仅更新移动的页面服务，健康服务不增加代次或重启。
 	for _, assignment := range assignments {
 		if current[assignment.ServiceType] == assignment.NodeID {
 			continue
 		}
-		claim := ""
-		if assignment.ServiceType != "nginx" && assignment.ServiceType != "traefik" {
-			workload := foundationWorkloadForLogicalType(assignment.ServiceType)
-			claim = newClaims[workload]
-			if claim == "" {
-				claim = "data-" + workload + "-m" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
-				newClaims[workload] = claim
-			}
-		}
-		if _, err := tx.Exec(ctx, `UPDATE runtime_environment_services SET previous_node_id=node_id,previous_storage_claim=storage_claim,node_id=$1,storage_claim=$2,observed_status='pending',last_message='等待从原节点迁移数据',operation='migrate',updated_at=now() WHERE environment_id=$3 AND service_type=$4`, assignment.NodeID, claim, environmentID, assignment.ServiceType); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE runtime_environment_services SET previous_node_id=NULL,previous_storage_claim=NULL,node_id=$1,storage_claim='',desired_generation=$2,observed_status='pending',last_message='等待页面服务切换节点',operation='apply',updated_at=now() WHERE environment_id=$3 AND service_type=$4`, assignment.NodeID, nextGeneration, environmentID, assignment.ServiceType); err != nil {
 			return nil, err
 		}
+
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message,created_by) VALUES($1,$2,'foundation_migration_requested','基础服务分布调整任务已创建','基础服务','success',$3,$4)`, tenant, environmentID, fmt.Sprintf("已提交 %d 项节点调整；有状态服务将先复制数据并校验，再切换运行节点", changed), user); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message,created_by) VALUES($1,$2,'foundation_migration_requested','基础服务分布调整任务已创建','基础服务','success',$3,$4)`, tenant, environmentID, fmt.Sprintf("已提交 %d 项页面服务节点调整，其他服务保持不变", changed), user); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE runtime_environments SET updated_at=now() WHERE id=$1`, environmentID); err != nil {
@@ -584,7 +588,7 @@ func (r *PostgreSQLRepository) DeployRuntimeEnvironmentFoundation(ctx context.Co
 		}
 	}
 	var readyCount int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_nodes en JOIN host_nodes n ON n.id=en.node_id JOIN runtime_cluster_nodes cn ON cn.node_id=n.id WHERE en.environment_id=$1 AND en.node_id=ANY($2::uuid[]) AND cn.desired_action='active' AND cn.cluster_status='ready' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds'`, environmentID, nodeIDs).Scan(&readyCount); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM runtime_environment_nodes en JOIN host_nodes n ON n.id=en.node_id JOIN runtime_cluster_nodes cn ON cn.node_id=n.id WHERE en.environment_id=$1 AND en.node_id=ANY($2::uuid[]) AND cn.desired_action='active' AND cn.cluster_status='ready' AND n.observed_status='online' AND (n.node_source='built_in' OR n.last_heartbeat_at>now()-interval '45 seconds')`, environmentID, nodeIDs).Scan(&readyCount); err != nil {
 		return nil, err
 	}
 	if readyCount != len(nodeIDs) {
@@ -602,18 +606,29 @@ func (r *PostgreSQLRepository) DeployRuntimeEnvironmentFoundation(ctx context.Co
 	} else {
 		// 当前基线只允许按原位置重新应用固定清单，避免在没有数据迁移协议时把
 		// 有状态服务直接搬到其他节点，造成 PVC 与数据库数据不可恢复地分离。
-		if len(existingAssignments) != len(assignments) {
-			return nil, ErrFoundationMoveUnsupported
-		}
-		for _, assignment := range assignments {
-			if existingAssignments[assignment.ServiceType] != assignment.NodeID {
-				return nil, ErrFoundationMoveUnsupported
-			}
-		}
-		if _, err := tx.Exec(ctx, `UPDATE runtime_environment_services SET desired_generation=(SELECT max(desired_generation)+1 FROM runtime_environment_services WHERE environment_id=$1),observed_status='pending',last_message='等待节点重新应用基础服务清单',updated_at=now() WHERE environment_id=$1`, environmentID); err != nil {
+		if err := validateFoundationExtension(existingAssignments, assignments); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message,created_by) VALUES($1,$2,'foundation_redeploy_requested','基础服务重新部署任务已创建',$3,'success','保持现有节点分配并重新应用固定清单，用于修复异常或升级内置配置',$4)`, tenant, environmentID, "运行环境", user); err != nil {
+		for _, assignment := range assignments {
+			if _, exists := existingAssignments[assignment.ServiceType]; !exists {
+				if _, err := tx.Exec(ctx, `INSERT INTO runtime_environment_services(tenant_id,environment_id,node_id,service_type) VALUES($1,$2,$3,$4)`, tenant, environmentID, assignment.NodeID, assignment.ServiceType); err != nil {
+					return nil, err
+				}
+			}
+		}
+		// 只重试失败或已停止的服务；健康和执行中的服务不重复下发。
+		repaired, err := tx.Exec(ctx, `UPDATE runtime_environment_services SET desired_generation=desired_generation+1,observed_status='pending',last_message='等待修复',updated_at=now() WHERE environment_id=$1 AND observed_status IN ('failed','degraded','stopped')`, environmentID)
+		if err != nil {
+			return nil, err
+		}
+		if repaired.RowsAffected() == 0 && len(existingAssignments) == len(assignments) {
+			if err = tx.Commit(ctx); err != nil {
+				return nil, err
+			}
+			return r.ListRuntimeEnvironmentServices(ctx, tenant, environmentID)
+		}
+
+		if _, err := tx.Exec(ctx, `INSERT INTO runtime_environment_events(tenant_id,environment_id,event_type,name,target,result,message,created_by) VALUES($1,$2,'foundation_redeploy_requested','基础服务修复任务已创建',$3,'success','仅处理异常或缺失服务，健康及执行中的服务保持不变',$4)`, tenant, environmentID, "运行环境", user); err != nil {
 			return nil, err
 		}
 	}
@@ -649,4 +664,14 @@ func scanNodeWithAssignments(row scanner) (Node, error) {
 	err := row.Scan(args...)
 	hydrateNode(&item, caps, summary)
 	return item, err
+}
+
+// 缺失服务允许补充；已有服务的位置必须保持不变，不能隐式迁移数据。
+func validateFoundationExtension(existing map[string]string, assignments []FoundationAssignment) error {
+	for _, a := range assignments {
+		if node, ok := existing[a.ServiceType]; ok && node != a.NodeID {
+			return ErrFoundationMoveUnsupported
+		}
+	}
+	return nil
 }

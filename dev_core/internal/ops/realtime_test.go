@@ -182,7 +182,7 @@ func TestOpsMutationsPublishOnlyAfterSuccessWithinAuthenticatedTenant(t *testing
 		router := chi.NewRouter()
 		h.MountRoutes(router)
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments/deployment/redeploy?tenantId=other", nil)
-		request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPERATOR"}))
+		request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}))
 		router.ServeHTTP(httptest.NewRecorder(), request)
 		if failure != nil {
 			if len(events.values) != 0 {

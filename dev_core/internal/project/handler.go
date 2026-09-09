@@ -42,7 +42,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, limit := pagination(r)
-	items, total, err := h.service.List(r.Context(), actor, ListFilter{Keyword: firstQuery(r, "name", "keyword"), Status: r.URL.Query().Get("status"), Visibility: firstQuery(r, "visibility"), GroupID: firstQuery(r, "groupId", "group"), TagID: firstQuery(r, "tagId", "tag"), Page: page, Limit: limit})
+	items, total, err := h.service.List(r.Context(), actor, ListFilter{Keyword: firstQuery(r, "name", "keyword"), Status: r.URL.Query().Get("status"), Visibility: listQuery(r, "visibility"), GroupID: firstQuery(r, "groupId", "group"), TagID: listQuery(r, "tagId"), RuntimeModes: listQuery(r, "runtimeMode"), DeployStatuses: listQuery(r, "deployStatus"), CreatedByFilter: firstQuery(r, "createdBy"), SortBy: firstQuery(r, "sortBy"), SortOrder: firstQuery(r, "sortOrder"), Page: page, Limit: limit})
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -371,6 +371,7 @@ func decodeJSON(r *http.Request, target any) error {
 }
 func decodeProjectInput(r *http.Request) (ProjectInput, error) {
 	var body struct {
+		Template    *string `json:"template"`
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
 		Icon        *string `json:"icon"`
@@ -379,7 +380,7 @@ func decodeProjectInput(r *http.Request) (ProjectInput, error) {
 	if err := decodeJSON(r, &body); err != nil {
 		return ProjectInput{}, err
 	}
-	return ProjectInput{Name: body.Name, Description: body.Description, Icon: body.Icon, Visibility: body.Visibility}, nil
+	return ProjectInput{Template: body.Template, Name: body.Name, Description: body.Description, Icon: body.Icon, Visibility: body.Visibility}, nil
 }
 func decodeTagInput(r *http.Request) (TagInput, error) {
 	var body struct {
@@ -429,7 +430,7 @@ func projectResponse(item Project) map[string]any {
 	for _, tag := range item.Tags {
 		tags = append(tags, tagResponse(tag))
 	}
-	payload := map[string]any{"id": item.ID, "tenantId": item.TenantID, "name": item.Name, "code": item.Code, "description": item.Description, "icon": item.Icon, "status": item.Status, "visibility": item.Visibility, "createdBy": item.CreatedBy, "createdByName": item.CreatedByName, "tags": tags, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+	payload := map[string]any{"id": item.ID, "tenantId": item.TenantID, "name": item.Name, "code": item.Code, "description": item.Description, "icon": item.Icon, "status": item.Status, "visibility": item.Visibility, "createdBy": item.CreatedBy, "createdByName": item.CreatedByName, "updatedBy": item.UpdatedBy, "updatedByName": item.UpdatedByName, "tags": tags, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
 	if item.Group != nil {
 		payload["group"] = groupResponse(*item.Group)
 		payload["groupId"] = item.Group.ID
@@ -448,4 +449,21 @@ func tagResponse(item Tag) map[string]any {
 }
 func groupResponse(item Group) map[string]any {
 	return map[string]any{"id": item.ID, "name": item.Name, "description": item.Description, "sortOrder": item.SortOrder, "projectCount": item.ProjectCount, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+}
+
+// 同时接受多选参数的重复键和浏览器数组编码，去重后交给参数化 SQL。
+func listQuery(r *http.Request, key string) string {
+	values := append(r.URL.Query()[key], r.URL.Query()[key+"[]"]...)
+	result := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" && !seen[part] {
+				seen[part] = true
+				result = append(result, part)
+			}
+		}
+	}
+	return strings.Join(result, ",")
 }

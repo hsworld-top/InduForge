@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
+	platformdb "github.com/indu-forge/dev_core/internal/platform/db"
 	dbsqlc "github.com/indu-forge/dev_core/internal/platform/db/sqlc"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -33,18 +34,21 @@ func (r *PostgreSQLRepository) List(ctx context.Context, tenantID string, filter
 	if err != nil {
 		return nil, 0, ErrNotFound
 	}
-	params := dbsqlc.ListProjectsParams{TenantID: tenantUUID, IsPlatformAdmin: filter.IsPlatformAdmin, ActorID: actorUUID, CanReadShared: filter.CanReadShared, Keyword: filter.Keyword, Status: filter.Status, Visibility: filter.Visibility, GroupID: filter.GroupID, TagID: filter.TagID, PageOffset: int32((filter.Page - 1) * filter.Limit), PageLimit: int32(filter.Limit)}
+	params := dbsqlc.ListProjectsParams{TenantID: tenantUUID, IsPlatformAdmin: filter.IsPlatformAdmin, ActorID: actorUUID, CanReadShared: filter.CanReadShared, Keyword: filter.Keyword, Status: filter.Status, Visibility: filter.Visibility, GroupID: filter.GroupID, TagID: filter.TagID, CreatedByFilter: filter.CreatedByFilter, RuntimeModes: filter.RuntimeModes, DeployStatuses: filter.DeployStatuses, SortBy: filter.SortBy, SortOrder: filter.SortOrder, PageOffset: int32((filter.Page - 1) * filter.Limit), PageLimit: int32(filter.Limit)}
 	rows, err := r.queries.ListProjects(ctx, params)
 	if err != nil {
 		return nil, 0, fmt.Errorf("查询工程列表失败: %w", err)
 	}
-	total, err := r.queries.CountProjects(ctx, dbsqlc.CountProjectsParams{TenantID: tenantUUID, IsPlatformAdmin: filter.IsPlatformAdmin, ActorID: actorUUID, CanReadShared: filter.CanReadShared, Keyword: filter.Keyword, Status: filter.Status, Visibility: filter.Visibility, GroupID: filter.GroupID, TagID: filter.TagID})
+	total, err := r.queries.CountProjects(ctx, dbsqlc.CountProjectsParams{TenantID: tenantUUID, IsPlatformAdmin: filter.IsPlatformAdmin, ActorID: actorUUID, CanReadShared: filter.CanReadShared, Keyword: filter.Keyword, Status: filter.Status, Visibility: filter.Visibility, GroupID: filter.GroupID, TagID: filter.TagID, CreatedByFilter: filter.CreatedByFilter, RuntimeModes: filter.RuntimeModes, DeployStatuses: filter.DeployStatuses})
 	if err != nil {
 		return nil, 0, fmt.Errorf("统计工程数量失败: %w", err)
 	}
 	items := make([]Project, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, projectFromListRow(row))
+	}
+	if err := r.attachActorNames(ctx, tenantID, items); err != nil {
+		return nil, 0, err
 	}
 	if err := r.attachDeploymentSummaries(ctx, tenantID, items); err != nil {
 		return nil, 0, fmt.Errorf("查询工程部署摘要失败: %w", err)
@@ -64,7 +68,11 @@ func (r *PostgreSQLRepository) Get(ctx context.Context, tenantID, projectID stri
 		}
 		return Project{}, fmt.Errorf("查询工程失败: %w", err)
 	}
-	return projectFromModel(row), nil
+	items := []Project{projectFromModel(row)}
+	if err := r.attachActorNames(ctx, tenantID, items); err != nil {
+		return Project{}, err
+	}
+	return items[0], nil
 }
 
 func (r *PostgreSQLRepository) Create(ctx context.Context, item Project, actor auth.User, runtimeAdminHash string) (Project, error) {
@@ -243,7 +251,7 @@ func (r *PostgreSQLRepository) DeleteTag(ctx context.Context, tenantID, tagID st
 	return nil
 }
 
-func (r *PostgreSQLRepository) ReplaceTags(ctx context.Context, tenantID, projectID string, tagIDs []string) error {
+func (r *PostgreSQLRepository) ReplaceTags(ctx context.Context, tenantID, projectID, actorID string, tagIDs []string) error {
 	project, err := r.Get(ctx, tenantID, projectID)
 	if err != nil {
 		return err
@@ -267,6 +275,14 @@ func (r *PostgreSQLRepository) ReplaceTags(ctx context.Context, tenantID, projec
 		if err := queries.CreateProjectTagBinding(ctx, dbsqlc.CreateProjectTagBindingParams{ProjectID: projectUUID, TagID: tagUUID}); err != nil {
 			return err
 		}
+	}
+	// 绑定和工程修改记录在同一事务中提交。
+	actorUUID, err := parseUUID(actorID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "UPDATE projects SET updated_by = $1, updated_at = now() WHERE id = $2", actorUUID, projectUUID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -441,4 +457,56 @@ func mapConstraintError(err error) error {
 		return ErrAuthoringBusy
 	}
 	return fmt.Errorf("保存工程资源失败: %w", err)
+}
+
+func (r *PostgreSQLRepository) CreateDemoShell(ctx context.Context, item Project, actor auth.User) (Project, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Project{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := platformdb.CreateDemoShell(ctx, tx, item.TenantID, actor.ID, item.ID, item.WorkspacePath); err != nil {
+		return Project{}, mapConstraintError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Project{}, err
+	}
+	return r.Get(ctx, item.TenantID, item.ID)
+}
+
+// 以当前页涉及的用户 ID 批量查询署名，避免逐个工程查询及跨组织关联。
+func (r *PostgreSQLRepository) attachActorNames(ctx context.Context, tenantID string, items []Project) error {
+	ids := []string{}
+	for _, item := range items {
+		if item.CreatedBy != "" {
+			ids = append(ids, item.CreatedBy)
+		}
+		if item.UpdatedBy != "" {
+			ids = append(ids, item.UpdatedBy)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id::text,username FROM users WHERE tenant_id=$1 AND id=ANY($2::uuid[])`, tenantID, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	names := map[string]string{}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return err
+		}
+		names[id] = name
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range items {
+		items[i].CreatedByName = names[items[i].CreatedBy]
+		items[i].UpdatedByName = names[items[i].UpdatedBy]
+	}
+	return nil
 }

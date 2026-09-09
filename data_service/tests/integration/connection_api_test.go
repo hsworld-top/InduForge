@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -37,7 +36,7 @@ func TestConnectionsCRUD(t *testing.T) {
 	tenantID := "tenant-alpha"
 	secret := "connections-secret"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -202,7 +201,7 @@ func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "connections-phase2-secret"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -371,6 +370,12 @@ func doJSONRequest(t *testing.T, method, url, token string, payload any) apiEnve
 func mustSignIntegrationJWT(t *testing.T, secret string, claims *auth.Claims) string {
 	t.Helper()
 
+	// 旧夹具省略角色；显式普通用户保持原有工程/能力授权边界。
+	copyClaims := *claims
+	if copyClaims.Role == "" {
+		copyClaims.Role = "DEVELOPER"
+	}
+	claims = &copyClaims
 	headerJSON := []byte(`{"alg":"HS256","typ":"JWT"}`)
 	now := time.Now().UTC()
 	payload := map[string]any{
@@ -397,5 +402,7 @@ func mustSignIntegrationJWT(t *testing.T, secret string, claims *auth.Claims) st
 	_, _ = mac.Write([]byte(signingInput))
 	signature := mac.Sum(nil)
 
-	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
+	token := signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
+	integrationIdentities(t).Store(token, copyClaims)
+	return token
 }

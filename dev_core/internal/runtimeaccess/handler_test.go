@@ -252,3 +252,24 @@ func (r *fakeRepository) UpdateUserPassword(_ context.Context, _, _, id, _ strin
 	r.users[id] = item
 	return nil
 }
+
+func (r *fakeRepository) PageRoles(ctx context.Context, tenant, project string, q runtimeaccess.ListQuery) ([]runtimeaccess.Role, int64, error) {
+	items, err := r.ListRoles(ctx, tenant, project)
+	return items, int64(len(items)), err
+}
+func (r *fakeRepository) PageUsers(ctx context.Context, tenant, project string, q runtimeaccess.ListQuery) ([]runtimeaccess.RuntimeUser, int64, error) {
+	items, err := r.ListUsers(ctx, tenant, project)
+	return items, int64(len(items)), err
+}
+
+func TestBuiltinAdminCannotBeDisabled(t *testing.T) {
+	repo := &fakeRepository{roles: map[string]runtimeaccess.Role{}, users: map[string]runtimeaccess.RuntimeUser{userID: {ID: userID, IsBuiltinAdmin: true, Status: "active"}}}
+	service := runtimeaccess.NewService(repo)
+	_, err := service.UpdateUserStatus(context.Background(), auth.User{ID: testsupport.UserID, TenantID: testsupport.TenantID, Role: "SYSTEM_ADMIN"}, projectID, userID, "disabled")
+	if err == nil {
+		t.Fatal("builtin admin was disabled")
+	}
+	if repo.users[userID].Status != "active" {
+		t.Fatal("builtin admin state changed")
+	}
+}

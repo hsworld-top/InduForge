@@ -19,7 +19,7 @@ func (c *Claims) hasGlobalAccessRole() bool {
 	}
 
 	switch c.Role {
-	case "SYSTEM_ADMIN", "SUPER_ADMIN":
+	case "SYSTEM_ADMIN":
 		return true
 	default:
 		return false

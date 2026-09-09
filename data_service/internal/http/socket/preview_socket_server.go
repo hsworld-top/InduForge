@@ -36,10 +36,12 @@ const (
 var previewSocketFallbackWriteMu sync.Mutex
 
 type socketSessionMetadata struct {
-	Claims         *auth.Claims
-	ProjectID      string
-	PreviewSession string
-	UserID         string
+	Claims              *auth.Claims
+	AuthToken           string
+	CancelIdentityLease context.CancelFunc
+	ProjectID           string
+	PreviewSession      string
+	UserID              string
 }
 
 type socketSubscriptionSet struct {
@@ -234,13 +236,12 @@ func (s *PreviewSocketServer) authorizeSocket(socket *socketio.Socket, params ma
 		return false, "missing previewSessionId"
 	}
 
-	claims, err := s.jwtValidator.Validate(token)
+	ctx, cancel := context.WithTimeout(context.Background(), previewSocketOpTimeout)
+	defer cancel()
+	claims, err := s.jwtValidator.ValidateContext(ctx, token)
 	if err != nil {
 		return false, socketErrorMessage(err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), previewSocketOpTimeout)
-	defer cancel()
 
 	session, err := s.previewService.AuthorizeSession(ctx, claims, projectID, previewSessionID)
 	if err != nil {
@@ -249,6 +250,7 @@ func (s *PreviewSocketServer) authorizeSocket(socket *socketio.Socket, params ma
 
 	socket.Metadata(previewSocketMetadataKey, &socketSessionMetadata{
 		Claims:         claims,
+		AuthToken:      token,
 		ProjectID:      projectID,
 		PreviewSession: session.ID,
 		UserID:         session.UserID,
@@ -264,6 +266,8 @@ func (s *PreviewSocketServer) handleConnection(socket *socketio.Socket) {
 	}
 
 	socket.Metadata(previewSocketWriteLockKey, &sync.Mutex{})
+	leaseCtx, cancelIdentityLease := s.jwtValidator.WithIdentityLease(context.Background(), metadata.AuthToken)
+	metadata.CancelIdentityLease = cancelIdentityLease
 
 	s.mu.Lock()
 	session := s.sessions[metadata.PreviewSession]
@@ -291,32 +295,78 @@ func (s *PreviewSocketServer) handleConnection(socket *socketio.Socket) {
 		s.handleSocketDisconnect(socket)
 	})
 	socket.On("mqtt:subscribe", func(event *socketio.EventPayload) {
-		s.handleMqttSubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleMqttSubscribe(socket, event)
+		}
 	})
 	socket.On("mqtt:unsubscribe", func(event *socketio.EventPayload) {
-		s.handleMqttUnsubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleMqttUnsubscribe(socket, event)
+		}
 	})
 	socket.On("mqtt:tag:subscribe", func(event *socketio.EventPayload) {
-		s.handleMqttTagSubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleMqttTagSubscribe(socket, event)
+		}
 	})
 	socket.On("mqtt:tag:unsubscribe", func(event *socketio.EventPayload) {
-		s.handleMqttTagUnsubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleMqttTagUnsubscribe(socket, event)
+		}
 	})
 	socket.On("datapoint:subscribe", func(event *socketio.EventPayload) {
-		s.handleDatapointSubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleDatapointSubscribe(socket, event)
+		}
 	})
 	socket.On("datapoint:unsubscribe", func(event *socketio.EventPayload) {
-		s.handleDatapointUnsubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleDatapointUnsubscribe(socket, event)
+		}
 	})
 	socket.On("datapoint:subscribe:batch", func(event *socketio.EventPayload) {
-		s.handleDatapointBatchSubscribe(socket, event)
+		if s.authorizeSocketEvent(socket, event) {
+			s.handleDatapointBatchSubscribe(socket, event)
+		}
 	})
+
+	go func() {
+		defer cancelIdentityLease()
+		select {
+		case <-leaseCtx.Done():
+		case <-s.closed:
+		}
+		_ = disconnectSocket(socket)
+	}()
+}
+
+// 每个订阅操作复查身份和预览租约；被撤销的连接不能在周期检查前新增权限。
+func (s *PreviewSocketServer) authorizeSocketEvent(socket *socketio.Socket, event *socketio.EventPayload) bool {
+	metadata := socketMetadataFromSocket(socket)
+	if metadata == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), previewSocketOpTimeout)
+	defer cancel()
+	claims, err := s.jwtValidator.ValidateContext(ctx, metadata.AuthToken)
+	if err == nil {
+		_, err = s.previewService.AuthorizeSession(ctx, claims, metadata.ProjectID, metadata.PreviewSession)
+	}
+	if err != nil {
+		respondSocketRequest(socket, payloadString(firstPayloadMap(event), "requestId"), nil, err)
+		_ = disconnectSocket(socket)
+		return false
+	}
+	return true
 }
 
 func (s *PreviewSocketServer) handleSocketDisconnect(socket *socketio.Socket) {
 	metadata := socketMetadataFromSocket(socket)
 	if metadata == nil {
 		return
+	}
+	if metadata.CancelIdentityLease != nil {
+		metadata.CancelIdentityLease()
 	}
 
 	var (

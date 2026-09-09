@@ -181,7 +181,7 @@ func (r *fakeRepository) List(_ context.Context, tenantID string, filter project
 		if item.TenantID != tenantID {
 			continue
 		}
-		if filter.IsPlatformAdmin || item.CreatedBy == filter.ActorID || (filter.CanReadShared && item.Visibility == "internal") {
+		if filter.IsPlatformAdmin || item.CreatedBy == filter.ActorID || filter.CanReadShared {
 			items = append(items, item)
 		}
 	}
@@ -251,7 +251,9 @@ func (r *fakeRepository) DeleteTag(_ context.Context, _, id string) error {
 	delete(r.tags, id)
 	return nil
 }
-func (r *fakeRepository) ReplaceTags(context.Context, string, string, []string) error { return nil }
+func (r *fakeRepository) ReplaceTags(context.Context, string, string, string, []string) error {
+	return nil
+}
 func (r *fakeRepository) ListGroups(context.Context, string, string) ([]project.Group, error) {
 	items := []project.Group{}
 	for _, item := range r.groups {

@@ -15,10 +15,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type PostgreSQLRepository struct{ queries *dbsqlc.Queries }
+type PostgreSQLRepository struct {
+	queries *dbsqlc.Queries
+	pool    *pgxpool.Pool
+}
 
 func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
-	return &PostgreSQLRepository{queries: dbsqlc.New(pool)}
+	return &PostgreSQLRepository{queries: dbsqlc.New(pool), pool: pool}
 }
 
 func (r *PostgreSQLRepository) List(ctx context.Context, tenantID string, filter ListFilter) ([]User, int64, error) {
@@ -74,7 +77,7 @@ func (r *PostgreSQLRepository) Update(ctx context.Context, item User) (User, err
 	if err != nil {
 		return User{}, ErrNotFound
 	}
-	row, err := r.queries.UpdateManagedUser(ctx, dbsqlc.UpdateManagedUserParams{Email: nullableText(item.Email), Phone: nullableText(item.Phone), FullName: nullableText(item.FullName), Avatar: nullableText(item.Avatar), Role: item.Role, Status: item.Status, Preferences: marshalMap(item.Preferences), UserID: userID, TenantID: tenantID})
+	row, err := r.queries.UpdateManagedUser(ctx, dbsqlc.UpdateManagedUserParams{Email: nullableText(item.Email), Phone: nullableText(item.Phone), FullName: nullableText(item.FullName), Role: item.Role, Status: item.Status, Preferences: marshalMap(item.Preferences), UserID: userID, TenantID: tenantID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return User{}, ErrNotFound
@@ -92,7 +95,8 @@ func (r *PostgreSQLRepository) UpdatePassword(ctx context.Context, tenantID, use
 	if _, err := r.queries.GetManagedUser(ctx, dbsqlc.GetManagedUserParams{UserID: userUUID, TenantID: tenantUUID}); err != nil {
 		return ErrNotFound
 	}
-	return r.queries.UpdateAuthUserPassword(ctx, dbsqlc.UpdateAuthUserPasswordParams{PasswordHash: passwordHash, UserID: userUUID})
+	_, err = r.pool.Exec(ctx, `UPDATE users SET password_hash=$3,must_change_password=true,credential_version=credential_version+1,password_changed_at=now(),updated_at=now() WHERE id=$1 AND tenant_id=$2`, userUUID, tenantUUID, passwordHash)
+	return err
 }
 
 func (r *PostgreSQLRepository) Delete(ctx context.Context, tenantID, userID string) error {

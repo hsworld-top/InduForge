@@ -1,13 +1,20 @@
 package tenant
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	_ "golang.org/x/image/webp"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/indu-forge/dev_core/internal/auth"
 	"github.com/indu-forge/dev_core/internal/objectstore"
@@ -20,6 +27,10 @@ var (
 )
 
 type Tenant struct {
+	Initialized              bool
+	IsDefault                bool
+	AdminUsername            string
+	AdminUserID              string
 	ID                       string
 	Name                     string
 	Code                     string
@@ -48,6 +59,8 @@ type Tenant struct {
 }
 
 type Input struct {
+	AdminUsername            *string
+	AdminPassword            *string
 	Name                     *string
 	Code                     *string
 	Description              *string
@@ -110,25 +123,13 @@ type UploadedAsset struct {
 	URL       string
 }
 
-type ServiceConfig struct {
-	DefaultAdminUsername string
-	DefaultAdminPassword string
-}
-
 type Service struct {
 	repository Repository
 	objects    ObjectStore
-	config     ServiceConfig
 }
 
-func NewService(repository Repository, objects ObjectStore, config ServiceConfig) *Service {
-	if config.DefaultAdminUsername == "" {
-		config.DefaultAdminUsername = "admin"
-	}
-	if config.DefaultAdminPassword == "" {
-		config.DefaultAdminPassword = "admin123"
-	}
-	return &Service{repository: repository, objects: objects, config: config}
+func NewService(repository Repository, objects ObjectStore) *Service {
+	return &Service{repository: repository, objects: objects}
 }
 
 func (s *Service) List(ctx context.Context, filter ListFilter) ([]Tenant, int64, error) {
@@ -162,11 +163,11 @@ func (s *Service) Create(ctx context.Context, input Input) (Tenant, error) {
 	if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Code) == "" {
 		return Tenant{}, fmt.Errorf("租户名称和编码不能为空")
 	}
-	passwordHash, err := auth.HashPassword(s.config.DefaultAdminPassword)
+	username, passwordHash, err := administratorCredentials(input.AdminUsername, input.AdminPassword)
 	if err != nil {
 		return Tenant{}, err
 	}
-	created, err := s.repository.Create(ctx, item, s.config.DefaultAdminUsername, passwordHash)
+	created, err := s.repository.Create(ctx, item, username, passwordHash)
 	if err != nil {
 		return Tenant{}, err
 	}
@@ -182,6 +183,9 @@ func (s *Service) Update(ctx context.Context, identifier string, input Input) (T
 		return Tenant{}, err
 	}
 	applyInput(&item, input)
+	if err := validateBrandKeys(item); err != nil {
+		return Tenant{}, err
+	}
 	updated, err := s.repository.Update(ctx, item)
 	if err != nil {
 		return Tenant{}, err
@@ -196,6 +200,9 @@ func (s *Service) Delete(ctx context.Context, identifier string) error {
 	item, err := s.repository.Get(ctx, identifier)
 	if err != nil {
 		return err
+	}
+	if item.IsDefault {
+		return fmt.Errorf("默认租户不可删除")
 	}
 	return s.repository.Delete(ctx, item.ID)
 }
@@ -243,8 +250,8 @@ func (s *Service) Upload(ctx context.Context, tenantID, assetType, fileName, con
 	if s.objects == nil {
 		return UploadedAsset{}, fmt.Errorf("对象存储未配置")
 	}
-	if assetType != "logo" && assetType != "background" {
-		return UploadedAsset{}, fmt.Errorf("文件类型仅支持 logo 或 background")
+	if assetType != "logo" && assetType != "background" && assetType != "captcha" {
+		return UploadedAsset{}, fmt.Errorf("文件类型仅支持 logo、background 或 captcha")
 	}
 	if size <= 0 || size > 16<<20 {
 		return UploadedAsset{}, fmt.Errorf("上传文件不能超过 16MB")
@@ -252,37 +259,36 @@ func (s *Service) Upload(ctx context.Context, tenantID, assetType, fileName, con
 	extension := strings.ToLower(filepath.Ext(fileName))
 	allowed := map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml"}
 	expectedType, ok := allowed[extension]
-	if !ok || contentType != expectedType || (assetType == "background" && extension == ".svg") {
+	if !ok || contentType != expectedType || (assetType != "logo" && extension == ".svg") {
 		return UploadedAsset{}, fmt.Errorf("上传文件扩展名或内容类型不受支持")
+	}
+	if assetType == "captcha" {
+		raw, err := io.ReadAll(io.LimitReader(reader, 5<<20+1))
+		if err != nil || len(raw) > 5<<20 {
+			return UploadedAsset{}, fmt.Errorf("验证码背景不能超过 5MB")
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+		if err != nil || cfg.Width < 300 || cfg.Height < 180 || int64(cfg.Width)*int64(cfg.Height) > 16_000_000 {
+			return UploadedAsset{}, fmt.Errorf("验证码背景至少 300×180，且不能超过 1600 万像素")
+		}
+		if _, _, err = image.Decode(bytes.NewReader(raw)); err != nil {
+			return UploadedAsset{}, fmt.Errorf("验证码背景图片无法读取")
+		}
+		reader = bytes.NewReader(raw)
+		size = int64(len(raw))
 	}
 	key := fmt.Sprintf("tenants/%s/%s/%d-%s", tenantID, assetType, time.Now().UnixNano(), sanitizeFileName(fileName))
 	ref, err := s.objects.Put(ctx, key, reader, size, contentType)
 	if err != nil {
 		return UploadedAsset{}, err
 	}
-	url, err := s.objects.PresignGet(ctx, ref.Key, time.Hour)
-	if err != nil {
-		_ = s.objects.Delete(ctx, ref.Key)
-		return UploadedAsset{}, err
-	}
-	return UploadedAsset{ObjectKey: ref.Key, URL: url}, nil
+	return UploadedAsset{ObjectKey: ref.Key}, nil
 }
 
 func (s *Service) hydrateAssets(ctx context.Context, item *Tenant) error {
-	if s.objects == nil {
-		return nil
-	}
-	var err error
-	if item.LogoObjectKey != "" {
-		item.LogoURL, err = s.objects.PresignGet(ctx, item.LogoObjectKey, time.Hour)
-		if err != nil {
-			return err
-		}
-	}
-	if item.LoginBackgroundObjectKey != "" {
-		item.LoginBackgroundURL, err = s.objects.PresignGet(ctx, item.LoginBackgroundObjectKey, time.Hour)
-	}
-	return err
+	item.LogoURL = objectstore.BrandURL(item.Code, item.LogoObjectKey)
+	item.LoginBackgroundURL = objectstore.BrandURL(item.Code, item.LoginBackgroundObjectKey)
+	return nil
 }
 
 func applyInput(item *Tenant, input Input) {
@@ -359,4 +365,70 @@ func sanitizeFileName(value string) string {
 		return "upload.bin"
 	}
 	return value
+}
+
+func administratorCredentials(username, password *string) (string, string, error) {
+	if username == nil || password == nil || strings.TrimSpace(*username) == "" || utf8.RuneCountInString(*password) < 8 {
+		return "", "", fmt.Errorf("管理员账号不能为空，密码至少8位")
+	}
+	name := strings.TrimSpace(*username)
+	if utf8.RuneCountInString(name) > 50 {
+		return "", "", fmt.Errorf("管理员账号不能超过50个字符")
+	}
+	hash, err := auth.HashPassword(*password)
+	return name, hash, err
+}
+func (s *Service) Initialize(ctx context.Context, identifier string, input Input) (Tenant, error) {
+	name, hash, err := administratorCredentials(input.AdminUsername, input.AdminPassword)
+	if err != nil {
+		return Tenant{}, err
+	}
+	repo, ok := s.repository.(interface {
+		Initialize(context.Context, string, string, string) (Tenant, error)
+	})
+	if !ok {
+		return Tenant{}, fmt.Errorf("租户初始化不可用")
+	}
+	return repo.Initialize(ctx, identifier, name, hash)
+}
+func (s *Service) ResetAdminPassword(ctx context.Context, identifier, password string) (Tenant, error) {
+	if utf8.RuneCountInString(password) < 8 {
+		return Tenant{}, fmt.Errorf("管理员密码至少8位")
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return Tenant{}, err
+	}
+	repo, ok := s.repository.(interface {
+		ResetAdminPassword(context.Context, string, string) (Tenant, error)
+	})
+	if !ok {
+		return Tenant{}, fmt.Errorf("租户管理员重置不可用")
+	}
+	return repo.ResetAdminPassword(ctx, identifier, hash)
+}
+
+func validateBrandKeys(item Tenant) error {
+	valid := func(key, kind string) bool {
+		return key == "" || strings.HasPrefix(key, "tenants/"+item.ID+"/"+kind+"/") && !strings.Contains(key, "..")
+	}
+	if !valid(item.LogoObjectKey, "logo") || !valid(item.LoginBackgroundObjectKey, "background") {
+		return fmt.Errorf("品牌图片不属于当前组织")
+	}
+	if raw, ok := item.Settings["captchaBackgrounds"]; ok {
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		var keys []string
+		if json.Unmarshal(data, &keys) != nil || len(keys) > 10 {
+			return fmt.Errorf("验证码背景最多 10 张")
+		}
+		for _, key := range keys {
+			if key == "" || !valid(key, "captcha") {
+				return fmt.Errorf("验证码背景不属于当前组织")
+			}
+		}
+	}
+	return nil
 }

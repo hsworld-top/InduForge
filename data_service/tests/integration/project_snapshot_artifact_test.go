@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 	"github.com/indu-forge/data_service/internal/repository"
@@ -36,7 +35,7 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 		t.Fatalf("bind project tenant failed: %v", err)
 	}
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

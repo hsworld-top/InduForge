@@ -74,6 +74,15 @@ for expected in \
   'path: /var/lib/induforge/center/meta-store'; do
   grep -Fq "$expected" "$temp_dir/rendered.yaml"
 done
+for runtime_image in \
+  'induforge/project-gateway:1.0.2' \
+  'induforge/project-runtime-api:1.0.1' \
+  'induforge/runtime-engine:1.0.32'; do
+  if grep -Fq "$runtime_image" "$SCRIPT_DIR/centerctl"; then
+    echo "center bootstrap must not require on-demand runtime image: $runtime_image" >&2
+    exit 1
+  fi
+done
 if ! grep -A8 -F 'name: center-control' "$temp_dir/rendered.yaml" | grep -Fq 'replicas: 0'; then
   echo "center-control must remain stopped until database bootstrap succeeds" >&2
   exit 1
@@ -302,6 +311,10 @@ case " $* " in
   *) exec /usr/bin/stat "$@" ;;
 esac
 EOF
+cat > "$fake_bin/chown" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
 cat > "$fake_bin/k3s" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$FAKE_K3S_LOG"
@@ -311,10 +324,15 @@ docker.io/induforge/control:1.0.0
 docker.io/induforge/data:1.0.0
 docker.io/induforge/edge:1.0.0
 docker.io/induforge/compute-sandbox:1.0.0
-docker.io/induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64
+docker.io/induforge/project-gateway:1.0.2
+docker.io/induforge/project-runtime-api:1.0.1
+docker.io/induforge/runtime-engine:1.0.32
 docker.io/timescale/timescaledb:2.26.4-pg16
 docker.io/library/redis:7.2-alpine
 docker.io/chrislusf/seaweedfs:3.85
+docker.io/emqx/emqx:5.6.1
+docker.io/library/nats:2.12.8-alpine
+docker.io/library/nginx:1.28-alpine
 docker.io/rancher/mirrored-library-busybox:1.37.0
 IMAGES
   exit 0
@@ -361,7 +379,7 @@ WORKSPACE_PUBLIC_ORIGIN_TEMPLATE' ;;
   *) : ;;
 esac
 EOF
-chmod +x "$fake_bin/id" "$fake_bin/docker" "$fake_bin/openssl" "$fake_bin/stat" "$fake_bin/k3s"
+chmod +x "$fake_bin/id" "$fake_bin/docker" "$fake_bin/openssl" "$fake_bin/stat" "$fake_bin/chown" "$fake_bin/k3s"
 
 run_fake_apply() {
   deployment_exists=$1
@@ -370,14 +388,18 @@ run_fake_apply() {
   set_env_failure=${4:-0}
   legacy_control_env=${5-__default__}
   : > "$log_file"
+  printf 'K10test::server:test-token\n' > "$temp_dir/k3s-token"
   PATH="$fake_bin:$PATH" \
   FAKE_K3S_LOG="$log_file" \
   FAKE_DEPLOYMENT_EXISTS="$deployment_exists" \
   FAKE_BOOTSTRAP_JOB_STATE="$bootstrap_job_state" \
   FAKE_LEGACY_CONTROL_ENV="$legacy_control_env" \
   FAKE_SET_ENV_FAILURE="$set_env_failure" \
+  IF_CENTER_IMAGE_SERVICE_INSTALLER=/usr/bin/true \
   IF_CENTER_CONFIG_FILE="$temp_dir/center-k3s.conf" \
   IF_CENTER_K3S_BIN="$fake_bin/k3s" \
+  IF_CENTER_KUBECONFIG="$temp_dir/custom.kubeconfig" \
+  IF_CENTER_K3S_TOKEN_FILE="$temp_dir/k3s-token" \
   IF_CENTER_NODE_NAME=if-center-01 \
   IF_CENTER_CONTROL_IMAGE=induforge/control:1.0.0 \
   IF_CENTER_DATA_IMAGE=induforge/data:1.0.0 \
@@ -389,6 +411,14 @@ run_fake_apply() {
 
 upgrade_log="$temp_dir/upgrade.log"
 run_fake_apply 1 "$upgrade_log"
+if ! grep -Fxq "IF_CENTER_KUBECONFIG=$temp_dir/custom.kubeconfig" "$temp_dir/center-k3s.conf"; then
+  echo "center apply must persist the resolved kubeconfig path" >&2
+  exit 1
+fi
+if ! grep -Fxq "K3S_TOKEN_FILE=$temp_dir/k3s-token" "$temp_dir/center-k3s.conf"; then
+  echo "center apply must persist the K3s token file path"
+  exit 1
+fi
 stop_line=$(grep -n 'scale deployment/center-control --replicas=0' "$upgrade_log" | cut -d: -f1)
 stop_wait_line=$(grep -n 'rollout status deployment/center-control --timeout=180s' "$upgrade_log" | head -n 1 | cut -d: -f1)
 clear_line=$(grep -n 'set env deployment/center-control --containers=control CODE_WORKSPACE_ALLOWED_ORIGINS- CENTER_PUBLIC_ORIGIN- WORKSPACE_PUBLIC_ORIGIN_TEMPLATE-' "$upgrade_log" | cut -d: -f1)

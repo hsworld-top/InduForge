@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,16 @@ type hostNodeAddressLoaderFunc func(context.Context, []string) (map[string]strin
 
 func (f hostNodeAddressLoaderFunc) LoadHostNodeAddresses(ctx context.Context, ids []string) (map[string]string, error) {
 	return f(ctx, ids)
+}
+
+type builtInHostNodeLoader struct{}
+
+func (builtInHostNodeLoader) LoadHostNodeAddresses(context.Context, []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (builtInHostNodeLoader) LoadHostNodeSchedulingTargets(context.Context, []string) (map[string]HostNodeSchedulingTarget, error) {
+	return map[string]HostNodeSchedulingTarget{testNodeID: {NodeSource: "built_in", Hostname: "center-01", IPAddress: "10.0.0.129"}}, nil
 }
 
 func TestProjectReleaseDigestUsesCanonicalSHA256(t *testing.T) {
@@ -91,6 +102,76 @@ func TestKubernetesProjectReconcilerLabelsHistoricalK3sNodeByInternalIP(t *testi
 	}))
 	if err := r.EnsureHostNodeLabels(context.Background(), []string{testNodeID}); err != nil || patches != 1 {
 		t.Fatalf("historical node name must be labelled by IP: err=%v patches=%d", err, patches)
+	}
+}
+
+func TestKubernetesProjectReconcilerAcceptsBuiltInNodeWithoutTenantSpecificLabel(t *testing.T) {
+	patches := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			patches++
+		}
+		_, _ = w.Write([]byte(`{"items":[{"metadata":{"name":"center-01","labels":{"induforge.io/center-node":"true"}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.129"}],"conditions":[{"type":"Ready","status":"True"}]}}]}`))
+	}))
+	defer server.Close()
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	reconciler.SetHostNodeAddressLoader(builtInHostNodeLoader{})
+	if err := reconciler.EnsureHostNodeLabels(context.Background(), []string{testNodeID}); err != nil {
+		t.Fatal(err)
+	}
+	if patches != 0 {
+		t.Fatal("中心内置节点不得写入租户专属节点标签")
+	}
+}
+
+func TestKubernetesProjectReconcilerCollectsBuiltInNodeResources(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/apis/metrics.k8s.io/v1beta1/nodes":
+			_, _ = w.Write([]byte(`{"items":[{"metadata":{"name":"center-01"},"usage":{"cpu":"500m","memory":"1Gi"}}]}`))
+		case "/api/v1/nodes/center-01/proxy/stats/summary":
+			_, _ = w.Write([]byte(`{"node":{"fs":{"capacityBytes":1000,"usedBytes":875}}}`))
+		default:
+			t.Fatalf("unexpected request %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	nodes := []KubernetesNode{{
+		Name: "center-01", Labels: map[string]string{"induforge.io/center-node": "true"},
+		CPUCapacity: "2", MemoryCapacity: "4Gi", OSImage: "Ubuntu 24.04.4 LTS", KernelVersion: "6.8.0",
+	}}
+	reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test", centerDataPath: "/var/lib/induframe/center"}
+	if err := reconciler.CollectNodeResourceSummaries(context.Background(), nodes); err != nil {
+		t.Fatal(err)
+	}
+	for key, expected := range map[string]float64{"cpu": 25, "memory": 25, "disk": 87.5} {
+		resource, ok := nodes[0].ResourceSummary[key].(map[string]any)
+		if !ok || resource["usedPercent"] != expected {
+			t.Fatalf("%s resource summary=%#v", key, nodes[0].ResourceSummary[key])
+		}
+	}
+	if cpu := nodes[0].ResourceSummary["cpu"].(map[string]any); cpu["count"] != float64(2) {
+		t.Fatalf("center cpu summary=%#v", cpu)
+	}
+	system := nodes[0].ResourceSummary["system"].(map[string]any)
+	if system["distribution"] != "Ubuntu 24.04.4 LTS" || system["dataPath"] != "/var/lib/induframe/center" {
+		t.Fatalf("center system summary=%#v", system)
+	}
+}
+
+func TestKubernetesQuantityParsing(t *testing.T) {
+	for input, expected := range map[string]float64{"250000000n": 0.25, "750m": 0.75, "2": 2} {
+		actual, ok := parseCPUQuantity(input)
+		if !ok || actual != expected {
+			t.Fatalf("parseCPUQuantity(%q)=(%v,%v), want %v", input, actual, ok, expected)
+		}
+	}
+	for input, expected := range map[string]float64{"1Ki": 1024, "2Mi": 2 << 20, "3G": 3e9} {
+		actual, ok := parseByteQuantity(input)
+		if !ok || actual != expected {
+			t.Fatalf("parseByteQuantity(%q)=(%v,%v), want %v", input, actual, ok, expected)
+		}
 	}
 }
 
@@ -288,5 +369,44 @@ func TestKubernetesProjectReconcilerStatusReportsRepeatedProbeRestart(t *testing
 	status, err := reconciler.Status(context.Background(), ProjectWorkload{EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", Engine: ServiceBase})
 	if err != nil || !status.Failed || !strings.Contains(status.Message, "runtime-api") {
 		t.Fatalf("repeated restart status=%+v err=%v", status, err)
+	}
+}
+
+func TestCurrentNodeIdentityWinsOverStaleIPRecords(t *testing.T) {
+	patches := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/v1/nodes":
+			_, _ = w.Write([]byte(`{"items":[{"metadata":{"name":"old-node"},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.129"}]}},{"metadata":{"name":"if-333333333333","labels":{}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.129"}],"conditions":[{"type":"Ready","status":"True"}]}}]}`))
+		case "PATCH /api/v1/nodes/if-333333333333":
+			patches++
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	r := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL, token: "test"}
+	r.SetHostNodeAddressLoader(hostNodeAddressLoaderFunc(func(context.Context, []string) (map[string]string, error) {
+		return map[string]string{testNodeID: "10.0.0.129"}, nil
+	}))
+	if err := r.EnsureHostNodeLabels(context.Background(), []string{testNodeID}); err != nil || patches != 1 {
+		t.Fatalf("historical node name must be labelled by IP: err=%v patches=%d", err, patches)
+	}
+}
+
+func TestProjectPodImageFailure(t *testing.T) {
+	for _, field := range []string{"initContainerStatuses", "containerStatuses"} {
+		t.Run(field, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"items":[{"status":{"%s":[{"name":"engine","state":{"waiting":{"reason":"ImagePullBackOff"}}}]}}]}`, field)
+			}))
+			defer server.Close()
+			reconciler := &KubernetesProjectReconciler{client: server.Client(), endpoint: server.URL}
+			status, err := reconciler.projectPodFailure(context.Background(), "test", "test")
+			if err != nil || !status.Failed || !strings.Contains(status.Message, "ImagePullBackOff") {
+				t.Fatalf("status=%+v err=%v", status, err)
+			}
+		})
 	}
 }

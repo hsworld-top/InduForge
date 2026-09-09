@@ -141,3 +141,43 @@ func TestNodeListsReleaseRowsBeforeBatchAndUseStableOrdering(t *testing.T) {
 		})
 	}
 }
+
+func TestRemovedNodesExcludedFromListCountAndMetrics(t *testing.T) {
+	source, err := os.ReadFile("repository.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	start := strings.Index(text, "func (r *PostgreSQLRepository) ListNodes(")
+	end := strings.Index(text[start:], "// LoadHostNodeAddresses")
+	if end < 0 {
+		t.Fatal("missing query boundary")
+	}
+	queries := text[start : start+end]
+	for _, filter := range []string{"n.desired_status<>'revoked'", "desired_status<>'revoked' AND ($2=", "desired_status<>'revoked' AND id=ANY"} {
+		if !strings.Contains(queries, filter) {
+			t.Fatalf("removed node filter missing: %s", filter)
+		}
+	}
+}
+
+func TestRemoveNodeOnlyRevokesRegistration(t *testing.T) {
+	source, err := os.ReadFile("repository.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	start := strings.Index(text, "func (r *PostgreSQLRepository) RemoveNode(")
+	end := strings.Index(text[start:], "func (r *PostgreSQLRepository) Heartbeat")
+	body := text[start : start+end]
+	for _, bad := range []string{"desired_action='removing'", "ErrNodeOfflineForRemoval", "lastHeartbeat"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("deregistration must not schedule uninstall or depend on online status: %s", bad)
+		}
+	}
+	for _, required := range []string{"ErrCenterNodeProtected", "ErrNodeEnvironmentInUse", "ErrNodeDeploymentInUse", "agent_token_hash='revoked:'"} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("missing guard: %s", required)
+		}
+	}
+}

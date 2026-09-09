@@ -95,7 +95,16 @@
 | `POST` | `/api/v1/auth/logout`   | 注销、撤销会话并清除 Cookie     |
 | `PUT`  | `/api/v1/auth/password` | 当前用户修改密码                |
 | `GET`  | `/api/v1/auth/me`       | 获取当前用户信息                |
+| `PUT`  | `/api/v1/auth/me`       | 更新本人姓名与联系邮箱          |
+| `POST` | `/api/v1/auth/me/avatar` | 上传并替换本人头像 |
+| `GET` | `/api/v1/auth/me/avatar` | 通过本人会话读取头像图片流 |
+| `DELETE` | `/api/v1/auth/me/avatar` | 清除本人头像并恢复姓名图标 |
 | `GET`  | `/api/v1/auth/config`   | 获取登录页和应用配置            |
+
+`PUT /api/v1/auth/me` 仅接受 `fullName`（最多 100 字符）与 `email`（最多 254 字符）两个必传字段，首尾空白会移除，空串或 `null` 清除对应可选资料；非空邮箱必须为纯邮箱地址。拒绝其他字段，不能修改账号、角色、租户或指定其他用户。平台管理员与租户用户均只更新会话本人，返回与 GET me 一致的用户对象；无认证返回现有认证错误，字段非法返回 `20001`。
+
+头像上传仅接收 multipart `file`，限 PNG/JPEG/WebP、5MB、1600 万像素；实际解码后居中裁剪并重编码为 256×256 PNG。沿用 `users.avatar` 保存对象键，无数据库结构变更。对象按用户隔离，更新成功后清理被替换的头像，数据库写入失败则清理新对象。上传响应、登录和 GET me 均返回 `avatarUrl`；图片通过同源认证读取，禁用缓存，不暴露存储服务地址。未认证、初始密码未修改和跨账号访问沿用现有认证约束；非法图片使用 `20001`。
+
 
 浏览器调用认证接口时由同源 `HttpOnly` Cookie 承载会话，响应体不返回访问令牌或刷新令牌；浏览器前端不得保存 JWT。
 
@@ -197,6 +206,11 @@
 
 ### 4.4 用户模块 `/api/v1/users`
 
+仅管理员（`SYSTEM_ADMIN`）可管理当前组织用户。可分配角色为管理员（`SYSTEM_ADMIN`）、工程人员（`PROJECT_ADMIN`）、运维人员（`OPS_ADMIN`）；平台管理员使用独立组织管理入口。
+
+创建仅必填 `username/password/role`。`fullName/email/phone/gender/attributes` 为选填高级资料；`attributes` 是自定义文本键值，最多 20 项，键最长 50 字符、值最长 500 字符，名称忽略大小写不重复且不能使用账号或权限字段名。扩展属性不参与鉴权。编辑不传字段保留，空字符串或空属性对象清空；用户名不可修改，不能修改自己的角色、状态。新建和重置允许非空简单临时密码，并标记首次登录强制改密。用户改密至少 8 个字符且不同于旧密码，不要求大小写、数字或特殊字符组合；Argon2id 无 72 字节限制。用户名仅允许 3–50 个文字、数字、下划线、短横线和点。列表返回同名高级资料字段，不返回原始界面偏好。
+
+
 | 方法     | 路径                         | 功能概要               |
 | -------- | ---------------------------- | ---------------------- |
 | `GET`    | `/api/v1/users`              | 获取用户列表           |
@@ -260,6 +274,7 @@
 | `GET`    | `/api/v1/ops/node-enrollments`                              | 分页查询节点接入申请         |
 | `POST`   | `/api/v1/ops/node-enrollments`                              | 创建一次性节点接入码         |
 | `GET`    | `/api/v1/ops/nodes`                                         | 分页查询物理节点及环境归属   |
+| `GET`    | `/api/v1/ops/nodes/metrics`                                 | 批量查询可见节点实时指标     |
 | `GET`    | `/api/v1/ops/runtime-environments`                          | 分页查询运行环境             |
 | `POST`   | `/api/v1/ops/runtime-environments`                          | 仅按名称创建运行环境         |
 | `GET`    | `/api/v1/ops/runtime-environments/:id`                      | 查询环境聚合状态             |
@@ -818,3 +833,42 @@ TDengine 使用结构化 `ws/wss` 配置和独立只读运行时，支持真实�
 2. 若是 `2xx`，再判断 `code === 0`
 3. 若 `code !== 0`，直接使用 `msg` 作为业务提示，并可按 `code` 做细分处理
 4. 日志、埋点、排障统一记录 `reqId`
+
+### 平台安装与租户初始化认证契约
+
+当前基线将平台与租户账户分开：`SUPER_ADMIN` 的 `tenant_id` 为空，仅负责租户管理；`SYSTEM_ADMIN` 属于单个租户，管理该租户内资源。平台登录显式传 `platform: true`，不接受 `tenantCode`；租户登录必须传 `tenantCode`，不查找平台账户。相同用户名可存在于不同范围。
+
+空库安装仅配置 `SUPER_ADMIN_USERNAME`、`SUPER_ADMIN_PASSWORD`（至少 8 位），创建待初始化的默认 InduFrame 租户和必须改密的平台账户，不创建租户管理员或自动示例工程。示例模板仍保留，租户初始化后可正常创建工程。平台入口建议仅在内网访问；当前仅提示，不实施网络 ACL。
+
+- `GET /api/v1/auth/tenants?page=1&limit=20&keyword=` 公开返回可登录（启用、已初始化、未过期）租户，`data.list` 仅含 `id/code/name/logoUrl/loginBackgroundUrl`，分页为 `total/pages/page/limit`。
+- `GET /api/v1/auth/config?platform=true` 返回 InduFrame 平台品牌，不读取租户品牌。
+- `POST /api/v1/auth/login` 增加 `platform`、`rememberMe`，默认均为 false。记住我仅决定 Cookie 持久性；刷新轮换保留此选择，浏览器不保存密码。
+- 登录 `data.user` 和 `GET /api/v1/auth/me` 的 `data` 直接用户对象均包含 `mustChangePassword/platform`。必须改密期间只允许 me、password、logout、refresh；其他受保护接口返回权限错误 `11001`。
+- `PUT /api/v1/auth/password` 使用 `oldPassword/newPassword`，新密码至少 8 位且不能与旧密码相同。成功清除 Cookie，递增凭证版本并撤销刷新凭证，旧 access token 即时失效，需重新登录。
+- `POST /api/v1/tenants` 必须显式提交 `adminUsername/adminPassword`，事务创建租户及其 SYSTEM_ADMIN，成功即 `initialized=true`。
+- `POST /api/v1/tenants/{id或code}/initialize` 使用相同管理员字段。行锁串行化初始化，重复成功请求不覆盖已有管理员或密码。
+- `POST /api/v1/tenants/{id或code}/reset-admin-password` 使用 `adminPassword`，事务重置该租户主管理员、强制改密并撤销旧凭证。两种操作均仅允许已完成改密的 SUPER_ADMIN。
+- 租户响应新增 `initialized/isDefault/adminUsername`；管理员用户名 trim 后非空且最多 50 个 Unicode 字符，密码不裁剪且至少 8 个 Unicode 字符，使用 Argon2id，不采用 bcrypt 的 72 字节限制。默认租户不可删除；暂停租户不影响独立平台账户登录。主管理员不能经租户用户接口删除、降级或停用。
+
+一次密码失败后必须验证拼图。`GET /api/v1/auth/captcha` 查询 `username/tenantCode/platform`，返回 `challengeId,image,thumb,width,height,thumbWidth,thumbHeight,thumbX,thumbY,expireSeconds`；image/ thumb 为本地生成图片的 data URI，thumbX 为初始位置，thumbY 固定。登录提交 `sliderChallengeId/sliderOffset`，offset 是组件 point.x 目标坐标，不是拖动距离。目标 X 仅存服务端缓存，挑战绑定账户、租户、平台范围和 IP，并一次消费；过期、错误或重放均不能跳过验证。
+
+组织初始化成功时，同一事务创建管理员、默认环境（`code=default-runtime`、`isDefault=true`）以及与默认环境关联的中心内置节点；不自动部署基础服务或工程。组织创建入口遵循相同规则，初始化重试不重复创建。外部节点审批后由运维人员显式关联环境，不通过列表读取或服务启动自动补库。
+
+组织创建或首次初始化时，同一事务创建一份名称为“工程模板”的独立工程外壳（组织内共享、随机工程 ID），保留空工作空间，不初始化示例页面、数据、报警、运行用户或部署。用户删除后不会由登录或启动自动补回。`POST /api/v1/projects` 可使用 `template=demo-shell` 显式创建该外壳，组织内模板编码唯一，不能重复创建。
+
+### Studio 工程公开状态与基本详情
+
+同组织的管理员、工程人员和运维人员可查询全部工程的基本资料。`visibility=private` 表示前端仅允许创建者和管理员操作，其他人员仅能查看详情；`visibility=internal` 在界面显示“公开”，允许组织内工程人员和运维人员协作。删除和切换公开状态仍由创建者或管理员执行，不影响工程运行用户的登录权限。运维人员具备工程人员的全部工程能力，并额外管理运维体系。
+
+工程列表返回 `createdByName`、`updatedBy` 和 `updatedByName`，用于基本详情署名；没有修改记录时修改者为空，前端显示占位符。署名使用同组织用户的账号名称，按当前页批量读取。
+
+### 工程总览筛选与分页
+
+`GET /api/v1/projects` 由后端执行搜索、筛选、排序及分页；列表与总数使用相同筛选条件。`visibility`、`tagId`、`runtimeMode`、`deployStatus` 支持重复参数或 `key[]` 多选，同一维度任一值命中即可，不同维度同时满足。`deployStatus=not_deployed` 匹配没有有效部署的工程；运行模式筛选不把未部署工程视为开发模式。`createdBy` 为创建者 ID。`sortBy` 支持 `createdAt`、`updatedAt`、`lastDeployedAt`、`runtimeStatus`，`sortOrder` 为 `ASC` 或 `DESC`，空值置后并以工程 ID 稳定排序。
+
+`groupId=ungrouped` 用于默认目录中未分组工程的分页；明确分组 ID 查询该分组。搜索或筛选时省略目录限制可查询组织内匹配工程，前端不再从当前页剔除已分组工程。
+
+### Studio 工程入口操作记录
+
+`POST /api/v1/studio-entry`：组织用户进入工程开发工作区或数据中心时，由 Studio 上报一次。
+请求体为 `{"projectId":"工程 UUID","target":"workspace 或 datacenter"}`；需要当前用户会话，仅允许记录本组织存在的工程。名称由服务端查询，不接受客户端自定义日志正文。响应遵守统一包络，成功数据为 `{"recorded":true}`。该接口不采集工作区、数据中心内部编辑行为，也不读取密码或业务内容。

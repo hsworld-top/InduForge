@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: InduForge Control Plane API
+  title: InduFrame Control Plane API
   version: 0.1.0
   description: dev_core 面向 dev_ide 的控制面契约。
 servers:
@@ -16,11 +16,91 @@ tags:
   - name: auditLog
   - name: scene
 paths:
+  /tenants/{tenantId}/reset-admin-password:
+    post:
+      x-client: studio
+      operationId: resetTenantAdminPassword
+      tags: [tenant]
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adminPassword]
+              properties:
+                adminUsername: { type: string, minLength: 1, maxLength: 50 }
+                adminPassword: { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/{tenantId}/initialize:
+    post:
+      x-client: studio
+      operationId: initializeTenant
+      tags: [tenant]
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adminUsername, adminPassword]
+              properties:
+                adminUsername: { type: string, minLength: 1, maxLength: 50 }
+                adminPassword: { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/tenants:
+    get:
+      x-client: studio
+      operationId: listAuthTenants
+      tags: [auth]
+      parameters:
+        - in: query
+          name: code
+          description: 精确租户编码，仅返回可登录租户，至多一项；独立于keyword模糊搜索。
+          schema: { type: string }
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
   /auth/captcha:
     get:
       operationId: getAuthCaptcha
       tags: [auth]
-      summary: 获取登录滑块挑战（拖至最右侧）
+      summary: 获取一次性拼图挑战（目标X仅存服务端）
       parameters:
         - in: query
           name: username
@@ -30,13 +110,17 @@ paths:
           name: tenantCode
           required: false
           schema: { type: string }
+        - in: query
+          name: platform
+          required: false
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: 成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiResponse'
+                $ref: '#/components/schemas/CaptchaResponse'
         default:
           description: 失败
           content:
@@ -47,7 +131,8 @@ paths:
     get:
       operationId: getAuthConfig
       tags: [auth]
-      summary: getAuthConfig
+      summary: 获取登录配置或组织品牌图片
+      description: 指定 asset 时返回当前组织上传的品牌图片二进制；省略时返回登录配置。
       responses:
         '200':
           description: 成功
@@ -127,7 +212,108 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+  /auth/me/avatar:
+    delete:
+      operationId: deleteCurrentUserAvatar
+      tags: [auth]
+      summary: 恢复当前账号的默认头像
+      responses:
+        '200':
+          description: 当前用户资料，avatarUrl 为空
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: uploadCurrentUserAvatar
+      tags: [auth]
+      summary: 上传当前账号头像
+      description: 仅允许本人；PNG、JPEG 或 WebP，不超过 5MB、1600 万像素；服务端居中裁剪为 256×256 PNG，使用既有 users.avatar 保存对象键。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 当前用户资料，含 avatarUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    get:
+      operationId: getCurrentUserAvatar
+      tags: [auth]
+      summary: 读取当前账号头像
+      description: 通过同源会话读取本人头像，不公开对象存储地址；成功为图片流，失败使用统一 JSON 包络。
+      responses:
+        '200':
+          description: 当前用户头像
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
   /auth/me:
+    put:
+      operationId: updateCurrentAuthUser
+      tags: [auth]
+      summary: 更新当前用户个人资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fullName, email]
+              properties:
+                fullName:
+                  type: string
+                  nullable: true
+                  maxLength: 100
+                email:
+                  type: string
+                  nullable: true
+                  maxLength: 254
+                  description: 联系邮箱，非空时必须为纯邮箱地址；空串或 null 清除
+      responses:
+        '200':
+          description: 当前用户信息，与 GET /auth/me 一致
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
     get:
       operationId: getCurrentAuthUser
       tags: [auth]
@@ -450,7 +636,8 @@ paths:
     post:
       operationId: uploadTenantAsset
       tags: [tenant]
-      summary: uploadTenantAsset
+      summary: 上传组织品牌图片
+      description: type 支持 logo、background、captcha。返回 fileUrl 和 objectKey；通过组织更新接口保存 logoObjectKey、loginBackgroundObjectKey 或 settings.captchaBackgrounds 后生效。验证码背景最多 10 张，单张不超过 5MB，至少 300×180，最多 1600 万像素。
       parameters:
         - name: tenantId
           in: path
@@ -1085,6 +1272,7 @@ paths:
       operationId: listRuntimeUsers
       tags: [runtimeAccess]
       summary: listRuntimeUsers
+      description: 支持 keyword 搜索、page（默认 1）、limit（默认 10，上限 100）。data 返回 list 和 pagination（page、limit、total）。
       parameters:
         - name: projectId
           in: path
@@ -1272,6 +1460,7 @@ paths:
       operationId: listRuntimeRoles
       tags: [runtimeAccess]
       summary: listRuntimeRoles
+      description: 支持 keyword 搜索、page（默认 1）、limit（默认 10，上限 100）。data 返回 list 和 pagination（page、limit、total）。
       parameters:
         - name: projectId
           in: path
@@ -2829,11 +3018,33 @@ paths:
         {
           '200':
             {
-              description: success,
+              description: "成功；data 包含 enrollment、一次性 code 和 nodeConnectionUrl（未配置时为空，不得由浏览器地址推断）",
               content:
                 { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
             },
         }
+  /ops/agent/enrollments/validate:
+    post:
+      operationId: validateNodeEnrollment
+      tags: [ops]
+      description: 只读校验接入码状态、平台和所需能力，不消耗接入码或创建节点。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, platform, capabilities]
+              properties:
+                code: {type: string}
+                platform: {type: string}
+                capabilities: {type: array, items: {type: string}}
+      responses:
+        '200':
+          description: data.valid 为 true 表示预检查通过，正式注册仍需原子验证。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiResponse'}
   /ops/node-enrollments/{id}:
     get:
       operationId: getNodeEnrollment
@@ -2850,25 +3061,9 @@ paths:
                 { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
             },
         }
-  /ops/node-enrollments/{id}/approve:
+  /ops/node-enrollments/{id}/revoke:
     post:
-      operationId: approveNodeEnrollment
-      tags: [ops]
-      x-client: dev_ide
-      security: [{ bearerAuth: [] }]
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses:
-        {
-          '200':
-            {
-              description: success,
-              content:
-                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
-            },
-        }
-  /ops/node-enrollments/{id}/reject:
-    post:
-      operationId: rejectNodeEnrollment
+      operationId: revokeNodeEnrollment
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -2885,6 +3080,7 @@ paths:
   /ops/nodes:
     get:
       operationId: listOpsNodes
+      description: 返回组织可用的全部节点。中心安装自带的节点返回 nodeSource=built_in、builtIn=true，无接入记录和 Agent 凭据；外部节点返回 nodeSource=agent。两类节点都可由运维人员决定是否承载基础服务或工程。
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -2895,6 +3091,29 @@ paths:
           { $ref: '#/components/parameters/OpsSearch' },
           { $ref: '#/components/parameters/OpsKeyword' },
         ]
+      responses:
+        {
+          '200':
+            {
+              description: success,
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } },
+            },
+        }
+  /ops/nodes/metrics:
+    get:
+      operationId: listOpsNodeMetrics
+      summary: 批量读取节点实时指标投影
+      description: 最多读取当前组织内 100 个节点的在线状态、资源摘要和最后上报时间，供实时通知后局部更新当前可见列表；不返回节点配置、工程关联或凭据。
+      tags: [ops]
+      x-client: dev_ide
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: 逗号分隔的节点 UUID，最多 100 个
+          schema: { type: string, minLength: 36, maxLength: 3699 }
       responses:
         {
           '200':
@@ -2923,7 +3142,7 @@ paths:
     delete:
       operationId: removeOpsNode
       summary: 安全移除工作节点
-      description: 中心节点禁止移除；工作节点必须在线且不再被运行环境或工程使用，完成 K3s Agent 卸载后撤销凭据。
+      description: 中心内置节点禁止移除；外部工作节点必须在线且不再被运行环境或工程使用，完成 K3s Agent 卸载后撤销凭据。
       tags: [ops]
       x-client: dev_ide
       security: [{ bearerAuth: [] }]
@@ -3716,6 +3935,25 @@ components:
       scheme: bearer
       bearerFormat: NodeAgentToken
   schemas:
+    CaptchaResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [challengeId, image, thumb, width, height, thumbWidth, thumbHeight, thumbX, thumbY, expireSeconds]
+              properties:
+                challengeId: { type: string }
+                image: { type: string, description: '完整背景图片 data URI，不包含目标坐标字段' }
+                thumb: { type: string, description: '滑块图片 data URI' }
+                width: { type: integer }
+                height: { type: integer }
+                thumbWidth: { type: integer }
+                thumbHeight: { type: integer }
+                thumbX: { type: integer, description: '初始横坐标，不是答案' }
+                thumbY: { type: integer, description: '固定纵坐标' }
+                expireSeconds: { type: integer }
     LoginRequest:
       type: object
       required: [username, password]
@@ -3725,6 +3963,8 @@ components:
         tenantCode: { type: string }
         sliderChallengeId: { type: string }
         sliderOffset: { type: integer, minimum: 0 }
+        platform: { type: boolean, default: false }
+        rememberMe: { type: boolean, default: false }
     RefreshTokenRequest:
       type: object
       required: [refreshToken]
@@ -3737,15 +3977,20 @@ components:
         newPassword: { type: string, format: password, minLength: 8 }
     TenantCreateRequest:
       type: object
-      required: [name, code]
+      required: [name, code, adminUsername, adminPassword]
       properties:
+        adminUsername: { type: string, minLength: 1, maxLength: 50 }
+        adminPassword: { type: string, format: password, minLength: 8 }
         name: { type: string }
         code: { type: string }
         description: { type: string }
         status: { type: string }
     TenantUpdateRequest:
-      allOf:
-        - $ref: '#/components/schemas/TenantCreateRequest'
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        status: { type: string }
     NoteRequest:
       type: object
       required: [content]
@@ -3753,24 +3998,44 @@ components:
         content: { type: string, maxLength: 2000 }
     UserCreateRequest:
       type: object
+      additionalProperties: false
+      description: 仅组织管理员可创建用户。仅用户名、密码、角色必填，其余为选填高级资料。
       required: [username, password, role]
       properties:
-        username: { type: string }
-        password: { type: string, format: password, minLength: 8 }
-        role: { type: string }
-        status: { type: string }
+        username: { type: string, minLength: 3, maxLength: 50 }
+        password: { type: string, format: password, minLength: 1, description: 非空临时密码；首次登录必须改密，新密码至少8个字符且不同于旧密码，不要求字符组合 }
+        email: { type: string, maxLength: 254 }
+        phone: { type: string, maxLength: 40 }
+        fullName: { type: string, maxLength: 100 }
+        gender: { type: string, enum: ['', male, female, other, undisclosed] }
+        attributes:
+          type: object
+          description: 自定义文本资料，最多20项；名称不重复且不使用账号或权限字段名，不参与鉴权。
+          maxProperties: 20
+          additionalProperties: { type: string, maxLength: 500 }
+        role: { type: string, enum: [SYSTEM_ADMIN, PROJECT_ADMIN, OPS_ADMIN] }
+        status: { type: string, enum: [active, inactive, suspended] }
     UserUpdateRequest:
       type: object
+      additionalProperties: false
+      description: 用户名不可修改；不传字段保留，空字符串或空属性对象清空。不能修改自己的角色或状态。
       properties:
-        email: { type: string }
-        phone: { type: string }
-        fullName: { type: string }
-        role: { type: string }
-        status: { type: string }
+        email: { type: string, maxLength: 254 }
+        phone: { type: string, maxLength: 40 }
+        fullName: { type: string, maxLength: 100 }
+        gender: { type: string, enum: ['', male, female, other, undisclosed] }
+        attributes:
+          type: object
+          description: 自定义文本资料，最多20项；名称不重复且不使用账号或权限字段名，不参与鉴权。
+          maxProperties: 20
+          additionalProperties: { type: string, maxLength: 500 }
+        role: { type: string, enum: [SYSTEM_ADMIN, PROJECT_ADMIN, OPS_ADMIN] }
+        status: { type: string, enum: [active, inactive, suspended] }
     ProjectCreateRequest:
       type: object
       required: [name]
       properties:
+        template: { type: string, enum: [demo-shell], description: 创建组织内独立的工程模板外壳，不初始化内部示例；每组织最多一份 }
         name: { type: string }
         description: { type: string }
     ProjectUpdateRequest:

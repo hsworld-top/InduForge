@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -35,7 +34,7 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 
 	connectionID := insertTestConnection(t, ctx, fixture, projectID, userID)
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -191,7 +190,7 @@ func TestDataPointBatchDelete(t *testing.T) {
 
 	insertTestConnection(t, ctx, fixture, projectID, userID)
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -245,7 +244,7 @@ func TestQueryAndDataPointCRUD(t *testing.T) {
 
 	connectionID := insertTestConnection(t, ctx, fixture, projectID, userID)
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,
@@ -719,7 +718,7 @@ func TestDataPointRuntimePermissionsListAndSave(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "runtime-permission-secret-01"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

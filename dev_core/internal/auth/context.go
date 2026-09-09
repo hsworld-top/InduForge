@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
 	"net/http"
 	"strings"
 )
@@ -51,6 +52,10 @@ func ResolveUser(service *Service) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			if user.MustChangePassword && !passwordChangeRouteAllowed(r.URL.Path) {
+				platformapi.WriteError(w, r, http.StatusForbidden, platformapi.ErrorCodePermissionDenied, "请先修改初始或重置密码")
+				return
+			}
 			next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), user)))
 		})
 	}
@@ -63,4 +68,12 @@ func WithUser(ctx context.Context, user User) context.Context {
 func UserFromContext(ctx context.Context) (User, bool) {
 	user, ok := ctx.Value(userContextKey{}).(User)
 	return user, ok
+}
+
+func passwordChangeRouteAllowed(path string) bool {
+	switch path {
+	case "/api/v1/auth/me", "/api/v1/auth/password", "/api/v1/auth/logout", "/api/v1/auth/refresh":
+		return true
+	}
+	return false
 }

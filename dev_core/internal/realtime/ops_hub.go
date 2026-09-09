@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	maxOpsClients        = 2048
-	maxOpsSubscriptions  = 8
-	maxOpsEntityIDs      = 200
+	maxOpsClients       = 2048
+	maxOpsSubscriptions = 8
+	// 一个租户三秒内可能汇集上千节点的错峰心跳。ID 集合保持有界，但要避免
+	// 千级部署频繁退化为 broad 通知，使只查看当前页的客户端全部回源。
+	maxOpsEntityIDs      = 4096
 	maxOpsPendingTenants = 1024
 	maxOpsWatchRequests  = 12
 	opsAuthExpired       = "AUTH_EXPIRED"
@@ -369,8 +371,16 @@ func (h *opsHub) flush() {
 				continue
 			}
 			allowed := map[string]bool{}
+			matchedIDs := map[string]bool{}
+			unrestricted := false
 			for _, watch := range client.watches {
 				if watchMatches(watch, item) {
+					unrestricted = unrestricted || len(watch.EntityIDs) == 0
+					for _, entityID := range watch.EntityIDs {
+						if item.ids[entityID] {
+							matchedIDs[entityID] = true
+						}
+					}
 					for _, topic := range watch.Topics {
 						if item.topics[topic] {
 							allowed[topic] = true
@@ -383,7 +393,11 @@ func (h *opsHub) flush() {
 			}
 			change := opsChange{Epoch: h.epoch, Sequence: h.sequence, Topics: sortedKeys(allowed), Timestamp: time.Now().UTC().Format(time.RFC3339Nano), Terminal: item.terminal}
 			if !item.broad {
-				change.EntityIDs = sortedKeys(item.ids)
+				if unrestricted {
+					change.EntityIDs = sortedKeys(item.ids)
+				} else {
+					change.EntityIDs = sortedKeys(matchedIDs)
+				}
 			}
 			if !queueOpsPacket(client, opsPacket{"ops:change", change}) {
 				overflow[id] = client

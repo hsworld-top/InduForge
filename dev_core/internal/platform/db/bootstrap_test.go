@@ -1,11 +1,13 @@
 package db
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
 
 	coreschema "github.com/indu-forge/dev_core/db/schema"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestSchemaContainsRequiredControlPlaneTables(t *testing.T) {
@@ -105,5 +107,28 @@ func TestAuthoringRestoreFinalSchemaRequiresCompleteSnapshotMetadata(t *testing.
 		if !strings.Contains(coreschema.CoreSQL, expected) {
 			t.Fatalf("authoring restore final schema missing %q", expected)
 		}
+	}
+}
+
+type missingSchemaColumn struct{ table, column string }
+
+func (m missingSchemaColumn) QueryRow(_ context.Context, _ string, args ...any) pgx.Row {
+	return schemaColumnRow(!(args[0] == m.table && args[1] == m.column))
+}
+
+type schemaColumnRow bool
+
+func (r schemaColumnRow) Scan(dest ...any) error { *dest[0].(*bool) = bool(r); return nil }
+func TestRuntimeSchemaRejectsMissingRequiredColumns(t *testing.T) {
+	for table, columns := range map[string][]string{"tenants": {"initialized", "is_default", "admin_user_id"}, "users": {"must_change_password", "credential_version"}, "refresh_tokens": {"remember_me", "credential_version"}, "host_nodes": {"node_source"}} {
+		for _, column := range columns {
+			err := validateRequiredColumns(context.Background(), missingSchemaColumn{table, column})
+			if err == nil || !strings.Contains(err.Error(), table+"."+column) || !strings.Contains(err.Error(), "重建数据库") {
+				t.Fatalf("missing %s.%s err=%v", table, column, err)
+			}
+		}
+	}
+	if err := validateRequiredColumns(context.Background(), missingSchemaColumn{}); err != nil {
+		t.Fatal(err)
 	}
 }

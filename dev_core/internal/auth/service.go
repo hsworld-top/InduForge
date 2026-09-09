@@ -5,10 +5,16 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/indu-forge/dev_core/internal/objectstore"
+	platformcache "github.com/indu-forge/dev_core/internal/platform/cache"
+	"image"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type ServiceConfig struct {
@@ -24,6 +30,7 @@ type Service struct {
 	tokens      *TokenManager
 	config      ServiceConfig
 	assets      AssetSigner
+	avatars     AvatarStore
 }
 
 type AssetSigner interface {
@@ -31,6 +38,8 @@ type AssetSigner interface {
 }
 
 type LoginInput struct {
+	Platform          bool
+	RememberMe        bool
 	Username          string
 	Password          string
 	TenantCode        string
@@ -42,10 +51,12 @@ type LoginInput struct {
 func (s *Service) SetAssetSigner(signer AssetSigner) { s.assets = signer }
 
 type TokenPair struct {
-	AccessToken  string `json:"accessToken"`
-	Token        string `json:"token"`
-	RefreshToken string `json:"refreshToken"`
-	ExpiresIn    int64  `json:"expiresIn"`
+	RememberMe       bool   `json:"-"`
+	RefreshExpiresIn int64  `json:"-"`
+	AccessToken      string `json:"accessToken"`
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refreshToken"`
+	ExpiresIn        int64  `json:"expiresIn"`
 }
 
 type LoginResult struct {
@@ -55,7 +66,7 @@ type LoginResult struct {
 
 func NewService(repository Repository, cache CaptchaStore, tokens *TokenManager, config ServiceConfig, revocations ...RevocationStore) *Service {
 	if config.AppName == "" {
-		config.AppName = "InduForge"
+		config.AppName = "InduFrame"
 	}
 	if config.CaptchaTTL <= 0 {
 		config.CaptchaTTL = 5 * time.Minute
@@ -77,20 +88,14 @@ func (s *Service) GetActiveUser(ctx context.Context, userID string) (User, error
 	if err != nil {
 		return User{}, err
 	}
-	if user.Status != "active" || user.TenantStatus != "active" {
+	if !loginAllowed(user) || user.MustChangePassword {
 		return User{}, ErrForbidden
 	}
 	return user, nil
 }
 
-const (
-	sliderTrackWidth = 280
-	sliderThumbWidth = 44
-	sliderTolerance  = 5
-)
-
-func (s *Service) Captcha(ctx context.Context, username, tenantCode, loginIP string) (map[string]any, error) {
-	contextKey := loginChallengeContextKey(username, tenantCode, loginIP)
+func (s *Service) Captcha(ctx context.Context, username, tenantCode, loginIP string, platform bool) (map[string]any, error) {
+	contextKey := loginChallengeContextKey(username, tenantCode, loginIP, platform)
 	if _, err := s.cache.Get(ctx, contextKey); err != nil {
 		return nil, ErrInvalidCaptcha
 	}
@@ -99,15 +104,23 @@ func (s *Service) Captcha(ctx context.Context, username, tenantCode, loginIP str
 		return nil, fmt.Errorf("生成滑块挑战标识失败: %w", err)
 	}
 	challengeID := hex.EncodeToString(keyBytes)
-	if err := s.cache.Put(ctx, sliderChallengeCacheKey(challengeID), contextKey, s.config.CaptchaTTL); err != nil {
-		return nil, fmt.Errorf("保存滑块挑战失败: %w", err)
+	var background image.Image
+	if !platform {
+		background = s.captchaBackground(ctx, tenantCode)
 	}
-	return map[string]any{
-		"challengeId":   challengeID,
-		"trackWidth":    sliderTrackWidth,
-		"thumbWidth":    sliderThumbWidth,
-		"expireSeconds": int64(s.config.CaptchaTTL.Seconds()),
-	}, nil
+	result, targetX, err := generatePuzzle(background)
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(puzzleChallenge{Context: contextKey, TargetX: targetX})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.cache.Put(ctx, sliderChallengeCacheKey(challengeID), string(encoded), s.config.CaptchaTTL); err != nil {
+		return nil, fmt.Errorf("保存拼图挑战失败: %w", err)
+	}
+	result["challengeId"], result["expireSeconds"] = challengeID, int64(s.config.CaptchaTTL.Seconds())
+	return result, nil
 }
 
 func (s *Service) Config(ctx context.Context, tenantCode string) map[string]any {
@@ -133,31 +146,36 @@ func (s *Service) Config(ctx context.Context, tenantCode string) map[string]any 
 		return result
 	}
 	result["tenantName"] = branding.Name
-	result["logoUrl"] = s.signAsset(ctx, branding.LogoObjectKey)
-	result["loginBackgroundUrl"] = s.signAsset(ctx, branding.LoginBackgroundObjectKey)
+	result["logoUrl"] = objectstore.BrandURL(branding.Code, branding.LogoObjectKey)
+	result["loginBackgroundUrl"] = objectstore.BrandURL(branding.Code, branding.LoginBackgroundObjectKey)
 	return result
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
 	input.Username = strings.TrimSpace(input.Username)
 	input.TenantCode = strings.TrimSpace(input.TenantCode)
-	if input.Username == "" || input.Password == "" {
+	if input.Username == "" || input.Password == "" || (input.Platform && input.TenantCode != "") {
 		return LoginResult{}, ErrInvalidCredentials
 	}
-	challengeContextKey := loginChallengeContextKey(input.Username, input.TenantCode, input.LoginIP)
-	if _, err := s.cache.Get(ctx, challengeContextKey); err == nil {
+	if !input.Platform && input.TenantCode == "" {
+		return LoginResult{}, ErrTenantRequired
+	}
+	challengeContextKey := loginChallengeContextKey(input.Username, input.TenantCode, input.LoginIP, input.Platform)
+	if _, err := s.cache.Get(ctx, challengeContextKey); err == nil || input.SliderChallengeID != "" {
 		if err := s.verifySliderCaptcha(ctx, challengeContextKey, input.SliderChallengeID, input.SliderOffset); err != nil {
 			return LoginResult{}, err
 		}
+	} else if !errors.Is(err, platformcache.ErrMiss) {
+		return LoginResult{}, ErrInvalidCaptcha
 	}
-	user, err := s.repository.FindLoginUser(ctx, input.Username, input.TenantCode)
+	user, err := s.repository.FindLoginUser(ctx, input.Username, input.TenantCode, input.Platform)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			s.requireSliderCaptcha(ctx, challengeContextKey)
 		}
 		return LoginResult{}, err
 	}
-	if user.Status != "active" || user.TenantStatus != "active" {
+	if !loginAllowed(user) {
 		return LoginResult{}, ErrForbidden
 	}
 	if !VerifyPassword(input.Password, user.PasswordHash) {
@@ -166,7 +184,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	}
 	// 验证状态仅用于限流式人机校验，清理失败不应影响已经通过的凭据登录。
 	_ = s.cache.Delete(ctx, challengeContextKey)
-	pair, refresh, err := s.issueTokenPair(user)
+	pair, refresh, err := s.issueTokenPair(user, input.RememberMe)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -188,10 +206,10 @@ func (s *Service) Refresh(ctx context.Context, rawToken string) (TokenPair, erro
 		return TokenPair{}, ErrInvalidRefresh
 	}
 	user, err := s.repository.GetUser(ctx, oldToken.UserID)
-	if err != nil || user.Status != "active" || user.TenantStatus != "active" {
+	if err != nil || (!loginAllowed(user) || oldToken.CredentialVersion != user.CredentialVersion) {
 		return TokenPair{}, ErrInvalidRefresh
 	}
-	pair, replacement, err := s.issueTokenPair(user)
+	pair, replacement, err := s.issueTokenPair(user, oldToken.RememberMe)
 	if err != nil {
 		return TokenPair{}, err
 	}
@@ -213,7 +231,7 @@ func (s *Service) Authenticate(ctx context.Context, accessToken string) (User, e
 		}
 	}
 	user, err := s.repository.GetUser(ctx, claims.UserID)
-	if err != nil || user.Status != "active" || user.TenantStatus != "active" {
+	if err != nil || (!loginAllowed(user) || claims.CredentialVersion != user.CredentialVersion) {
 		return User{}, ErrUnauthorized
 	}
 	return user, nil
@@ -231,6 +249,9 @@ func (s *Service) AuthenticateSession(ctx context.Context, accessToken string) (
 	actor, err := s.Authenticate(ctx, accessToken)
 	if err != nil {
 		return User{}, time.Time{}, err
+	}
+	if actor.MustChangePassword {
+		return User{}, time.Time{}, ErrForbidden
 	}
 	return actor, claims.ExpiresAt.Time, nil
 }
@@ -257,8 +278,8 @@ func (s *Service) AuthenticatePassword(ctx context.Context, username, password, 
 	if username == "" || password == "" {
 		return User{}, ErrInvalidCredentials
 	}
-	user, err := s.repository.FindLoginUser(ctx, username, tenantCode)
-	if err != nil || user.Status != "active" || user.TenantStatus != "active" || !VerifyPassword(password, user.PasswordHash) {
+	user, err := s.repository.FindLoginUser(ctx, username, tenantCode, false)
+	if err != nil || !loginAllowed(user) || user.MustChangePassword || !VerifyPassword(password, user.PasswordHash) {
 		return User{}, ErrInvalidCredentials
 	}
 	return user, nil
@@ -279,20 +300,20 @@ func (s *Service) ChangePassword(ctx context.Context, user User, oldPassword, ne
 	if !VerifyPassword(oldPassword, user.PasswordHash) {
 		return ErrInvalidCredentials
 	}
-	if len(newPassword) < 8 {
-		return fmt.Errorf("%w: 新密码至少 8 位", ErrInvalidCredentials)
+	if utf8.RuneCountInString(newPassword) < 8 || newPassword == oldPassword {
+		return fmt.Errorf("%w: 新密码至少 8 位且不能与旧密码相同", ErrInvalidCredentials)
 	}
 	hash, err := HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	if err := s.repository.UpdatePassword(ctx, user.ID, hash); err != nil {
+	if err := s.repository.UpdatePassword(ctx, user.ID, hash, user.CredentialVersion); err != nil {
 		return fmt.Errorf("更新密码失败: %w", err)
 	}
 	return s.repository.RevokeUserRefreshTokens(ctx, user.ID)
 }
 
-func (s *Service) issueTokenPair(user User) (TokenPair, RefreshToken, error) {
+func (s *Service) issueTokenPair(user User, rememberMe bool) (TokenPair, RefreshToken, error) {
 	access, expiresAt, err := s.tokens.IssueAccessToken(user)
 	if err != nil {
 		return TokenPair{}, RefreshToken{}, err
@@ -301,7 +322,7 @@ func (s *Service) issueTokenPair(user User) (TokenPair, RefreshToken, error) {
 	if err != nil {
 		return TokenPair{}, RefreshToken{}, err
 	}
-	return TokenPair{AccessToken: access, Token: access, RefreshToken: rawRefresh, ExpiresIn: int64(time.Until(expiresAt).Seconds())}, RefreshToken{TenantID: user.TenantID, UserID: user.ID, Hash: refreshHash, ExpiresAt: refreshExpiresAt}, nil
+	return TokenPair{RememberMe: rememberMe, RefreshExpiresIn: int64(time.Until(refreshExpiresAt).Seconds()), AccessToken: access, Token: access, RefreshToken: rawRefresh, ExpiresIn: int64(time.Until(expiresAt).Seconds())}, RefreshToken{RememberMe: rememberMe, CredentialVersion: user.CredentialVersion, TenantID: user.TenantID, UserID: user.ID, Hash: refreshHash, ExpiresAt: refreshExpiresAt}, nil
 }
 
 func (s *Service) requireSliderCaptcha(ctx context.Context, contextKey string) {
@@ -310,21 +331,21 @@ func (s *Service) requireSliderCaptcha(ctx context.Context, contextKey string) {
 }
 
 func (s *Service) verifySliderCaptcha(ctx context.Context, contextKey, challengeID string, offset int) error {
-	if strings.TrimSpace(challengeID) == "" || offset < 0 || offset > sliderTrackWidth-sliderThumbWidth {
+	if strings.TrimSpace(challengeID) == "" {
 		return ErrInvalidCaptcha
 	}
-	challengeContextKey, err := s.cache.Take(ctx, sliderChallengeCacheKey(strings.TrimSpace(challengeID)))
+	encoded, err := s.cache.Take(ctx, sliderChallengeCacheKey(strings.TrimSpace(challengeID)))
 	if err != nil {
 		return ErrInvalidCaptcha
 	}
-	if challengeContextKey != contextKey || offset < sliderTrackWidth-sliderThumbWidth-sliderTolerance {
+	var challenge puzzleChallenge
+	if json.Unmarshal([]byte(encoded), &challenge) != nil || challenge.Context != contextKey || offset < 0 || offset > captchaWidth || offset < challenge.TargetX-5 || offset > challenge.TargetX+5 {
 		return ErrInvalidCaptcha
 	}
 	return nil
 }
-
-func loginChallengeContextKey(username, tenantCode, loginIP string) string {
-	value := strings.Join([]string{strings.TrimSpace(username), strings.TrimSpace(tenantCode), strings.TrimSpace(loginIP)}, "\n")
+func loginChallengeContextKey(username, tenantCode, loginIP string, platform bool) string {
+	value := strings.Join([]string{strings.TrimSpace(username), strings.TrimSpace(tenantCode), strconv.FormatBool(platform), strings.TrimSpace(loginIP)}, "\n")
 	sum := sha256.Sum256([]byte(value))
 	return "login-challenge:" + hex.EncodeToString(sum[:])
 }
@@ -332,11 +353,16 @@ func loginChallengeContextKey(username, tenantCode, loginIP string) string {
 func sliderChallengeCacheKey(challengeID string) string { return "slider-challenge:" + challengeID }
 
 func publicUser(user User) map[string]any {
-	return map[string]any{
+	result := map[string]any{
+		"mustChangePassword": user.MustChangePassword, "platform": user.Role == "SUPER_ADMIN",
 		"id": user.ID, "tenantId": user.TenantID, "username": user.Username,
-		"email": user.Email, "fullName": user.FullName, "role": user.Role,
+		"email": user.Email, "fullName": user.FullName, "role": user.Role, "avatarUrl": avatarURL(user),
 		"tenant": map[string]any{"id": user.TenantID, "code": user.TenantCode, "name": user.TenantName, "logoUrl": user.LogoURL},
 	}
+	if user.Role == "SUPER_ADMIN" {
+		result["tenant"], result["tenantId"] = nil, nil
+	}
+	return result
 }
 
 func (s *Service) signAsset(ctx context.Context, objectKey string) string {
@@ -348,4 +374,9 @@ func (s *Service) signAsset(ctx context.Context, objectKey string) string {
 		return ""
 	}
 	return url
+}
+
+// 平台账号没有租户，租户账号必须属于已启用且已初始化的租户。
+func loginAllowed(user User) bool {
+	return user.Status == "active" && (user.Role == "SUPER_ADMIN" && user.TenantID == "" || user.Role != "SUPER_ADMIN" && user.TenantID != "" && user.TenantStatus == "active" && user.TenantInitialized)
 }

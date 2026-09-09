@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -29,14 +28,24 @@ func Middleware(writer Writer, logger *slog.Logger) func(http.Handler) http.Hand
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			actor, ok := auth.UserFromContext(r.Context())
-			if !ok || !strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			if (!ok && r.URL.Path != "/api/v1/auth/login") || !strings.HasPrefix(r.URL.Path, "/api/v1/") {
 				next.ServeHTTP(w, r)
 				return
 			}
 
+			if _, _, record := studioOperation(r.Method, r.URL.Path); !record {
+				next.ServeHTTP(w, r)
+				return
+			}
 			startedAt := time.Now()
 			observer := &responseObserver{ResponseWriter: w}
 			defer func() {
+				if !ok {
+					actor, ok = auth.UserFromContext(r.Context())
+					if !ok {
+						return
+					}
+				}
 				if recovered := recover(); recovered != nil {
 					observer.statusCode = http.StatusInternalServerError
 					recordRequest(r, actor, observer, startedAt, writer, logger)
@@ -94,10 +103,11 @@ func recordRequest(r *http.Request, actor auth.User, response *responseObserver,
 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
 	defer cancel()
+	action, message, _ := studioOperation(r.Method, r.URL.Path)
 	err := writer.Create(ctx, Log{
 		TenantID: actor.TenantID, UserID: actor.ID, Username: actor.Username, FullName: actor.FullName,
-		Level: level, Action: actionForMethod(r.Method), Resource: resource,
-		Message: fmt.Sprintf("%s %s", r.Method, r.URL.Path), RequestID: platformapi.RequestIDFromContext(r.Context()),
+		Level: level, Action: action, Resource: resource,
+		Message: message, RequestID: platformapi.RequestIDFromContext(r.Context()),
 		Method: r.Method, Path: r.URL.Path, Result: result, IP: requestIP(r), UserAgent: r.UserAgent(),
 		Metadata:  map[string]any{"statusCode": statusCode, "businessCode": businessCode, "durationMs": time.Since(startedAt).Milliseconds()},
 		CreatedAt: time.Now(),

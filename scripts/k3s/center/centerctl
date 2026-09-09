@@ -23,12 +23,14 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 K3S_BIN=${IF_CENTER_K3S_BIN:-/usr/local/bin/k3s}
 KUBECONFIG_PATH=${IF_CENTER_KUBECONFIG:-/var/lib/induforge/k3s/server/cred/admin.kubeconfig}
+K3S_TOKEN_FILE=${IF_CENTER_K3S_TOKEN_FILE:-${K3S_TOKEN_FILE:-/var/lib/induforge/k3s/server/token}}
 CONTAINERD_ADDRESS=${IF_CENTER_CONTAINERD_ADDRESS:-/run/k3s/containerd/containerd.sock}
 CENTER_NODE_NAME=${IF_CENTER_NODE_NAME:-${CENTER_NODE_NAME:-}}
 CONTROL_IMAGE=${IF_CENTER_CONTROL_IMAGE:-${CONTROL_IMAGE:-induforge/control:latest}}
 DATA_IMAGE=${IF_CENTER_DATA_IMAGE:-${DATA_IMAGE:-induforge/data:latest}}
 EDGE_IMAGE=${IF_CENTER_EDGE_IMAGE:-${EDGE_IMAGE:-induforge/edge:latest}}
 DATA_ROOT=${IF_CENTER_DATA_ROOT:-${DATA_ROOT:-/var/lib/induforge/center}}
+NODE_CONNECTION_URL=${IF_NODE_CONNECTION_URL:-${NODE_CONNECTION_URL:-}}
 HTTP_PORT=${IF_EDGE_HOST_PORT:-${HTTP_PORT:-18080}}
 HTTPS_PORT=${IF_EDGE_TLS_HOST_PORT:-${HTTPS_PORT:-18443}}
 DOCKER_GID=${IF_CENTER_DOCKER_GID:-${DOCKER_GID:-}}
@@ -38,6 +40,7 @@ RELEASE_WORKSPACE_VOLUME=${IF_RELEASE_WORKSPACE_VOLUME:-${RELEASE_WORKSPACE_VOLU
 RELEASE_KEY_ID=${IF_RELEASE_SIGNING_KEY_ID:-${RELEASE_KEY_ID:-release-signing-key-v1}}
 RELEASE_MIN_AGENT_VERSION=${IF_RELEASE_MIN_NODE_AGENT_VERSION:-${RELEASE_MIN_AGENT_VERSION:-1.0.0}}
 RELEASE_MIN_RUNTIME_VERSION=${IF_RELEASE_MIN_RUNTIME_VERSION:-${RELEASE_MIN_RUNTIME_VERSION:-1.0.0}}
+CODE_SERVER_IMAGE=induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64
 
 usage() {
   echo "Usage: internal center manager <render|import-images|apply|status|summary|doctor|logs|restart> [arguments]" >&2
@@ -53,7 +56,6 @@ require_center_images() {
   for image in \
     "$CONTROL_IMAGE" "$DATA_IMAGE" "$EDGE_IMAGE" \
     induforge/compute-sandbox:1.0.0 \
-    induforge/designer-code-server:4.131.0-node24.19.0-pnpm11.21.0-8147b161-arm64 \
     docker.io/timescale/timescaledb:2.26.4-pg16 \
     docker.io/library/redis:7.2-alpine \
     docker.io/chrislusf/seaweedfs:3.85 \
@@ -112,6 +114,9 @@ require_root() {
 }
 
 validate_settings() {
+  case "$NODE_CONNECTION_URL" in
+    *[!a-zA-Z0-9._:/\[\]-]*) echo "NODE_CONNECTION_URL contains unsupported characters" >&2; exit 1 ;;
+  esac
   case "$CENTER_NODE_NAME" in
     ''|*[!a-zA-Z0-9._-]*) echo "IF_CENTER_NODE_NAME is missing or invalid" >&2; exit 1 ;;
   esac
@@ -133,6 +138,13 @@ validate_settings() {
     /*) ;;
     *) echo "IF_CENTER_DATA_ROOT must be absolute" >&2; exit 1 ;;
   esac
+  for path in "$KUBECONFIG_PATH" "$K3S_TOKEN_FILE"; do
+    case "$path" in
+      /|*[!a-zA-Z0-9._/-]*) echo "center K3s credential path is unsafe" >&2; exit 1 ;;
+      /*) ;;
+      *) echo "center K3s credential path must be absolute" >&2; exit 1 ;;
+    esac
+  done
   for port in "$HTTP_PORT" "$HTTPS_PORT"; do
     case "$port" in ''|*[!0-9]*) echo "center edge port is invalid" >&2; exit 1 ;; esac
     if [ "$port" -lt 1024 ] || [ "$port" -gt 65535 ]; then
@@ -159,6 +171,7 @@ ensure_release_workspace_volume() {
     docker volume create --driver local --opt type=none --opt o=bind --opt device="$workspace_device" "$RELEASE_WORKSPACE_VOLUME" >/dev/null
   fi
   if ! docker image inspect "$RELEASE_BUILDER_IMAGE" >/dev/null 2>&1; then echo "required release builder image is not available in Docker: $RELEASE_BUILDER_IMAGE" >&2; exit 1; fi
+  if ! docker image inspect "$CODE_SERVER_IMAGE" >/dev/null 2>&1; then echo "required code workspace image is not available in Docker: $CODE_SERVER_IMAGE" >&2; exit 1; fi
 }
 
 ensure_release_signing_key() {
@@ -237,6 +250,7 @@ render_manifest() {
     -e "s|__DATA_IMAGE__|$DATA_IMAGE|g" \
     -e "s|__EDGE_IMAGE__|$EDGE_IMAGE|g" \
     -e "s|__DATA_ROOT__|$DATA_ROOT|g" \
+    -e "s|__NODE_CONNECTION_URL__|$NODE_CONNECTION_URL|g" \
     -e "s|__HTTP_PORT__|$HTTP_PORT|g" \
     -e "s|__HTTPS_PORT__|$HTTPS_PORT|g" \
     -e "s|__DOCKER_GID__|$DOCKER_GID|g" \
@@ -342,11 +356,14 @@ persist_config() {
   config_tmp="$CONFIG_FILE.tmp.$$"
   umask 077
   {
+    printf 'IF_CENTER_KUBECONFIG=%s\n' "$KUBECONFIG_PATH"
+    printf 'K3S_TOKEN_FILE=%s\n' "$K3S_TOKEN_FILE"
     printf 'CENTER_NODE_NAME=%s\n' "$CENTER_NODE_NAME"
     printf 'CONTROL_IMAGE=%s\n' "$CONTROL_IMAGE"
     printf 'DATA_IMAGE=%s\n' "$DATA_IMAGE"
     printf 'EDGE_IMAGE=%s\n' "$EDGE_IMAGE"
     printf 'DATA_ROOT=%s\n' "$DATA_ROOT"
+    printf 'NODE_CONNECTION_URL=%s\n' "$NODE_CONNECTION_URL"
     printf 'HTTP_PORT=%s\n' "$HTTP_PORT"
     printf 'HTTPS_PORT=%s\n' "$HTTPS_PORT"
     printf 'DOCKER_GID=%s\n' "$DOCKER_GID"
@@ -363,6 +380,13 @@ persist_config() {
 
 apply_center() {
   require_root apply
+  # 只提供宿主机地址候选；多网卡和跨网络可达性必须由安装人员确认。
+  if [ -z "$NODE_CONNECTION_URL" ] && [ -t 0 ]; then
+    echo "宿主机地址候选："
+    hostname -I 2>/dev/null || true
+    echo "请输入节点可访问的中心地址（包含 https:// 及端口，优先使用内网）："
+    IFS= read -r NODE_CONNECTION_URL
+  fi
   validate_settings
   require_center_images
   env_file=${1:-/etc/induforge/center.env}
@@ -377,7 +401,9 @@ apply_center() {
   install -d -m 0755 "$DATA_ROOT"
   install -d -m 0750 \
     "$DATA_ROOT/meta-store" "$DATA_ROOT/cache-store" "$DATA_ROOT/object-store" \
-    "$DATA_ROOT/workspaces" "$DATA_ROOT/tls"
+    "$DATA_ROOT/workspaces" "$DATA_ROOT/center-releases" "$DATA_ROOT/tls"
+  chown 1000:1000 "$DATA_ROOT/center-releases"
+  "${IF_CENTER_IMAGE_SERVICE_INSTALLER:-$SCRIPT_DIR/install-image-service.sh}"
   ensure_release_workspace_volume
   ensure_release_signing_key
 
@@ -393,6 +419,13 @@ apply_center() {
   ensure_data_service_internal_token "$temp_dir/center.env"
   ensure_compute_sandbox_token "$temp_dir/center.env"
   ensure_authoring_snapshot_keyring "$temp_dir/center.env"
+  if [ ! -f "$K3S_TOKEN_FILE" ] || [ ! -r "$K3S_TOKEN_FILE" ] || [ -L "$K3S_TOKEN_FILE" ]; then
+    echo "center K3s token file is missing or unsafe" >&2
+    exit 1
+  fi
+  k3s_join_token=$(tr -d '\r\n' < "$K3S_TOKEN_FILE")
+  case "$k3s_join_token" in ''|*[!a-zA-Z0-9._:@-]*) echo "center K3s token is invalid" >&2; exit 1;; esac
+  printf 'IF_OPS_K3S_TOKEN=%s\n' "$k3s_join_token" >> "$temp_dir/center.env"
   render_manifest > "$temp_dir/center-system.yaml"
   render_bootstrap_job > "$temp_dir/center-bootstrap-job.yaml"
 
@@ -421,6 +454,9 @@ apply_center() {
     deployment/compute-sandbox deployment/center-data; do
     kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
   done
+  if [ -f "$SCRIPT_DIR/resources/manifest.json" ]; then
+    IF_CENTER_K3S_BIN="$K3S_BIN" IF_CENTER_KUBECONFIG="$KUBECONFIG_PATH" python3 "$SCRIPT_DIR/import-image-resources.py" "$SCRIPT_DIR/resources"
+  fi
   run_control_bootstrap "$temp_dir/center-bootstrap-job.yaml"
   kubectl_cmd -n "$NAMESPACE" scale deployment/center-control --replicas=1
   for workload in deployment/center-control deployment/center-edge; do
@@ -429,6 +465,9 @@ apply_center() {
   doctor
   # 仅在工作负载和服务端点全部健康后提交配置，保证后续普通 apply 不会回退镜像。
   persist_config
+  echo "InduFrame 平台管理员登录入口：中心访问地址/admin/login"
+  echo "首次登录请先修改安装密码，再初始化 InduFrame 租户及其管理员账号。"
+  echo "请通过内网访问平台管理入口，并仅向内网开放管理 API。"
 }
 
 show_status() {
@@ -484,7 +523,7 @@ doctor() {
     kubectl_cmd -n "$NAMESPACE" get pods -o wide >&2 || true
     return 1
   fi
-  echo "InduForge center is healthy"
+  echo "InduFrame center is healthy"
 }
 
 show_logs() {

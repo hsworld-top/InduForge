@@ -132,6 +132,20 @@ func nodeAgentExecutable() string {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--notify-uninstalled" {
+		config, err := loadConfig()
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			err = ops.NotifyUninstalled(ctx, ops.Config{ServerURL: config.Agent.Ops.ServerURL, DataDir: config.Agent.Ops.DataDir})
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "中心卸载状态同步失败:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if len(os.Args) == 2 && os.Args[1] == "--service" {
 		runWindowsService()
 		return

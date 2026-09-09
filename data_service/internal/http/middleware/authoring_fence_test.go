@@ -30,7 +30,11 @@ func (s *epochGateStub) GateNormalWrite(_ context.Context, projectID, _ string, 
 
 func TestAuthoringFenceGuardRequiresCurrentEpochAndReturnsReloadContext(t *testing.T) {
 	const secret = "epoch-middleware-secret"
-	validator, err := auth.NewJWTValidator(secret)
+	center := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"code":0,"data":{"id":"user","tenantId":"tenant","role":"SYSTEM_ADMIN","mustChangePassword":false}}`))
+	}))
+	defer center.Close()
+	validator, err := auth.NewJWTValidator(secret, center.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +45,7 @@ func TestAuthoringFenceGuardRequiresCurrentEpochAndReturnsReloadContext(t *testi
 		nextCalls++
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	token := signEpochTestJWT(t, secret, map[string]any{"userId": "user", "tenantId": "tenant", "projectIds": []string{projectID}})
+	token := signEpochTestJWT(t, secret, map[string]any{"userId": "user", "tenantId": "tenant", "role": "SYSTEM_ADMIN", "projectIds": []string{projectID}})
 
 	for _, epoch := range []string{"", "broken", "epoch-1"} {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/data/projects/"+projectID+"/connections", nil)

@@ -8,6 +8,7 @@ import (
 )
 
 func TestLoad_UsesDefaultAddr(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_ADDR", "")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 
@@ -21,6 +22,7 @@ func TestLoad_UsesDefaultAddr(t *testing.T) {
 }
 
 func TestLoad_ReadsCollectorSecretKey(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	encoded := base64.StdEncoding.EncodeToString(make([]byte, 32))
 	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY", encoded)
@@ -36,6 +38,7 @@ func TestLoad_ReadsCollectorSecretKey(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidCollectorSecretKey(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
 
@@ -45,6 +48,7 @@ func TestLoad_RejectsInvalidCollectorSecretKey(t *testing.T) {
 }
 
 func TestLoad_ReadsIndependentAlarmSecretKey(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	encoded := base64.StdEncoding.EncodeToString(make([]byte, 32))
 	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY", encoded)
@@ -60,6 +64,7 @@ func TestLoad_ReadsIndependentAlarmSecretKey(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidAlarmSecretKey(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
 
@@ -69,6 +74,7 @@ func TestLoad_RejectsInvalidAlarmSecretKey(t *testing.T) {
 }
 
 func TestValidateCollectorSecretKeyRejectsMissingKey(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	err := ValidateCollectorSecretKey(Config{CollectorSecretKeyVersion: "v1"})
 	if err == nil {
 		t.Fatal("expected missing collector secret key to be rejected")
@@ -76,6 +82,7 @@ func TestValidateCollectorSecretKeyRejectsMissingKey(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidAddr(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_ADDR", "invalid-addr")
 
@@ -86,6 +93,7 @@ func TestLoad_RejectsInvalidAddr(t *testing.T) {
 }
 
 func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("DATA_SERVICE_ADDR", ":18102")
 	t.Setenv("DATA_SERVICE_DATABASE_URL", "")
@@ -105,7 +113,6 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	t.Setenv("IF_CACHE_STORE_PORT", "18379")
 	t.Setenv("IF_CACHE_STORE_PASSWORD", "cache-pass")
 	t.Setenv("IF_CACHE_STORE_DATA_DB", "2")
-	t.Setenv("IF_MESSAGE_HUB_TOPIC_PREFIX", "tenant-dev")
 
 	cfg, err := Load()
 	if err != nil {
@@ -129,12 +136,11 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	if cfg.RedisDB != 2 {
 		t.Fatalf("expected redis db to be loaded as 2, got %d", cfg.RedisDB)
 	}
-	if cfg.MessageHubTopicPrefix != "tenant-dev" {
-		t.Fatalf("expected message topic prefix to be loaded, got %q", cfg.MessageHubTopicPrefix)
-	}
+
 }
 
 func TestLoad_RejectsInvalidRedisDB(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "test-internal-token")
 	t.Setenv("IF_CACHE_STORE_DATA_DB", "bad")
 
@@ -145,6 +151,7 @@ func TestLoad_RejectsInvalidRedisDB(t *testing.T) {
 }
 
 func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	rootDir := t.TempDir()
 	childDir := filepath.Join(rootDir, "data_service")
 	if err := os.MkdirAll(childDir, 0o755); err != nil {
@@ -231,6 +238,7 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 }
 
 func TestLoad_RejectsMissingInternalToken(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	t.Setenv("DATA_SERVICE_INTERNAL_TOKEN", "")
 	currentDir, err := os.Getwd()
 	if err != nil {
@@ -247,12 +255,14 @@ func TestLoad_RejectsMissingInternalToken(t *testing.T) {
 }
 
 func TestValidateInternalTokenRejectsMissingToken(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	if err := ValidateInternalToken(Config{}); err == nil {
 		t.Fatal("expected missing internal token to be rejected")
 	}
 }
 
 func TestResolveCollectorProtocolCatalogPathFindsPublicContractFromChildDirectory(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	rootDir := t.TempDir()
 	catalogDir := filepath.Join(rootDir, "contracts", "collector-protocols")
 	childDir := filepath.Join(rootDir, "data_service", "tmp")
@@ -285,6 +295,7 @@ func TestResolveCollectorProtocolCatalogPathFindsPublicContractFromChildDirector
 }
 
 func TestResolveCollectorProtocolCatalogPathUsesPublicContractByDefault(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	rootDir := t.TempDir()
 	catalogDir := filepath.Join(rootDir, "contracts", "collector-protocols")
 	childDir := filepath.Join(rootDir, "data_service", "tmp")
@@ -316,6 +327,7 @@ func TestResolveCollectorProtocolCatalogPathUsesPublicContractByDefault(t *testi
 }
 
 func TestResolveCollectorProtocolCatalogPathKeepsAbsolutePath(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	configured := filepath.Join(t.TempDir(), "collector-protocols")
 	if resolved := ResolveCollectorProtocolCatalogPath(configured); resolved != configured {
 		t.Fatalf("expected absolute path %q, got %q", configured, resolved)
@@ -323,6 +335,7 @@ func TestResolveCollectorProtocolCatalogPathKeepsAbsolutePath(t *testing.T) {
 }
 
 func TestValidateJWTSecret_RejectsWeakSecret(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	err := ValidateJWTSecret("short-secret")
 	if err == nil {
 		t.Fatal("expected weak secret to be rejected")
@@ -333,6 +346,7 @@ func TestValidateJWTSecret_RejectsWeakSecret(t *testing.T) {
 }
 
 func TestValidateConnectionsDependencies_RejectsMissingDatabaseURL(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	err := ValidateConnectionsDependencies(Config{JWTSecret: "1234567890abcdef"})
 	if err == nil {
 		t.Fatal("expected missing database url to be rejected")
@@ -343,6 +357,7 @@ func TestValidateConnectionsDependencies_RejectsMissingDatabaseURL(t *testing.T)
 }
 
 func TestValidatePreviewDependencies_RejectsMissingRedisAddr(t *testing.T) {
+	t.Setenv("DEV_CORE_URL", "http://center.test")
 	err := ValidatePreviewDependencies(Config{})
 	if err == nil {
 		t.Fatal("expected missing redis addr to be rejected")

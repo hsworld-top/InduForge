@@ -166,17 +166,13 @@ func TestManagerApplyIsVerifiedAndIdempotent(t *testing.T) {
 	}
 	binary := filepath.Join(assets, "k3s")
 	images := filepath.Join(assets, "k3s-airgap-images-arm64.tar.zst")
-	foundationImages := filepath.Join(assets, "induforge-foundation-images-arm64.tar.gz")
 	if err := os.WriteFile(binary, []byte("binary"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(images, []byte("images"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(foundationImages, []byte("foundation-images"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	checksumLine := checksum(t, binary) + "  k3s\n" + checksum(t, images) + "  k3s-airgap-images-arm64.tar.zst\n" + checksum(t, foundationImages) + "  induforge-foundation-images-arm64.tar.gz\n"
+	checksumLine := checksum(t, binary) + "  k3s\n" + checksum(t, images) + "  k3s-airgap-images-arm64.tar.zst\n"
 	if err := os.WriteFile(filepath.Join(assets, "SHA256SUMS"), []byte(checksumLine), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -302,11 +298,9 @@ func preparedManager(t *testing.T) (*Manager, ClusterPlan) {
 	}
 	binary := filepath.Join(assets, "k3s")
 	images := filepath.Join(assets, "k3s-airgap-images-arm64.tar.zst")
-	foundationImages := filepath.Join(assets, "induforge-foundation-images-arm64.tar.gz")
 	_ = os.WriteFile(binary, []byte("binary"), 0755)
 	_ = os.WriteFile(images, []byte("images"), 0600)
-	_ = os.WriteFile(foundationImages, []byte("foundation-images"), 0600)
-	checksums := checksum(t, binary) + "  k3s\n" + checksum(t, images) + "  k3s-airgap-images-arm64.tar.zst\n" + checksum(t, foundationImages) + "  induforge-foundation-images-arm64.tar.gz\n"
+	checksums := checksum(t, binary) + "  k3s\n" + checksum(t, images) + "  k3s-airgap-images-arm64.tar.zst\n"
 	_ = os.WriteFile(filepath.Join(assets, "SHA256SUMS"), []byte(checksums), 0600)
 	manager, err := NewManager(ManagerConfig{
 		AssetsDir: filepath.Join(root, "assets"), BinaryPath: filepath.Join(root, "bin", "k3s"), ConfigDir: filepath.Join(root, "config"),

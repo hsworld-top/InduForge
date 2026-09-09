@@ -75,6 +75,9 @@ func (s *Service) List(ctx context.Context, actor auth.User, filter Filter) ([]L
 		filter.Limit = 200
 	}
 	filter.Level = strings.ToUpper(strings.TrimSpace(filter.Level))
+	if filter.Level == "WARNING" {
+		filter.Level = "WARN"
+	}
 	return s.repository.List(ctx, actor.TenantID, filter)
 }
 
@@ -91,6 +94,9 @@ func (s *Service) DeleteBefore(ctx context.Context, actor auth.User, before time
 
 func (s *Service) Export(ctx context.Context, actor auth.User, filter Filter) ([]Log, error) {
 	filter.Level = strings.ToUpper(strings.TrimSpace(filter.Level))
+	if filter.Level == "WARNING" {
+		filter.Level = "WARN"
+	}
 	return s.repository.Export(ctx, actor.TenantID, filter)
 }
 

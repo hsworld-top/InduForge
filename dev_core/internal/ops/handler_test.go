@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/indu-forge/dev_core/internal/app"
 	"github.com/indu-forge/dev_core/internal/auth"
@@ -112,7 +113,7 @@ func TestRedeployRouteUsesUnifiedResponseAndReportsBusy(t *testing.T) {
 		router := chi.NewRouter()
 		NewHandler(NewService(repository, nil), nil).MountRoutes(router)
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments/deployment/redeploy", nil)
-		request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPERATOR"}))
+		request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}))
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 		var envelope struct {
@@ -361,7 +362,7 @@ func TestDeploymentLifecycleEndpointUsesDeploymentOperation(t *testing.T) {
 	h := NewHandler(NewService(repository, nil), nil)
 	s := app.New(app.Options{Mount: func(r chi.Router) { h.MountRoutes(r) }}).Handler()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments/deployment-1/restart", nil)
-	req = req.WithContext(auth.WithUser(req.Context(), auth.User{TenantID: "tenant", Role: "OPERATOR"}))
+	req = req.WithContext(auth.WithUser(req.Context(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}))
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || repository.deploymentID != "deployment-1" || repository.deploymentOperation != "restart" {
@@ -439,6 +440,13 @@ func TestNodePayloadIncludesCurrentProjectAssignment(t *testing.T) {
 	}
 }
 
+func TestNodePayloadIdentifiesBuiltInCenterNode(t *testing.T) {
+	payload := nodePayload(Node{NodeSource: "built_in", NodeKind: "center"})
+	if payload["nodeSource"] != "built_in" || payload["builtIn"] != true {
+		t.Fatalf("中心内置节点标识不完整: %#v", payload)
+	}
+}
+
 func TestEnrollmentPayloadContainsAuditAndClaimIdentity(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	payload := enrollmentPayload(Enrollment{
@@ -474,11 +482,57 @@ func TestOpsHTTPContractInventory(t *testing.T) {
 	_ = httptest.NewRequest(http.MethodGet, "/api/v1/ops/deployment-runs/id", nil)
 	_ = httptest.NewRequest(http.MethodGet, "/api/v1/ops/deployment-runs/id/events", nil)
 	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/node-enrollments", nil)
-	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/node-enrollments/id/approve", nil)
-	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/node-enrollments/id/reject", nil)
+	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/node-enrollments/id/revoke", nil)
 	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments", nil)
 	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments/id/restart", nil)
 	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/project-deployments/id/services/project_entry/start", nil)
 	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/agent/enrollments/claim", nil)
 	_ = httptest.NewRequest(http.MethodPost, "/api/v1/ops/agent/nodes/id/heartbeat", nil)
+}
+
+func TestNodePayloadConfirmedUninstall(t *testing.T) {
+	result := nodePayload(Node{ObservedStatus: "offline", ResourceSummary: map[string]any{"uninstalledAt": "2026-09-08T00:00:00Z"}})
+	if result["observedStatus"] != "uninstalled" {
+		t.Fatalf("confirmed uninstall lost: %v", result)
+	}
+	result = nodePayload(Node{ObservedStatus: "offline"})
+	if result["observedStatus"] != "offline" {
+		t.Fatal("offline is not proof of uninstall")
+	}
+}
+
+func TestDuplicateNodeNameReturnsBusinessError(t *testing.T) {
+	w := httptest.NewRecorder()
+	(&Handler{}).err(w, httptest.NewRequest("POST", "/api/v1/ops/node-enrollments", nil), ErrNodeNameExists)
+	if w.Code != 200 {
+		t.Fatalf("expected business error, got %d", w.Code)
+	}
+	var payload struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Code == 0 || payload.Msg != ErrNodeNameExists.Error() {
+		t.Fatalf("wrong error: %+v", payload)
+	}
+}
+
+func TestNodePreflightReturnsActionableBusinessError(t *testing.T) {
+	w := httptest.NewRecorder()
+	(&Handler{}).err(w, httptest.NewRequest("POST", "/", nil), &nodePreflightError{cause: fmt.Errorf("物理节点 secret-id 的管理 IP 匹配到 3 个 Kubernetes 节点")})
+	if w.Code != 200 {
+		t.Fatalf("unexpected HTTP status: %d", w.Code)
+	}
+	var result struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Code == 0 || result.Msg != "无法确认部署节点：节点登记与运行组件不一致。请检查节点接入状态后重试。" {
+		t.Fatalf("unexpected response: %+v", result)
+	}
 }

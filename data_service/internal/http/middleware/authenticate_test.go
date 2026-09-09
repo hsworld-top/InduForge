@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ func TestAuthenticate_AllowsValidBearerJWT(t *testing.T) {
 		TenantID:     "tenant-1",
 		ProjectIDs:   []string{"project-a", "project-b"},
 		Capabilities: []string{"project:read"},
+		Role:         "USER",
 	}
 	now := time.Now().UTC()
 	token := mustSignJWT(t, "secret-123", claims, now.Add(time.Minute), now.Add(-time.Minute), now.Add(-time.Minute))
@@ -176,7 +178,7 @@ func TestAuthenticate_RejectsMissingBearerPrefix(t *testing.T) {
 }
 
 func TestAuthenticate_RejectsEmptySecretAtConstruction(t *testing.T) {
-	validator, err := auth.NewJWTValidator("   ")
+	validator, err := auth.NewJWTValidator("   ", "http://center.invalid")
 	if err == nil {
 		t.Fatal("expected empty secret to be rejected")
 	}
@@ -202,7 +204,19 @@ func TestAuthenticate_RejectsNilValidatorWithInternalError(t *testing.T) {
 func mustNewJWTValidator(t *testing.T, secret string) *auth.JWTValidator {
 	t.Helper()
 
-	validator, err := auth.NewJWTValidator(secret)
+	center := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), ".")
+		var claims auth.Claims
+		if len(parts) != 3 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
+		_ = json.Unmarshal(payload, &claims)
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"id": claims.UserID, "tenantId": claims.TenantID, "role": claims.Role, "mustChangePassword": false}})
+	}))
+	t.Cleanup(center.Close)
+	validator, err := auth.NewJWTValidator(secret, center.URL)
 	if err != nil {
 		t.Fatalf("new validator failed: %v", err)
 	}

@@ -25,6 +25,8 @@ type ProjectWorkload struct {
 	RuntimeBindingChecksum                                                                      string
 	BindingRevision                                                                             int
 	RuntimeNATSEndpoint                                                                         string
+	NodeSelectorKey, NodeSelectorValue                                                          string
+	ArtifactHostPath                                                                            string
 }
 
 func projectNamespace(environmentID string) (string, error) {
@@ -71,7 +73,20 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 	if workload.Generation < 1 || strings.TrimSpace(workload.NodeID) == "" || strings.TrimSpace(workload.ReleaseID) == "" || !validSHA256Checksum(workload.ReleaseDigest) {
 		return "", fmt.Errorf("工作负载调和字段不完整")
 	}
+	selectorKey, selectorValue := workload.NodeSelectorKey, workload.NodeSelectorValue
+	if selectorKey == "" && selectorValue == "" {
+		selectorKey, selectorValue = "induforge.io/host-node-id", workload.NodeID
+	}
+	if (selectorKey != "induforge.io/host-node-id" && selectorKey != "induforge.io/center-node") || strings.TrimSpace(selectorValue) == "" {
+		return "", fmt.Errorf("工作负载调度标签无效")
+	}
 	artifactRoot := projectArtifactHostPath(workload.DeploymentID, workload.ReleaseDigest)
+	if selectorKey == "induforge.io/center-node" {
+		if !strings.HasPrefix(workload.ArtifactHostPath, "/") {
+			return "", fmt.Errorf("中心工程制品尚未准备")
+		}
+		artifactRoot = workload.ArtifactHostPath
+	}
 	image, role := runtimeEngineImage, workload.Engine
 	container := "runtime-engine"
 	if workload.Engine == ServiceBase {
@@ -100,7 +115,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
       initContainers:
         - name: runtime-provision-nats
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["provision-nats", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/nats.json"]
           resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
@@ -110,7 +125,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: bootstrap-nats, mountPath: /var/run/induforge/bootstrap, readOnly: true}
         - name: runtime-provision-state
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["provision-state", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/postgres-bootstrap.json"]
           resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
@@ -120,7 +135,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: bootstrap-state, mountPath: /var/run/induforge/bootstrap, readOnly: true}
         - name: runtime-api-artifact-prepare
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["unpack-runtime", "--archive", "/opt/induforge/release/runtime-artifact.tar.zst", "--target", "/work/runtime-api-artifact"]
           resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
@@ -130,7 +145,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: work, mountPath: /work}
         - name: runtime-binding-prepare
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["prepare", "--input", "/etc/induforge/runtime-binding/input.json"]
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "768Mi"}}
@@ -177,7 +192,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		apiSidecar = fmt.Sprintf(`
         - name: runtime-api
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           args: ["--listen", "127.0.0.1:18081", "--artifact", "/work/runtime-api-artifact/runtime-project-artifact.json", "--postgres-secret", "/var/run/induforge/runtime-api/postgres.json", "--token-secret", "/var/run/induforge/runtime-api/tokens.json", "--nats-credentials", "/var/run/induforge/runtime-api/nats.json", "--deployment-id", %q, "--project-id", %q, "--account-id", %q, "--site-id", %q, "--node-id", %q, "--version", %q, "--manual-owner", "runtime-api", "--manual-epoch", %q, "--execution-form", "k3s-workload"]
           env: [{name: IF_RUNTIME_NATS_URL, value: %q}]
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
@@ -190,7 +205,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		writerSidecar = fmt.Sprintf(`
         - name: runtime-writer
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["runtime-engine"]
           args: ["--config", "/work/bundle/runtime-engine-config.json", "--config-root", "/work/bundle", "--index", "/work/bundle/site-index.json", "--listen", "0.0.0.0:18082"]
           ports: [{name: writer-health, containerPort: 18082}]
@@ -217,7 +232,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
       initContainers:
         - name: runtime-provision-nats
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["provision-nats", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/nats.json"]
           resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
@@ -227,7 +242,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: bootstrap-nats, mountPath: /var/run/induforge/bootstrap, readOnly: true}
         - name: runtime-provision-state
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["provision-state", "--input", "/etc/induforge/runtime-binding/input.json", "--credentials", "/var/run/induforge/bootstrap/postgres-bootstrap.json"]
           resources: {requests: {cpu: "50m", memory: "64Mi"}, limits: {cpu: "250m", memory: "256Mi"}}
@@ -237,7 +252,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
             - {name: bootstrap-state, mountPath: /var/run/induforge/bootstrap, readOnly: true}
         - name: runtime-binding-prepare
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           command: ["if-runtime-provisioner"]
           args: ["prepare", "--input", "/etc/induforge/runtime-binding/input.json"]
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "768Mi"}}
@@ -289,7 +304,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
 		sandbox = fmt.Sprintf(`
         - name: compute-sandbox
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           env:
             - {name: COMPUTE_SANDBOX_TOKEN, valueFrom: {secretKeyRef: {name: %s, key: sandbox-token}}}
             - {name: COMPUTE_SANDBOX_RUNTIME_PROFILE, value: "runtime"}
@@ -345,13 +360,13 @@ spec:
       labels: {app.kubernetes.io/name: %q, induforge.io/release-id: %q}
       annotations: {induforge.io/runtime-binding-sha256: %q, induforge.io/release-id: %q, induforge.io/generation: %q, induforge.io/binding-revision: %q}
     spec:
-      nodeSelector: {induforge.io/host-node-id: %q}
+      nodeSelector: {%s: %q}
       securityContext: {%sfsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
 %s
       containers:
         - name: %s
           image: %s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
 %s
           env:
             - {name: IF_ENGINE_ROLE, valueFrom: {configMapKeyRef: {name: %s-config, key: engine-role}}}
@@ -390,5 +405,5 @@ spec:
   type: %s
   selector: {app.kubernetes.io/name: %q}
   ports: [{name: http, port: %d, targetPort: http}]
-`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, rolloutStrategy, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), workload.NodeID, podRunAsNonRoot, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar+writerSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, serviceType, name, servicePort), nil
+`, name, namespace, role, workload.ReleaseID, name, namespace, workload.ServiceID, rolloutStrategy, name, name, workload.ReleaseID, workload.RuntimeBindingChecksum, workload.ReleaseID, fmt.Sprint(workload.Generation), fmt.Sprint(workload.BindingRevision), selectorKey, selectorValue, podRunAsNonRoot, runtimeInit, container, image, runtimeArgs, name, name, workload.DeploymentID, workload.ProjectID, workload.EnvironmentID, workload.NodeID, hostPort, workMountReadOnly, runtimeMounts, sandbox+apiSidecar+writerSidecar, artifactRoot, runtimeVolumes, name, namespace, workload.ServiceID, serviceType, name, servicePort), nil
 }

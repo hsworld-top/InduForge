@@ -41,7 +41,7 @@ func main() {
 	if socketPath == "" {
 		socketPath = defaultSocketPath
 	}
-	listener, err := listenUnix(socketPath, "induforge")
+	listener, err := listenUnix(socketPath, envOr("INDUFORGE_HOSTD_GROUP", "induforge"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,11 +49,15 @@ func main() {
 		_ = listener.Close()
 		_ = os.Remove(socketPath)
 	}()
+	handler := api.Handler()
+	if os.Getenv("INDUFORGE_HOSTD_IMAGES_ONLY") == "true" {
+		handler = api.ImagesHandler()
+	}
 	server := &http.Server{
-		Handler:           api.Handler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      20 * time.Minute,
 		IdleTimeout:       30 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

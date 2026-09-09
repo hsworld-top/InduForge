@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -60,7 +61,7 @@ func NewMinIO(ctx context.Context, config Config) (*MinIO, error) {
 }
 
 func (store *MinIO) Put(ctx context.Context, objectKey string, reader io.Reader, size int64, contentType string) (ObjectRef, error) {
-	info, err := store.client.PutObject(ctx, store.bucket, objectKey, reader, size, minio.PutObjectOptions{ContentType: contentType})
+	info, err := store.client.PutObject(ctx, store.bucket, objectKey, reader, size, putOptions(objectKey, contentType))
 	if err != nil {
 		return ObjectRef{}, fmt.Errorf("上传对象失败: %w", err)
 	}
@@ -96,4 +97,14 @@ func (store *MinIO) Delete(ctx context.Context, objectKey string) error {
 		return fmt.Errorf("删除对象失败: %w", err)
 	}
 	return nil
+}
+
+// 镜像归档较大；限制上传分块与并行度，避免小内存中心对象存储被大块上传挤垮。
+func putOptions(key, contentType string) minio.PutObjectOptions {
+	opts := minio.PutObjectOptions{ContentType: contentType}
+	if strings.HasPrefix(key, "node-images/") {
+		opts.NumThreads = 1
+		opts.PartSize = 8 << 20
+	}
+	return opts
 }

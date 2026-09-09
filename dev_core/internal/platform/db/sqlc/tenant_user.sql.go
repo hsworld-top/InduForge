@@ -98,11 +98,11 @@ func (q *Queries) CreateDashboardNote(ctx context.Context, arg CreateDashboardNo
 }
 
 const createManagedUser = `-- name: CreateManagedUser :one
-INSERT INTO users (tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences)
+INSERT INTO users (tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, must_change_password)
 VALUES ($1, $2, $3, $4,
         $5, $6, $7, $8,
-        $9, $10)
-RETURNING id, tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, last_login_at, last_login_ip, password_changed_at, created_at, updated_at
+        $9, $10, true)
+RETURNING must_change_password, credential_version, id, tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, last_login_at, last_login_ip, password_changed_at, created_at, updated_at
 `
 
 type CreateManagedUserParams struct {
@@ -133,6 +133,8 @@ func (q *Queries) CreateManagedUser(ctx context.Context, arg CreateManagedUserPa
 	)
 	var i User
 	err := row.Scan(
+		&i.MustChangePassword,
+		&i.CredentialVersion,
 		&i.ID,
 		&i.TenantID,
 		&i.Username,
@@ -165,7 +167,7 @@ INSERT INTO tenants (
   $11, $12, $13,
   $14, $15, $16, $17
 )
-RETURNING id, name, code, description, status, contact_email, contact_phone, max_users, max_projects, max_storage, used_storage, logo_object_key, login_background_object_key, company_name, company_address, company_phone, company_website, settings, expires_at, created_at, updated_at
+RETURNING initialized, is_default, admin_user_id, id, name, code, description, status, contact_email, contact_phone, max_users, max_projects, max_storage, used_storage, logo_object_key, login_background_object_key, company_name, company_address, company_phone, company_website, settings, expires_at, created_at, updated_at
 `
 
 type CreateTenantParams struct {
@@ -210,6 +212,9 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 	)
 	var i Tenant
 	err := row.Scan(
+		&i.Initialized,
+		&i.IsDefault,
+		&i.AdminUserID,
 		&i.ID,
 		&i.Name,
 		&i.Code,
@@ -254,7 +259,8 @@ func (q *Queries) DeleteDashboardNote(ctx context.Context, arg DeleteDashboardNo
 }
 
 const deleteManagedUser = `-- name: DeleteManagedUser :execrows
-DELETE FROM users WHERE id = $1 AND tenant_id = $2
+DELETE FROM users WHERE users.id = $1 AND users.tenant_id = $2
+  AND NOT EXISTS (SELECT 1 FROM tenants WHERE admin_user_id = users.id)
 `
 
 type DeleteManagedUserParams struct {
@@ -283,7 +289,7 @@ func (q *Queries) DeleteTenant(ctx context.Context, tenantID pgtype.UUID) (int64
 }
 
 const getManagedUser = `-- name: GetManagedUser :one
-SELECT id, tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, last_login_at, last_login_ip, password_changed_at, created_at, updated_at FROM users WHERE id = $1 AND tenant_id = $2 LIMIT 1
+SELECT must_change_password, credential_version, id, tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, last_login_at, last_login_ip, password_changed_at, created_at, updated_at FROM users WHERE users.id = $1 AND users.tenant_id = $2 LIMIT 1
 `
 
 type GetManagedUserParams struct {
@@ -295,6 +301,8 @@ func (q *Queries) GetManagedUser(ctx context.Context, arg GetManagedUserParams) 
 	row := q.db.QueryRow(ctx, getManagedUser, arg.UserID, arg.TenantID)
 	var i User
 	err := row.Scan(
+		&i.MustChangePassword,
+		&i.CredentialVersion,
 		&i.ID,
 		&i.TenantID,
 		&i.Username,
@@ -317,7 +325,8 @@ func (q *Queries) GetManagedUser(ctx context.Context, arg GetManagedUserParams) 
 
 const getTenantByIdentifier = `-- name: GetTenantByIdentifier :one
 SELECT
-  t.id, t.name, t.code, t.description, t.status, t.contact_email, t.contact_phone, t.max_users, t.max_projects, t.max_storage, t.used_storage, t.logo_object_key, t.login_background_object_key, t.company_name, t.company_address, t.company_phone, t.company_website, t.settings, t.expires_at, t.created_at, t.updated_at,
+  t.initialized, t.is_default, t.admin_user_id, t.id, t.name, t.code, t.description, t.status, t.contact_email, t.contact_phone, t.max_users, t.max_projects, t.max_storage, t.used_storage, t.logo_object_key, t.login_background_object_key, t.company_name, t.company_address, t.company_phone, t.company_website, t.settings, t.expires_at, t.created_at, t.updated_at,
+  COALESCE((SELECT username FROM users admin WHERE admin.id=t.admin_user_id AND admin.tenant_id=t.id), '')::text AS admin_username,
   (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
@@ -326,6 +335,9 @@ LIMIT 1
 `
 
 type GetTenantByIdentifierRow struct {
+	Initialized              bool               `json:"initialized"`
+	IsDefault                bool               `json:"is_default"`
+	AdminUserID              pgtype.UUID        `json:"admin_user_id"`
 	ID                       pgtype.UUID        `json:"id"`
 	Name                     string             `json:"name"`
 	Code                     string             `json:"code"`
@@ -347,6 +359,7 @@ type GetTenantByIdentifierRow struct {
 	ExpiresAt                pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	AdminUsername            string             `json:"admin_username"`
 	UserCount                int64              `json:"user_count"`
 	ProjectCount             int64              `json:"project_count"`
 }
@@ -355,6 +368,9 @@ func (q *Queries) GetTenantByIdentifier(ctx context.Context, identifier string) 
 	row := q.db.QueryRow(ctx, getTenantByIdentifier, identifier)
 	var i GetTenantByIdentifierRow
 	err := row.Scan(
+		&i.Initialized,
+		&i.IsDefault,
+		&i.AdminUserID,
 		&i.ID,
 		&i.Name,
 		&i.Code,
@@ -376,6 +392,7 @@ func (q *Queries) GetTenantByIdentifier(ctx context.Context, identifier string) 
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AdminUsername,
 		&i.UserCount,
 		&i.ProjectCount,
 	)
@@ -437,7 +454,8 @@ func (q *Queries) ListDashboardNotes(ctx context.Context, tenantID pgtype.UUID) 
 
 const listTenants = `-- name: ListTenants :many
 SELECT
-  t.id, t.name, t.code, t.description, t.status, t.contact_email, t.contact_phone, t.max_users, t.max_projects, t.max_storage, t.used_storage, t.logo_object_key, t.login_background_object_key, t.company_name, t.company_address, t.company_phone, t.company_website, t.settings, t.expires_at, t.created_at, t.updated_at,
+  t.initialized, t.is_default, t.admin_user_id, t.id, t.name, t.code, t.description, t.status, t.contact_email, t.contact_phone, t.max_users, t.max_projects, t.max_storage, t.used_storage, t.logo_object_key, t.login_background_object_key, t.company_name, t.company_address, t.company_phone, t.company_website, t.settings, t.expires_at, t.created_at, t.updated_at,
+  COALESCE((SELECT username FROM users admin WHERE admin.id=t.admin_user_id AND admin.tenant_id=t.id), '')::text AS admin_username,
   (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
@@ -455,6 +473,9 @@ type ListTenantsParams struct {
 }
 
 type ListTenantsRow struct {
+	Initialized              bool               `json:"initialized"`
+	IsDefault                bool               `json:"is_default"`
+	AdminUserID              pgtype.UUID        `json:"admin_user_id"`
 	ID                       pgtype.UUID        `json:"id"`
 	Name                     string             `json:"name"`
 	Code                     string             `json:"code"`
@@ -476,6 +497,7 @@ type ListTenantsRow struct {
 	ExpiresAt                pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	AdminUsername            string             `json:"admin_username"`
 	UserCount                int64              `json:"user_count"`
 	ProjectCount             int64              `json:"project_count"`
 }
@@ -495,6 +517,9 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 	for rows.Next() {
 		var i ListTenantsRow
 		if err := rows.Scan(
+			&i.Initialized,
+			&i.IsDefault,
+			&i.AdminUserID,
 			&i.ID,
 			&i.Name,
 			&i.Code,
@@ -516,6 +541,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AdminUsername,
 			&i.UserCount,
 			&i.ProjectCount,
 		); err != nil {
@@ -616,7 +642,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 const setTenantStatus = `-- name: SetTenantStatus :one
 UPDATE tenants SET status = $1, updated_at = now()
 WHERE id = $2
-RETURNING id, name, code, description, status, contact_email, contact_phone, max_users, max_projects, max_storage, used_storage, logo_object_key, login_background_object_key, company_name, company_address, company_phone, company_website, settings, expires_at, created_at, updated_at
+RETURNING initialized, is_default, admin_user_id, id, name, code, description, status, contact_email, contact_phone, max_users, max_projects, max_storage, used_storage, logo_object_key, login_background_object_key, company_name, company_address, company_phone, company_website, settings, expires_at, created_at, updated_at
 `
 
 type SetTenantStatusParams struct {
@@ -628,6 +654,9 @@ func (q *Queries) SetTenantStatus(ctx context.Context, arg SetTenantStatusParams
 	row := q.db.QueryRow(ctx, setTenantStatus, arg.Status, arg.TenantID)
 	var i Tenant
 	err := row.Scan(
+		&i.Initialized,
+		&i.IsDefault,
+		&i.AdminUserID,
 		&i.ID,
 		&i.Name,
 		&i.Code,
@@ -690,17 +719,18 @@ func (q *Queries) UpdateDashboardNote(ctx context.Context, arg UpdateDashboardNo
 const updateManagedUser = `-- name: UpdateManagedUser :one
 UPDATE users
 SET email = $1, phone = $2, full_name = $3,
-    avatar = $4, role = $5, status = $6,
-    preferences = $7, updated_at = now()
-WHERE id = $8 AND tenant_id = $9
-RETURNING id, tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, last_login_at, last_login_ip, password_changed_at, created_at, updated_at
+    role = $4, status = $5,
+    preferences = $6, updated_at = now()
+WHERE users.id = $7 AND users.tenant_id = $8
+  AND (NOT EXISTS (SELECT 1 FROM tenants WHERE admin_user_id = users.id)
+       OR ($4::text = 'SYSTEM_ADMIN' AND $5::text = 'active'))
+RETURNING must_change_password, credential_version, id, tenant_id, username, password_hash, email, phone, full_name, avatar, role, status, preferences, last_login_at, last_login_ip, password_changed_at, created_at, updated_at
 `
 
 type UpdateManagedUserParams struct {
 	Email       pgtype.Text `json:"email"`
 	Phone       pgtype.Text `json:"phone"`
 	FullName    pgtype.Text `json:"full_name"`
-	Avatar      pgtype.Text `json:"avatar"`
 	Role        string      `json:"role"`
 	Status      string      `json:"status"`
 	Preferences []byte      `json:"preferences"`
@@ -713,7 +743,6 @@ func (q *Queries) UpdateManagedUser(ctx context.Context, arg UpdateManagedUserPa
 		arg.Email,
 		arg.Phone,
 		arg.FullName,
-		arg.Avatar,
 		arg.Role,
 		arg.Status,
 		arg.Preferences,
@@ -722,6 +751,8 @@ func (q *Queries) UpdateManagedUser(ctx context.Context, arg UpdateManagedUserPa
 	)
 	var i User
 	err := row.Scan(
+		&i.MustChangePassword,
+		&i.CredentialVersion,
 		&i.ID,
 		&i.TenantID,
 		&i.Username,
@@ -763,7 +794,7 @@ SET name = $1,
     expires_at = $17,
     updated_at = now()
 WHERE id = $18
-RETURNING id, name, code, description, status, contact_email, contact_phone, max_users, max_projects, max_storage, used_storage, logo_object_key, login_background_object_key, company_name, company_address, company_phone, company_website, settings, expires_at, created_at, updated_at
+RETURNING initialized, is_default, admin_user_id, id, name, code, description, status, contact_email, contact_phone, max_users, max_projects, max_storage, used_storage, logo_object_key, login_background_object_key, company_name, company_address, company_phone, company_website, settings, expires_at, created_at, updated_at
 `
 
 type UpdateTenantParams struct {
@@ -810,6 +841,9 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Ten
 	)
 	var i Tenant
 	err := row.Scan(
+		&i.Initialized,
+		&i.IsDefault,
+		&i.AdminUserID,
 		&i.ID,
 		&i.Name,
 		&i.Code,

@@ -23,6 +23,7 @@ import (
 	"github.com/indu-forge/node_agent/internal/pkg/utils"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
@@ -57,9 +58,8 @@ const maxCenterResponseBytes = 1 << 20
 
 // Identity 是领取成功后的设备凭据，文件权限只允许服务账户读取。
 type Identity struct {
-	NodeID          string `json:"nodeId"`
-	AgentToken      string `json:"agentToken"`
-	PendingApproval bool   `json:"pendingApproval"`
+	NodeID     string `json:"nodeId"`
+	AgentToken string `json:"agentToken"`
 }
 
 type HostInfo struct {
@@ -103,6 +103,7 @@ type Agent struct {
 	hostd              *hostd.Client
 	clusterFailure     *hostd.ClusterState
 	foundationFailure  *hostd.FoundationState
+	imageState         *ImageState
 	lastReconcileError string
 }
 
@@ -261,13 +262,12 @@ func (a *Agent) claim(ctx context.Context) error {
 		Node struct {
 			ID string `json:"id"`
 		} `json:"node"`
-		AgentToken      string `json:"agentToken"`
-		PendingApproval bool   `json:"pendingApproval"`
+		AgentToken string `json:"agentToken"`
 	}
 	if err := a.request(ctx, http.MethodPost, "/api/v1/ops/agent/enrollments/claim", "", payload, &result); err != nil {
 		return err
 	}
-	if err := a.saveIdentity(Identity{NodeID: result.Node.ID, AgentToken: result.AgentToken, PendingApproval: result.PendingApproval}); err != nil {
+	if err := a.saveIdentity(Identity{NodeID: result.Node.ID, AgentToken: result.AgentToken}); err != nil {
 		return err
 	}
 	if a.cfg.ClearEnrollmentCode != nil {
@@ -316,6 +316,7 @@ func (a *Agent) reconcileOnce(ctx context.Context) {
 	if a.currentIdentity().NodeID == "" {
 		// 控制面可能比 Agent 晚就绪；领取失败留待下一周期重试，不影响本机已运行进程。
 		if err := a.claim(ctx); err != nil {
+			_ = a.writeConnectionStatus(err.Error())
 			a.reportReconcileError(err)
 		} else {
 			a.clearReconcileError()
@@ -332,6 +333,7 @@ func (a *Agent) reconcileOnce(ctx context.Context) {
 		a.cfg.EnrollmentCode = ""
 	}
 	if err := a.Heartbeat(ctx); err != nil {
+		_ = a.writeConnectionStatus(err.Error())
 		a.reportReconcileError(fmt.Errorf("上报节点心跳失败: %w", err))
 		return
 	}
@@ -513,7 +515,13 @@ func (a *Agent) Heartbeat(ctx context.Context) error {
 			"endpoint":           a.supervisor.PublicURL(status.Role),
 		})
 	}
-	payload := map[string]any{"agentVersion": a.cfg.AgentVersion, "ipAddress": a.nodeIP(), "resourceSummary": resourceSummary(), "services": services}
+	payload := map[string]any{"agentVersion": a.cfg.AgentVersion, "ipAddress": a.nodeIP(), "resourceSummary": a.resourceSummary(), "services": services}
+	a.mu.RLock()
+	if a.imageState != nil {
+		state := *a.imageState
+		payload["imageState"] = state
+	}
+	a.mu.RUnlock()
 	if a.hostd != nil {
 		if state, err := a.hostd.TimeSyncStatus(ctx); err == nil {
 			payload["resourceSummary"].(map[string]any)["timeSync"] = state
@@ -537,7 +545,19 @@ func (a *Agent) Heartbeat(ctx context.Context) error {
 			payload["foundationStates"] = states
 		}
 	}
-	if err := a.request(ctx, http.MethodPost, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/heartbeat", identity.AgentToken, payload, nil); err != nil {
+	var acknowledgement struct {
+		Node struct {
+			ID     string `json:"id"`
+			Status string `json:"observedStatus"`
+		} `json:"node"`
+	}
+	if err := a.request(ctx, http.MethodPost, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/heartbeat", identity.AgentToken, payload, &acknowledgement); err != nil {
+		return err
+	}
+	if acknowledgement.Node.ID != identity.NodeID || acknowledgement.Node.Status != "online" {
+		return fmt.Errorf("中心尚未确认节点在线")
+	}
+	if err := a.writeConnectionStatus(""); err != nil {
 		return err
 	}
 	a.mu.Lock()
@@ -587,6 +607,7 @@ func (a *Agent) Commands(ctx context.Context) ([]AgentCommand, error) {
 	}
 	var response struct {
 		Commands         []AgentCommand                 `json:"commands"`
+		ImagePlan        *ImagePlan                     `json:"imagePlan"`
 		ClusterPlan      *hostd.ClusterPlan             `json:"clusterPlan"`
 		ClusterUninstall *hostd.UninstallRequest        `json:"clusterUninstall"`
 		FoundationPlan   *hostd.FoundationPlan          `json:"foundationPlan"`
@@ -646,6 +667,11 @@ func (a *Agent) Commands(ctx context.Context) ([]AgentCommand, error) {
 		// 时间同步异常由心跳状态上报并在运维页告警，不能阻断 K3s、基础服务
 		// 或工程命令的正常收敛，否则 Chrony 故障会放大为节点完全失管。
 		_, _ = a.hostd.ApplyTimeSync(ctx, *response.TimeSyncPlan)
+	}
+	if response.ImagePlan != nil {
+		if err := a.prepareImages(ctx, *response.ImagePlan); err != nil {
+			return nil, fmt.Errorf("准备运行资源失败: %w", err)
+		}
 	}
 	if response.FoundationPlan != nil {
 		if a.hostd == nil {
@@ -853,7 +879,7 @@ func isLoopbackCenterHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func resourceSummary() map[string]any {
+func (a *Agent) resourceSummary() map[string]any {
 	result := map[string]any{"cpu": map[string]any{"count": runtime.NumCPU()}, "memory": map[string]any{}, "disk": map[string]any{}}
 	if cpuPercent, err := cpu.Percent(0, false); err == nil && len(cpuPercent) > 0 {
 		result["cpu"].(map[string]any)["usedPercent"] = cpuPercent[0]
@@ -866,5 +892,75 @@ func resourceSummary() map[string]any {
 		result["disk"].(map[string]any)["totalBytes"] = usage.Total
 		result["disk"].(map[string]any)["usedPercent"] = usage.UsedPercent
 	}
+	system := map[string]any{"dataPath": filepath.Clean(a.cfg.HostDataDir)}
+	if strings.TrimSpace(a.cfg.HostDataDir) == "" {
+		system["dataPath"] = filepath.Clean(a.cfg.DataDir)
+	}
+	if info, err := host.Info(); err == nil {
+		system["distribution"] = info.Platform
+		system["version"] = info.PlatformVersion
+		system["kernelVersion"] = info.KernelVersion
+	}
+	result["system"] = system
 	return result
+}
+
+// 中心确认回执不含令牌，安装器只读取本次启动后的成功确认。
+func (a *Agent) writeConnectionStatus(message string) error {
+	record := struct {
+		NodeID      string `json:"nodeId"`
+		ConfirmedAt int64  `json:"confirmedAt"`
+		Error       string `json:"error,omitempty"`
+	}{NodeID: a.currentIdentity().NodeID, Error: message}
+	if message == "" {
+		record.ConfirmedAt = time.Now().Unix()
+	}
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	if err = os.MkdirAll(a.cfg.DataDir, 0700); err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(a.cfg.DataDir, ".connection-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err = file.Write(raw); err != nil {
+		file.Close()
+		return err
+	}
+	if err = file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), filepath.Join(a.cfg.DataDir, "ops-center-connection.json"))
+}
+
+// NotifyUninstalled 仅在本机清理完成后调用；离线或中心未确认时返回错误，不伪报同步成功。
+func NotifyUninstalled(ctx context.Context, cfg Config) error {
+	data, err := os.ReadFile(filepath.Join(cfg.DataDir, "ops-agent-identity.json"))
+	if err != nil {
+		return err
+	}
+	var identity Identity
+	if err = json.Unmarshal(data, &identity); err != nil {
+		return err
+	}
+	if identity.NodeID == "" || identity.AgentToken == "" {
+		return errors.New("缺少节点接入身份")
+	}
+	a := &Agent{cfg: cfg, client: newCenterHTTPClient(15 * time.Second)}
+	var response struct {
+		Node struct {
+			Status string `json:"observedStatus"`
+		} `json:"node"`
+	}
+	if err = a.request(ctx, http.MethodPost, "/api/v1/ops/agent/nodes/"+identity.NodeID+"/heartbeat", identity.AgentToken, map[string]any{"uninstalled": true}, &response); err != nil {
+		return err
+	}
+	if response.Node.Status != "uninstalled" {
+		return errors.New("中心未确认卸载状态")
+	}
+	return nil
 }

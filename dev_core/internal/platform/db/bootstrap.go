@@ -6,12 +6,14 @@ import (
 	"strings"
 
 	coreschema "github.com/indu-forge/dev_core/db/schema"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var requiredTables = []string{
 	"tenants",
 	"users",
+	"refresh_tokens",
 	"projects",
 	"scene_provider_state",
 	"scene_documents",
@@ -51,6 +53,10 @@ var requiredTables = []string{
 }
 
 var requiredColumns = map[string][]string{
+	"tenants":              {"initialized", "is_default", "admin_user_id"},
+	"users":                {"must_change_password", "credential_version"},
+	"refresh_tokens":       {"remember_me", "credential_version"},
+	"host_nodes":           {"node_source"},
 	"projects":             {"authoring_epoch"},
 	"application_versions": {"authoring_snapshot_schema", "authoring_snapshot_bucket", "authoring_snapshot_key", "authoring_snapshot_hash", "authoring_snapshot_cipher_hash", "authoring_snapshot_size", "authoring_snapshot_key_id", "authoring_project_revision", "restorable"},
 	"project_deployments":  {"deletion_requested_at"},
@@ -76,6 +82,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool, allowCreate bool) err
 			return fmt.Errorf("控制面数据库已有业务表但缺少必需表 %s，服务拒绝自动修改", table)
 		}
 	}
+	return validateRequiredColumns(ctx, pool)
+}
+
+type schemaColumnReader interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+// 只读取元数据；旧库缺少当前认证字段时明确拒绝，绝不启动修复。
+func validateRequiredColumns(ctx context.Context, pool schemaColumnReader) error {
 	for table, columns := range requiredColumns {
 		for _, column := range columns {
 			var exists bool

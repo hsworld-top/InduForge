@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/google/uuid"
+	platformdb "github.com/indu-forge/dev_core/internal/platform/db"
 	dbsqlc "github.com/indu-forge/dev_core/internal/platform/db/sqlc"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -16,12 +18,44 @@ import (
 )
 
 type PostgreSQLRepository struct {
-	pool    *pgxpool.Pool
-	queries *dbsqlc.Queries
+	pool          *pgxpool.Pool
+	queries       *dbsqlc.Queries
+	demoWorkspace interface {
+		Initialize(string) (string, error)
+		Remove(string) error
+	}
+	runtimeConfig platformdb.BuiltInRuntimeConfig
 }
 
 func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
-	return &PostgreSQLRepository{pool: pool, queries: dbsqlc.New(pool)}
+	return &PostgreSQLRepository{pool: pool, queries: dbsqlc.New(pool), runtimeConfig: platformdb.BuiltInRuntimeConfig{NodeName: "induframe-center", Architecture: runtime.GOARCH, K3sVersion: "v1.36.4+k3s1", K3sAPIPort: 6443}}
+}
+
+func (r *PostgreSQLRepository) SetBuiltInRuntimeConfig(config platformdb.BuiltInRuntimeConfig) {
+	r.runtimeConfig = config
+}
+
+func (r *PostgreSQLRepository) SetDemoWorkspace(workspace interface {
+	Initialize(string) (string, error)
+	Remove(string) error
+}) {
+	r.demoWorkspace = workspace
+}
+func (r *PostgreSQLRepository) createDemoShell(ctx context.Context, tx pgx.Tx, tenantID, actorID string) (func(), error) {
+	if r.demoWorkspace == nil {
+		return func() {}, fmt.Errorf("示例工程工作空间未配置")
+	}
+	projectID := uuid.NewString()
+	path, err := r.demoWorkspace.Initialize(projectID)
+	if err != nil {
+		return func() {}, err
+	}
+	cleanup := func() { _ = r.demoWorkspace.Remove(path) }
+	if err := platformdb.CreateDemoShell(ctx, tx, tenantID, actorID, projectID, path); err != nil {
+		cleanup()
+		return func() {}, err
+	}
+	return cleanup, nil
 }
 
 func (r *PostgreSQLRepository) List(ctx context.Context, filter ListFilter) ([]Tenant, int64, error) {
@@ -38,7 +72,9 @@ func (r *PostgreSQLRepository) List(ctx context.Context, filter ListFilter) ([]T
 	}
 	result := make([]Tenant, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, tenantFromListRow(row))
+		item := tenantFromListRow(row)
+
+		result = append(result, item)
 	}
 	return result, total, nil
 }
@@ -51,7 +87,9 @@ func (r *PostgreSQLRepository) Get(ctx context.Context, identifier string) (Tena
 		}
 		return Tenant{}, fmt.Errorf("查询租户失败: %w", err)
 	}
-	return tenantFromGetRow(row), nil
+	item := tenantFromGetRow(row)
+
+	return item, nil
 }
 
 func (r *PostgreSQLRepository) Create(ctx context.Context, item Tenant, adminUsername, adminPasswordHash string) (Tenant, error) {
@@ -65,18 +103,38 @@ func (r *PostgreSQLRepository) Create(ctx context.Context, item Tenant, adminUse
 	if err != nil {
 		return Tenant{}, mapConstraintError(err)
 	}
-	_, err = queries.CreateManagedUser(ctx, dbsqlc.CreateManagedUserParams{
+	admin, err := queries.CreateManagedUser(ctx, dbsqlc.CreateManagedUserParams{
 		TenantID: created.ID, Username: adminUsername, PasswordHash: adminPasswordHash,
 		Role: "SYSTEM_ADMIN", Status: "active", Preferences: []byte(`{}`),
 	})
 	if err != nil {
 		return Tenant{}, fmt.Errorf("创建租户默认管理员失败: %w", err)
 	}
+	if _, _, err := platformdb.EnsureBuiltInRuntime(ctx, tx, uuidString(created.ID), uuidString(admin.ID), r.runtimeConfig); err != nil {
+		return Tenant{}, err
+	}
+	cleanupDemo, err := r.createDemoShell(ctx, tx, uuidString(created.ID), uuidString(admin.ID))
+	if err != nil {
+		return Tenant{}, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			cleanupDemo()
+		}
+	}()
+	if _, err := tx.Exec(ctx, `UPDATE tenants SET initialized=true, admin_user_id=$2 WHERE id=$1`, created.ID, admin.ID); err != nil {
+		return Tenant{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Tenant{}, fmt.Errorf("提交创建租户事务失败: %w", err)
 	}
+	committed = true
 	result := tenantFromModel(created)
 	result.UserCount = 1
+	result.Initialized = true
+	result.AdminUsername = adminUsername
+	result.AdminUserID = uuidString(admin.ID)
 	return result, nil
 }
 
@@ -219,15 +277,23 @@ func updateTenantParams(item Tenant) dbsqlc.UpdateTenantParams {
 }
 
 func tenantFromListRow(row dbsqlc.ListTenantsRow) Tenant {
-	return tenantFromFields(row.ID, row.Name, row.Code, row.Description, row.Status, row.ContactEmail, row.ContactPhone, row.MaxUsers, row.MaxProjects, row.MaxStorage, row.UsedStorage, row.LogoObjectKey, row.LoginBackgroundObjectKey, row.CompanyName, row.CompanyAddress, row.CompanyPhone, row.CompanyWebsite, row.Settings, row.ExpiresAt, row.CreatedAt, row.UpdatedAt, row.UserCount, row.ProjectCount)
+	result := tenantFromFields(row.ID, row.Name, row.Code, row.Description, row.Status, row.ContactEmail, row.ContactPhone, row.MaxUsers, row.MaxProjects, row.MaxStorage, row.UsedStorage, row.LogoObjectKey, row.LoginBackgroundObjectKey, row.CompanyName, row.CompanyAddress, row.CompanyPhone, row.CompanyWebsite, row.Settings, row.ExpiresAt, row.CreatedAt, row.UpdatedAt, row.UserCount, row.ProjectCount)
+	result.Initialized, result.IsDefault, result.AdminUserID = row.Initialized, row.IsDefault, uuidString(row.AdminUserID)
+	result.AdminUsername = row.AdminUsername
+	return result
 }
 
 func tenantFromGetRow(row dbsqlc.GetTenantByIdentifierRow) Tenant {
-	return tenantFromFields(row.ID, row.Name, row.Code, row.Description, row.Status, row.ContactEmail, row.ContactPhone, row.MaxUsers, row.MaxProjects, row.MaxStorage, row.UsedStorage, row.LogoObjectKey, row.LoginBackgroundObjectKey, row.CompanyName, row.CompanyAddress, row.CompanyPhone, row.CompanyWebsite, row.Settings, row.ExpiresAt, row.CreatedAt, row.UpdatedAt, row.UserCount, row.ProjectCount)
+	result := tenantFromFields(row.ID, row.Name, row.Code, row.Description, row.Status, row.ContactEmail, row.ContactPhone, row.MaxUsers, row.MaxProjects, row.MaxStorage, row.UsedStorage, row.LogoObjectKey, row.LoginBackgroundObjectKey, row.CompanyName, row.CompanyAddress, row.CompanyPhone, row.CompanyWebsite, row.Settings, row.ExpiresAt, row.CreatedAt, row.UpdatedAt, row.UserCount, row.ProjectCount)
+	result.Initialized, result.IsDefault, result.AdminUserID = row.Initialized, row.IsDefault, uuidString(row.AdminUserID)
+	result.AdminUsername = row.AdminUsername
+	return result
 }
 
 func tenantFromModel(row dbsqlc.Tenant) Tenant {
-	return tenantFromFields(row.ID, row.Name, row.Code, row.Description, row.Status, row.ContactEmail, row.ContactPhone, row.MaxUsers, row.MaxProjects, row.MaxStorage, row.UsedStorage, row.LogoObjectKey, row.LoginBackgroundObjectKey, row.CompanyName, row.CompanyAddress, row.CompanyPhone, row.CompanyWebsite, row.Settings, row.ExpiresAt, row.CreatedAt, row.UpdatedAt, 0, 0)
+	result := tenantFromFields(row.ID, row.Name, row.Code, row.Description, row.Status, row.ContactEmail, row.ContactPhone, row.MaxUsers, row.MaxProjects, row.MaxStorage, row.UsedStorage, row.LogoObjectKey, row.LoginBackgroundObjectKey, row.CompanyName, row.CompanyAddress, row.CompanyPhone, row.CompanyWebsite, row.Settings, row.ExpiresAt, row.CreatedAt, row.UpdatedAt, 0, 0)
+	result.Initialized, result.IsDefault, result.AdminUserID = row.Initialized, row.IsDefault, uuidString(row.AdminUserID)
+	return result
 }
 
 func tenantFromFields(id pgtype.UUID, name, code string, description pgtype.Text, status string, contactEmail, contactPhone pgtype.Text, maxUsers, maxProjects int32, maxStorage, usedStorage int64, logoObjectKey, backgroundObjectKey, companyName, companyAddress, companyPhone, companyWebsite pgtype.Text, settings []byte, expiresAt, createdAt, updatedAt pgtype.Timestamptz, userCount, projectCount int64) Tenant {
@@ -309,9 +375,81 @@ func unmarshalSettings(value []byte) map[string]any {
 }
 
 func mapConstraintError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
 	var pgError *pgconn.PgError
 	if errors.As(err, &pgError) && pgError.Code == "23505" {
 		return ErrAlreadyExists
 	}
 	return fmt.Errorf("保存租户失败: %w", err)
+}
+
+// 锁定租户行串行化初始化；重试已成功的请求不会替换管理员或密码。
+func (r *PostgreSQLRepository) Initialize(ctx context.Context, identifier, username, hash string) (Tenant, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Tenant{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	cleanupDemo := func() {}
+	committed := false
+	defer func() {
+		if !committed {
+			cleanupDemo()
+		}
+	}()
+	var id string
+	var initialized bool
+	if err := tx.QueryRow(ctx, `SELECT id::text, initialized FROM tenants WHERE id::text=$1 OR lower(code)=lower($1) FOR UPDATE`, identifier).Scan(&id, &initialized); err != nil {
+		return Tenant{}, mapConstraintError(err)
+	}
+	if !initialized {
+		var userID string
+		if err := tx.QueryRow(ctx, `INSERT INTO users(tenant_id,username,password_hash,role,status) VALUES($1,$2,$3,'SYSTEM_ADMIN','active') RETURNING id::text`, id, username, hash).Scan(&userID); err != nil {
+			return Tenant{}, mapConstraintError(err)
+		}
+		if _, _, err := platformdb.EnsureBuiltInRuntime(ctx, tx, id, userID, r.runtimeConfig); err != nil {
+			return Tenant{}, err
+		}
+		cleanupDemo, err = r.createDemoShell(ctx, tx, id, userID)
+		if err != nil {
+			return Tenant{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE tenants SET initialized=true,admin_user_id=$2,updated_at=now() WHERE id=$1`, id, userID); err != nil {
+			return Tenant{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Tenant{}, err
+	}
+	committed = true
+	return r.Get(ctx, id)
+}
+
+// 密码版本和刷新会话在同一事务更新，旧 access token 也立即因版本不匹配失效。
+func (r *PostgreSQLRepository) ResetAdminPassword(ctx context.Context, identifier, hash string) (Tenant, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Tenant{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var id, userID string
+	if err := tx.QueryRow(ctx, `SELECT id::text,admin_user_id::text FROM tenants WHERE (id::text=$1 OR lower(code)=lower($1)) AND initialized FOR UPDATE`, identifier).Scan(&id, &userID); err != nil {
+		return Tenant{}, ErrNotFound
+	}
+	result, err := tx.Exec(ctx, `UPDATE users SET password_hash=$3,must_change_password=true,credential_version=credential_version+1,password_changed_at=now(),updated_at=now() WHERE id=$1 AND tenant_id=$2 AND role='SYSTEM_ADMIN'`, userID, id, hash)
+	if err != nil {
+		return Tenant{}, err
+	}
+	if result.RowsAffected() != 1 {
+		return Tenant{}, ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id=$1`, userID); err != nil {
+		return Tenant{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Tenant{}, err
+	}
+	return r.Get(ctx, id)
 }

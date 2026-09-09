@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 )
@@ -23,7 +22,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	}
 	projectID, userID, tenantID := uuid.NewString(), uuid.NewString(), "tenant-collector"
 	secret := "collector-dev-secret-123"
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token", Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret, CollectorSecretKey: []byte("0123456789abcdef0123456789abcdef"), CollectorSecretKeyVersion: "v1", ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1", CollectorProtocolCatalogPath: "../../../contracts/collector-protocols"})
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token", Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret, CollectorSecretKey: []byte("0123456789abcdef0123456789abcdef"), CollectorSecretKeyVersion: "v1", ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1", CollectorProtocolCatalogPath: "../../../contracts/collector-protocols"})
 	if err != nil {
 		t.Fatalf("创建服务失败: %v", err)
 	}

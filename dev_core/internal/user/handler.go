@@ -142,6 +142,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeUserNotFound, err.Error())
 	case errors.Is(err, ErrAlreadyExists):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeUsernameExists, err.Error())
+	case errors.Is(err, ErrInvalidInput):
+		h.writeInvalid(w, r, err)
 	case errors.Is(err, ErrDeleteSelf), errors.Is(err, ErrModifySelf):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
 	default:
@@ -159,25 +161,33 @@ func (h *Handler) writeInvalid(w http.ResponseWriter, r *http.Request, err error
 
 func decodeInput(r *http.Request) (Input, error) {
 	var body struct {
-		TenantID    *string        `json:"tenantId"`
-		Username    *string        `json:"username"`
-		Password    *string        `json:"password"`
-		Email       *string        `json:"email"`
-		Phone       *string        `json:"phone"`
-		FullName    *string        `json:"fullName"`
-		Avatar      *string        `json:"avatar"`
-		Role        *string        `json:"role"`
-		Status      *string        `json:"status"`
-		Preferences map[string]any `json:"preferences"`
+		TenantID   *string           `json:"tenantId"`
+		Username   *string           `json:"username"`
+		Password   *string           `json:"password"`
+		Email      *string           `json:"email"`
+		Phone      *string           `json:"phone"`
+		FullName   *string           `json:"fullName"`
+		Role       *string           `json:"role"`
+		Status     *string           `json:"status"`
+		Gender     *string           `json:"gender"`
+		Attributes map[string]string `json:"attributes"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		return Input{}, err
 	}
-	return Input{TenantID: body.TenantID, Username: body.Username, Password: body.Password, Email: body.Email, Phone: body.Phone, FullName: body.FullName, Avatar: body.Avatar, Role: body.Role, Status: body.Status, Preferences: body.Preferences}, nil
+	return Input{TenantID: body.TenantID, Username: body.Username, Password: body.Password, Email: body.Email, Phone: body.Phone, FullName: body.FullName, Role: body.Role, Status: body.Status, Gender: body.Gender, Attributes: body.Attributes}, nil
 }
 
 func decodeJSON(r *http.Request, target any) error {
-	return json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(target)
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return errors.New("请求字段或字段类型不正确")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("请求体只能包含一个对象")
+	}
+	return nil
 }
 func pagination(r *http.Request) (int, int) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -192,7 +202,7 @@ func paginationPayload(page, limit int, total int64) map[string]any {
 	return map[string]any{"page": page, "limit": limit, "total": total, "pages": pages}
 }
 func userPayload(item User) map[string]any {
-	payload := map[string]any{"id": item.ID, "tenantId": item.TenantID, "username": item.Username, "email": item.Email, "phone": item.Phone, "fullName": item.FullName, "avatar": item.Avatar, "role": item.Role, "status": item.Status, "preferences": item.Preferences, "lastLoginIp": item.LastLoginIP, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+	payload := map[string]any{"id": item.ID, "tenantId": item.TenantID, "username": item.Username, "email": item.Email, "phone": item.Phone, "fullName": item.FullName, "role": item.Role, "status": item.Status, "gender": extendedProfile(item)["gender"], "attributes": extendedProfile(item)["attributes"], "lastLoginIp": item.LastLoginIP, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
 	if item.LastLoginAt != nil {
 		payload["lastLoginAt"] = item.LastLoginAt.Format(timeFormat)
 	} else {

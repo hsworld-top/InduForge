@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/indu-forge/dev_core/internal/auth"
@@ -26,7 +27,8 @@ func (h *Handler) ListRuntimeRoles(w http.ResponseWriter, r *http.Request, proje
 	if !ok {
 		return
 	}
-	items, err := h.service.ListRoles(r.Context(), actor, projectID)
+	query := parseListQuery(r)
+	items, total, err := h.service.PageRoles(r.Context(), actor, projectID, query)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -35,7 +37,7 @@ func (h *Handler) ListRuntimeRoles(w http.ResponseWriter, r *http.Request, proje
 	for _, item := range items {
 		list = append(list, rolePayload(item))
 	}
-	platformapi.WriteSuccess(w, r, list)
+	platformapi.WriteSuccess(w, r, map[string]any{"list": list, "pagination": map[string]any{"page": query.Page, "limit": query.Limit, "total": total}})
 }
 func (h *Handler) CreateRuntimeRole(w http.ResponseWriter, r *http.Request, projectID string) {
 	actor, ok := h.requireUser(w, r)
@@ -87,7 +89,8 @@ func (h *Handler) ListRuntimeUsers(w http.ResponseWriter, r *http.Request, proje
 	if !ok {
 		return
 	}
-	items, err := h.service.ListUsers(r.Context(), actor, projectID)
+	query := parseListQuery(r)
+	items, total, err := h.service.PageUsers(r.Context(), actor, projectID, query)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -96,7 +99,7 @@ func (h *Handler) ListRuntimeUsers(w http.ResponseWriter, r *http.Request, proje
 	for _, item := range items {
 		list = append(list, userPayload(item))
 	}
-	platformapi.WriteSuccess(w, r, list)
+	platformapi.WriteSuccess(w, r, map[string]any{"list": list, "pagination": map[string]any{"page": query.Page, "limit": query.Limit, "total": total}})
 }
 func (h *Handler) CreateRuntimeUser(w http.ResponseWriter, r *http.Request, projectID string) {
 	actor, ok := h.requireUser(w, r)
@@ -255,4 +258,22 @@ func userPayload(item RuntimeUser) map[string]any {
 		payload["passwordChangedAt"] = nil
 	}
 	return payload
+}
+
+func parseListQuery(r *http.Request) ListQuery {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if page < 1 {
+		page = 1
+	}
+	if page > 1000000 {
+		page = 1000000
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return ListQuery{Keyword: strings.TrimSpace(r.URL.Query().Get("keyword")), Page: page, Limit: limit}
 }

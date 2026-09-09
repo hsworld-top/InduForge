@@ -106,7 +106,7 @@
 
           <!-- 品牌标题 -->
           <h1 class="text-4xl font-bold text-white mb-4">
-            {{ appConfig?.name || 'InduForge' }}
+            {{ appConfig?.name || 'InduFrame' }}
           </h1>
           <p class="text-xl text-white text-opacity-90">
             {{ appConfig?.description || $t('auth.defaultDescription') }}

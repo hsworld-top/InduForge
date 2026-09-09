@@ -10,20 +10,40 @@ LEFT JOIN project_group_members gm ON gm.project_id = p.id
 LEFT JOIN project_groups g ON g.id = gm.group_id
 LEFT JOIN project_tag_bindings tb ON tb.project_id = p.id
 LEFT JOIN project_tags t ON t.id = tb.tag_id
+
+LEFT JOIN LATERAL (
+ SELECT array_agg(CASE WHEN d.mode IN ('release','production') THEN 'RELEASE' ELSE 'DEV' END)::text[] AS modes,
+ array_agg(CASE WHEN d.observed_status IN ('failed','degraded') THEN 'error' WHEN d.observed_status='pending' AND d.desired_status='running' THEN 'deploying' ELSE d.observed_status END)::text[] AS states,
+ max(d.updated_at) AS last_deployed_at,
+ max(CASE d.observed_status WHEN 'failed' THEN 6 WHEN 'degraded' THEN 6 WHEN 'pending' THEN 5 WHEN 'running' THEN 4 WHEN 'stopped' THEN 2 ELSE 1 END) AS runtime_rank
+ FROM project_deployments d JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id AND e.deleted_at IS NULL
+ WHERE d.project_id=p.id AND d.tenant_id=p.tenant_id AND d.deleted_at IS NULL
+) ds ON true
 WHERE p.tenant_id = sqlc.arg(tenant_id)
   AND p.status <> 'deleted'
   AND (
     sqlc.arg(is_platform_admin)::boolean
     OR p.created_by = sqlc.arg(actor_id)
-    OR (sqlc.arg(can_read_shared)::boolean AND p.visibility = 'internal')
+    OR sqlc.arg(can_read_shared)::boolean
   )
   AND (sqlc.arg(keyword)::text = '' OR p.name ILIKE '%' || sqlc.arg(keyword) || '%' OR p.code ILIKE '%' || sqlc.arg(keyword) || '%')
   AND (sqlc.arg(status)::text = '' OR p.status = sqlc.arg(status))
-  AND (sqlc.arg(visibility)::text = '' OR p.visibility = sqlc.arg(visibility))
-  AND (sqlc.arg(group_id)::text = '' OR g.id::text = sqlc.arg(group_id))
-  AND (sqlc.arg(tag_id)::text = '' OR EXISTS (SELECT 1 FROM project_tag_bindings filter_tb WHERE filter_tb.project_id = p.id AND filter_tb.tag_id::text = sqlc.arg(tag_id)))
-GROUP BY p.id, creator.username, g.id, g.name
-ORDER BY p.updated_at DESC,p.id DESC
+  AND (sqlc.arg(visibility)::text = '' OR p.visibility = ANY(string_to_array(sqlc.arg(visibility)::text, ',')))
+  AND (sqlc.arg(group_id)::text = '' OR (sqlc.arg(group_id)::text='ungrouped' AND g.id IS NULL) OR g.id::text = sqlc.arg(group_id))
+  AND (sqlc.arg(tag_id)::text = '' OR EXISTS (SELECT 1 FROM project_tag_bindings filter_tb WHERE filter_tb.project_id = p.id AND filter_tb.tag_id::text = ANY(string_to_array(sqlc.arg(tag_id)::text, ','))))
+
+  AND (sqlc.arg(created_by_filter)::text = '' OR p.created_by::text = sqlc.arg(created_by_filter))
+  AND (sqlc.arg(runtime_modes)::text = '' OR ds.modes && string_to_array(sqlc.arg(runtime_modes)::text, ','))
+  AND (sqlc.arg(deploy_statuses)::text = '' OR COALESCE(ds.states, ARRAY['not_deployed']::text[]) && string_to_array(sqlc.arg(deploy_statuses)::text, ','))
+GROUP BY p.id, creator.username, g.id, g.name, ds.last_deployed_at, ds.runtime_rank
+ORDER BY CASE WHEN sqlc.arg(sort_by)::text='createdAt' AND sqlc.arg(sort_order)::text='ASC' THEN p.created_at END ASC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='createdAt' AND sqlc.arg(sort_order)::text='DESC' THEN p.created_at END DESC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='updatedAt' AND sqlc.arg(sort_order)::text='ASC' THEN p.updated_at END ASC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='updatedAt' AND sqlc.arg(sort_order)::text='DESC' THEN p.updated_at END DESC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='lastDeployedAt' AND sqlc.arg(sort_order)::text='ASC' THEN ds.last_deployed_at END ASC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='lastDeployedAt' AND sqlc.arg(sort_order)::text='DESC' THEN ds.last_deployed_at END DESC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='runtimeStatus' AND sqlc.arg(sort_order)::text='ASC' THEN ds.runtime_rank END ASC NULLS LAST,
+CASE WHEN sqlc.arg(sort_by)::text='runtimeStatus' AND sqlc.arg(sort_order)::text='DESC' THEN ds.runtime_rank END DESC NULLS LAST,p.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: CountProjects :one
@@ -31,18 +51,31 @@ SELECT count(DISTINCT p.id)
 FROM projects p
 LEFT JOIN project_group_members gm ON gm.project_id = p.id
 LEFT JOIN project_groups g ON g.id = gm.group_id
+
+LEFT JOIN LATERAL (
+ SELECT array_agg(CASE WHEN d.mode IN ('release','production') THEN 'RELEASE' ELSE 'DEV' END)::text[] AS modes,
+ array_agg(CASE WHEN d.observed_status IN ('failed','degraded') THEN 'error' WHEN d.observed_status='pending' AND d.desired_status='running' THEN 'deploying' ELSE d.observed_status END)::text[] AS states,
+ max(d.updated_at) AS last_deployed_at,
+ max(CASE d.observed_status WHEN 'failed' THEN 6 WHEN 'degraded' THEN 6 WHEN 'pending' THEN 5 WHEN 'running' THEN 4 WHEN 'stopped' THEN 2 ELSE 1 END) AS runtime_rank
+ FROM project_deployments d JOIN runtime_environments e ON e.id=d.environment_id AND e.tenant_id=d.tenant_id AND e.deleted_at IS NULL
+ WHERE d.project_id=p.id AND d.tenant_id=p.tenant_id AND d.deleted_at IS NULL
+) ds ON true
 WHERE p.tenant_id = sqlc.arg(tenant_id)
   AND p.status <> 'deleted'
   AND (
     sqlc.arg(is_platform_admin)::boolean
     OR p.created_by = sqlc.arg(actor_id)
-    OR (sqlc.arg(can_read_shared)::boolean AND p.visibility = 'internal')
+    OR sqlc.arg(can_read_shared)::boolean
   )
   AND (sqlc.arg(keyword)::text = '' OR p.name ILIKE '%' || sqlc.arg(keyword) || '%' OR p.code ILIKE '%' || sqlc.arg(keyword) || '%')
   AND (sqlc.arg(status)::text = '' OR p.status = sqlc.arg(status))
-  AND (sqlc.arg(visibility)::text = '' OR p.visibility = sqlc.arg(visibility))
-  AND (sqlc.arg(group_id)::text = '' OR g.id::text = sqlc.arg(group_id))
-  AND (sqlc.arg(tag_id)::text = '' OR EXISTS (SELECT 1 FROM project_tag_bindings filter_tb WHERE filter_tb.project_id = p.id AND filter_tb.tag_id::text = sqlc.arg(tag_id)));
+  AND (sqlc.arg(visibility)::text = '' OR p.visibility = ANY(string_to_array(sqlc.arg(visibility)::text, ',')))
+  AND (sqlc.arg(group_id)::text = '' OR (sqlc.arg(group_id)::text='ungrouped' AND g.id IS NULL) OR g.id::text = sqlc.arg(group_id))
+  AND (sqlc.arg(tag_id)::text = '' OR EXISTS (SELECT 1 FROM project_tag_bindings filter_tb WHERE filter_tb.project_id = p.id AND filter_tb.tag_id::text = ANY(string_to_array(sqlc.arg(tag_id)::text, ','))))
+  AND (sqlc.arg(created_by_filter)::text = '' OR p.created_by::text = sqlc.arg(created_by_filter))
+  AND (sqlc.arg(runtime_modes)::text = '' OR ds.modes && string_to_array(sqlc.arg(runtime_modes)::text, ','))
+  AND (sqlc.arg(deploy_statuses)::text = '' OR COALESCE(ds.states, ARRAY['not_deployed']::text[]) && string_to_array(sqlc.arg(deploy_statuses)::text, ','))
+;
 
 -- name: GetProject :one
 SELECT * FROM projects WHERE id = sqlc.arg(project_id) AND tenant_id = sqlc.arg(tenant_id) AND status <> 'deleted' LIMIT 1;
@@ -71,7 +104,7 @@ UPDATE projects SET status = 'deleted', updated_by = sqlc.arg(user_id), updated_
 WHERE id = sqlc.arg(project_id) AND tenant_id = sqlc.arg(tenant_id) AND status <> 'deleted';
 
 -- name: ListProjectTags :many
-SELECT t.*, (SELECT count(*) FROM project_tag_bindings b WHERE b.tag_id = t.id) AS project_count
+SELECT t.*, (SELECT count(*) FROM project_tag_bindings b JOIN projects p ON p.id = b.project_id WHERE b.tag_id = t.id AND p.status <> 'deleted') AS project_count
 FROM project_tags t
 WHERE t.tenant_id = sqlc.arg(tenant_id)
   AND (sqlc.arg(keyword)::text = '' OR t.name ILIKE '%' || sqlc.arg(keyword) || '%')

@@ -18,11 +18,15 @@ var (
 )
 
 type User struct {
+	MustChangePassword       bool
+	CredentialVersion        int64
+	TenantInitialized        bool
 	ID                       string
 	TenantID                 string
 	Username                 string
 	PasswordHash             string
 	Email                    string
+	Avatar                   string
 	FullName                 string
 	Role                     string
 	Status                   string
@@ -35,6 +39,7 @@ type User struct {
 }
 
 type TenantBranding struct {
+	CaptchaBackgrounds       []string
 	ID                       string
 	Code                     string
 	Name                     string
@@ -43,20 +48,24 @@ type TenantBranding struct {
 }
 
 type RefreshToken struct {
-	ID        string
-	TenantID  string
-	UserID    string
-	Hash      string
-	ExpiresAt time.Time
-	Revoked   bool
+	RememberMe        bool
+	CredentialVersion int64
+	ID                string
+	TenantID          string
+	UserID            string
+	Hash              string
+	ExpiresAt         time.Time
+	Revoked           bool
 }
 
 type Repository interface {
 	CountActiveTenants(ctx context.Context) (int64, error)
-	FindLoginUser(ctx context.Context, username, tenantCode string) (User, error)
+	FindLoginUser(ctx context.Context, username, tenantCode string, platform bool) (User, error)
 	GetUser(ctx context.Context, userID string) (User, error)
+	UpdateProfile(ctx context.Context, userID, fullName, email string) error
+	UpdateAvatar(ctx context.Context, userID, objectKey string) (string, error)
 	UpdateLogin(ctx context.Context, userID, loginIP string) error
-	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	UpdatePassword(ctx context.Context, userID, passwordHash string, credentialVersion int64) error
 	CreateRefreshToken(ctx context.Context, token RefreshToken) error
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	RotateRefreshToken(ctx context.Context, oldTokenHash string, replacement RefreshToken) error

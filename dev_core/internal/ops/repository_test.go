@@ -35,6 +35,75 @@ func TestFoundationMigrationColumnsBelongToServicesTable(t *testing.T) {
 	}
 }
 
+func TestHostNodeSourceIdentityConstraint(t *testing.T) {
+	_, currentFile, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "..", "..", "db", "schema", "core-schema.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := string(raw)
+	for _, expected := range []string{
+		"node_source text NOT NULL DEFAULT 'agent'", "host_nodes_tenant_built_in_key",
+		"node_source = 'built_in' AND enrollment_id IS NULL AND agent_token_hash IS NULL",
+		"node_source = 'agent' AND enrollment_id IS NOT NULL AND agent_token_hash IS NOT NULL",
+	} {
+		if !strings.Contains(schema, expected) {
+			t.Fatalf("节点来源身份约束缺少 %q", expected)
+		}
+	}
+}
+
+func TestAgentClusterPlanOnlyJoinsBuiltInCenter(t *testing.T) {
+	_, currentFile, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(currentFile), "repository.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	implementation := string(raw)
+	start := strings.Index(implementation, "func (r *PostgreSQLRepository) AgentClusterPlan")
+	end := strings.Index(implementation[start:], "func (r *PostgreSQLRepository) AgentClusterUninstall")
+	if start < 0 || end < 0 {
+		t.Fatal("无法定位 AgentClusterPlan 实现")
+	}
+	plan := implementation[start : start+end]
+	for _, expected := range []string{"cn.node_kind='worker'", "n.node_source='agent'", "center.node_source='built_in'", `plan.Operation = "join-agent"`} {
+		if !strings.Contains(plan, expected) {
+			t.Fatalf("外部节点加入计划缺少约束 %q", expected)
+		}
+	}
+	if strings.Contains(plan, "init-server") {
+		t.Fatal("中心内置节点不得通过 NodeAgent 初始化 K3s Server")
+	}
+}
+
+func TestObserveBuiltInNodeRequiresCenterLabelAndReady(t *testing.T) {
+	nodes := []KubernetesNode{
+		{Name: "center-01", InternalIP: "10.0.0.129", Ready: true, Labels: map[string]string{}},
+		{Name: "center-02", InternalIP: "10.0.0.130", Ready: false, Labels: map[string]string{"induforge.io/center-node": "true"}},
+	}
+	missing := observeBuiltInNode("center-01", nodes)
+	if missing.HostStatus != "offline" || missing.ClusterStatus != "failed" {
+		t.Fatalf("缺少中心标签的节点不应被接受: %#v", missing)
+	}
+	notReady := observeBuiltInNode("center-02", nodes)
+	if notReady.HostStatus != "offline" || notReady.IPAddress != "10.0.0.130" {
+		t.Fatalf("未就绪中心节点观测错误: %#v", notReady)
+	}
+	nodes[1].Ready = true
+	ready := observeBuiltInNode("center-02", nodes)
+	if ready.HostStatus != "online" || ready.ClusterStatus != "ready" || ready.IPAddress != "10.0.0.130" {
+		t.Fatalf("中心节点就绪观测错误: %#v", ready)
+	}
+}
+
+func TestUniqueNodeIDsAllowsMultipleServicesOnOneNode(t *testing.T) {
+	nodeID := "ee45f0a6-61bd-43a4-82d1-049ef8531139"
+	ids := uniqueNodeIDs([]string{nodeID, nodeID, nodeID, nodeID, nodeID, nodeID, nodeID, nodeID})
+	if len(ids) != 1 || ids[0] != nodeID {
+		t.Fatalf("同一节点承载多项服务时应只校验一次登记状态: %#v", ids)
+	}
+}
+
 func TestAcceptClusterStateIdentity(t *testing.T) {
 	tests := []struct {
 		name  string

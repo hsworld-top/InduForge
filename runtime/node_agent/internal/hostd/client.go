@@ -187,3 +187,40 @@ func (client *Client) request(ctx context.Context, method, path string, payload 
 	}
 	return envelope.Data, nil
 }
+
+func (c *Client) CheckImages(ctx context.Context, p ImageArtifact) (ImageResult, error) {
+	return c.imageRequest(ctx, "/v1/images/check", p)
+}
+func (c *Client) ImportImages(ctx context.Context, p ImageArtifact) (ImageResult, error) {
+	return c.imageRequest(ctx, "/v1/images/import", p)
+}
+func (c *Client) imageRequest(ctx context.Context, path string, p ImageArtifact) (ImageResult, error) {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return ImageResult{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://unix"+path, bytes.NewReader(raw))
+	if err != nil {
+		return ImageResult{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := *c.httpClient
+	client.Timeout = 20 * time.Minute
+	resp, err := client.Do(req)
+	if err != nil {
+		return ImageResult{}, err
+	}
+	defer resp.Body.Close()
+	var env struct {
+		Code int         `json:"code"`
+		Msg  string      `json:"msg"`
+		Data ImageResult `json:"data"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return ImageResult{}, err
+	}
+	if resp.StatusCode != 200 || env.Code != 0 {
+		return ImageResult{}, fmt.Errorf("hostd 镜像操作失败: %s", env.Msg)
+	}
+	return env.Data, nil
+}

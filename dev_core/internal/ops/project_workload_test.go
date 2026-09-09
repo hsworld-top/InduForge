@@ -15,7 +15,7 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 	if strings.Contains(base, "\t") {
 		t.Fatalf("base manifest must not contain YAML tab indentation: %q", base)
 	}
-	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "type: LoadBalancer", "port: 17800", "induforge.io/host-node-id", "maxUnavailable: 0, maxSurge: 1", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", `IF_PROJECT_ID, value: "` + testProjectID + `"`, "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.2", "image: induforge/project-runtime-api:1.0.1", "image: induforge/runtime-engine:1.0.32", "name: runtime-writer", `"--project-id", "` + testProjectID + `"`, `"--account-id", "` + runtimeAccountID(testProjectID, "99999999-9999-4999-8999-999999999999") + `"`, `exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-binding-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "name: runtime-viewer-token", "{key: runtime-api-token, path: token}", "mountPath: /var/run/induforge/runtime-viewer", "imagePullPolicy: IfNotPresent", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
+	for _, expected := range []string{"if-env-666666666666", "if-project-999999999999-base", "type: LoadBalancer", "port: 17800", "induforge.io/host-node-id", "maxUnavailable: 0, maxSurge: 1", "allowPrivilegeEscalation: false", "IF_RELEASE_ROOT", "IF_WORK_ROOT", `IF_PROJECT_ID, value: "` + testProjectID + `"`, "mountPath: /opt/induforge/release", "kind: Service", "image: induforge/project-gateway:1.0.2", "image: induforge/project-runtime-api:1.0.1", "image: induforge/runtime-engine:1.0.32", "name: runtime-writer", `"--project-id", "` + testProjectID + `"`, `"--account-id", "` + runtimeAccountID(testProjectID, "99999999-9999-4999-8999-999999999999") + `"`, `exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}`, "name: runtime-provision-nats", "name: runtime-provision-state", "name: runtime-api-artifact-prepare", "name: runtime-binding-prepare", "name: runtime-api-secrets", "runtime-api-tokens.json", "name: runtime-viewer-token", "{key: runtime-api-token, path: token}", "mountPath: /var/run/induforge/runtime-viewer", "imagePullPolicy: Never", `path: "/var/lib/induforge/node-agent/deployments/99999999-9999-4999-8999-999999999999/release/releases/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`} {
 		if !strings.Contains(base, expected) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
@@ -85,6 +85,19 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 		if !strings.Contains(compute, expected) {
 			t.Fatalf("compute manifest missing sandbox runtime contract %q: %s", expected, compute)
 		}
+	}
+}
+
+func TestRenderProjectWorkloadManifestUsesCenterSelectorForBuiltInNode(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	manifest, err := RenderProjectWorkloadManifest(ProjectWorkload{
+		EnvironmentID: testEnvironmentID, DeploymentID: "99999999-9999-4999-8999-999999999999", ServiceID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+		NodeID: testNodeID, Engine: ServiceCompute, ReleaseID: testVersionID, ReleaseDigest: digest, Generation: 1,
+		NodeSelectorKey: "induforge.io/center-node", NodeSelectorValue: "true",
+		ArtifactHostPath: "/var/lib/induforge/center-releases/test",
+	})
+	if err != nil || !strings.Contains(manifest, `nodeSelector: {induforge.io/center-node: "true"}`) || strings.Contains(manifest, "induforge.io/host-node-id") {
+		t.Fatalf("中心内置节点调度标签错误: %v\n%s", err, manifest)
 	}
 }
 

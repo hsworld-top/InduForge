@@ -199,7 +199,7 @@ func (h *WebSocketWorkbenchHandler) StreamSessionWithQueryToken(validator *auth.
 			response.WriteAppError(w, http.StatusUnauthorized, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthTokenRequired, "请提供 Bearer JWT")
 			return
 		}
-		claims, err := validator.Validate(token)
+		claims, err := validator.ValidateContext(r.Context(), token)
 		if err != nil {
 			response.WriteAppError(w, http.StatusUnauthorized, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthTokenInvalid, "JWT 校验失败")
 			return
@@ -208,7 +208,9 @@ func (h *WebSocketWorkbenchHandler) StreamSessionWithQueryToken(validator *auth.
 			response.WriteAppError(w, http.StatusForbidden, middleware.RequestID(r.Context()), apperrors.ErrorCodePermissionInsufficient, "缺少 project:read 权限")
 			return
 		}
-		if err := h.service.StreamSession(auth.WithClaims(r.Context(), claims), w, r.PathValue("projectId"), r.PathValue("sessionId"), claims.UserID); err != nil {
+		ctx, cancel := validator.WithIdentityLease(r.Context(), token)
+		defer cancel()
+		if err := h.service.StreamSession(auth.WithClaims(ctx, claims), w, r.PathValue("projectId"), r.PathValue("sessionId"), claims.UserID); err != nil {
 			writeWorkbenchStreamError(w, r, normalizeRepresentativeHandlerError(err))
 		}
 	})

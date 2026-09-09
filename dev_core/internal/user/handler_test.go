@@ -23,7 +23,7 @@ const managedUserID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
 func TestUserHTTPInterfaces(t *testing.T) {
 	handler, token, revoker := newUserServer(t, "SYSTEM_ADMIN")
 	assertOK(t, request(t, handler, http.MethodGet, "/api/v1/users", nil, token))
-	assertOK(t, request(t, handler, http.MethodPost, "/api/v1/users", map[string]any{"username": "operator", "password": "operator123", "role": "OPERATOR"}, token))
+	assertOK(t, request(t, handler, http.MethodPost, "/api/v1/users", map[string]any{"username": "operator", "password": "operator123", "role": "OPS_ADMIN"}, token))
 	assertOK(t, request(t, handler, http.MethodPut, "/api/v1/users/"+managedUserID, map[string]any{"fullName": "操作员", "status": "active"}, token))
 	assertOK(t, request(t, handler, http.MethodPut, "/api/v1/users/"+managedUserID+"/password", map[string]any{"newPassword": "new-operator-123"}, token))
 	if revoker.userID != managedUserID {
@@ -60,7 +60,9 @@ func TestUserRoleAssignmentBoundaries(t *testing.T) {
 	}
 
 	superHandler, superToken, _ := newUserServer(t, "SUPER_ADMIN")
-	assertOK(t, request(t, superHandler, http.MethodPost, "/api/v1/users", map[string]any{"username": "peer-super", "password": "target123", "role": "SUPER_ADMIN"}, superToken))
+	if result := request(t, superHandler, http.MethodPost, "/api/v1/users", map[string]any{"username": "peer-super", "password": "target123", "role": "SUPER_ADMIN"}, superToken); result.Code != platformapi.ErrorCodePermissionDenied {
+		t.Fatal("平台管理员不能通过租户用户接口创建账号")
+	}
 }
 
 func TestUserRejectsSelfRoleAndStatusChanges(t *testing.T) {
@@ -79,7 +81,7 @@ func newUserServer(t *testing.T, role string) (http.Handler, string, *fakeRevoke
 	now := time.Now()
 	repository := &fakeRepository{items: map[string]user.User{
 		actor.ID:      {ID: actor.ID, TenantID: actor.TenantID, Username: actor.Username, Role: actor.Role, Status: "active", CreatedAt: now, UpdatedAt: now},
-		managedUserID: {ID: managedUserID, TenantID: actor.TenantID, Username: "managed", Role: "VIEWER", Status: "active", CreatedAt: now, UpdatedAt: now},
+		managedUserID: {ID: managedUserID, TenantID: actor.TenantID, Username: "managed", Role: "OPS_ADMIN", Status: "active", CreatedAt: now, UpdatedAt: now},
 	}, hashes: map[string]string{}}
 	revoker := &fakeRevoker{}
 	root := controlplane.NewHandler(auth.NewHandler(authService))
@@ -96,8 +98,9 @@ func (r *fakeRevoker) RevokeUserRefreshTokens(_ context.Context, userID string) 
 }
 
 type responseEnvelope struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	Code int            `json:"code"`
+	Msg  string         `json:"msg"`
+	Data map[string]any `json:"data"`
 }
 
 func request(t *testing.T, handler http.Handler, method, path string, body any, token string) responseEnvelope {
@@ -176,4 +179,77 @@ func (r *fakeRepository) Delete(_ context.Context, tenantID, userID string) erro
 	}
 	delete(r.items, userID)
 	return nil
+}
+
+func TestUserAdvancedProfileRoundTrip(t *testing.T) {
+	handler, token, _ := newUserServer(t, "SYSTEM_ADMIN")
+	for _, role := range []string{"SYSTEM_ADMIN", "PROJECT_ADMIN", "OPS_ADMIN"} {
+		result := request(t, handler, http.MethodPost, "/api/v1/users", map[string]any{"username": "engineer", "password": "example123", "role": role}, token)
+		assertOK(t, result)
+		if result.Data["role"] != role {
+			t.Fatalf("role: %+v", result.Data)
+		}
+	}
+	profile := map[string]any{"fullName": "张工", "email": "engineer@example.com", "phone": "13800000000", "gender": "female", "attributes": map[string]string{"部门": "工程部", "工号": "A001"}}
+	result := request(t, handler, http.MethodPut, "/api/v1/users/"+managedUserID, profile, token)
+	assertOK(t, result)
+	if result.Data["gender"] != "female" || result.Data["attributes"].(map[string]any)["部门"] != "工程部" {
+		t.Fatalf("profile: %+v", result.Data)
+	}
+	// 编辑部分资料不应丢失其他高级字段。
+	result = request(t, handler, http.MethodPut, "/api/v1/users/"+managedUserID, map[string]any{"fullName": "李工"}, token)
+	assertOK(t, result)
+	if result.Data["attributes"].(map[string]any)["工号"] != "A001" {
+		t.Fatal("attributes lost")
+	}
+	result = request(t, handler, http.MethodPut, "/api/v1/users/"+managedUserID, map[string]any{"gender": "", "attributes": map[string]string{}, "email": ""}, token)
+	assertOK(t, result)
+	if len(result.Data["attributes"].(map[string]any)) != 0 || result.Data["email"] != "" {
+		t.Fatalf("not cleared: %+v", result.Data)
+	}
+}
+
+func TestUserValidationAndManagementBoundary(t *testing.T) {
+	handler, token, _ := newUserServer(t, "SYSTEM_ADMIN")
+	for _, field := range []map[string]any{
+		{"role": ""}, {"password": " "}, {"email": "bad"}, {"gender": "invalid"},
+		{"attributes": map[string]string{"role": "SYSTEM_ADMIN"}},
+		{"attributes": map[string]string{"Dept": "a", "dept": "b"}},
+		{"attributes": map[string]any{"部门": 123}}, {"preferences": map[string]any{"theme": "dark"}},
+	} {
+		body := map[string]any{"username": "engineer", "password": "example123", "role": "PROJECT_ADMIN"}
+		for key, value := range field {
+			body[key] = value
+		}
+		result := request(t, handler, http.MethodPost, "/api/v1/users", body, token)
+		if result.Code != platformapi.ErrorCodeInvalidRequest {
+			t.Fatalf("invalid field %v: %+v", field, result)
+		}
+	}
+	for _, role := range []string{"USER_ADMIN", "DEVELOPER", "OPERATOR", "VIEWER", "SUPER_ADMIN"} {
+		result := request(t, handler, http.MethodPost, "/api/v1/users", map[string]any{"username": "engineer", "password": "example123", "role": role}, token)
+		if result.Code != platformapi.ErrorCodePermissionDenied {
+			t.Fatalf("assign role %s: %+v", role, result)
+		}
+	}
+	for _, role := range []string{"PROJECT_ADMIN", "OPS_ADMIN", "USER_ADMIN"} {
+		other, otherToken, _ := newUserServer(t, role)
+		result := request(t, other, http.MethodGet, "/api/v1/users", nil, otherToken)
+		if result.Code != platformapi.ErrorCodePermissionDenied {
+			t.Fatalf("manage users as %s: %+v", role, result)
+		}
+	}
+}
+
+func TestTemporaryPasswordAndUsernameRules(t *testing.T) {
+	handler, token, _ := newUserServer(t, "SYSTEM_ADMIN")
+	for _, password := range []string{"1", "abc", "简单密码!@#"} {
+		assertOK(t, request(t, handler, http.MethodPost, "/api/v1/users", map[string]any{"username": "user.test-1", "password": password, "role": "PROJECT_ADMIN"}, token))
+	}
+	for _, name := range []string{"user/name", "user@name", "user<name", "user name"} {
+		result := request(t, handler, http.MethodPost, "/api/v1/users", map[string]any{"username": name, "password": "123", "role": "PROJECT_ADMIN"}, token)
+		if result.Code != platformapi.ErrorCodeInvalidRequest {
+			t.Fatalf("username %s accepted: %+v", name, result)
+		}
+	}
 }

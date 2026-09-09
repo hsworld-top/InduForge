@@ -20,7 +20,7 @@ fi
 
 usage() {
   cat <<EOF
-${BOLD}InduForge 中心开发系统运维${RESET}
+${BOLD}InduFrame 中心开发系统运维${RESET}
 
 用法：
   induforge status [--json]
@@ -37,7 +37,7 @@ EOF
 banner() {
   [ "$COLOR_ENABLED" -eq 1 ] || return 0
   printf '%s%s  ██╗███████╗%s\n' "$BOLD" "$CYAN" "$RESET"
-  printf '%s%s  ██║██╔════╝%s   %sInduForge%s\n' "$BOLD" "$CYAN" "$RESET" "$BOLD" "$RESET"
+  printf '%s%s  ██║██╔════╝%s   %sInduFrame%s\n' "$BOLD" "$CYAN" "$RESET" "$BOLD" "$RESET"
   printf '%s%s  ██║█████╗%s     %sIndustrial Runtime Platform%s\n' "$BOLD" "$CYAN" "$RESET" "$DIM" "$RESET"
   printf '%s%s  ██║██╔══╝%s\n' "$BOLD" "$CYAN" "$RESET"
   printf '%s%s  ██║██║%s\n' "$BOLD" "$CYAN" "$RESET"
@@ -84,7 +84,7 @@ display_name() {
 
 require_manager() {
   if [ ! -x "$CENTER_MANAGER" ]; then
-    echo "InduForge 开发系统管理程序未安装" >&2
+    echo "InduFrame 开发系统管理程序未安装" >&2
     exit 1
   fi
 }

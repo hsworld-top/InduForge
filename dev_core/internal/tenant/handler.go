@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/indu-forge/dev_core/internal/objectstore"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -213,6 +214,7 @@ func (h *Handler) UploadTenantAsset(w http.ResponseWriter, r *http.Request, tena
 		h.writeInvalid(w, r, errors.New("上传文件不能超过 16MB"))
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		h.writeInvalid(w, r, errors.New("缺少上传文件"))
@@ -235,17 +237,8 @@ func (h *Handler) UploadTenantAsset(w http.ResponseWriter, r *http.Request, tena
 		h.writeError(w, r, err)
 		return
 	}
-	input := Input{}
-	if assetType == "logo" {
-		input.LogoObjectKey = &asset.ObjectKey
-	} else {
-		input.LoginBackgroundObjectKey = &asset.ObjectKey
-	}
-	if _, err := h.service.Update(r.Context(), item.ID, input); err != nil {
-		h.writeError(w, r, err)
-		return
-	}
-	platformapi.WriteSuccess(w, r, map[string]any{"fileUrl": asset.URL})
+	asset.URL = objectstore.BrandURL(item.Code, asset.ObjectKey)
+	platformapi.WriteSuccess(w, r, map[string]any{"fileUrl": asset.URL, "objectKey": asset.ObjectKey})
 }
 
 func (h *Handler) setStatus(w http.ResponseWriter, r *http.Request, tenantID, status string) {
@@ -282,7 +275,7 @@ func (h *Handler) requireSuperAdmin(w http.ResponseWriter, r *http.Request) (aut
 	if !ok {
 		return auth.User{}, false
 	}
-	if user.Role != "SUPER_ADMIN" {
+	if user.Role != "SUPER_ADMIN" || user.MustChangePassword {
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodePermissionDenied, "无权执行当前操作")
 		return auth.User{}, false
 	}
@@ -298,7 +291,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	case errors.Is(err, ErrNoteNotFound):
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeNotFound, err.Error())
 	default:
-		if strings.Contains(err.Error(), "不能为空") || strings.Contains(err.Error(), "不能超过") || strings.Contains(err.Error(), "仅支持") {
+		if strings.Contains(err.Error(), "至少8位") || strings.Contains(err.Error(), "不能为空") || strings.Contains(err.Error(), "不能超过") || strings.Contains(err.Error(), "仅支持") {
 			h.writeInvalid(w, r, err)
 			return
 		}
@@ -312,26 +305,30 @@ func (h *Handler) writeInvalid(w http.ResponseWriter, r *http.Request, err error
 
 func decodeTenantInput(r *http.Request) (Input, error) {
 	var body struct {
-		Name           *string        `json:"name"`
-		Code           *string        `json:"code"`
-		Description    *string        `json:"description"`
-		Status         *string        `json:"status"`
-		ContactEmail   *string        `json:"contactEmail"`
-		ContactPhone   *string        `json:"contactPhone"`
-		MaxUsers       *int32         `json:"maxUsers"`
-		MaxProjects    *int32         `json:"maxProjects"`
-		MaxStorage     *int64         `json:"maxStorage"`
-		CompanyName    *string        `json:"companyName"`
-		CompanyAddress *string        `json:"companyAddress"`
-		CompanyPhone   *string        `json:"companyPhone"`
-		CompanyWebsite *string        `json:"companyWebsite"`
-		Settings       map[string]any `json:"settings"`
-		ExpiresAt      *string        `json:"expiresAt"`
+		LogoObjectKey            *string        `json:"logoObjectKey"`
+		LoginBackgroundObjectKey *string        `json:"loginBackgroundObjectKey"`
+		AdminUsername            *string        `json:"adminUsername"`
+		AdminPassword            *string        `json:"adminPassword"`
+		Name                     *string        `json:"name"`
+		Code                     *string        `json:"code"`
+		Description              *string        `json:"description"`
+		Status                   *string        `json:"status"`
+		ContactEmail             *string        `json:"contactEmail"`
+		ContactPhone             *string        `json:"contactPhone"`
+		MaxUsers                 *int32         `json:"maxUsers"`
+		MaxProjects              *int32         `json:"maxProjects"`
+		MaxStorage               *int64         `json:"maxStorage"`
+		CompanyName              *string        `json:"companyName"`
+		CompanyAddress           *string        `json:"companyAddress"`
+		CompanyPhone             *string        `json:"companyPhone"`
+		CompanyWebsite           *string        `json:"companyWebsite"`
+		Settings                 map[string]any `json:"settings"`
+		ExpiresAt                *string        `json:"expiresAt"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		return Input{}, err
 	}
-	input := Input{Name: body.Name, Code: body.Code, Description: body.Description, Status: body.Status, ContactEmail: body.ContactEmail, ContactPhone: body.ContactPhone, MaxUsers: body.MaxUsers, MaxProjects: body.MaxProjects, MaxStorage: body.MaxStorage, CompanyName: body.CompanyName, CompanyAddress: body.CompanyAddress, CompanyPhone: body.CompanyPhone, CompanyWebsite: body.CompanyWebsite, Settings: body.Settings}
+	input := Input{LogoObjectKey: body.LogoObjectKey, LoginBackgroundObjectKey: body.LoginBackgroundObjectKey, AdminUsername: body.AdminUsername, AdminPassword: body.AdminPassword, Name: body.Name, Code: body.Code, Description: body.Description, Status: body.Status, ContactEmail: body.ContactEmail, ContactPhone: body.ContactPhone, MaxUsers: body.MaxUsers, MaxProjects: body.MaxProjects, MaxStorage: body.MaxStorage, CompanyName: body.CompanyName, CompanyAddress: body.CompanyAddress, CompanyPhone: body.CompanyPhone, CompanyWebsite: body.CompanyWebsite, Settings: body.Settings}
 	if body.ExpiresAt != nil && strings.TrimSpace(*body.ExpiresAt) != "" {
 		parsed, err := time.Parse(time.RFC3339, *body.ExpiresAt)
 		if err != nil {
@@ -375,7 +372,7 @@ func paginationPayload(page, limit int, total int64) map[string]any {
 }
 
 func tenantPayload(item Tenant) map[string]any {
-	payload := map[string]any{"id": item.ID, "name": item.Name, "code": item.Code, "description": item.Description, "status": item.Status, "contactEmail": item.ContactEmail, "contactPhone": item.ContactPhone, "maxUsers": item.MaxUsers, "maxProjects": item.MaxProjects, "maxStorage": item.MaxStorage, "usedStorage": item.UsedStorage, "logoUrl": item.LogoURL, "loginBackgroundUrl": item.LoginBackgroundURL, "companyName": item.CompanyName, "companyAddress": item.CompanyAddress, "companyPhone": item.CompanyPhone, "companyWebsite": item.CompanyWebsite, "settings": item.Settings, "userCount": item.UserCount, "projectCount": item.ProjectCount, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+	payload := map[string]any{"initialized": item.Initialized, "isDefault": item.IsDefault, "adminUsername": item.AdminUsername, "id": item.ID, "name": item.Name, "code": item.Code, "description": item.Description, "status": item.Status, "contactEmail": item.ContactEmail, "contactPhone": item.ContactPhone, "maxUsers": item.MaxUsers, "maxProjects": item.MaxProjects, "maxStorage": item.MaxStorage, "usedStorage": item.UsedStorage, "logoObjectKey": item.LogoObjectKey, "loginBackgroundObjectKey": item.LoginBackgroundObjectKey, "logoUrl": item.LogoURL, "loginBackgroundUrl": item.LoginBackgroundURL, "companyName": item.CompanyName, "companyAddress": item.CompanyAddress, "companyPhone": item.CompanyPhone, "companyWebsite": item.CompanyWebsite, "settings": item.Settings, "userCount": item.UserCount, "projectCount": item.ProjectCount, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
 	if item.ExpiresAt != nil {
 		payload["expiresAt"] = item.ExpiresAt.Format(timeFormat)
 	} else {
@@ -393,4 +390,37 @@ func actorDisplayName(user auth.User) string {
 		return name
 	}
 	return user.Username
+}
+
+func (h *Handler) InitializeTenant(w http.ResponseWriter, r *http.Request, tenantID string) {
+	if _, ok := h.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	input, err := decodeTenantInput(r)
+	if err != nil {
+		h.writeInvalid(w, r, err)
+		return
+	}
+	item, err := h.service.Initialize(r.Context(), tenantID, input)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, tenantPayload(item))
+}
+func (h *Handler) ResetTenantAdminPassword(w http.ResponseWriter, r *http.Request, tenantID string) {
+	if _, ok := h.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	input, err := decodeTenantInput(r)
+	if err != nil || input.AdminPassword == nil {
+		h.writeInvalid(w, r, fmt.Errorf("管理员密码不能为空"))
+		return
+	}
+	item, err := h.service.ResetAdminPassword(r.Context(), tenantID, *input.AdminPassword)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, tenantPayload(item))
 }

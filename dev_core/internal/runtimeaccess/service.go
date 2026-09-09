@@ -69,7 +69,13 @@ type ProjectAccess struct {
 	Visibility string
 }
 
+type ListQuery struct {
+	Keyword     string
+	Page, Limit int
+}
 type Repository interface {
+	PageRoles(context.Context, string, string, ListQuery) ([]Role, int64, error)
+	PageUsers(context.Context, string, string, ListQuery) ([]RuntimeUser, int64, error)
 	GetProjectAccess(context.Context, string, string) (ProjectAccess, error)
 	ListRoles(context.Context, string, string) ([]Role, error)
 	GetRole(context.Context, string, string, string) (Role, error)
@@ -87,6 +93,18 @@ type Repository interface {
 type Service struct{ repository Repository }
 
 func NewService(repository Repository) *Service { return &Service{repository: repository} }
+func (s *Service) PageRoles(ctx context.Context, actor auth.User, projectID string, query ListQuery) ([]Role, int64, error) {
+	if err := s.requireProject(ctx, actor, projectID, auth.CapabilityProjectRead); err != nil {
+		return nil, 0, err
+	}
+	return s.repository.PageRoles(ctx, actor.TenantID, projectID, query)
+}
+func (s *Service) PageUsers(ctx context.Context, actor auth.User, projectID string, query ListQuery) ([]RuntimeUser, int64, error) {
+	if err := s.requireProject(ctx, actor, projectID, auth.CapabilityProjectRead); err != nil {
+		return nil, 0, err
+	}
+	return s.repository.PageUsers(ctx, actor.TenantID, projectID, query)
+}
 func (s *Service) ListRoles(ctx context.Context, actor auth.User, projectID string) ([]Role, error) {
 	if err := s.requireProject(ctx, actor, projectID, auth.CapabilityProjectRead); err != nil {
 		return nil, err
@@ -171,6 +189,13 @@ func (s *Service) UpdateUserStatus(ctx context.Context, actor auth.User, project
 	}
 	if status != "active" && status != "disabled" {
 		return RuntimeUser{}, fmt.Errorf("运行用户状态无效")
+	}
+	user, err := s.repository.GetUser(ctx, actor.TenantID, projectID, userID)
+	if err != nil {
+		return RuntimeUser{}, err
+	}
+	if user.IsBuiltinAdmin && status != "active" {
+		return RuntimeUser{}, fmt.Errorf("%w：不能停用内置管理员", auth.ErrPermissionDenied)
 	}
 	return s.repository.UpdateUserStatus(ctx, actor.TenantID, projectID, userID, status, actor.ID)
 }

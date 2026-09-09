@@ -28,29 +28,30 @@ func TestTenantHTTPInterfaces(t *testing.T) {
 	handler, token := newTenantServer(t)
 
 	assertOK(t, requestJSON(t, handler, http.MethodGet, "/api/v1/tenants", nil, token))
-	assertOK(t, requestJSON(t, handler, http.MethodGet, "/api/v1/tenants/current", nil, token))
-	notes := requestJSON(t, handler, http.MethodGet, "/api/v1/tenants/current/dashboard-notes", nil, token)
+	tenantHandler, tenantToken := newTenantServerForRole(t, "SYSTEM_ADMIN")
+	assertOK(t, requestJSON(t, tenantHandler, http.MethodGet, "/api/v1/tenants/current", nil, tenantToken))
+	notes := requestJSON(t, tenantHandler, http.MethodGet, "/api/v1/tenants/current/dashboard-notes", nil, tenantToken)
 	assertOK(t, notes)
 	assertDataArray(t, notes, "notes")
 
-	createdNote := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants/current/dashboard-notes", map[string]any{"content": "测试便签"}, token)
+	createdNote := requestJSON(t, tenantHandler, http.MethodPost, "/api/v1/tenants/current/dashboard-notes", map[string]any{"content": "测试便签"}, tenantToken)
 	assertOK(t, createdNote)
 	noteID := nestedDataString(t, createdNote, "note", "id")
 	if content := nestedDataString(t, createdNote, "note", "content"); content != "测试便签" {
 		t.Fatalf("新增便签内容错误: %s", content)
 	}
-	updatedNote := requestJSON(t, handler, http.MethodPut, "/api/v1/tenants/current/dashboard-notes/"+noteID, map[string]any{"content": "更新便签"}, token)
+	updatedNote := requestJSON(t, tenantHandler, http.MethodPut, "/api/v1/tenants/current/dashboard-notes/"+noteID, map[string]any{"content": "更新便签"}, tenantToken)
 	assertOK(t, updatedNote)
 	if content := nestedDataString(t, updatedNote, "note", "content"); content != "更新便签" {
 		t.Fatalf("更新便签内容错误: %s", content)
 	}
-	deletedNote := requestJSON(t, handler, http.MethodDelete, "/api/v1/tenants/current/dashboard-notes/"+noteID, nil, token)
+	deletedNote := requestJSON(t, tenantHandler, http.MethodDelete, "/api/v1/tenants/current/dashboard-notes/"+noteID, nil, tenantToken)
 	assertOK(t, deletedNote)
 	if deletedID := dataString(t, deletedNote, "deletedId"); deletedID != noteID {
 		t.Fatalf("删除便签 ID 错误: %s", deletedID)
 	}
 
-	createdTenant := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants", map[string]any{"name": "第二租户", "code": "second"}, token)
+	createdTenant := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants", map[string]any{"name": "第二租户", "code": "second", "adminUsername": "owner", "adminPassword": "secure-pass-123"}, token)
 	assertOK(t, createdTenant)
 	assertOK(t, requestJSON(t, handler, http.MethodGet, "/api/v1/tenants/"+secondTenantID, nil, token))
 	assertOK(t, requestJSON(t, handler, http.MethodPut, "/api/v1/tenants/"+secondTenantID, map[string]any{"name": "第二租户更新"}, token))
@@ -61,12 +62,15 @@ func TestTenantHTTPInterfaces(t *testing.T) {
 }
 
 func newTenantServer(t *testing.T) (http.Handler, string) {
+	return newTenantServerForRole(t, "SUPER_ADMIN")
+}
+func newTenantServerForRole(t *testing.T, role string) (http.Handler, string) {
 	t.Helper()
-	authService, token, _ := testsupport.NewAuth(t, "SUPER_ADMIN")
+	authService, token, _ := testsupport.NewAuth(t, role)
 	repository := &fakeRepository{tenants: map[string]tenant.Tenant{
 		testsupport.TenantID: {ID: testsupport.TenantID, Name: "默认租户", Code: "default", Status: "active", MaxUsers: 100, MaxProjects: 50, Settings: map[string]any{}, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}}
-	service := tenant.NewService(repository, fakeObjectStore{}, tenant.ServiceConfig{})
+	service := tenant.NewService(repository, fakeObjectStore{})
 	root := controlplane.NewHandler(auth.NewHandler(authService), tenant.NewHandler(service, authService))
 	application := app.New(app.Options{RequestID: func() string { return "tenant-test" }, Mount: func(router chi.Router) { platformapi.HandlerFromMuxWithBaseURL(root, router, "/api/v1") }})
 	return application.Handler(), token
@@ -253,3 +257,60 @@ func (fakeObjectStore) PresignGet(_ context.Context, key string, _ time.Duration
 }
 
 func (fakeObjectStore) Delete(context.Context, string) error { return nil }
+
+func (r *fakeRepository) Initialize(ctx context.Context, identifier, username, hash string) (tenant.Tenant, error) {
+	item, err := r.Get(ctx, identifier)
+	if err != nil {
+		return item, err
+	}
+	if !item.Initialized {
+		item.Initialized = true
+		item.AdminUsername = username
+		r.tenants[item.ID] = item
+	}
+	return item, nil
+}
+func (r *fakeRepository) ResetAdminPassword(ctx context.Context, identifier, hash string) (tenant.Tenant, error) {
+	return r.Get(ctx, identifier)
+}
+func TestTenantInitializationLifecycle(t *testing.T) {
+	handler, token := newTenantServer(t)
+	body := map[string]any{"adminUsername": " tenant-owner ", "adminPassword": "secure-password"}
+	first := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants/default/initialize", body, token)
+	assertOK(t, first)
+	if got := dataString(t, first, "adminUsername"); got != "tenant-owner" {
+		t.Fatalf("admin=%q", got)
+	}
+	body["adminUsername"] = "replacement"
+	second := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants/default/initialize", body, token)
+	assertOK(t, second)
+	if got := dataString(t, second, "adminUsername"); got != "tenant-owner" {
+		t.Fatalf("idempotent init replaced admin: %q", got)
+	}
+	assertOK(t, requestJSON(t, handler, http.MethodPost, "/api/v1/tenants/default/reset-admin-password", map[string]any{"adminPassword": "reset-password"}, token))
+}
+func TestTenantLifecycleRequiresPlatformAdministrator(t *testing.T) {
+	handler, token := newTenantServerForRole(t, "SYSTEM_ADMIN")
+	for _, path := range []string{"/api/v1/tenants/default/initialize", "/api/v1/tenants/default/reset-admin-password"} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"adminUsername":"owner","adminPassword":"secure-password"}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		var result responseEnvelope
+		_ = json.Unmarshal(res.Body.Bytes(), &result)
+		if result.Code != platformapi.ErrorCodePermissionDenied {
+			t.Fatalf("%s status=%d body=%s", path, res.Code, res.Body.String())
+		}
+	}
+}
+
+func TestDefaultTenantCannotBeDeleted(t *testing.T) {
+	repo := &fakeRepository{tenants: map[string]tenant.Tenant{"default": {ID: "default", Code: "default", IsDefault: true}}}
+	service := tenant.NewService(repo, fakeObjectStore{})
+	if err := service.Delete(context.Background(), "default"); err == nil {
+		t.Fatal("default tenant deletion accepted")
+	}
+	if len(repo.tenants) != 1 {
+		t.Fatal("default tenant removed")
+	}
+}

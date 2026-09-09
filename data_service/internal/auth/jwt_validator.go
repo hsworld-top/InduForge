@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -17,20 +18,34 @@ const hs256Algorithm = "HS256"
 
 // JWTValidator 使用共享密钥校验 Bearer JWT 的签名、结构与时间声明。
 type JWTValidator struct {
-	secret []byte
+	secret    []byte
+	centerURL string
+	client    *http.Client
 }
 
 // NewJWTValidator 创建一个基于 HMAC-SHA256 的 JWT 校验器。
-func NewJWTValidator(secret string) (*JWTValidator, error) {
+func NewJWTValidator(secret, centerURL string) (*JWTValidator, error) {
 	if strings.TrimSpace(secret) == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthSecretRequired, http.StatusInternalServerError, "JWT secret 未配置")
 	}
 
-	return &JWTValidator{secret: []byte(secret)}, nil
+	endpoint, err := identityEndpoint(centerURL)
+	if err != nil {
+		return nil, err
+	}
+	return &JWTValidator{secret: []byte(secret), centerURL: endpoint, client: &http.Client{
+		Timeout:       3 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}}, nil
 }
 
 // Validate 校验并解析 JWT，失败时返回错误。
 func (v *JWTValidator) Validate(token string) (*Claims, error) {
+	return v.ValidateContext(context.Background(), token)
+}
+
+// ValidateContext 每次验签后向中心复查当前身份；撤销、改密状态和中心故障均不缓存放行。
+func (v *JWTValidator) ValidateContext(ctx context.Context, token string) (*Claims, error) {
 	if v == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthSecretRequired, http.StatusInternalServerError, "JWT 校验器未初始化")
 	}
@@ -85,6 +100,9 @@ func (v *JWTValidator) Validate(token string) (*Claims, error) {
 		return nil, err
 	}
 
+	if err := v.verifyIdentity(ctx, token, &payload.Claims); err != nil {
+		return nil, err
+	}
 	return &payload.Claims, nil
 }
 

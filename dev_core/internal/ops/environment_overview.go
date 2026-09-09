@@ -65,11 +65,11 @@ type OverviewRiskNode struct {
 const environmentOverviewSQL = `WITH env AS (
  SELECT id,tenant_id FROM runtime_environments WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL
 ), raw_nodes AS (
- SELECT n.id,COALESCE(NULLIF(n.display_name,''),NULLIF(n.hostname,''),n.id::text) AS display_name,n.ip_address,n.desired_status,n.observed_status,n.last_heartbeat_at,
+ SELECT n.id,COALESCE(NULLIF(n.display_name,''),NULLIF(n.hostname,''),n.id::text) AS display_name,n.ip_address,n.node_source,n.desired_status,n.observed_status,n.last_heartbeat_at,
  COALESCE(cn.node_kind,'') AS node_kind,COALESCE(cn.cluster_status,'') AS cluster_status,
  (n.platform='linux' AND n.capabilities @> '["project_entry","data_runtime"]'::jsonb) AS requires_cluster,
  COALESCE(cn.desired_action='removing' OR cn.observed_generation<>cn.desired_generation,false) AS cluster_pending,
- COALESCE(n.last_heartbeat_at>now()-interval '45 seconds',false) AS fresh,
+ (n.node_source='built_in' OR COALESCE(n.last_heartbeat_at>now()-interval '45 seconds',false)) AS fresh,
  CASE WHEN jsonb_typeof(n.resource_summary->'cpu'->'usedPercent')='number' THEN (n.resource_summary->'cpu'->>'usedPercent')::numeric END AS raw_cpu,
  CASE WHEN jsonb_typeof(n.resource_summary->'memory'->'usedPercent')='number' THEN (n.resource_summary->'memory'->>'usedPercent')::numeric END AS raw_memory,
  CASE WHEN jsonb_typeof(n.resource_summary->'disk'->'usedPercent')='number' THEN (n.resource_summary->'disk'->>'usedPercent')::numeric END AS raw_disk
@@ -102,8 +102,8 @@ const environmentOverviewSQL = `WITH env AS (
  bool_or(s.observed_status='failed') AS service_failed,
  bool_or(s.id IS NOT NULL AND (s.desired_generation IS NULL OR s.observed_generation IS NULL)) AS generation_unknown,
  bool_and(COALESCE(s.observed_status=s.desired_status AND s.observed_generation=s.desired_generation,false)) AS converged,
- bool_or(s.desired_status='running' AND (n.id IS NULL OR n.last_heartbeat_at IS NULL)) AS node_unknown,
- bool_and(CASE WHEN s.desired_status='running' THEN COALESCE(n.desired_status='active' AND n.observed_status='online' AND n.last_heartbeat_at>now()-interval '45 seconds',false) ELSE true END) AS nodes_fresh
+ bool_or(s.desired_status='running' AND (n.id IS NULL OR (n.node_source='agent' AND n.last_heartbeat_at IS NULL))) AS node_unknown,
+ bool_and(CASE WHEN s.desired_status='running' THEN COALESCE(n.desired_status='active' AND n.observed_status='online' AND (n.node_source='built_in' OR n.last_heartbeat_at>now()-interval '45 seconds'),false) ELSE true END) AS nodes_fresh
  FROM env JOIN project_deployments d ON d.environment_id=env.id AND d.tenant_id=env.tenant_id AND d.deleted_at IS NULL
  LEFT JOIN deployment_services s ON s.project_deployment_id=d.id AND s.tenant_id=d.tenant_id
  LEFT JOIN host_nodes n ON n.id=s.node_id AND n.tenant_id=d.tenant_id

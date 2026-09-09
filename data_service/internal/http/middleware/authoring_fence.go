@@ -32,7 +32,7 @@ func AuthoringFenceGuard(validator *auth.JWTValidator, checker AuthoringFenceChe
 				next.ServeHTTP(w, r)
 				return
 			}
-			claims, err := validator.Validate(token)
+			claims, err := validator.ValidateContext(r.Context(), token)
 			if err != nil {
 				next.ServeHTTP(w, r)
 				return

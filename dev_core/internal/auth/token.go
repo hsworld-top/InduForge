@@ -16,10 +16,11 @@ import (
 var ErrAccessTokenExpired = errors.New("访问令牌已到期")
 
 type Claims struct {
-	UserID   string `json:"userId"`
-	TenantID string `json:"tenantId"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	CredentialVersion int64  `json:"credentialVersion"`
+	UserID            string `json:"userId"`
+	TenantID          string `json:"tenantId"`
+	Username          string `json:"username"`
+	Role              string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -57,10 +58,11 @@ func (m *TokenManager) IssueAccessToken(user User) (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("生成访问令牌标识失败: %w", err)
 	}
 	claims := Claims{
-		UserID:   user.ID,
-		TenantID: user.TenantID,
-		Username: user.Username,
-		Role:     user.Role,
+		CredentialVersion: user.CredentialVersion,
+		UserID:            user.ID,
+		TenantID:          user.TenantID,
+		Username:          user.Username,
+		Role:              user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        tokenID,
 			Issuer:    m.issuer,

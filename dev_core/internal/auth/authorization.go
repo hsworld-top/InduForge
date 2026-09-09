@@ -26,7 +26,6 @@ const (
 )
 
 var allCapabilities = capabilitySet(
-	CapabilityTenantManage,
 	CapabilityUserManage,
 	CapabilityProjectRead,
 	CapabilityProjectCreate,
@@ -47,7 +46,7 @@ var allCapabilities = capabilitySet(
 )
 
 var roleCapabilities = map[string]map[Capability]struct{}{
-	"SUPER_ADMIN":  allCapabilities,
+	"SUPER_ADMIN":  capabilitySet(CapabilityTenantManage),
 	"SYSTEM_ADMIN": allCapabilities,
 	"PROJECT_ADMIN": capabilitySet(
 		CapabilityProjectRead,
@@ -65,6 +64,12 @@ var roleCapabilities = map[string]map[Capability]struct{}{
 	),
 	"OPS_ADMIN": capabilitySet(
 		CapabilityProjectRead,
+		CapabilityProjectCreate,
+		CapabilityProjectWrite,
+		CapabilityProjectShare,
+		CapabilityProjectDelete,
+		CapabilityRuntimeAccessManage,
+		CapabilityReleasePublish,
 		CapabilityDeploymentExecute,
 		CapabilityDeploymentOperate,
 		CapabilityNodeRead,
@@ -73,24 +78,6 @@ var roleCapabilities = map[string]map[Capability]struct{}{
 		CapabilityEnvironmentRead,
 		CapabilityEnvironmentManage,
 		CapabilityAuditLogRead,
-	),
-	"USER_ADMIN": capabilitySet(
-		CapabilityUserManage,
-	),
-	"DEVELOPER": capabilitySet(
-		CapabilityProjectRead,
-		CapabilityProjectCreate,
-		CapabilityProjectWrite,
-		CapabilityProjectShare,
-		CapabilityProjectDelete,
-		CapabilityReleasePublish,
-	),
-	"OPERATOR": capabilitySet(
-		CapabilityProjectRead,
-		CapabilityDeploymentOperate,
-	),
-	"VIEWER": capabilitySet(
-		CapabilityProjectRead,
 	),
 }
 
@@ -121,16 +108,14 @@ func CanAssignRole(actorRole, targetRole string) bool {
 		return true
 	case "SYSTEM_ADMIN":
 		return targetRole != "SUPER_ADMIN"
-	case "USER_ADMIN":
-		return targetRole == "DEVELOPER" || targetRole == "OPERATOR" || targetRole == "VIEWER"
 	default:
 		return false
 	}
 }
 
-func IsPlatformAdmin(role string) bool {
+func IsTenantAdministrator(role string) bool {
 	role = normalizeRole(role)
-	return role == "SUPER_ADMIN" || role == "SYSTEM_ADMIN"
+	return role == "SYSTEM_ADMIN"
 }
 
 func capabilitySet(capabilities ...Capability) map[Capability]struct{} {

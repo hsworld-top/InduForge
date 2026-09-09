@@ -7,7 +7,7 @@ type TenantBrand = {
   logoUrl?: unknown
 }
 
-const DEFAULT_TENANT_NAME = 'InduForge'
+const DEFAULT_TENANT_NAME = 'InduFrame'
 
 const normalizeText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : ''

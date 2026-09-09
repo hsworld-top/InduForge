@@ -84,7 +84,7 @@ const resolveErrorMessage = (error: unknown): string => {
 }
 
 const buildDefaultAppConfig = (): AppConfig => ({
-  name: 'InduForge',
+  name: 'InduFrame',
   description: '高效、安全的企业级解决方案',
   logoUrl: defaultLogoUrl,
   loginBackgroundUrl: defaultLoginBgUrl,
@@ -285,7 +285,7 @@ export const useAppStore = defineStore('app', {
         const mergedConfig: AppConfig = {
           ...buildDefaultAppConfig(),
           ...(config ?? {}),
-          name: config?.tenantName || config?.appName || config?.name || 'InduForge',
+          name: config?.tenantName || config?.appName || config?.name || 'InduFrame',
           logoUrl: config?.logoUrl || defaultLogoUrl,
           loginBackgroundUrl: config?.loginBackgroundUrl || defaultLoginBgUrl,
           multiTenant: config?.multiTenant || false,

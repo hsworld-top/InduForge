@@ -89,7 +89,7 @@ func (s *Service) GetProvider(ctx context.Context, actor auth.User) (ProviderSta
 }
 
 func (s *Service) SetProvider(ctx context.Context, actor auth.User, name string) (ProviderState, error) {
-	if !auth.IsPlatformAdmin(actor.Role) {
+	if !auth.IsTenantAdministrator(actor.Role) {
 		return ProviderState{}, auth.ErrPermissionDenied
 	}
 	provider, err := s.providers.Get(name)

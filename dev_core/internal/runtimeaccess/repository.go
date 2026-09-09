@@ -112,8 +112,11 @@ func (r *PostgreSQLRepository) UpdateRole(ctx context.Context, projectID, roleID
 		}
 		return Role{}, mapConstraintError(err)
 	}
-	if err := replaceRoleGrants(ctx, q, projectUUID, roleUUID, input.Capabilities); err != nil {
-		return Role{}, err
+	// 未提交权限字段时只修改角色资料，显式空数组才清空权限。
+	if input.Capabilities != nil {
+		if err := replaceRoleGrants(ctx, q, projectUUID, roleUUID, input.Capabilities); err != nil {
+			return Role{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Role{}, err
@@ -370,4 +373,44 @@ func mapConstraintError(err error) error {
 		return ErrAlreadyExists
 	}
 	return fmt.Errorf("保存运行权限失败: %w", err)
+}
+
+func (r *PostgreSQLRepository) PageRoles(ctx context.Context, tenantID, projectID string, query ListQuery) ([]Role, int64, error) {
+	tenantUUID, projectUUID, err := parsePair(tenantID, projectID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := r.queries.CountRuntimeRoles(ctx, dbsqlc.CountRuntimeRolesParams{TenantID: tenantUUID, ProjectID: projectUUID, Keyword: query.Keyword})
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.queries.PageRuntimeRoles(ctx, dbsqlc.PageRuntimeRolesParams{TenantID: tenantUUID, ProjectID: projectUUID, Keyword: query.Keyword, PageLimit: int32(query.Limit), PageOffset: int32((query.Page - 1) * query.Limit)})
+	if err != nil {
+		return nil, 0, err
+	}
+	items := make([]Role, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, roleFromList(dbsqlc.ListRuntimeRolesRow(row)))
+	}
+	return items, total, nil
+}
+
+func (r *PostgreSQLRepository) PageUsers(ctx context.Context, tenantID, projectID string, query ListQuery) ([]RuntimeUser, int64, error) {
+	tenantUUID, projectUUID, err := parsePair(tenantID, projectID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := r.queries.CountRuntimeUsers(ctx, dbsqlc.CountRuntimeUsersParams{TenantID: tenantUUID, ProjectID: projectUUID, Keyword: query.Keyword})
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.queries.PageRuntimeUsers(ctx, dbsqlc.PageRuntimeUsersParams{TenantID: tenantUUID, ProjectID: projectUUID, Keyword: query.Keyword, PageLimit: int32(query.Limit), PageOffset: int32((query.Page - 1) * query.Limit)})
+	if err != nil {
+		return nil, 0, err
+	}
+	items := make([]RuntimeUser, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, userFromList(dbsqlc.ListRuntimeUsersRow(row)))
+	}
+	return items, total, nil
 }

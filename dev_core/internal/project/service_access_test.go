@@ -19,28 +19,28 @@ func TestServiceFiltersPrivateAndSharedProjects(t *testing.T) {
 	}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
 	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
-	actor := auth.User{ID: "developer-1", TenantID: "tenant-1", Role: "DEVELOPER"}
+	actor := auth.User{ID: "developer-1", TenantID: "tenant-1", Role: "PROJECT_ADMIN"}
 
 	items, total, err := service.List(context.Background(), actor, project.ListFilter{Page: 1, Limit: 20})
 	if err != nil {
 		t.Fatalf("查询工程列表失败: %v", err)
 	}
-	if total != 2 || len(items) != 2 {
-		t.Fatalf("开发人员只应看到自己的私有工程和分享工程: total=%d items=%#v", total, items)
+	if total != 3 || len(items) != 3 {
+		t.Fatalf("开发人员应看到组织内全部工程: total=%d items=%#v", total, items)
 	}
 }
 
-func TestServiceRejectsPrivateProjectForOtherDeveloper(t *testing.T) {
+func TestServiceAllowsPrivateProjectDetailsForOtherDeveloper(t *testing.T) {
 	repository := &fakeRepository{projects: map[string]project.Project{
 		"private-project": {ID: "private-project", TenantID: "tenant-1", CreatedBy: "owner-1", Visibility: "private"},
 	}}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
 	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
-	actor := auth.User{ID: "developer-2", TenantID: "tenant-1", Role: "DEVELOPER"}
+	actor := auth.User{ID: "developer-2", TenantID: "tenant-1", Role: "PROJECT_ADMIN"}
 
 	_, err := service.Get(context.Background(), actor, "private-project")
-	if !errors.Is(err, auth.ErrPermissionDenied) {
-		t.Fatalf("其他开发人员访问私有工程应失败: %v", err)
+	if err != nil {
+		t.Fatalf("其他开发人员可查看私有工程详情: %v", err)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestServiceSharedProjectWriteAndOwnerOnlyDelete(t *testing.T) {
 	}}
 	service := project.NewService(repository, &fakeWorkspace{files: map[string]map[string]string{"shared-project": {}}}, "admin123")
 	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
-	developer := auth.User{ID: "developer-2", TenantID: "tenant-1", Role: "DEVELOPER"}
+	developer := auth.User{ID: "developer-2", TenantID: "tenant-1", Role: "PROJECT_ADMIN"}
 	newName := "更新名称"
 
 	updated, err := service.Update(context.Background(), developer, "shared-project", project.ProjectInput{Name: &newName})
@@ -66,7 +66,7 @@ func TestServiceCreateAlwaysStartsPrivate(t *testing.T) {
 	repository := &fakeRepository{projects: map[string]project.Project{}}
 	service := project.NewService(repository, &fakeWorkspace{}, "admin123")
 	service.SetTenantBindingEnsurer(noopTenantBindingEnsurer{})
-	actor := auth.User{ID: "developer-1", TenantID: "tenant-1", Username: "开发人员", Role: "DEVELOPER"}
+	actor := auth.User{ID: "developer-1", TenantID: "tenant-1", Username: "开发人员", Role: "PROJECT_ADMIN"}
 	name := "新工程"
 	requestedVisibility := "internal"
 

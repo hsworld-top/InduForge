@@ -78,7 +78,7 @@ func TestStartCreatesDeterministicSharedContainerWithControlledMounts(t *testing
 		t.Fatal(err)
 	}
 
-	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID)
+	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, testProjectID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestStartReusesExistingProjectContainer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID)
+	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, testProjectID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestStatusReportsPendingClusterWorkspaceAsStarting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, err := service.Status(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID)
+	status, err := service.Status(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, testProjectID)
 	if err != nil || status.Status != "starting" {
 		t.Fatalf("K3s Pending 工作区状态错误: %#v, %v", status, err)
 	}
@@ -166,7 +166,7 @@ func TestStartReportsUnhealthyWorkspaceAsErrorWithoutRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID)
+	status, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, testProjectID)
 	if err != nil || status.Status != "error" {
 		t.Fatalf("失败工作区必须明确返回 error: %#v, %v", status, err)
 	}
@@ -186,7 +186,7 @@ func TestBuiltinDemoWorkspaceReceivesOfficialDefaultTemplateOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, demoID); err != nil {
+	if _, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, demoID); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(engine.created[0].Environment, "INDUFORGE_DEFAULT_WORKSPACE_TEMPLATE=vite-vue-js") {
@@ -207,7 +207,7 @@ func TestWorkspacePublicOriginInjectsExactAIAndViteHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID); err != nil {
+	if _, err := service.Start(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, testProjectID); err != nil {
 		t.Fatal(err)
 	}
 	environment := engine.created[0].Environment
@@ -235,7 +235,7 @@ func TestCodeWorkspaceRequiresProjectWriteAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Status(context.Background(), auth.User{ID: "viewer", TenantID: "tenant", Role: "VIEWER"}, testProjectID)
+	_, err = service.Status(context.Background(), auth.User{ID: "viewer", TenantID: "tenant", Role: "OPS_ADMIN"}, testProjectID)
 	if !errors.Is(err, auth.ErrPermissionDenied) {
 		t.Fatalf("expected permission denied, got %v", err)
 	}
@@ -253,7 +253,7 @@ func TestRebuildPreservesPersistentDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Rebuild(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "DEVELOPER"}, testProjectID); err != nil {
+	if _, err := service.Rebuild(context.Background(), auth.User{ID: "owner", TenantID: "tenant", Role: "PROJECT_ADMIN"}, testProjectID); err != nil {
 		t.Fatal(err)
 	}
 	if len(engine.removed) != 1 || len(engine.created) != 1 || len(engine.started) != 1 {

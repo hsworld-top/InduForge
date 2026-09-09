@@ -20,8 +20,18 @@ func NewAPI(manager *Manager) (*API, error) {
 	return &API{manager: manager}, nil
 }
 
-func (api *API) Handler() http.Handler {
+func (api *API) Handler() http.Handler { return api.handler(false) }
+
+// ImagesHandler 为中心内置节点仅开放镜像检查和导入能力。
+func (api *API) ImagesHandler() http.Handler { return api.handler(true) }
+
+func (api *API) handler(imagesOnly bool) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/images/import", api.imagesImport)
+	mux.HandleFunc("POST /v1/images/check", api.imagesCheck)
+	if imagesOnly {
+		return mux
+	}
 	mux.HandleFunc("GET /v1/cluster/status", api.status)
 	mux.HandleFunc("POST /v1/cluster/apply", api.apply)
 	mux.HandleFunc("POST /v1/cluster/uninstall", api.uninstall)
@@ -150,4 +160,27 @@ func (api *API) writeError(writer http.ResponseWriter, status int, err error) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(map[string]any{"code": status, "msg": err.Error(), "data": nil})
+}
+
+func (api *API) imagesImport(w http.ResponseWriter, r *http.Request) { api.images(w, r, true) }
+func (api *API) imagesCheck(w http.ResponseWriter, r *http.Request)  { api.images(w, r, false) }
+func (api *API) images(w http.ResponseWriter, r *http.Request, importImage bool) {
+	var p ImageArtifact
+	if err := decodeStrict(w, r, &p); err != nil {
+		api.writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var result ImageResult
+	var err error
+	if importImage {
+		result, err = api.manager.ImportImages(r.Context(), p)
+	} else {
+		result, err = api.manager.CheckImages(r.Context(), p)
+	}
+	if err != nil {
+		api.writeError(w, http.StatusConflict, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "msg": "ok", "data": result})
 }

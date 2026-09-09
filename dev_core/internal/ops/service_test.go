@@ -28,6 +28,53 @@ type environmentRepository struct {
 	addedNodeIDs []string
 }
 
+type clusterPlanRepository struct{ Repository }
+
+type nodeMetricsRepository struct {
+	Repository
+	tenant string
+	ids    []string
+}
+
+func (r *nodeMetricsRepository) ListNodeMetrics(_ context.Context, tenant string, ids []string) ([]Node, error) {
+	r.tenant = tenant
+	r.ids = append([]string(nil), ids...)
+	return []Node{{ID: ids[0], ObservedStatus: "online"}}, nil
+}
+
+func TestListNodeMetricsValidatesScopeAndDeduplicatesIDs(t *testing.T) {
+	repository := &nodeMetricsRepository{}
+	service := NewService(repository, nil)
+	viewer := auth.User{TenantID: "tenant", ID: "user", Role: "VIEWER"}
+	ops := auth.User{TenantID: "tenant", ID: "user", Role: "OPS_ADMIN"}
+	if _, err := service.ListNodeMetrics(context.Background(), viewer, []string{testNodeID}); !errors.Is(err, auth.ErrPermissionDenied) {
+		t.Fatalf("viewer must not read node metrics: %v", err)
+	}
+	if _, err := service.ListNodeMetrics(context.Background(), ops, []string{"invalid"}); err == nil {
+		t.Fatal("invalid node ID must be rejected")
+	}
+	items, err := service.ListNodeMetrics(context.Background(), ops, []string{testNodeID, testNodeID})
+	if err != nil || len(items) != 1 || repository.tenant != "tenant" || len(repository.ids) != 1 || repository.ids[0] != testNodeID {
+		t.Fatalf("metrics scope mismatch: items=%#v tenant=%s ids=%v err=%v", items, repository.tenant, repository.ids, err)
+	}
+}
+
+func (clusterPlanRepository) AgentClusterPlan(context.Context, string, string) (*ClusterPlan, error) {
+	return &ClusterPlan{ClusterID: "cluster", NodeID: testNodeID}, nil
+}
+
+func TestAgentClusterPlanUsesInstalledK3sJoinToken(t *testing.T) {
+	service := NewService(clusterPlanRepository{}, nil)
+	if _, err := service.AgentClusterPlan(context.Background(), testNodeID, "agent-token"); err == nil || !strings.Contains(err.Error(), "加入令牌未配置") {
+		t.Fatalf("缺少中心 K3s token 时必须失败关闭: %v", err)
+	}
+	service.SetClusterJoinToken("K10test::server:join-token")
+	plan, err := service.AgentClusterPlan(context.Background(), testNodeID, "agent-token")
+	if err != nil || plan.Token != "K10test::server:join-token" {
+		t.Fatalf("外部节点未取得实际中心 K3s token: plan=%#v err=%v", plan, err)
+	}
+}
+
 func (r *environmentRepository) UpdateRuntimeEnvironment(_ context.Context, _, _, _ string, input UpdateRuntimeEnvironmentInput) (RuntimeEnvironment, error) {
 	r.updatedInput = input
 	return RuntimeEnvironment{ID: testEnvironmentID, Name: input.Name}, nil
@@ -185,7 +232,7 @@ func TestCreateDeploymentRejectsInvalidCustomerPort(t *testing.T) {
 }
 func TestOperateDeploymentUsesOneLifecycleOperationForAllServices(t *testing.T) {
 	repository := &deploymentRepository{}
-	deployment, run, err := NewService(repository, nil).OperateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPERATOR"}, "deployment-1", "restart")
+	deployment, run, err := NewService(repository, nil).OperateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, "deployment-1", "restart")
 	if err != nil || repository.deploymentID != "deployment-1" || repository.deploymentOperation != "restart" || run.Operation != "restart" || len(deployment.Services) != 3 {
 		t.Fatalf("deployment lifecycle operation was not delegated atomically: deployment=%#v run=%#v repository=%#v err=%v", deployment, run, repository, err)
 	}
@@ -194,7 +241,7 @@ func TestOperateDeploymentUsesOneLifecycleOperationForAllServices(t *testing.T) 
 func TestOperateDeploymentPreservesBusyAndNotFoundFailures(t *testing.T) {
 	for _, expected := range []error{ErrDeploymentBusy, ErrNotFound} {
 		repository := &deploymentRepository{deploymentErr: expected}
-		_, _, err := NewService(repository, nil).OperateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPERATOR"}, "deployment-1", "stop")
+		_, _, err := NewService(repository, nil).OperateDeployment(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, "deployment-1", "stop")
 		if !errors.Is(err, expected) {
 			t.Fatalf("expected %v, got %v", expected, err)
 		}
@@ -210,7 +257,7 @@ func TestOperateDeploymentRequiresOperateCapability(t *testing.T) {
 }
 
 func TestRedeployDoesNotRebuildAndRequiresOperateCapability(t *testing.T) {
-	for _, role := range []string{"OPERATOR", "VIEWER"} {
+	for _, role := range []string{"OPS_ADMIN", "VIEWER"} {
 		r := &deploymentRepository{}
 		s := NewService(r, nil)
 		s.SetDevelopmentArtifactBuilder(func(context.Context, auth.User, string, string) (DevelopmentArtifact, error) {
@@ -230,7 +277,7 @@ func TestRedeployDoesNotRebuildAndRequiresOperateCapability(t *testing.T) {
 
 func TestOperateServiceIsFailClosed(t *testing.T) {
 	repository := &deploymentRepository{}
-	_, _, err := NewService(repository, nil).OperateService(context.Background(), auth.User{TenantID: "tenant", Role: "OPERATOR"}, "deployment-1", ServiceBase, "stop")
+	_, _, err := NewService(repository, nil).OperateService(context.Background(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}, "deployment-1", ServiceBase, "stop")
 	if !errors.Is(err, ErrServiceLifecycleDisabled) || repository.deploymentOperation != "" {
 		t.Fatalf("service-level lifecycle route must not reach repository: repository=%#v err=%v", repository, err)
 	}

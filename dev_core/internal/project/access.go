@@ -6,7 +6,7 @@ func CanRead(actor auth.User, item Project) bool {
 	if actor.TenantID == "" || actor.TenantID != item.TenantID {
 		return false
 	}
-	if auth.IsPlatformAdmin(actor.Role) || actor.ID == item.CreatedBy {
+	if auth.IsTenantAdministrator(actor.Role) || actor.ID == item.CreatedBy {
 		return true
 	}
 	return item.Visibility == "internal" && auth.HasCapability(actor.Role, auth.CapabilityProjectRead)
@@ -26,7 +26,7 @@ func RequireOwnerOrAdmin(actor auth.User, item Project, capability auth.Capabili
 	if err := auth.RequireCapability(actor, capability); err != nil {
 		return err
 	}
-	if actor.ID == item.CreatedBy || auth.IsPlatformAdmin(actor.Role) || actor.Role == "PROJECT_ADMIN" {
+	if actor.ID == item.CreatedBy || auth.IsTenantAdministrator(actor.Role) {
 		return nil
 	}
 	return auth.ErrPermissionDenied

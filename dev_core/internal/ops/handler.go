@@ -17,9 +17,10 @@ import (
 )
 
 type Handler struct {
-	service *Service
-	auth    *auth.Service
-	changes ChangePublisher
+	service           *Service
+	auth              *auth.Service
+	changes           ChangePublisher
+	nodeConnectionURL string
 }
 
 func NewHandler(s *Service, a *auth.Service) *Handler { return &Handler{service: s, auth: a} }
@@ -28,9 +29,10 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Get("/node-enrollments", h.listEnrollments)
 		r.Post("/node-enrollments", h.createEnrollment)
 		r.Get("/node-enrollments/{id}", h.getEnrollment)
-		r.Post("/node-enrollments/{id}/approve", h.approve)
-		r.Post("/node-enrollments/{id}/reject", h.reject)
+		r.Post("/node-enrollments/{id}/revoke", h.revokeEnrollment)
+		r.Delete("/node-enrollments/{id}", h.deleteEnrollment)
 		r.Get("/nodes", h.listNodes)
+		r.Get("/nodes/metrics", h.listNodeMetrics)
 		r.Get("/nodes/{id}", h.getNode)
 		r.Delete("/nodes/{id}", h.removeNode)
 		r.Get("/runtime-environments", h.listRuntimeEnvironments)
@@ -66,8 +68,10 @@ func (h *Handler) MountRoutes(r chi.Router) {
 		r.Get("/deployment-runs/{id}/events/page", h.listRunEventsPage)
 		r.Get("/deployment-runs/{id}/events", h.events)
 		r.Post("/agent/enrollments/claim", h.claim)
+		r.Post("/agent/enrollments/validate", h.validateEnrollment)
 		r.Post("/agent/nodes/{id}/heartbeat", h.heartbeat)
 		r.Get("/agent/nodes/{id}/commands", h.commands)
+		r.Get("/agent/nodes/{id}/images/{sha256}/download", h.agentImageDownload)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/binding", h.agentBinding)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/collector", h.agentNativeCollector)
 		r.Get("/agent/nodes/{id}/deployments/{deployment}/release", h.agentRelease)
@@ -137,7 +141,7 @@ func (h *Handler) createEnrollment(w http.ResponseWriter, r *http.Request) {
 			h.err(w, r, err)
 			return
 		}
-		h.writeSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "code": code})
+		h.writeSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "code": code, "nodeConnectionUrl": h.nodeConnectionURL})
 	})
 }
 func (h *Handler) getEnrollment(w http.ResponseWriter, r *http.Request) {
@@ -150,11 +154,9 @@ func (h *Handler) getEnrollment(w http.ResponseWriter, r *http.Request) {
 		h.writeSuccess(w, r, enrollmentPayload(x))
 	})
 }
-func (h *Handler) approve(w http.ResponseWriter, r *http.Request) { h.change(w, r, true) }
-func (h *Handler) reject(w http.ResponseWriter, r *http.Request)  { h.change(w, r, false) }
-func (h *Handler) change(w http.ResponseWriter, r *http.Request, ok bool) {
+func (h *Handler) revokeEnrollment(w http.ResponseWriter, r *http.Request) {
 	h.user(w, r, func(u auth.User) {
-		x, e := h.service.ApproveEnrollment(r.Context(), u, chi.URLParam(r, "id"), ok)
+		x, e := h.service.RevokeEnrollment(r.Context(), u, chi.URLParam(r, "id"))
 		if e != nil {
 			h.err(w, r, e)
 			return
@@ -174,6 +176,33 @@ func (h *Handler) listNodes(w http.ResponseWriter, r *http.Request) {
 			out = append(out, nodePayload(v))
 		}
 		h.writeSuccess(w, r, pageData(out, n, page(r)))
+	})
+}
+func (h *Handler) listNodeMetrics(w http.ResponseWriter, r *http.Request) {
+	h.user(w, r, func(u auth.User) {
+		x, e := h.service.ListNodeMetrics(r.Context(), u, strings.Split(r.URL.Query().Get("ids"), ","))
+		if e != nil {
+			h.err(w, r, e)
+			return
+		}
+		out := make([]any, 0, len(x))
+		for _, node := range x {
+			status := node.ObservedStatus
+			if node.ResourceSummary["uninstalledAt"] != nil {
+				status = "uninstalled"
+			}
+			if node.NodeSource == "agent" && status == "online" && node.LastHeartbeatAt != nil && time.Since(*node.LastHeartbeatAt) > 45*time.Second {
+				status = "offline"
+			}
+			out = append(out, map[string]any{
+				"id":              node.ID,
+				"desiredStatus":   node.DesiredStatus,
+				"observedStatus":  status,
+				"resourceSummary": node.ResourceSummary,
+				"lastHeartbeatAt": node.LastHeartbeatAt,
+			})
+		}
+		h.writeSuccess(w, r, map[string]any{"items": out})
 	})
 }
 func (h *Handler) getNode(w http.ResponseWriter, r *http.Request) {
@@ -341,7 +370,7 @@ func (h *Handler) claim(w http.ResponseWriter, r *http.Request) {
 		h.err(w, r, err)
 		return
 	}
-	h.writeSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "node": nodePayload(n), "agentToken": t, "pendingApproval": true})
+	h.writeSuccess(w, r, map[string]any{"enrollment": enrollmentPayload(e), "node": nodePayload(n), "agentToken": t})
 }
 
 func remoteIPAddress(r *http.Request) string {
@@ -399,11 +428,19 @@ func (h *Handler) commands(w http.ResponseWriter, r *http.Request) {
 		h.err(w, r, e)
 		return
 	}
+	var imagePlan *ImagePlan
+	if uninstall == nil && foundationDelete == nil {
+		imagePlan, e = h.service.AgentImagePlan(r.Context(), nodeID, token)
+		if e != nil {
+			h.err(w, r, e)
+			return
+		}
+	}
 	// 删除优先于部署，避免同一轮命令先重建再删除环境隔离空间。
 	if foundationDelete != nil {
 		foundationPlan = nil
 	}
-	h.writeSuccess(w, r, map[string]any{"commands": x, "clusterPlan": plan, "clusterUninstall": uninstall, "foundationPlan": foundationPlan, "foundationDelete": foundationDelete, "timeSyncPlan": timeSyncPlan})
+	h.writeSuccess(w, r, map[string]any{"imagePlan": imagePlan, "commands": x, "clusterPlan": plan, "clusterUninstall": uninstall, "foundationPlan": foundationPlan, "foundationDelete": foundationDelete, "timeSyncPlan": timeSyncPlan})
 }
 func (h *Handler) agentBinding(w http.ResponseWriter, r *http.Request) {
 	binding, err := h.service.AgentDeploymentBinding(r.Context(), chi.URLParam(r, "id"), agentToken(r), chi.URLParam(r, "deployment"), r.URL.Query().Get("serviceId"))
@@ -468,12 +505,20 @@ func (h *Handler) invalid(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) err(w http.ResponseWriter, r *http.Request, e error) {
 	status, code := http.StatusInternalServerError, platformapi.ErrorCodeInternal
+	var preflight *nodePreflightError
+	if errors.As(e, &preflight) {
+		log.Printf("部署节点预检失败: %v", preflight.cause)
+		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, preflight.Error())
+		return
+	}
 	if errors.Is(e, auth.ErrPermissionDenied) {
 		status, code = 200, platformapi.ErrorCodePermissionDenied
 	} else if errors.Is(e, ErrNotFound) || errors.Is(e, ErrEnrollmentUnavailable) {
 		status, code = 200, platformapi.ErrorCodeNotFound
 	} else if errors.Is(e, ErrAgentUnauthorized) {
 		status, code = 401, platformapi.ErrorCodeTokenInvalid
+	} else if errors.Is(e, ErrNodeNameExists) {
+		status, code = http.StatusOK, platformapi.ErrorCodeAlreadyExists
 	} else if errors.Is(e, ErrDeploymentExists) || errors.Is(e, ErrNodePortConflict) || errors.Is(e, ErrEnvironmentExists) || errors.Is(e, ErrNodeEnvironmentConflict) || errors.Is(e, ErrNodeEnvironmentInUse) || errors.Is(e, ErrNodeDeploymentInUse) || errors.Is(e, ErrEnvironmentNodeServiceInUse) || errors.Is(e, ErrEnvironmentNodeDeploymentInUse) || errors.Is(e, ErrCoordinatorInUse) || errors.Is(e, ErrCenterNodeProtected) || errors.Is(e, ErrDefaultEnvironmentProtected) || errors.Is(e, ErrEnvironmentHasDeployment) || errors.Is(e, ErrEnvironmentDeleting) || errors.Is(e, ErrFoundationExists) {
 		status, code = 409, platformapi.ErrorCodeAlreadyExists
 	} else if errors.Is(e, ErrReleaseNotDeployable) || errors.Is(e, ErrServiceLifecycleDisabled) || errors.Is(e, ErrNodeNotEligible) || errors.Is(e, ErrNodeOfflineForRemoval) || errors.Is(e, ErrFoundationNotReady) || errors.Is(e, ErrFoundationMoveUnsupported) {
@@ -509,11 +554,16 @@ func enrollmentPayload(x Enrollment) map[string]any {
 }
 func nodePayload(x Node) map[string]any {
 	status := x.ObservedStatus
+	if x.ResourceSummary["uninstalledAt"] != nil {
+		status = "uninstalled"
+	}
 	if status == "online" && x.LastHeartbeatAt != nil && time.Since(*x.LastHeartbeatAt) > 45*time.Second {
 		status = "offline"
 	}
 	return map[string]any{
 		"id":                        x.ID,
+		"nodeSource":                x.NodeSource,
+		"builtIn":                   x.NodeSource == "built_in",
 		"enrollmentId":              x.EnrollmentID,
 		"displayName":               x.DisplayName,
 		"name":                      x.DisplayName,
@@ -620,4 +670,31 @@ func normalizeHealth(v string) string {
 		return "degraded"
 	}
 	return "unknown"
+}
+
+func (h *Handler) validateEnrollment(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Code         string   `json:"code"`
+		Platform     string   `json:"platform"`
+		Capabilities []string `json:"capabilities"`
+	}
+	if !decode(r, &body) {
+		h.invalid(w, r)
+		return
+	}
+	if err := h.service.ValidateEnrollment(r.Context(), ClaimEnrollmentInput{Code: body.Code, Platform: body.Platform, Capabilities: body.Capabilities}); err != nil {
+		h.err(w, r, err)
+		return
+	}
+	h.writeSuccess(w, r, map[string]any{"valid": true})
+}
+
+func (h *Handler) deleteEnrollment(w http.ResponseWriter, r *http.Request) {
+	h.user(w, r, func(u auth.User) {
+		if err := h.service.DeleteEnrollment(r.Context(), u, chi.URLParam(r, "id")); err != nil {
+			h.err(w, r, err)
+			return
+		}
+		h.writeSuccess(w, r, map[string]any{"deleted": true})
+	})
 }

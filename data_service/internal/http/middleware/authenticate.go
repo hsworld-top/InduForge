@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -24,7 +25,7 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 				return
 			}
 
-			claims, err := validator.Validate(token)
+			claims, err := validator.ValidateContext(r.Context(), token)
 			if err != nil {
 				var appErr *apperrors.AppError
 				if AsAppError(err, &appErr) {
@@ -35,7 +36,13 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(auth.WithClaims(r.Context(), claims)))
+			ctx := r.Context()
+			if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+				var cancel context.CancelFunc
+				ctx, cancel = validator.WithIdentityLease(ctx, token)
+				defer cancel()
+			}
+			next.ServeHTTP(w, r.WithContext(auth.WithClaims(ctx, claims)))
 		})
 	}
 }

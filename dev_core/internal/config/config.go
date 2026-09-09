@@ -29,8 +29,6 @@ type Config struct {
 	AccessTokenTTL                time.Duration
 	RefreshTokenTTL               time.Duration
 	AppName                       string
-	DefaultAdminUsername          string
-	DefaultAdminPassword          string
 	ObjectStoreEndpoint           string
 	ObjectStoreAccessKey          string
 	ObjectStoreSecretKey          string
@@ -60,9 +58,14 @@ type Config struct {
 	CacheAddress                  string
 	CachePassword                 string
 	CacheDB                       int
+	NodeConnectionURL             string
 	NodePackageDirectory          string
-	OpsCenterNodeID               string
+	OpsCenterNodeName             string
+	OpsCenterNodeIP               string
 	OpsK3sAPIPort                 int
+	OpsK3sToken                   string
+	CenterReleaseRoot             string
+	CenterReleaseHostRoot         string
 	ReleaseBuilderEnabled         bool
 	ReleaseBuilderImage           string
 	ReleaseBuilderID              string
@@ -140,14 +143,17 @@ func Load() (Config, error) {
 	if workspaceEngine == "kubernetes" && (workspaceOriginTemplate == "" || centerPublicOrigin == "") {
 		return Config{}, fmt.Errorf("Kubernetes 代码工作区必须配置 WORKSPACE_PUBLIC_ORIGIN_TEMPLATE 和 CENTER_PUBLIC_ORIGIN")
 	}
+	centerReleaseRoot := filepath.Clean(firstEnvWithDefault("IF_CENTER_RELEASE_ROOT", "/var/lib/induforge/center-releases"))
+	centerReleaseHostRoot := filepath.Clean(firstEnvWithDefault("IF_CENTER_RELEASE_HOST_ROOT", centerReleaseRoot))
+	if !filepath.IsAbs(centerReleaseRoot) || !filepath.IsAbs(centerReleaseHostRoot) {
+		return Config{}, fmt.Errorf("中心 Release 缓存路径必须是绝对路径")
+	}
 	return Config{
 		Addr: addr, DatabaseURL: databaseURL, DBAutoSchemaSync: autoSchema,
 		JWTSecret: jwtSecret, JWTIssuer: firstEnvWithDefault("JWT_ISSUER", "induforge"),
 		JWTAudience:    firstEnvWithDefault("JWT_AUDIENCE", "induforge-api"),
 		AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL,
-		AppName:                       firstEnvWithDefault("DEFAULT_TENANT_NAME", "InduForge"),
-		DefaultAdminUsername:          firstEnvWithDefault("TENANT_DEFAULT_ADMIN_USERNAME", "admin"),
-		DefaultAdminPassword:          firstEnvWithDefault("TENANT_DEFAULT_ADMIN_PASSWORD", "admin123"),
+		AppName:                       firstEnvWithDefault("DEFAULT_TENANT_NAME", "InduFrame"),
 		ObjectStoreEndpoint:           net.JoinHostPort(firstEnvWithDefault("IF_OBJECT_STORE_ENDPOINT", "127.0.0.1"), firstEnvWithDefault("IF_OBJECT_STORE_PORT", "18500")),
 		ObjectStoreAccessKey:          firstEnv("IF_OBJECT_STORE_ACCESS_KEY"),
 		ObjectStoreSecretKey:          firstEnv("IF_OBJECT_STORE_SECRET_KEY"),
@@ -159,7 +165,7 @@ func Load() (Config, error) {
 		DefaultTenantCode:             firstEnvWithDefault("DEFAULT_TENANT_CODE", "default"),
 		SuperAdminUserID:              firstEnvWithDefault("SUPER_ADMIN_USER_ID", "550e8400-e29b-41d4-a716-446655440001"),
 		SuperAdminUsername:            firstEnvWithDefault("SUPER_ADMIN_USERNAME", "superadmin"),
-		SuperAdminPassword:            firstEnvWithDefault("SUPER_ADMIN_PASSWORD", "admin123"),
+		SuperAdminPassword:            firstEnv("SUPER_ADMIN_PASSWORD"),
 		WorkspaceRoot:                 workspaceRoot,
 		CodeWorkspaceVolume:           firstEnvWithDefault("CODE_WORKSPACE_VOLUME", "induforge-control-workspaces"),
 		CodeServerDockerHost:          firstEnvWithDefault("CODE_SERVER_DOCKER_HOST", "unix:///var/run/docker.sock"),
@@ -177,9 +183,14 @@ func Load() (Config, error) {
 		CacheAddress:                  net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),
 		CachePassword:                 firstEnv("IF_CACHE_STORE_PASSWORD"),
 		CacheDB:                       cacheDB,
+		NodeConnectionURL:             strings.TrimSpace(os.Getenv("NODE_CONNECTION_URL")),
 		NodePackageDirectory:          firstEnvWithDefault("NODE_PACKAGE_DIRECTORY", defaultNodePackageDirectory()),
-		OpsCenterNodeID:               strings.TrimSpace(firstEnv("IF_OPS_CENTER_NODE_ID")),
+		OpsCenterNodeName:             firstEnvWithDefault("IF_OPS_CENTER_NODE_NAME", "induframe-center"),
+		OpsCenterNodeIP:               strings.TrimSpace(firstEnv("IF_OPS_CENTER_NODE_IP")),
 		OpsK3sAPIPort:                 k3sAPIPort,
+		OpsK3sToken:                   strings.TrimSpace(firstEnv("IF_OPS_K3S_TOKEN")),
+		CenterReleaseRoot:             centerReleaseRoot,
+		CenterReleaseHostRoot:         centerReleaseHostRoot,
 		ReleaseBuilderEnabled:         releaseEnabled, ReleaseBuilderImage: releaseImage, ReleaseBuilderID: releaseBuilderID,
 		ReleaseSigningKeyFile: releaseKeyFile, ReleaseSigningKeyID: releaseKeyID, MinNodeAgentVersion: minAgent, MinRuntimeVersion: minRuntime,
 		AuthoringSnapshotCurrentKeyID: authoringKeyID, AuthoringSnapshotKeyring: authoringKeyring,

@@ -27,8 +27,13 @@ import (
 type KubernetesProjectReconciler struct {
 	client          *http.Client
 	endpoint, token string
-	secretManager   *DeploymentSecretManager
-	runtimeContext  interface {
+	centerDataPath  string
+	imagePreparer   interface {
+		EnsureNodeImages(context.Context, string, []string) error
+	}
+	secretManager  *DeploymentSecretManager
+	centerReleases *centerReleaseStore
+	runtimeContext interface {
 		LoadProjectRuntimeContext(context.Context, string) (ProjectRuntimeContext, error)
 	}
 	collectorBundle interface {
@@ -37,15 +42,31 @@ type KubernetesProjectReconciler struct {
 	hostNodes interface {
 		LoadHostNodeAddresses(context.Context, []string) (map[string]string, error)
 	}
+	hostNodeTargets interface {
+		LoadHostNodeSchedulingTargets(context.Context, []string) (map[string]HostNodeSchedulingTarget, error)
+	}
 }
 
 const hostNodeIDLabel = "induforge.io/host-node-id"
 
 type KubernetesNode struct {
-	Name       string
-	InternalIP string
-	Ready      bool
-	Labels     map[string]string
+	Name            string
+	InternalIP      string
+	Ready           bool
+	Labels          map[string]string
+	CPUCapacity     string
+	MemoryCapacity  string
+	Architecture    string
+	OperatingSystem string
+	OSImage         string
+	KernelVersion   string
+	ResourceSummary map[string]any
+}
+
+func (r *KubernetesProjectReconciler) SetImagePreparer(p interface {
+	EnsureNodeImages(context.Context, string, []string) error
+}) {
+	r.imagePreparer = p
 }
 
 func (r *KubernetesProjectReconciler) SetDeploymentSecretManager(manager *DeploymentSecretManager) {
@@ -68,6 +89,11 @@ func (r *KubernetesProjectReconciler) SetHostNodeAddressLoader(loader interface 
 	LoadHostNodeAddresses(context.Context, []string) (map[string]string, error)
 }) {
 	r.hostNodes = loader
+	if targets, ok := loader.(interface {
+		LoadHostNodeSchedulingTargets(context.Context, []string) (map[string]HostNodeSchedulingTarget, error)
+	}); ok {
+		r.hostNodeTargets = targets
+	}
 }
 
 // ListNodes 只读取调度节点的名称、InternalIP、Ready 和标签，禁止使用 hostname 推断身份。
@@ -92,6 +118,7 @@ func (r *KubernetesProjectReconciler) ListNodes(ctx context.Context) ([]Kubernet
 				Labels map[string]string `json:"labels"`
 			} `json:"metadata"`
 			Status struct {
+				Capacity  map[string]string `json:"capacity"`
 				Addresses []struct {
 					Type    string `json:"type"`
 					Address string `json:"address"`
@@ -100,6 +127,12 @@ func (r *KubernetesProjectReconciler) ListNodes(ctx context.Context) ([]Kubernet
 					Type   string `json:"type"`
 					Status string `json:"status"`
 				} `json:"conditions"`
+				NodeInfo struct {
+					Architecture    string `json:"architecture"`
+					OperatingSystem string `json:"operatingSystem"`
+					OSImage         string `json:"osImage"`
+					KernelVersion   string `json:"kernelVersion"`
+				} `json:"nodeInfo"`
 			} `json:"status"`
 		} `json:"items"`
 	}
@@ -108,7 +141,16 @@ func (r *KubernetesProjectReconciler) ListNodes(ctx context.Context) ([]Kubernet
 	}
 	result := make([]KubernetesNode, 0, len(body.Items))
 	for _, item := range body.Items {
-		node := KubernetesNode{Name: item.Metadata.Name, Labels: item.Metadata.Labels}
+		node := KubernetesNode{
+			Name:            item.Metadata.Name,
+			Labels:          item.Metadata.Labels,
+			CPUCapacity:     item.Status.Capacity["cpu"],
+			MemoryCapacity:  item.Status.Capacity["memory"],
+			Architecture:    item.Status.NodeInfo.Architecture,
+			OperatingSystem: item.Status.NodeInfo.OperatingSystem,
+			OSImage:         item.Status.NodeInfo.OSImage,
+			KernelVersion:   item.Status.NodeInfo.KernelVersion,
+		}
 		for _, address := range item.Status.Addresses {
 			if address.Type == "InternalIP" {
 				node.InternalIP = address.Address
@@ -123,6 +165,12 @@ func (r *KubernetesProjectReconciler) ListNodes(ctx context.Context) ([]Kubernet
 		result = append(result, node)
 	}
 	return result, nil
+}
+
+// CollectNodeResourceSummaries 从 Metrics API 与 Kubelet summary 读取中心节点资源用量。
+// 指标读取失败不会影响节点 Ready 状态，调用方仍可用 ListNodes 的结果继续调和。
+func (r *KubernetesProjectReconciler) CollectNodeResourceSummaries(ctx context.Context, nodes []KubernetesNode) error {
+	return r.collectNodeResourceSummaries(ctx, nodes)
 }
 
 // PatchNodeLabel 仅写入平台节点身份标签，调用方须先完成唯一性和冲突校验。
@@ -149,15 +197,22 @@ func (r *KubernetesProjectReconciler) EnsureHostNodeLabels(ctx context.Context, 
 	if r.hostNodes == nil {
 		return fmt.Errorf("Kubernetes 节点地址加载器未配置")
 	}
-	unique := make([]string, 0, len(hostNodeIDs))
-	seen := make(map[string]struct{}, len(hostNodeIDs))
-	for _, id := range hostNodeIDs {
-		if _, ok := seen[id]; !ok {
-			seen[id] = struct{}{}
-			unique = append(unique, id)
+	unique := uniqueNodeIDs(hostNodeIDs)
+	targets := map[string]HostNodeSchedulingTarget{}
+	if r.hostNodeTargets != nil {
+		var err error
+		targets, err = r.hostNodeTargets.LoadHostNodeSchedulingTargets(ctx, unique)
+		if err != nil {
+			return err
 		}
 	}
-	addresses, err := r.hostNodes.LoadHostNodeAddresses(ctx, unique)
+	agentIDs := make([]string, 0, len(unique))
+	for _, id := range unique {
+		if targets[id].NodeSource != "built_in" {
+			agentIDs = append(agentIDs, id)
+		}
+	}
+	addresses, err := r.hostNodes.LoadHostNodeAddresses(ctx, agentIDs)
 	if err != nil {
 		return err
 	}
@@ -167,6 +222,19 @@ func (r *KubernetesProjectReconciler) EnsureHostNodeLabels(ctx context.Context, 
 	}
 	matchedHosts := make(map[string]string, len(unique))
 	for _, hostNodeID := range unique {
+		if target := targets[hostNodeID]; target.NodeSource == "built_in" {
+			matched := false
+			for _, node := range nodes {
+				if node.Name == target.Hostname && node.Ready && node.Labels["induforge.io/center-node"] == "true" {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return fmt.Errorf("中心内置节点 %s 未在 Kubernetes 中就绪", target.Hostname)
+			}
+			continue
+		}
 		address := strings.TrimSpace(addresses[hostNodeID])
 		if address == "" {
 			return fmt.Errorf("物理节点 %s 缺少管理 IP", hostNodeID)
@@ -175,6 +243,17 @@ func (r *KubernetesProjectReconciler) EnsureHostNodeLabels(ctx context.Context, 
 		for _, node := range nodes {
 			if node.InternalIP == address {
 				matches = append(matches, node)
+			}
+		}
+		// 重装会保留旧 Kubernetes 登记；优先选当前身份，不能仅用共享的历史 IP 判定。
+		compactID := strings.ReplaceAll(hostNodeID, "-", "")
+		if len(compactID) >= 12 {
+			expectedName := "if-" + compactID[:12]
+			for _, candidate := range matches {
+				if candidate.Name == expectedName {
+					matches = []KubernetesNode{candidate}
+					break
+				}
 			}
 		}
 		if len(matches) != 1 {
@@ -206,10 +285,11 @@ type ProjectWorkloadApplier interface {
 	Reconcile(context.Context, ProjectWorkload) error
 }
 type ProjectWorkloadStatus struct {
-	Ready            bool
-	Failed           bool
-	ReplicasObserved int
-	Message          string
+	PreparingResources bool
+	Ready              bool
+	Failed             bool
+	ReplicasObserved   int
+	Message            string
 }
 type ProjectWorkloadInspector interface {
 	Status(context.Context, ProjectWorkload) (ProjectWorkloadStatus, error)
@@ -228,7 +308,7 @@ type ProjectDeploymentDeleter interface {
 // ReconcilePendingProjectWorkloads 是中心控制面周期调用的唯一写集群入口。任何 apply
 // 失败都会落库为 failed 并写入 run event；只有 applier 成功返回才标记服务 running。
 func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Context, applier ProjectWorkloadApplier) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT d.tenant_id::text,s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE s.service_type<>'collector' AND s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.tenant_id::text,s.id::text,s.project_deployment_id::text,d.environment_id::text,s.node_id::text,s.service_type,COALESCE(d.application_version_id::text,d.artifact_descriptor->>'releaseId'),COALESCE(v.artifact_hash,d.artifact_descriptor->>'artifactHash',''),s.desired_generation,s.public_port FROM deployment_services s JOIN project_deployments d ON d.id=s.project_deployment_id LEFT JOIN application_versions v ON v.id=d.application_version_id AND v.status='ready' WHERE NOT EXISTS(SELECT 1 FROM host_nodes n WHERE n.id=s.node_id AND n.resource_summary->>'cleanupRequested'='true') AND s.service_type<>'collector' AND s.desired_status='running' AND (s.observed_status<>'running' OR s.observed_generation<>s.desired_generation) ORDER BY s.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
@@ -258,7 +338,8 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 		workload := item.workload
 		status := ProjectWorkloadStatus{Message: "Kubernetes rollout 已提交，等待 readiness"}
 		if applyErr := applier.Reconcile(ctx, workload); applyErr != nil {
-			status = ProjectWorkloadStatus{Failed: true, Message: applyErr.Error()}
+			var pending *imagePreparationPending
+			status = ProjectWorkloadStatus{Failed: !errors.As(applyErr, &pending), PreparingResources: pending != nil, Message: applyErr.Error()}
 		} else if inspector, ok := applier.(ProjectWorkloadInspector); ok {
 			if status, err = inspector.Status(ctx, workload); err != nil {
 				status = ProjectWorkloadStatus{Failed: true, Message: err.Error()}
@@ -287,7 +368,7 @@ func (r *PostgreSQLRepository) ReconcilePendingProjectWorkloads(ctx context.Cont
 // ReconcileStoppedProjectDeployments 与运行态调和器成对工作。停止不能只更新
 // desired_status，否则 K3s 工作负载会继续运行且 deployment run 永远 pending。
 func (r *PostgreSQLRepository) ReconcileStoppedProjectDeployments(ctx context.Context, stopper ProjectDeploymentStopper) (int, error) {
-	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.tenant_id::text,d.deletion_requested_at IS NOT NULL,COALESCE((SELECT max(desired_generation) FROM deployment_services WHERE project_deployment_id=d.id),0) FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM deployment_services c WHERE c.project_deployment_id=d.id AND c.service_type='collector' AND (c.observed_status<>'stopped' OR c.observed_generation<>c.desired_generation)) AND (d.deletion_requested_at IS NOT NULL OR EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation))) ORDER BY d.updated_at LIMIT 100`)
+	rows, err := r.pool.Query(ctx, `SELECT d.id::text,d.environment_id::text,d.tenant_id::text,d.deletion_requested_at IS NOT NULL,COALESCE((SELECT max(desired_generation) FROM deployment_services WHERE project_deployment_id=d.id),0) FROM project_deployments d WHERE d.desired_status='stopped' AND d.deleted_at IS NULL AND NOT EXISTS(SELECT 1 FROM deployment_services s JOIN host_nodes n ON n.id=s.node_id WHERE s.project_deployment_id=d.id AND n.resource_summary->>'cleanupRequested'='true') AND NOT EXISTS (SELECT 1 FROM deployment_services c WHERE c.project_deployment_id=d.id AND c.service_type='collector' AND (c.observed_status<>'stopped' OR c.observed_generation<>c.desired_generation)) AND (d.deletion_requested_at IS NOT NULL OR EXISTS (SELECT 1 FROM deployment_services s WHERE s.project_deployment_id=d.id AND (s.observed_status<>'stopped' OR s.observed_generation<>s.desired_generation))) ORDER BY d.updated_at LIMIT 100`)
 	if err != nil {
 		return 0, err
 	}
@@ -522,6 +603,13 @@ func (r *KubernetesProjectReconciler) projectPodFailure(ctx context.Context, nam
 		return ProjectWorkloadStatus{}, err
 	}
 	for _, pod := range pods.Items {
+		// 初始化和运行容器都只使用节点包镜像，缺失必须结束等待并给出处理方向。
+		for _, status := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
+			switch status.State.Waiting.Reason {
+			case "ErrImageNeverPull", "ImagePullBackOff", "ErrImagePull", "InvalidImageName":
+				return ProjectWorkloadStatus{Failed: true, Message: "节点缺少所需运行镜像，请检查节点安装包是否完整并重新导入镜像（" + status.State.Waiting.Reason + "）"}, nil
+			}
+		}
 		for _, status := range pod.Status.InitContainerStatuses {
 			if status.State.Terminated.ExitCode != 0 {
 				return ProjectWorkloadStatus{Failed: true, Message: "初始化阶段 " + status.Name + " 失败"}, nil
@@ -563,7 +651,7 @@ func NewInClusterProjectReconciler() (*KubernetesProjectReconciler, error) {
 	if !pool.AppendCertsFromPEM(ca) {
 		return nil, fmt.Errorf("集群 CA 无效")
 	}
-	return &KubernetesProjectReconciler{client: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}, endpoint: "https://" + host + ":" + port, token: string(bytes.TrimSpace(token))}, nil
+	return &KubernetesProjectReconciler{client: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}, endpoint: "https://" + host + ":" + port, token: string(bytes.TrimSpace(token)), centerDataPath: strings.TrimSpace(os.Getenv("IF_OPS_CENTER_DATA_PATH"))}, nil
 }
 
 // Reconcile 使用稳定名称的 ConfigMap/Deployment server-side apply；同名模板更新由
@@ -572,9 +660,31 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 	if workload.Engine == ServiceCollector {
 		return fmt.Errorf("采集生命周期由 NodeAgent 管理，拒绝创建采集 Pod")
 	}
+	if all, ok := r.imagePreparer.(interface {
+		EnsureDeploymentImages(context.Context, string) error
+	}); ok {
+		if err := all.EnsureDeploymentImages(ctx, workload.DeploymentID); err != nil {
+			return err
+		}
+	}
+	if r.imagePreparer != nil {
+		if err := r.imagePreparer.EnsureNodeImages(ctx, workload.NodeID, projectImageReferences(workload.Engine)); err != nil {
+			return err
+		}
+	}
 	if r.hostNodes != nil {
 		if err := r.EnsureHostNodeLabels(ctx, []string{workload.NodeID}); err != nil {
-			return fmt.Errorf("工程节点标签预检失败: %w", err)
+			return &nodePreflightError{cause: err}
+		}
+	}
+	if r.hostNodeTargets != nil {
+		targets, err := r.hostNodeTargets.LoadHostNodeSchedulingTargets(ctx, []string{workload.NodeID})
+		if err != nil {
+			return fmt.Errorf("加载工程调度节点失败: %w", err)
+		}
+		if targets[workload.NodeID].NodeSource == "built_in" {
+			workload.NodeSelectorKey = "induforge.io/center-node"
+			workload.NodeSelectorValue = "true"
 		}
 	}
 
@@ -590,6 +700,12 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		input, err := BuildRuntimeBindingInput(workload, runtimeContext)
 		if err != nil {
 			return fmt.Errorf("构造运行绑定输入失败: %w", err)
+		}
+		if workload.NodeSelectorKey == "induforge.io/center-node" {
+			workload.ArtifactHostPath, err = r.centerReleases.prepare(ctx, workload.DeploymentID, runtimeContext.Release)
+			if err != nil {
+				return fmt.Errorf("准备中心工程制品失败: %w", err)
+			}
 		}
 		if r.secretManager == nil {
 			return fmt.Errorf("部署 Secret 管理器未配置")

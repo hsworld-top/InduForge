@@ -17,6 +17,9 @@ const insertRunEventOnceSQL = `INSERT INTO deployment_run_events(deployment_run_
 
 func recordProjectWorkloadObservation(ctx context.Context, executor statementExecutor, workload ProjectWorkload, status ProjectWorkloadStatus) (bool, error) {
 	observed, stage, message := "pending", "dispatched", "Kubernetes 工作负载已提交"
+	if status.PreparingResources {
+		stage, message = "queued", "正在准备运行资源"
+	}
 	if status.Ready {
 		observed, stage, message = "running", "observed", "工程引擎已就绪"
 	}

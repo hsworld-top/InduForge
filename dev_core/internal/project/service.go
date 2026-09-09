@@ -32,6 +32,7 @@ type Project struct {
 	AuthoringEpoch    int64
 	CreatedBy         string
 	CreatedByName     string
+	UpdatedByName     string
 	UpdatedBy         string
 	Group             *Group
 	Tags              []Tag
@@ -87,6 +88,11 @@ type DeleteImpact struct {
 }
 
 type ListFilter struct {
+	CreatedByFilter string
+	RuntimeModes    string
+	DeployStatuses  string
+	SortBy          string
+	SortOrder       string
 	Keyword         string
 	Status          string
 	Visibility      string
@@ -99,6 +105,7 @@ type ListFilter struct {
 	Limit           int
 }
 type ProjectInput struct {
+	Template    *string
 	Name        *string
 	Description *string
 	Icon        *string
@@ -129,7 +136,7 @@ type Repository interface {
 	CreateTag(ctx context.Context, tenantID, userID string, item Tag) (Tag, error)
 	UpdateTag(ctx context.Context, tenantID string, item Tag) (Tag, error)
 	DeleteTag(ctx context.Context, tenantID, tagID string) error
-	ReplaceTags(ctx context.Context, tenantID, projectID string, tagIDs []string) error
+	ReplaceTags(ctx context.Context, tenantID, projectID, actorID string, tagIDs []string) error
 	ListGroups(ctx context.Context, tenantID, keyword string) ([]Group, error)
 	GetGroup(ctx context.Context, tenantID, groupID string) (Group, error)
 	CreateGroup(ctx context.Context, tenantID, userID string, item Group) (Group, error)
@@ -183,8 +190,18 @@ func (s *Service) List(ctx context.Context, actor auth.User, filter ListFilter) 
 		return nil, 0, err
 	}
 	filter.Page, filter.Limit = normalizePage(filter.Page, filter.Limit)
+	switch filter.SortBy {
+	case "createdAt", "updatedAt", "lastDeployedAt", "runtimeStatus":
+	default:
+		filter.SortBy = "createdAt"
+	}
+	if strings.ToUpper(filter.SortOrder) == "ASC" {
+		filter.SortOrder = "ASC"
+	} else {
+		filter.SortOrder = "DESC"
+	}
 	filter.ActorID = actor.ID
-	filter.IsPlatformAdmin = auth.IsPlatformAdmin(actor.Role)
+	filter.IsPlatformAdmin = auth.IsTenantAdministrator(actor.Role)
 	filter.CanReadShared = auth.HasCapability(actor.Role, auth.CapabilityProjectRead)
 	return s.repository.List(ctx, actor.TenantID, filter)
 }
@@ -193,7 +210,7 @@ func (s *Service) Get(ctx context.Context, actor auth.User, projectID string) (P
 	if err != nil {
 		return Project{}, err
 	}
-	if !CanRead(actor, item) {
+	if actor.TenantID != item.TenantID || !auth.HasCapability(actor.Role, auth.CapabilityProjectRead) {
 		return Project{}, auth.ErrPermissionDenied
 	}
 	return item, nil
@@ -211,6 +228,9 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInpu
 	if err := auth.RequireCapability(actor, auth.CapabilityProjectCreate); err != nil {
 		return Project{}, err
 	}
+	if input.Template != nil && *input.Template != "" && *input.Template != "demo-shell" {
+		return Project{}, fmt.Errorf("未知工程模板")
+	}
 	item := Project{TenantID: actor.TenantID, Visibility: "private", Status: "active"}
 	applyProjectInput(&item, input)
 	item.Visibility = "private"
@@ -225,6 +245,20 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInpu
 		return Project{}, err
 	}
 	item.WorkspacePath = workspacePath
+	if input.Template != nil && *input.Template == "demo-shell" {
+		creator, ok := s.repository.(interface {
+			CreateDemoShell(context.Context, Project, auth.User) (Project, error)
+		})
+		if !ok {
+			_ = s.workspace.Remove(workspacePath)
+			return Project{}, fmt.Errorf("示例工程创建未配置")
+		}
+		result, err := creator.CreateDemoShell(ctx, item, actor)
+		if err != nil {
+			_ = s.workspace.Remove(workspacePath)
+		}
+		return result, err
+	}
 	hash, err := auth.HashPassword(s.defaultRuntimePassword)
 	if err != nil {
 		_ = s.workspace.Remove(workspacePath)
@@ -388,13 +422,13 @@ func (s *Service) CreateTag(ctx context.Context, actor auth.User, input TagInput
 	}
 	item := Tag{}
 	applyTagInput(&item, input)
-	if item.Name == "" {
-		return Tag{}, fmt.Errorf("标签名称不能为空")
+	if err := validateTagName(item.Name); err != nil {
+		return Tag{}, err
 	}
 	return s.repository.CreateTag(ctx, actor.TenantID, actor.ID, item)
 }
 func (s *Service) UpdateTag(ctx context.Context, actor auth.User, tagID string, input TagInput) (Tag, error) {
-	if err := auth.RequireCapability(actor, auth.CapabilityProjectWrite); err != nil {
+	if err := auth.RequireCapability(actor, auth.CapabilityUserManage); err != nil {
 		return Tag{}, err
 	}
 	item, err := s.repository.GetTag(ctx, actor.TenantID, tagID)
@@ -402,10 +436,13 @@ func (s *Service) UpdateTag(ctx context.Context, actor auth.User, tagID string, 
 		return Tag{}, err
 	}
 	applyTagInput(&item, input)
+	if err := validateTagName(item.Name); err != nil {
+		return Tag{}, err
+	}
 	return s.repository.UpdateTag(ctx, actor.TenantID, item)
 }
 func (s *Service) DeleteTag(ctx context.Context, actor auth.User, tagID string) error {
-	if err := auth.RequireCapability(actor, auth.CapabilityProjectWrite); err != nil {
+	if err := auth.RequireCapability(actor, auth.CapabilityUserManage); err != nil {
 		return err
 	}
 	return s.repository.DeleteTag(ctx, actor.TenantID, tagID)
@@ -421,7 +458,11 @@ func (s *Service) ReplaceTags(ctx context.Context, actor auth.User, projectID st
 	if err := RequireCapability(actor, item, auth.CapabilityProjectWrite); err != nil {
 		return err
 	}
-	return s.repository.ReplaceTags(ctx, actor.TenantID, projectID, tagIDs)
+	tagIDs, err = normalizeTagIDs(tagIDs)
+	if err != nil {
+		return err
+	}
+	return s.repository.ReplaceTags(ctx, actor.TenantID, projectID, actor.ID, tagIDs)
 }
 func (s *Service) ListGroups(ctx context.Context, actor auth.User, keyword string) ([]Group, error) {
 	if err := auth.RequireCapability(actor, auth.CapabilityProjectRead); err != nil {
@@ -495,6 +536,34 @@ func applyProjectInput(item *Project, input ProjectInput) {
 
 func generateProjectCode() string {
 	return "PRJ-" + strings.ToUpper(strings.ReplaceAll(newID(), "-", ""))
+}
+
+// 标签名称仅约束长度和控制字符，保留中文、空格及常用符号。
+func validateTagName(name string) error {
+	if len([]rune(name)) < 1 || len([]rune(name)) > 32 {
+		return fmt.Errorf("标签名称需为 1–32 个字符")
+	}
+	for _, c := range name {
+		if c < 32 || c == 127 {
+			return fmt.Errorf("标签名称不能包含控制字符")
+		}
+	}
+	return nil
+}
+func normalizeTagIDs(ids []string) ([]string, error) {
+	result := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
+	if len(result) > 10 {
+		return nil, fmt.Errorf("每个工程最多选择 10 个标签")
+	}
+	return result, nil
 }
 func applyTagInput(item *Tag, input TagInput) {
 	if input.Name != nil {

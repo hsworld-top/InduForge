@@ -27,6 +27,40 @@ func (q *Queries) CheckRuntimeRoleInProject(ctx context.Context, arg CheckRuntim
 	return exists, err
 }
 
+const countRuntimeRoles = `-- name: CountRuntimeRoles :one
+SELECT count(*) FROM project_roles r JOIN projects p ON p.id = r.project_id WHERE r.project_id = $1 AND p.tenant_id = $2 AND p.status <> 'deleted' AND ($3::text = '' OR r.name ILIKE '%' || $3 || '%' OR r.code ILIKE '%' || $3 || '%')
+`
+
+type CountRuntimeRolesParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	Keyword   string      `json:"keyword"`
+}
+
+func (q *Queries) CountRuntimeRoles(ctx context.Context, arg CountRuntimeRolesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRuntimeRoles, arg.ProjectID, arg.TenantID, arg.Keyword)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRuntimeUsers = `-- name: CountRuntimeUsers :one
+SELECT count(*) FROM project_runtime_users u JOIN projects p ON p.id = u.project_id WHERE u.project_id = $1 AND p.tenant_id = $2 AND p.status <> 'deleted' AND ($3::text = '' OR u.username ILIKE '%' || $3 || '%' OR u.display_name ILIKE '%' || $3 || '%')
+`
+
+type CountRuntimeUsersParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	Keyword   string      `json:"keyword"`
+}
+
+func (q *Queries) CountRuntimeUsers(ctx context.Context, arg CountRuntimeUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRuntimeUsers, arg.ProjectID, arg.TenantID, arg.Keyword)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createRuntimeRole = `-- name: CreateRuntimeRole :one
 INSERT INTO project_roles (project_id, code, name, description, status, is_builtin, created_by)
 VALUES ($1, $2, $3, $4, $5, false, $6)
@@ -367,6 +401,154 @@ func (q *Queries) ListRuntimeUsers(ctx context.Context, arg ListRuntimeUsersPara
 	items := []ListRuntimeUsersRow{}
 	for rows.Next() {
 		var i ListRuntimeUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Username,
+			&i.DisplayName,
+			&i.Email,
+			&i.Status,
+			&i.IsBuiltinAdmin,
+			&i.LastLoginAt,
+			&i.PasswordChangedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Roles,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pageRuntimeRoles = `-- name: PageRuntimeRoles :many
+SELECT r.id, r.project_id, r.code, r.name, r.description, r.status, r.is_builtin,
+       r.created_at, r.updated_at,
+       COALESCE(jsonb_agg(DISTINCT g.capability) FILTER (WHERE g.id IS NOT NULL AND g.effect = 'allow'), '[]'::jsonb) AS capabilities,
+       (SELECT count(*) FROM project_user_role_bindings b WHERE b.role_id = r.id) AS user_count
+FROM project_roles r
+JOIN projects p ON p.id = r.project_id
+LEFT JOIN project_role_grants g ON g.role_id = r.id
+WHERE r.project_id = $1 AND p.tenant_id = $2 AND p.status <> 'deleted' AND ($3::text = '' OR r.name ILIKE '%' || $3 || '%' OR r.code ILIKE '%' || $3 || '%')
+GROUP BY r.id
+ORDER BY r.is_builtin DESC, r.created_at, r.id LIMIT $5 OFFSET $4
+`
+
+type PageRuntimeRolesParams struct {
+	ProjectID  pgtype.UUID `json:"project_id"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	Keyword    string      `json:"keyword"`
+	PageOffset int32       `json:"page_offset"`
+	PageLimit  int32       `json:"page_limit"`
+}
+
+type PageRuntimeRolesRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	ProjectID    pgtype.UUID        `json:"project_id"`
+	Code         string             `json:"code"`
+	Name         string             `json:"name"`
+	Description  pgtype.Text        `json:"description"`
+	Status       string             `json:"status"`
+	IsBuiltin    bool               `json:"is_builtin"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Capabilities interface{}        `json:"capabilities"`
+	UserCount    int64              `json:"user_count"`
+}
+
+func (q *Queries) PageRuntimeRoles(ctx context.Context, arg PageRuntimeRolesParams) ([]PageRuntimeRolesRow, error) {
+	rows, err := q.db.Query(ctx, pageRuntimeRoles,
+		arg.ProjectID,
+		arg.TenantID,
+		arg.Keyword,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PageRuntimeRolesRow{}
+	for rows.Next() {
+		var i PageRuntimeRolesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Code,
+			&i.Name,
+			&i.Description,
+			&i.Status,
+			&i.IsBuiltin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Capabilities,
+			&i.UserCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pageRuntimeUsers = `-- name: PageRuntimeUsers :many
+SELECT u.id, u.project_id, u.username, u.display_name, u.email, u.status, u.is_builtin_admin,
+       u.last_login_at, u.password_changed_at, u.created_at, u.updated_at,
+       COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', r.id, 'code', r.code, 'name', r.name, 'status', r.status, 'isBuiltin', r.is_builtin)) FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS roles
+FROM project_runtime_users u
+JOIN projects p ON p.id = u.project_id
+LEFT JOIN project_user_role_bindings b ON b.runtime_user_id = u.id
+LEFT JOIN project_roles r ON r.id = b.role_id
+WHERE u.project_id = $1 AND p.tenant_id = $2 AND p.status <> 'deleted' AND ($3::text = '' OR u.username ILIKE '%' || $3 || '%' OR u.display_name ILIKE '%' || $3 || '%')
+GROUP BY u.id
+ORDER BY u.is_builtin_admin DESC, u.created_at, u.id LIMIT $5 OFFSET $4
+`
+
+type PageRuntimeUsersParams struct {
+	ProjectID  pgtype.UUID `json:"project_id"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	Keyword    string      `json:"keyword"`
+	PageOffset int32       `json:"page_offset"`
+	PageLimit  int32       `json:"page_limit"`
+}
+
+type PageRuntimeUsersRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	Username          string             `json:"username"`
+	DisplayName       pgtype.Text        `json:"display_name"`
+	Email             pgtype.Text        `json:"email"`
+	Status            string             `json:"status"`
+	IsBuiltinAdmin    bool               `json:"is_builtin_admin"`
+	LastLoginAt       pgtype.Timestamptz `json:"last_login_at"`
+	PasswordChangedAt pgtype.Timestamptz `json:"password_changed_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Roles             interface{}        `json:"roles"`
+}
+
+func (q *Queries) PageRuntimeUsers(ctx context.Context, arg PageRuntimeUsersParams) ([]PageRuntimeUsersRow, error) {
+	rows, err := q.db.Query(ctx, pageRuntimeUsers,
+		arg.ProjectID,
+		arg.TenantID,
+		arg.Keyword,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PageRuntimeUsersRow{}
+	for rows.Next() {
+		var i PageRuntimeUsersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,

@@ -71,20 +71,16 @@ func TestDeploymentHTTPFlow(t *testing.T) {
 }
 
 func TestDeploymentPermissionBoundaries(t *testing.T) {
-	developerHandler, developerToken, _ := newDeploymentServer(t, "DEVELOPER")
-	assertOK(t, call(t, developerHandler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{}, developerToken))
-	developerDeploy := call(t, developerHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, developerToken)
-	if developerDeploy.Code != platformapi.ErrorCodePermissionDenied {
-		t.Fatalf("DEVELOPER 不应执行部署，实际 code=%d msg=%s", developerDeploy.Code, developerDeploy.Msg)
+	engineerHandler, engineerToken, _ := newDeploymentServer(t, "PROJECT_ADMIN")
+	assertOK(t, call(t, engineerHandler, http.MethodPost, "/api/v1/publish/"+testProjectID, map[string]any{}, engineerToken))
+	assertLegacyReleaseDisabled(t, call(t, engineerHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, engineerToken))
+	for _, role := range []string{"DEVELOPER", "OPERATOR", "VIEWER", "USER_ADMIN"} {
+		handler, token, _ := newDeploymentServer(t, role)
+		result := call(t, handler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, token)
+		if result.Code != platformapi.ErrorCodePermissionDenied {
+			t.Fatalf("removed role %s: %+v", role, result)
+		}
 	}
-
-	operatorHandler, operatorToken, _ := newDeploymentServer(t, "OPERATOR")
-	operatorDeploy := call(t, operatorHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, operatorToken)
-	if operatorDeploy.Code != platformapi.ErrorCodePermissionDenied {
-		t.Fatalf("OPERATOR 不应创建部署，实际 code=%d msg=%s", operatorDeploy.Code, operatorDeploy.Msg)
-	}
-	assertOK(t, call(t, operatorHandler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/stop", nil, operatorToken))
-
 	opsHandler, opsToken, _ := newDeploymentServer(t, "OPS_ADMIN")
 	assertLegacyReleaseDisabled(t, call(t, opsHandler, http.MethodPost, "/api/v1/deployments/"+testVersionID+"/deploy", map[string]any{"nodeIds": []string{testNodeID}}, opsToken))
 	assertLegacyReleaseDisabled(t, call(t, opsHandler, http.MethodPost, "/api/v1/deployments/node-deployment/"+testDeploymentID+"/restart", nil, opsToken))

@@ -105,7 +105,7 @@ func (h *Handler) ExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 	writer := csv.NewWriter(w)
 	_ = writer.Write([]string{"时间", "级别", "用户", "操作", "资源", "消息", "结果", "请求ID", "请求路径", "IP"})
 	for _, item := range items {
-		_ = writer.Write([]string{item.CreatedAt.Format(timeFormat), item.Level, item.Username, item.Action, item.Resource, item.Message, item.Result, item.RequestID, item.Path, item.IP})
+		_ = writer.Write([]string{item.CreatedAt.Format(time.RFC3339), item.Level, item.Username, item.Action, item.Resource, item.Message, item.Result, item.RequestID, item.Path, item.IP})
 	}
 	writer.Flush()
 }
@@ -154,7 +154,7 @@ func (h *Handler) ListRecentActivities(w http.ResponseWriter, r *http.Request) {
 func activityPayload(item Log) map[string]any {
 	return map[string]any{
 		"id": item.ID, "action": item.Action, "resource": item.Resource, "path": item.Path,
-		"createdAt": item.CreatedAt.Format(timeFormat),
+		"createdAt": item.CreatedAt.Format(time.RFC3339),
 		"user":      map[string]any{"id": item.UserID, "username": item.Username, "fullName": item.FullName},
 	}
 }
@@ -240,7 +240,7 @@ func logPayload(item Log) map[string]any {
 		"id": item.ID, "tenantId": item.TenantID, "userId": item.UserID, "level": item.Level,
 		"action": item.Action, "resource": item.Resource, "resourceId": item.ResourceID, "message": item.Message,
 		"requestId": item.RequestID, "method": item.Method, "path": item.Path, "result": item.Result,
-		"ip": item.IP, "userAgent": item.UserAgent, "metadata": item.Metadata, "createdAt": item.CreatedAt.Format(timeFormat),
+		"ip": item.IP, "userAgent": item.UserAgent, "metadata": item.Metadata, "createdAt": item.CreatedAt.Format(time.RFC3339),
 		"user": map[string]any{"id": item.UserID, "username": item.Username, "fullName": item.FullName},
 	}
 }

@@ -77,13 +77,13 @@ func newGatewayForTestMode(t *testing.T, transport http.RoundTripper, template, 
 		AllowInsecureHTTPDev: allowInsecureHTTPDev,
 		Transport:            transport,
 		ResolveUser: func(_ context.Context, _ string) (auth.User, error) {
-			return auth.User{ID: "owner", TenantID: "tenant", Username: "developer", Role: "DEVELOPER", Status: "active", TenantStatus: "active"}, nil
+			return auth.User{ID: "owner", TenantID: "tenant", Username: "developer", Role: "PROJECT_ADMIN", Status: "active", TenantStatus: "active"}, nil
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return gateway, guard, auth.User{ID: "owner", TenantID: "tenant", Username: "developer", Role: "DEVELOPER"}
+	return gateway, guard, auth.User{ID: "owner", TenantID: "tenant", Username: "developer", Role: "PROJECT_ADMIN"}
 }
 
 func TestGatewayInsecureHTTPDevelopmentMode(t *testing.T) {

@@ -59,25 +59,6 @@ prepare_k3s_assets() {
   )
 }
 
-prepare_foundation_images() {
-  local arch="$1" destination="$2"
-  local archive="$destination/induforge-foundation-images-$arch.tar.gz"
-  local images=(
-    "timescale/timescaledb:2.26.4-pg16"
-    "redis:7.2-alpine"
-    "emqx/emqx:5.6.1"
-    "nats:2.12.8-alpine"
-    "chrislusf/seaweedfs:3.85"
-    "nginx:1.28-alpine"
-  )
-  command -v docker >/dev/null 2>&1 || { echo "docker is required to bundle foundation images" >&2; exit 1; }
-  for image in "${images[@]}"; do docker pull --platform "linux/$arch" "$image"; done
-  docker image save "${images[@]}" | gzip -9 > "$archive.tmp"
-  mv "$archive.tmp" "$archive"
-  chmod 0600 "$archive"
-  (cd "$destination" && shasum -a 256 "$(basename "$archive")" >> SHA256SUMS)
-}
-
 prepare_chrony_asset() {
   local arch="$1" destination="$2"
   local cache_dir="${CHRONY_ASSET_CACHE:-$REPO_ROOT/.data/release-cache/chrony/$CHRONY_VERSION}/ubuntu-24.04/$arch"
@@ -133,6 +114,13 @@ make_linux_package() {
   cp "$MODULE_DIR/packaging/uninstall-linux.sh" "$package_dir/uninstall.sh"
   cp "$MODULE_DIR/packaging/README-linux.md" "$package_dir/README.md"
   cp "$MODULE_DIR/packaging/config-linux.yaml" "$package_dir/config.yaml"
+  # 中心专属信任文件由部署打包流程注入，不下载或自动信任远端证书。
+  if [[ -n "${NODE_PACKAGE_CENTER_CA_FILE:-}" ]]; then
+    cp "$NODE_PACKAGE_CENTER_CA_FILE" "$package_dir/center-ca.crt"
+  fi
+  if [[ -n "${NODE_PACKAGE_RELEASE_TRUST_FILE:-}" ]]; then
+    cp "$NODE_PACKAGE_RELEASE_TRUST_FILE" "$package_dir/release-trust.txt"
+  fi
   printf '%s\n' "$VERSION" > "$package_dir/BUILD_VERSION"
 
   command -v dotnet >/dev/null 2>&1 || { echo "dotnet SDK is required to build collector NodeAgent package" >&2; exit 1; }
@@ -142,10 +130,10 @@ make_linux_package() {
   build_linux_capability "$REPO_ROOT/runtime/runtime_engine" ./cmd/runtime-engine "$arch" "$package_dir/capabilities/$arch/runtime-engine"
   build_collector_linux "$arch" "$package_dir/capabilities/$arch/collector"
   prepare_k3s_assets "$arch" "$package_dir/k3s/$arch"
-  prepare_foundation_images "$arch" "$package_dir/k3s/$arch"
   prepare_chrony_asset "$arch" "$package_dir/time-sync/ubuntu-24.04/$arch"
   chmod +x "$package_dir/capabilities/$arch/project-gateway" "$package_dir/capabilities/$arch/runtime-api" "$package_dir/capabilities/$arch/runtime-engine" "$package_dir/capabilities/$arch/collector/industrial_collector"
   chmod +x "$package_dir/install.sh" "$package_dir/uninstall.sh" "$package_dir/bin/"*
+  (cd "$package_dir" && find . -type f ! -name SHA256SUMS -exec shasum -a 256 {} + > SHA256SUMS)
   # macOS bsdtar 默认会写入宿主机扩展属性，Linux 解包会产生噪声且污染制品。
   COPYFILE_DISABLE=1 tar --no-xattrs -C "$STAGE_DIR" -czf "$PACKAGE_OUT/induforge-node-agent-linux-$arch.tar.gz" "$(basename "$package_dir")"
 }

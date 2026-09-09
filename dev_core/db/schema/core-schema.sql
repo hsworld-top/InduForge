@@ -1,6 +1,9 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE tenants (
+  initialized boolean NOT NULL DEFAULT false,
+  is_default boolean NOT NULL DEFAULT false,
+  admin_user_id uuid,
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   code text NOT NULL UNIQUE,
@@ -26,15 +29,17 @@ CREATE TABLE tenants (
 CREATE INDEX tenants_status_idx ON tenants (status);
 
 CREATE TABLE users (
+  must_change_password boolean NOT NULL DEFAULT false,
+  credential_version bigint NOT NULL DEFAULT 0,
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
   username text NOT NULL,
   password_hash text NOT NULL,
   email text,
   phone text,
   full_name text,
   avatar text,
-  role text NOT NULL CHECK (role IN ('SUPER_ADMIN', 'SYSTEM_ADMIN', 'PROJECT_ADMIN', 'OPS_ADMIN', 'USER_ADMIN', 'DEVELOPER', 'OPERATOR', 'VIEWER')),
+  role text NOT NULL CHECK (role IN ('SUPER_ADMIN', 'SYSTEM_ADMIN', 'PROJECT_ADMIN', 'OPS_ADMIN')),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
   preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
   last_login_at timestamptz,
@@ -42,16 +47,21 @@ CREATE TABLE users (
   password_changed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((role = 'SUPER_ADMIN') = (tenant_id IS NULL)),
   UNIQUE (tenant_id, username)
 );
 CREATE INDEX users_tenant_role_idx ON users (tenant_id, role);
 CREATE INDEX users_status_idx ON users (status);
+CREATE UNIQUE INDEX tenant_user_username_idx ON users (tenant_id, lower(username)) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX platform_user_username_idx ON users (lower(username)) WHERE tenant_id IS NULL;
 
 CREATE TABLE refresh_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   token_hash text NOT NULL UNIQUE,
+  remember_me boolean NOT NULL DEFAULT false,
+  credential_version bigint NOT NULL DEFAULT 0,
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
   replaced_by_token_id uuid REFERENCES refresh_tokens (id) ON DELETE SET NULL,
@@ -693,35 +703,44 @@ CREATE TABLE node_enrollments (
   approved_by uuid REFERENCES users (id) ON DELETE SET NULL,
   rejected_at timestamptz,
   rejected_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  deleted_at timestamptz,
+  deleted_by uuid REFERENCES users (id) ON DELETE SET NULL,
   created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX node_enrollments_tenant_idx ON node_enrollments (tenant_id, status, expires_at DESC);
+CREATE INDEX node_enrollments_tenant_idx ON node_enrollments (tenant_id, status, expires_at DESC) WHERE deleted_at IS NULL;
 
 CREATE TABLE host_nodes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
-  enrollment_id uuid NOT NULL UNIQUE REFERENCES node_enrollments (id) ON DELETE RESTRICT,
+  node_source text NOT NULL DEFAULT 'agent' CHECK (node_source IN ('built_in', 'agent')),
+  enrollment_id uuid UNIQUE REFERENCES node_enrollments (id) ON DELETE RESTRICT,
   display_name text NOT NULL,
   hostname text NOT NULL,
   platform text NOT NULL CHECK (platform IN ('linux', 'windows')),
   architecture text NOT NULL,
   agent_version text,
-  agent_token_hash text NOT NULL UNIQUE,
+  agent_token_hash text UNIQUE,
   machine_fingerprint text,
   ip_address text,
   desired_status text NOT NULL DEFAULT 'active' CHECK (desired_status IN ('active', 'maintenance', 'revoked')),
-  observed_status text NOT NULL DEFAULT 'pending_approval' CHECK (observed_status IN ('pending_approval', 'offline', 'online', 'degraded', 'revoked')),
+  observed_status text NOT NULL DEFAULT 'offline' CHECK (observed_status IN ('offline', 'online', 'degraded', 'revoked')),
   resource_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
   capabilities jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(capabilities) = 'array'),
   last_heartbeat_at timestamptz,
   approved_at timestamptz,
   approved_by uuid REFERENCES users (id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT host_nodes_source_identity_check CHECK (
+    (node_source = 'built_in' AND enrollment_id IS NULL AND agent_token_hash IS NULL)
+    OR
+    (node_source = 'agent' AND enrollment_id IS NOT NULL AND agent_token_hash IS NOT NULL)
+  )
 );
 CREATE INDEX host_nodes_tenant_idx ON host_nodes (tenant_id, observed_status, updated_at DESC);
+CREATE UNIQUE INDEX host_nodes_tenant_built_in_key ON host_nodes (tenant_id) WHERE node_source = 'built_in';
 
 -- 每个中心只维护一套 K3s 集群。集群节点身份独立于运行环境：中心节点固定
 -- 承载 Server/embedded etcd，外部 Linux 节点固定作为工作节点。
@@ -868,6 +887,7 @@ CREATE TABLE project_deployments (
   )
 );
 CREATE INDEX project_deployments_tenant_idx ON project_deployments (tenant_id, project_id, updated_at DESC);
+CREATE INDEX project_deployments_environment_active_idx ON project_deployments (tenant_id, environment_id) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX project_deployments_tenant_project_environment_active_key ON project_deployments (tenant_id, project_id, environment_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE deployment_runs (

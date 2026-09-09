@@ -314,3 +314,28 @@ func (h *Handler) ChangeAuthPassword(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RefreshAuthToken(w http.ResponseWriter, r *http.Request) {
 	h.auth.RefreshAuthToken(w, r)
 }
+
+func (h *Handler) ListAuthTenants(w http.ResponseWriter, r *http.Request, params platformapi.ListAuthTenantsParams) {
+	h.auth.ListAuthTenants(w, r, params)
+}
+func (h *Handler) InitializeTenant(w http.ResponseWriter, r *http.Request, tenantID string) {
+	h.tenant.InitializeTenant(w, r, tenantID)
+}
+func (h *Handler) ResetTenantAdminPassword(w http.ResponseWriter, r *http.Request, tenantID string) {
+	h.tenant.ResetTenantAdminPassword(w, r, tenantID)
+}
+
+func (h *Handler) UpdateCurrentAuthUser(w http.ResponseWriter, r *http.Request) {
+	h.auth.UpdateCurrentAuthUser(w, r)
+}
+
+func (h *Handler) UploadCurrentUserAvatar(w http.ResponseWriter, r *http.Request) {
+	h.auth.UploadCurrentUserAvatar(w, r)
+}
+func (h *Handler) GetCurrentUserAvatar(w http.ResponseWriter, r *http.Request) {
+	h.auth.GetCurrentUserAvatar(w, r)
+}
+
+func (h *Handler) DeleteCurrentUserAvatar(w http.ResponseWriter, r *http.Request) {
+	h.auth.DeleteCurrentUserAvatar(w, r)
+}

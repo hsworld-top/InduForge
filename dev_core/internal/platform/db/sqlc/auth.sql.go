@@ -38,21 +38,27 @@ INSERT INTO refresh_tokens (
   tenant_id,
   user_id,
   token_hash,
-  expires_at
+  expires_at,
+  remember_me,
+  credential_version
 ) VALUES (
   $1,
   $2,
   $3,
-  $4
+  $4,
+  $5,
+  $6
 )
 RETURNING id
 `
 
 type CreateRefreshTokenParams struct {
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	TokenHash string             `json:"token_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	TokenHash         string             `json:"token_hash"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	RememberMe        bool               `json:"remember_me"`
+	CredentialVersion int64              `json:"credential_version"`
 }
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (pgtype.UUID, error) {
@@ -61,6 +67,8 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
+		arg.RememberMe,
+		arg.CredentialVersion,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -75,16 +83,21 @@ SELECT
   u.password_hash,
   u.email,
   u.full_name,
+  u.avatar,
   u.role,
   u.status,
-  t.code AS tenant_code,
-  t.name AS tenant_name,
-  t.status AS tenant_status,
+  u.must_change_password,
+  u.credential_version,
+  COALESCE(t.code, '')::text AS tenant_code,
+  COALESCE(t.name, '')::text AS tenant_name,
+  COALESCE(t.status, 'active')::text AS tenant_status,
+  (COALESCE(t.initialized, true) AND (t.expires_at IS NULL OR t.expires_at > now()))::boolean AS tenant_initialized,
   t.logo_object_key,
   t.login_background_object_key
 FROM users u
-JOIN tenants t ON t.id = u.tenant_id
+LEFT JOIN tenants t ON t.id = u.tenant_id
 WHERE lower(u.username) = lower($1)
+  AND u.role <> 'SUPER_ADMIN'
   AND lower(t.code) = lower($2)
 LIMIT 1
 `
@@ -101,11 +114,15 @@ type FindAuthUserByTenantCodeRow struct {
 	PasswordHash             string      `json:"password_hash"`
 	Email                    pgtype.Text `json:"email"`
 	FullName                 pgtype.Text `json:"full_name"`
+	Avatar                   pgtype.Text `json:"avatar"`
 	Role                     string      `json:"role"`
 	Status                   string      `json:"status"`
+	MustChangePassword       bool        `json:"must_change_password"`
+	CredentialVersion        int64       `json:"credential_version"`
 	TenantCode               string      `json:"tenant_code"`
 	TenantName               string      `json:"tenant_name"`
 	TenantStatus             string      `json:"tenant_status"`
+	TenantInitialized        bool        `json:"tenant_initialized"`
 	LogoObjectKey            pgtype.Text `json:"logo_object_key"`
 	LoginBackgroundObjectKey pgtype.Text `json:"login_background_object_key"`
 }
@@ -120,11 +137,15 @@ func (q *Queries) FindAuthUserByTenantCode(ctx context.Context, arg FindAuthUser
 		&i.PasswordHash,
 		&i.Email,
 		&i.FullName,
+		&i.Avatar,
 		&i.Role,
 		&i.Status,
+		&i.MustChangePassword,
+		&i.CredentialVersion,
 		&i.TenantCode,
 		&i.TenantName,
 		&i.TenantStatus,
+		&i.TenantInitialized,
 		&i.LogoObjectKey,
 		&i.LoginBackgroundObjectKey,
 	)
@@ -139,16 +160,21 @@ SELECT
   u.password_hash,
   u.email,
   u.full_name,
+  u.avatar,
   u.role,
   u.status,
-  t.code AS tenant_code,
-  t.name AS tenant_name,
-  t.status AS tenant_status,
+  u.must_change_password,
+  u.credential_version,
+  COALESCE(t.code, '')::text AS tenant_code,
+  COALESCE(t.name, '')::text AS tenant_name,
+  COALESCE(t.status, 'active')::text AS tenant_status,
+  (COALESCE(t.initialized, true) AND (t.expires_at IS NULL OR t.expires_at > now()))::boolean AS tenant_initialized,
   t.logo_object_key,
   t.login_background_object_key
 FROM users u
-JOIN tenants t ON t.id = u.tenant_id
+LEFT JOIN tenants t ON t.id = u.tenant_id
 WHERE lower(u.username) = lower($1)
+AND u.role = 'SUPER_ADMIN' AND u.tenant_id IS NULL
 ORDER BY u.created_at
 LIMIT 2
 `
@@ -160,11 +186,15 @@ type FindAuthUsersByUsernameRow struct {
 	PasswordHash             string      `json:"password_hash"`
 	Email                    pgtype.Text `json:"email"`
 	FullName                 pgtype.Text `json:"full_name"`
+	Avatar                   pgtype.Text `json:"avatar"`
 	Role                     string      `json:"role"`
 	Status                   string      `json:"status"`
+	MustChangePassword       bool        `json:"must_change_password"`
+	CredentialVersion        int64       `json:"credential_version"`
 	TenantCode               string      `json:"tenant_code"`
 	TenantName               string      `json:"tenant_name"`
 	TenantStatus             string      `json:"tenant_status"`
+	TenantInitialized        bool        `json:"tenant_initialized"`
 	LogoObjectKey            pgtype.Text `json:"logo_object_key"`
 	LoginBackgroundObjectKey pgtype.Text `json:"login_background_object_key"`
 }
@@ -185,11 +215,15 @@ func (q *Queries) FindAuthUsersByUsername(ctx context.Context, username string) 
 			&i.PasswordHash,
 			&i.Email,
 			&i.FullName,
+			&i.Avatar,
 			&i.Role,
 			&i.Status,
+			&i.MustChangePassword,
+			&i.CredentialVersion,
 			&i.TenantCode,
 			&i.TenantName,
 			&i.TenantStatus,
+			&i.TenantInitialized,
 			&i.LogoObjectKey,
 			&i.LoginBackgroundObjectKey,
 		); err != nil {
@@ -211,15 +245,19 @@ SELECT
   u.password_hash,
   u.email,
   u.full_name,
+  u.avatar,
   u.role,
   u.status,
-  t.code AS tenant_code,
-  t.name AS tenant_name,
-  t.status AS tenant_status,
+  u.must_change_password,
+  u.credential_version,
+  COALESCE(t.code, '')::text AS tenant_code,
+  COALESCE(t.name, '')::text AS tenant_name,
+  COALESCE(t.status, 'active')::text AS tenant_status,
+  (COALESCE(t.initialized, true) AND (t.expires_at IS NULL OR t.expires_at > now()))::boolean AS tenant_initialized,
   t.logo_object_key,
   t.login_background_object_key
 FROM users u
-JOIN tenants t ON t.id = u.tenant_id
+LEFT JOIN tenants t ON t.id = u.tenant_id
 WHERE u.id = $1
 LIMIT 1
 `
@@ -231,11 +269,15 @@ type GetAuthUserByIDRow struct {
 	PasswordHash             string      `json:"password_hash"`
 	Email                    pgtype.Text `json:"email"`
 	FullName                 pgtype.Text `json:"full_name"`
+	Avatar                   pgtype.Text `json:"avatar"`
 	Role                     string      `json:"role"`
 	Status                   string      `json:"status"`
+	MustChangePassword       bool        `json:"must_change_password"`
+	CredentialVersion        int64       `json:"credential_version"`
 	TenantCode               string      `json:"tenant_code"`
 	TenantName               string      `json:"tenant_name"`
 	TenantStatus             string      `json:"tenant_status"`
+	TenantInitialized        bool        `json:"tenant_initialized"`
 	LogoObjectKey            pgtype.Text `json:"logo_object_key"`
 	LoginBackgroundObjectKey pgtype.Text `json:"login_background_object_key"`
 }
@@ -250,11 +292,15 @@ func (q *Queries) GetAuthUserByID(ctx context.Context, userID pgtype.UUID) (GetA
 		&i.PasswordHash,
 		&i.Email,
 		&i.FullName,
+		&i.Avatar,
 		&i.Role,
 		&i.Status,
+		&i.MustChangePassword,
+		&i.CredentialVersion,
 		&i.TenantCode,
 		&i.TenantName,
 		&i.TenantStatus,
+		&i.TenantInitialized,
 		&i.LogoObjectKey,
 		&i.LoginBackgroundObjectKey,
 	)
@@ -262,19 +308,21 @@ func (q *Queries) GetAuthUserByID(ctx context.Context, userID pgtype.UUID) (GetA
 }
 
 const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
-SELECT id, tenant_id, user_id, token_hash, expires_at, revoked_at
+SELECT id, tenant_id, user_id, token_hash, expires_at, revoked_at, remember_me, credential_version
 FROM refresh_tokens
 WHERE token_hash = $1
 LIMIT 1
 `
 
 type GetRefreshTokenByHashRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	TokenHash string             `json:"token_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	TokenHash         string             `json:"token_hash"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
+	RememberMe        bool               `json:"remember_me"`
+	CredentialVersion int64              `json:"credential_version"`
 }
 
 func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (GetRefreshTokenByHashRow, error) {
@@ -287,6 +335,8 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 		&i.TokenHash,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.RememberMe,
+		&i.CredentialVersion,
 	)
 	return i, err
 }
@@ -294,7 +344,7 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 const getTenantBrandingByCode = `-- name: GetTenantBrandingByCode :one
 SELECT id, code, name, logo_object_key, login_background_object_key
 FROM tenants
-WHERE lower(code) = lower($1) AND status = 'active'
+WHERE lower(code) = lower($1) AND status = 'active' AND initialized = true AND (expires_at IS NULL OR expires_at > now())
 LIMIT 1
 `
 
@@ -360,6 +410,27 @@ func (q *Queries) SetRefreshTokenReplacement(ctx context.Context, arg SetRefresh
 	return err
 }
 
+const updateAuthUserAvatar = `-- name: UpdateAuthUserAvatar :one
+WITH previous AS (
+  SELECT u.id, u.avatar FROM users u WHERE u.id = $2 FOR UPDATE
+)
+UPDATE users SET avatar = $1, updated_at = now()
+FROM previous WHERE users.id = previous.id
+RETURNING previous.avatar
+`
+
+type UpdateAuthUserAvatarParams struct {
+	Avatar pgtype.Text `json:"avatar"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) UpdateAuthUserAvatar(ctx context.Context, arg UpdateAuthUserAvatarParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, updateAuthUserAvatar, arg.Avatar, arg.UserID)
+	var avatar pgtype.Text
+	err := row.Scan(&avatar)
+	return avatar, err
+}
+
 const updateAuthUserLogin = `-- name: UpdateAuthUserLogin :exec
 UPDATE users
 SET last_login_at = now(),
@@ -378,20 +449,48 @@ func (q *Queries) UpdateAuthUserLogin(ctx context.Context, arg UpdateAuthUserLog
 	return err
 }
 
-const updateAuthUserPassword = `-- name: UpdateAuthUserPassword :exec
+const updateAuthUserPassword = `-- name: UpdateAuthUserPassword :execrows
 UPDATE users
 SET password_hash = $1,
     password_changed_at = now(),
+    must_change_password = false,
+    credential_version = credential_version + 1,
     updated_at = now()
-WHERE id = $2
+WHERE id = $2 AND credential_version = $3
 `
 
 type UpdateAuthUserPasswordParams struct {
-	PasswordHash string      `json:"password_hash"`
-	UserID       pgtype.UUID `json:"user_id"`
+	PasswordHash      string      `json:"password_hash"`
+	UserID            pgtype.UUID `json:"user_id"`
+	CredentialVersion int64       `json:"credential_version"`
 }
 
-func (q *Queries) UpdateAuthUserPassword(ctx context.Context, arg UpdateAuthUserPasswordParams) error {
-	_, err := q.db.Exec(ctx, updateAuthUserPassword, arg.PasswordHash, arg.UserID)
-	return err
+func (q *Queries) UpdateAuthUserPassword(ctx context.Context, arg UpdateAuthUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateAuthUserPassword, arg.PasswordHash, arg.UserID, arg.CredentialVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateAuthUserProfile = `-- name: UpdateAuthUserProfile :execrows
+UPDATE users
+SET full_name = $1,
+    email = $2,
+    updated_at = now()
+WHERE id = $3
+`
+
+type UpdateAuthUserProfileParams struct {
+	FullName pgtype.Text `json:"full_name"`
+	Email    pgtype.Text `json:"email"`
+	UserID   pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) UpdateAuthUserProfile(ctx context.Context, arg UpdateAuthUserProfileParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateAuthUserProfile, arg.FullName, arg.Email, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

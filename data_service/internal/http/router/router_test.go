@@ -39,7 +39,7 @@ func (s *routerProjectTenantBindingStore) Get(_ context.Context, projectID, tena
 }
 
 func TestNewRouterKafkaWorkbenchRoutesDoNotConflict(t *testing.T) {
-	validator, err := auth.NewJWTValidator("router-test-secret")
+	validator, err := auth.NewJWTValidator("router-test-secret", "http://center.invalid")
 	if err != nil {
 		t.Fatalf("create jwt validator failed: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestNewRouterKafkaWorkbenchRoutesDoNotConflict(t *testing.T) {
 }
 
 func TestNewRouterCollectorCatalogRoutesDoNotConflict(t *testing.T) {
-	validator, err := auth.NewJWTValidator("router-test-secret")
+	validator, err := auth.NewJWTValidator("router-test-secret", "http://center.invalid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestNewRouterCollectorCatalogRoutesDoNotConflict(t *testing.T) {
 }
 
 func TestNewRouterCollectorRoutesDoNotConflict(t *testing.T) {
-	validator, err := auth.NewJWTValidator("router-test-secret")
+	validator, err := auth.NewJWTValidator("router-test-secret", "http://center.invalid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestNewRouterCollectorRoutesDoNotConflict(t *testing.T) {
 }
 
 func TestNewRouterCollectorPointRoutesDoNotConflict(t *testing.T) {
-	validator, err := auth.NewJWTValidator("router-test-secret")
+	validator, err := auth.NewJWTValidator("router-test-secret", "http://center.invalid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestNewRouterCollectorPointRoutesDoNotConflict(t *testing.T) {
 }
 
 func TestNewRouterCollectorImportRoutesDoNotConflict(t *testing.T) {
-	validator, err := auth.NewJWTValidator("router-test-secret")
+	validator, err := auth.NewJWTValidator("router-test-secret", "http://center.invalid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestNewRouterCollectorImportRoutesDoNotConflict(t *testing.T) {
 }
 
 func TestNewRouterAlarmRoutesDoNotConflict(t *testing.T) {
-	validator, err := auth.NewJWTValidator("router-test-secret")
+	validator, err := auth.NewJWTValidator("router-test-secret", "http://center.invalid")
 	if err != nil {
 		t.Fatal(err)
 	}

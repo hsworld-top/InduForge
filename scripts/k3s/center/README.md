@@ -38,13 +38,13 @@ sudo IF_CENTER_NODE_NAME=<k3s-node-name> \
 旧版 Docker/宿主进程中心可在确认镜像已经导入 K3s 后执行一次性迁移脚本。脚本先保存 PostgreSQL
 逻辑备份和中心资产归档，再停止旧服务、复制固定数据目录并部署 K3s 工作负载；失败会缩容新工作负载
 并尝试恢复旧服务。成功后不会删除旧 Docker Volume，需在人工验收和备份确认后另行清理。
-迁移同时把中心证书加入中心服务器系统信任，并将内置 NodeAgent 切换到中心 HTTPS 入口。
+迁移会备份并停用旧版中心 NodeAgent。新版中心直接把安装时已有的 K3s Server 映射为中心内置节点，
+基础服务和工程由中心控制面调和；额外服务器仍通过各自的 NodeAgent 接入。
 
 ```bash
 sudo IF_CENTER_NODE_NAME=<k3s-node-name> \
   IF_CENTER_CONTROL_IMAGE=induforge/control:<version> \
   IF_CENTER_EDGE_IMAGE=induforge/edge:<version> \
-  IF_CENTER_AGENT_SERVER_URL=https://<center-ip>:18443 \
   ./migrate-docker-center.sh
 ```
 

@@ -1,93 +1,34 @@
-# InduForge NodeAgent（Linux）
+# InduFrame Linux 节点
 
-安装包按 `amd64` 与 `arm64` 分别发布；安装器会校验当前机器架构与包内制品是否匹配。
+## 安装
 
-## 安装并接入中心
+在 Studio 的节点管理中生成接入码，下载与目标机器 CPU 架构对应的安装包。当前 Linux 包支持 Ubuntu 24.04。
 
-```bash
-tar -xzf induforge-node-*.tar.gz
-cd induforge-node-agent-*
-sudo ./install.sh \
-  --server-url "https://你的中心地址" \
-  --enrollment-code "中心生成的一次性接入码"
-```
-
-Linux 包会安装 `project-gateway`、`runtime-api`、`runtime-engine` 能力模板；如节点还需
-采集能力，在安装时显式加入 `--enable-collector`：
+解压后进入安装包目录，直接运行：
 
 ```bash
-sudo ./install.sh --enable-collector --server-url "https://你的中心地址" --enrollment-code "一次性接入码"
+./install.sh
 ```
 
-默认安装目录为 `/opt/induforge/node-agent`，配置文件为
-`/etc/induforge/node-agent/config.yaml`。两个接入参数齐全时，安装器会创建并启动
-`induforge-node-agent.service`；接入码领取成功后会从配置中清除。
+按向导填写 Studio 显示的 HTTPS 节点连接地址、接入码和运行数据目录。安装前检查系统、证书、安装包完整性、目录空间及接入码；全部通过后才确认安装。请保留包内的 `center-ca.crt`、`release-trust.txt` 和 `SHA256SUMS` 配套文件。
 
-## 接入、ReleaseStore 与工程部署的边界
+节点包已包含运行与采集能力，不需要额外选择。接入码自动授权，无需人工审批。只有中心确认节点首次心跳为在线，安装器才显示“节点已接入中心”。随后在 Studio 中关联运行环境；基础服务和工程由运维人员另行部署。
 
-安装后模板会声明本机已安装能力，因此即使尚未有工程 release，NodeAgent 也能完成领取并
-显示为在线。模板默认 `enabled: false`，不会自动启动任何 capability 子进程，也不会把未
-配置的服务伪报为运行中。
+## 连接失败或重试
 
-旧本机 Supervisor 配置需要运维人员在 `config.yaml` 中为服务补齐 `releaseRoot`、`releaseDigest`、
-`executable`、`healthUrl`（以及可选 `arguments`、`environment`）；它不是正式 Release 部署的替代品。
-正式命令中 Agent 会以自身 token 拉取节点专属 Binding 和同源 `application/zstd` Release 流，拒绝
-重定向、外部 URL、中心下发路径/命令/环境变量/Secret；签名公钥只来自本机 trust store。当前正式
-launcher 尚未交付，因此完成安全安装后会明确拒绝启动，不能通过手工补齐旧配置绕过门禁。
-
-`ReleaseStore` 已由正式命令调和调用：它限额流式写入、验证 outer SHA-256、签名与所有摘要、
-版本/能力兼容性，内容寻址保存并原子写入 `current.json`。它不负责 Secret、内层工件物化、
-RuntimeEngine 的真实只读 mount、Runtime Foundation、启动或回滚服务。因此它不是“安装包已能
-部署工程”的证明。
-
-Release tar.zst 根目录的标准文件为：
-
-```text
-release-manifest.json
-client-assets.tar.zst
-runtime-artifact.tar.zst
-health-contract.json
-resource-recommendation.json
-schema-plan.json
-sbom.cdx.json
-collector-artifact.tar.zst       # 可选
-checksums.json
-signature.sig
-```
-
-`checksums.json` 必须使用 `release-checksums.v1`，包含按路径严格升序的
-`{path,sha256,size}` 文件清单；它覆盖以上固定 Release 文件（可选 Collector 仅在 Manifest 声明
-时出现），不包含自身和 `signature.sig`。`signature.sig` 是对精确原始 checksums 字节的 64-byte
-Ed25519 签名，且 Manifest 的 `supplyChain.signingKeyId` 必须等于本地受信 key ID。压缩包不能
-含目录或其他路径。失败绝不激活 `current.json`。
-
-即使 Center 同机安装，也不能把它放入本安装目录、复用服务账户或嵌入 NodeAgent 进程；Center 和
-Agent 继续是独立服务、身份、目录、端口和网络连接。
-
-常用命令：
+已安装的节点再次执行 `./install.sh` 会提供重试连接选项，保留身份、配置和数据，不会重复安装或重复消费接入码。
 
 ```bash
 sudo systemctl status induforge-node-agent
-sudo journalctl -u induforge-node-agent -f
-sudo systemctl restart induforge-node-agent
+sudo tail -n 50 /opt/induforge/node-agent/logs/agent_*.log
 ```
 
-## 容器或手工验收
-
-没有 systemd 时可只安装文件：
-
-```bash
-./install.sh --prefix /app --config-dir /config --no-service
-NODE_AGENT_CONFIG=/config/config.yaml NODE_AGENT_WORKDIR=/app NODE_AGENT_DATA_DIR=/app/data \
-  /app/bin/node-agent --daemon
-```
+默认程序目录为 `/opt/induforge/node-agent`，配置目录为 `/etc/induforge/node-agent`。接入码领取成功后自动从配置中清除。
 
 ## 卸载
 
-`sudo ./uninstall.sh` 会停止并清理本节点受管 K3s、容器进程、CNI 网络、挂载点和
-节点安装时指定的数据目录（包括本地 PVC），同时删除 NodeAgent 程序与服务；默认
-保留节点身份、配置和日志，便于诊断与按原身份重装。
+运行 `./uninstall.sh`，按向导选择备份目录并确认。默认备份到解压目录的上一级，停止写入后仅打包节点安装配置、身份、版本和安装状态；工程数据、镜像缓存与日志不备份，校验成功后才清理。备份失败停止后续删除，服务保持停止。备份为本机文件归档，不代表支持跨机器自动恢复。已删除的数据无法补备份。
 
-确实需要把服务器恢复为未接入状态时，再使用 `sudo ./uninstall.sh --purge` 清除
-保留的节点身份、配置和日志。基础服务数据会在两种卸载方式下清理，因此执行前应
-由运维管理员确认该节点已不再承载需要保留的数据。
+默认清除安装后的节点目录，保留解压安装包；完成后可选择删除解压目录。重复卸载不会启动已删除的服务。`--keep-data` 可保留身份与日志，`--backup-dir` 指定备份目录，`--yes` 供自动化确认使用。重新安装前如有旧残留，请先通过卸载向导备份清理。
+
+节点包包含 K3s 启动底座和节点程序。基础服务、工程运行镜像在部署时按架构从中心下载、校验并导入；不会从外部镜像仓库拉取。中心安装时需要先导入镜像资源目录，节点到中心的连接需在资源准备期间保持可用。已在本机且内容摘要一致的镜像直接复用。

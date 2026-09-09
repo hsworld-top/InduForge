@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/indu-forge/dev_core/internal/app"
@@ -24,6 +25,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/controlplane"
 	"github.com/indu-forge/dev_core/internal/dataservice"
 	"github.com/indu-forge/dev_core/internal/deployment"
+	"github.com/indu-forge/dev_core/internal/imagecatalog"
 	"github.com/indu-forge/dev_core/internal/node"
 	"github.com/indu-forge/dev_core/internal/objectstore"
 	"github.com/indu-forge/dev_core/internal/ops"
@@ -118,21 +120,28 @@ func main() {
 		os.Exit(1)
 	}
 	authService.SetAssetSigner(designObjects)
+	authService.SetAvatarStore(designObjects)
 	ifpObjects, err := objectstore.NewMinIO(ctx, objectstore.Config{Endpoint: cfg.ObjectStoreEndpoint, AccessKey: cfg.ObjectStoreAccessKey, SecretKey: cfg.ObjectStoreSecretKey, Bucket: cfg.ObjectStoreIFPBucket, Region: cfg.ObjectStoreRegion, UseSSL: cfg.ObjectStoreUseSSL})
 	if err != nil {
 		logger.Error("初始化发布工件对象存储失败", "error", err)
 		os.Exit(1)
 	}
-	tenantService := tenant.NewService(tenant.NewPostgreSQLRepository(pool), designObjects, tenant.ServiceConfig{DefaultAdminUsername: cfg.DefaultAdminUsername, DefaultAdminPassword: cfg.DefaultAdminPassword})
-	controlPlane := controlplane.NewHandler(auth.NewHandler(authService), tenant.NewHandler(tenantService, authService))
-	controlPlane.SetUserHandler(user.NewHandler(user.NewService(user.NewPostgreSQLRepository(pool), authService), authService))
 	workspace, err := project.NewFileWorkspace(cfg.WorkspaceRoot)
 	if err != nil {
 		logger.Error("初始化工程工作空间失败", "error", err)
 		os.Exit(1)
 	}
+	tenantRepository := tenant.NewPostgreSQLRepository(pool)
+	tenantRepository.SetBuiltInRuntimeConfig(platformdb.BuiltInRuntimeConfig{
+		NodeName: cfg.OpsCenterNodeName, NodeIP: cfg.OpsCenterNodeIP, Architecture: runtime.GOARCH,
+		K3sVersion: "v1.36.4+k3s1", K3sAPIPort: cfg.OpsK3sAPIPort,
+	})
+	tenantRepository.SetDemoWorkspace(workspace)
+	tenantService := tenant.NewService(tenantRepository, designObjects)
+	controlPlane := controlplane.NewHandler(auth.NewHandler(authService), tenant.NewHandler(tenantService, authService))
+	controlPlane.SetUserHandler(user.NewHandler(user.NewService(user.NewPostgreSQLRepository(pool), authService), authService))
 	projectRepository := project.NewPostgreSQLRepository(pool)
-	projectService := project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword)
+	projectService := project.NewService(projectRepository, workspace, "")
 	projectService.SetTenantBindingEnsurer(dataServiceClient)
 	controlPlane.SetProjectHandler(project.NewHandler(projectService, authService))
 	workspaceEngine, err := newCodeWorkspaceEngine(cfg)
@@ -169,7 +178,7 @@ func main() {
 	}
 	controlPlane.SetCodeWorkspaceHandler(codeWorkspaceHandler)
 	controlPlane.SetRuntimeAccessHandler(runtimeaccess.NewHandler(runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), authService))
-	contextPackService := contextpack.NewService(project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword), runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), workspace, cfg.DataServiceURL)
+	contextPackService := contextpack.NewService(project.NewService(projectRepository, workspace, ""), runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), workspace, cfg.DataServiceURL)
 	contextPackHandler := contextpack.NewHandler(contextPackService)
 	controlPlane.SetContextPackHandler(contextPackHandler)
 	sceneAssetService := sceneasset.NewService(
@@ -186,16 +195,16 @@ func main() {
 	nodeHandler := node.NewHandler(nodeService, authService)
 	opsRepository := ops.NewPostgreSQLRepository(pool)
 	opsRepository.SetEvents(realtimeServer)
-	opsRepository.SetK3sAPIPort(cfg.OpsK3sAPIPort)
-	if cfg.OpsCenterNodeID != "" {
-		if err := opsRepository.EnsureRuntimeCluster(ctx, cfg.OpsCenterNodeID); err != nil {
-			logger.Error("初始化中心运行集群失败", "nodeId", cfg.OpsCenterNodeID, "error", err)
-			os.Exit(1)
-		}
-	}
 	opsService := ops.NewService(opsRepository, ops.NewFilePackageStore(cfg.NodePackageDirectory), ifpObjects)
-	opsService.SetClusterTokenKey([]byte(cfg.JWTSecret))
+	opsService.SetClusterJoinToken(cfg.OpsK3sToken)
+	imageCatalog := &imagecatalog.Catalog{Store: ifpObjects}
+	opsRepository.SetImageCatalog(imageCatalog)
+	opsService.SetImageCatalog(imageCatalog)
 	opsHandler := ops.NewHandler(opsService, authService)
+	if err := opsHandler.SetNodeConnectionURL(cfg.NodeConnectionURL); err != nil {
+		logger.Error("节点连接地址配置错误", "error", err)
+		os.Exit(1)
+	}
 	opsHandler.SetEvents(realtimeServer)
 	controlPlane.SetNodeHandler(nodeHandler)
 	deploymentRepository := deployment.NewPostgreSQLRepository(pool)
@@ -250,6 +259,7 @@ func main() {
 		Mount: func(router chi.Router) {
 			router.Handle("/control-socket.io", realtimeServer.Handler())
 			router.Handle("/control-socket.io/*", realtimeServer.Handler())
+			router.Post("/api/v1/studio-entry", auditlog.EntryHandler(pool, auditLogRepository))
 			nodeHandler.MountAgentRoutes(router)
 			opsHandler.MountRoutes(router)
 			router.Route("/api/v1", sceneAssetHandler.MountRoutes)
@@ -271,6 +281,7 @@ func main() {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	opsRepository.SetImageWorkerContext(signalCtx)
 	if restoreExecutor != nil {
 		restoreExecutor.Start(signalCtx)
 	}
@@ -281,6 +292,8 @@ func main() {
 		logger.Info("项目 K3s 调和器未启用", "reason", reconcileErr)
 	} else {
 		reconciler.SetHostNodeAddressLoader(opsRepository)
+		reconciler.SetImagePreparer(opsRepository)
+		reconciler.SetCenterReleaseStore(ifpObjects, cfg.CenterReleaseRoot, cfg.CenterReleaseHostRoot)
 		opsService.SetFoundationNodePreflight(reconciler)
 		reconciler.SetRuntimeContextLoader(opsRepository)
 		reconciler.SetDeploymentSecretManager(ops.NewDeploymentSecretManager(reconciler))
@@ -359,6 +372,23 @@ func runProjectWorkloadReconciler(ctx context.Context, repository *ops.PostgreSQ
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			nodes, listErr := reconciler.ListNodes(ctx)
+			if listErr != nil {
+				logger.Warn("读取中心 K3s 节点状态失败", "error", listErr)
+			} else {
+				if metricsErr := reconciler.CollectNodeResourceSummaries(ctx, nodes); metricsErr != nil {
+					logger.Warn("读取中心 K3s 节点资源指标失败", "error", metricsErr)
+				}
+				if _, statusErr := repository.ReconcileBuiltInNodeStatus(ctx, nodes); statusErr != nil {
+					logger.Warn("同步中心内置节点状态失败", "error", statusErr)
+				}
+			}
+			if err := repository.ReconcileNodeCleanup(ctx, reconciler); err != nil {
+				logger.Warn("清理节点残留失败，将重试", "error", err)
+			}
+			if err := repository.ReconcileFoundationServices(ctx, reconciler); err != nil {
+				logger.Warn("调和环境基础服务失败", "error", err)
+			}
 			if _, err := repository.ReconcilePendingProjectWorkloads(ctx, reconciler); err != nil {
 				logger.Warn("调和项目 K3s 工作负载失败", "error", err)
 			}
@@ -389,53 +419,24 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 	if err := platformdb.EnsureSchema(ctx, pool, allowCreate); err != nil {
 		return err
 	}
-	superAdminPasswordHash, err := auth.HashPassword(cfg.SuperAdminPassword)
-	if err != nil {
-		return err
+	var superAdminPasswordHash string
+	if cfg.SuperAdminPassword != "" {
+		if utf8.RuneCountInString(cfg.SuperAdminPassword) < 8 {
+			return fmt.Errorf("平台管理员安装密码至少8位")
+		}
+		var err error
+		superAdminPasswordHash, err = auth.HashPassword(cfg.SuperAdminPassword)
+		if err != nil {
+			return err
+		}
 	}
-	defaultAdminPasswordHash, err := auth.HashPassword(cfg.DefaultAdminPassword)
-	if err != nil {
-		return err
-	}
-	workspaceRoot, err := filepath.Abs(cfg.WorkspaceRoot)
-	if err != nil {
-		return fmt.Errorf("解析工程工作区根目录失败: %w", err)
-	}
-	demoWorkspacePath := filepath.Join(workspaceRoot, platformdb.BuiltinDemoProjectID, "workspace")
 	if err := platformdb.EnsureInitialData(ctx, pool, platformdb.SeedConfig{
 		TenantID: cfg.DefaultTenantID, TenantName: cfg.AppName, TenantCode: cfg.DefaultTenantCode,
 		SuperAdminUserID: cfg.SuperAdminUserID, SuperAdminUsername: cfg.SuperAdminUsername, SuperAdminPasswordHash: superAdminPasswordHash,
-		DefaultAdminUsername: cfg.DefaultAdminUsername, DefaultAdminPasswordHash: defaultAdminPasswordHash,
-		DemoWorkspacePath: demoWorkspacePath,
 	}); err != nil {
 		return err
 	}
-	if err := platformdb.EnsureBuiltinDemoProject(ctx, pool, platformdb.SeedConfig{
-		TenantID: cfg.DefaultTenantID, DefaultAdminUsername: cfg.DefaultAdminUsername,
-		DefaultAdminPasswordHash: defaultAdminPasswordHash, DemoWorkspacePath: demoWorkspacePath,
-	}); err != nil {
-		return err
-	}
-	if err := syncBuiltinDemoProjectTenantBinding(ctx, pool, dataServiceClient); err != nil {
-		return fmt.Errorf("同步内置教程工程项目租户绑定失败，可稍后重试: %w", err)
-	}
-	var demoProjectActive bool
-	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND status='active')`, platformdb.BuiltinDemoProjectID).Scan(&demoProjectActive); err != nil {
-		return fmt.Errorf("检查内置教程工程失败: %w", err)
-	}
-	if demoProjectActive {
-		demoWorkspace, err := project.NewFileWorkspace(workspaceRoot)
-		if err != nil {
-			return fmt.Errorf("准备内置教程工程工作区失败: %w", err)
-		}
-		initializedPath, err := demoWorkspace.Initialize(platformdb.BuiltinDemoProjectID)
-		if err != nil {
-			return fmt.Errorf("初始化内置教程工程工作区失败: %w", err)
-		}
-		if filepath.Clean(initializedPath) != filepath.Clean(demoWorkspacePath) {
-			return fmt.Errorf("内置教程工程工作区路径不一致")
-		}
-	}
+
 	return nil
 }
 

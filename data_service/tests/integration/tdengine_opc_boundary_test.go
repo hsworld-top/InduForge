@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -30,7 +29,7 @@ func TestTDengineAndOPCDevelopmentBoundary(t *testing.T) {
 	userID := uuid.NewString()
 	secret := "tdengine-opc-secret-01"
 
-	srv, err := app.NewServer(config.Config{DataServiceInternalToken: "integration-test-internal-token",
+	srv, err := newIntegrationServer(t, config.Config{DataServiceInternalToken: "integration-test-internal-token",
 		Addr:                       ":0",
 		DatabaseURL:                fixture.databaseURL,
 		DatabaseSearchPath:         fixture.schemaName,

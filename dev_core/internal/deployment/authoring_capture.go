@@ -10,6 +10,7 @@ import (
 )
 
 type dataAuthoringFence interface {
+	EnsureProjectTenantBindingAtEpoch(context.Context, string, string, string) error
 	AcquireAuthoringFence(context.Context, string, string, string, string, int) (string, time.Time, error)
 	AcquireRestoreAuthoringFence(context.Context, string, string, string, string, int) (string, time.Time, string, error)
 	RenewAuthoringFence(context.Context, string, string, string, string, int) (string, time.Time, error)
@@ -50,10 +51,25 @@ func shouldRetainRestoreFences(err error) bool {
 	return !terminal
 }
 
+func ensureDataProjectBinding(ctx context.Context, data interface {
+	EnsureProjectTenantBindingAtEpoch(context.Context, string, string, string) error
+}, project Project) error {
+	if data == nil {
+		return fmt.Errorf("数据域工程绑定服务未配置")
+	}
+	if err := data.EnsureProjectTenantBindingAtEpoch(ctx, project.ID, project.TenantID, projectAuthoringEpoch(project)); err != nil {
+		return fmt.Errorf("同步数据域工程绑定失败: %w", err)
+	}
+	return nil
+}
+
 // WithRestoreFences 在整个跨域 Saga 期间保持双域租约与代码工作区冻结。
 func (c *PostgreSQLCaptureCoordinator) WithRestoreFences(ctx context.Context, actor auth.User, project Project, ownerID string, knownWorkspaceState *bool, persistWorkspaceState func(bool) error, fn func(context.Context, RestoreFenceTokens) error) error {
 	if c == nil || fn == nil {
 		return fmt.Errorf("恢复协调器未配置")
+	}
+	if err := ensureDataProjectBinding(ctx, c.data, project); err != nil {
+		return err
 	}
 	retainFences := false
 	core, err := c.repository.AcquireAuthoringFence(ctx, project.TenantID, project.ID, "restore", ownerID, c.ttl)
@@ -131,6 +147,9 @@ func NewAuthoringCaptureCoordinator(repository Repository, data dataAuthoringFen
 
 // CleanupRestoreFences 用于 succeeded 后崩溃恢复：只回收持久 marker，不再次停止已恢复的工作区。
 func (c *PostgreSQLCaptureCoordinator) CleanupRestoreFences(ctx context.Context, project Project, ownerID string) error {
+	if err := ensureDataProjectBinding(ctx, c.data, project); err != nil {
+		return err
+	}
 	core, err := c.repository.AcquireAuthoringFence(ctx, project.TenantID, project.ID, "restore", ownerID, c.ttl)
 	if err != nil {
 		return err
@@ -148,6 +167,9 @@ func (c *PostgreSQLCaptureCoordinator) CleanupRestoreFences(ctx context.Context,
 func (c *PostgreSQLCaptureCoordinator) Capture(ctx context.Context, actor auth.User, project Project, ownerID string, capture func(context.Context) (CapturedAuthoring, error)) (CapturedAuthoring, error) {
 	if c == nil || c.repository == nil || c.data == nil || c.workspace == nil || capture == nil {
 		return CapturedAuthoring{}, fmt.Errorf("开发态捕获协调器未配置")
+	}
+	if err := ensureDataProjectBinding(ctx, c.data, project); err != nil {
+		return CapturedAuthoring{}, err
 	}
 	coreToken, err := c.repository.AcquireAuthoringFence(ctx, project.TenantID, project.ID, "build", ownerID, c.ttl)
 	if err != nil {

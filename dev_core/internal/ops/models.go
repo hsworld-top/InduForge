@@ -32,9 +32,9 @@ type Enrollment struct {
 	CreatedAt, UpdatedAt                            time.Time
 }
 
-// Node 表示一台物理主机及其独立 NodeAgent 身份；同机部署中心时也不例外。
+// Node 表示一个可调度节点。中心内置节点由控制面管理，外部节点由 NodeAgent 接入。
 type Node struct {
-	ID, TenantID, EnrollmentID, DisplayName             string
+	ID, TenantID, NodeSource, EnrollmentID, DisplayName string
 	Hostname, Platform, Architecture                    string
 	AgentVersion, MachineFingerprint, IPAddress         string
 	AssignedDeploymentID, AssignedProjectID             string
@@ -199,6 +199,8 @@ type ServiceObservation struct {
 	ObservedGeneration int64  `json:"observedGeneration"`
 }
 type HeartbeatInput struct {
+	ImageState       *ImageState          `json:"imageState"`
+	Uninstalled      bool                 `json:"uninstalled,omitempty"`
 	ResourceSummary  map[string]any       `json:"resourceSummary"`
 	AgentVersion     string               `json:"agentVersion"`
 	IPAddress        string               `json:"ipAddress"`
@@ -207,8 +209,8 @@ type HeartbeatInput struct {
 	FoundationStates []FoundationState    `json:"foundationStates"`
 }
 
-// ClusterPlan 是中心生成的受限 K3s 期望状态。Token 仅在已认证的节点拉取时
-// 临时派生并返回，不持久化到数据库，也不会通过管理端接口暴露。
+// ClusterPlan 是中心生成的受限 K3s 期望状态。Token 来自中心安装的 K3s，
+// 仅在已认证的外部节点拉取时返回，不持久化到数据库，也不通过管理端暴露。
 type ClusterPlan struct {
 	SchemaVersion string `json:"schemaVersion"`
 	Generation    int64  `json:"generation"`

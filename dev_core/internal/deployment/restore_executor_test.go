@@ -209,7 +209,7 @@ func restoreFixture(state string) (*RestoreExecutor, *restoreRepoFake, *restoreW
 	data := &restoreDataFake{epoch: "epoch-2"}
 	fences := &restoreFencesFake{epoch: "epoch-2"}
 	snapshot := authoringsnapshot.Snapshot{Workspace: map[string]string{}, WorkspaceModes: map[string]uint32{}, Scenes: json.RawMessage(`{}`), Data: json.RawMessage(`{}`)}
-	actors := &restoreActorResolverFake{user: auth.User{ID: task.RequestedBy, TenantID: task.TenantID, Role: "DEVELOPER"}}
+	actors := &restoreActorResolverFake{user: auth.User{ID: task.RequestedBy, TenantID: task.TenantID, Role: "PROJECT_ADMIN"}}
 	executor := NewRestoreExecutor(repo, &restoreAuthoringFake{target: snapshot, backup: snapshot}, workspace, &restoreScenesFake{}, data, fences, actors, slog.Default())
 	return executor, repo, workspace, data, fences
 }
@@ -261,7 +261,7 @@ func TestRestoreExecutorUsesRequestedUsersRealRole(t *testing.T) {
 	if err := executor.process(context.Background(), repo.task); err != nil {
 		t.Fatal(err)
 	}
-	if fences.actor.ID != repo.task.RequestedBy || fences.actor.TenantID != repo.task.TenantID || fences.actor.Role != "DEVELOPER" {
+	if fences.actor.ID != repo.task.RequestedBy || fences.actor.TenantID != repo.task.TenantID || fences.actor.Role != "PROJECT_ADMIN" {
 		t.Fatalf("restore did not use resolved request actor: %+v", fences.actor)
 	}
 }
