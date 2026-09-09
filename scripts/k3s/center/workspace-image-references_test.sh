@@ -13,7 +13,6 @@ previous_workspace_image="induforge/designer-code-server:4.131.0-node24.19.0-pnp
 for source_file in \
   "$REPO_ROOT/designer/code-workspace/verify-image.sh" \
   "$SCRIPT_DIR/centerctl" \
-  "$SCRIPT_DIR/center-system.yaml.template" \
   "$REPO_ROOT/scripts/offline/build-package.sh" \
   "$REPO_ROOT/scripts/offline/build-package.ps1" \
   "$REPO_ROOT/scripts/release/build-offline-package-linux.sh"; do
@@ -30,5 +29,10 @@ for source_file in \
     exit 1
   fi
 done
+
+if ! grep -Fq 'value: __CODE_SERVER_IMAGE__' "$SCRIPT_DIR/center-system.yaml.template"; then
+  echo "中心模板必须使用已解析的工作区镜像配置" >&2
+  exit 1
+fi
 
 echo "正式工作区镜像引用一致性测试通过"

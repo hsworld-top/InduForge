@@ -658,11 +658,11 @@ func (*HTProvider) EditorURL(session EditorSession) string {
 	query.Set("sessionId", session.ID)
 	query.Set("open", session.EntryPath)
 	query.Set("sceneName", session.SceneName)
-	return "/designer/scene-studio/" + entry + "?" + query.Encode()
+	return "/scene-studio/" + entry + "?" + query.Encode()
 }
 
 func (*HTProvider) AssetEditorURL(session AssetEditorSession) string {
-	return "/designer/scene-studio/index.html?assetSessionId=" + session.ID
+	return "/scene-studio/index.html?assetSessionId=" + session.ID
 }
 
 func (*HTProvider) ViewerURL(session ViewerSession) string {
@@ -672,5 +672,5 @@ func (*HTProvider) ViewerURL(session ViewerSession) string {
 	}
 	query := url.Values{}
 	query.Set("viewerSessionId", session.ID)
-	return "/designer/scene-studio/" + entry + "?" + query.Encode()
+	return "/scene-studio/" + entry + "?" + query.Encode()
 }

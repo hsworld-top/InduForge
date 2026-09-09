@@ -17,6 +17,7 @@ import (
 var customRoutePrefixes = []string{
 	"/scene-provider",
 	"/scene-editor-sessions/",
+	"/scene-viewer-sessions/",
 	"/scene-asset-editor-sessions/",
 	"/projects/{projectId}/scenes",
 	"/projects/{projectId}/scene-assets",

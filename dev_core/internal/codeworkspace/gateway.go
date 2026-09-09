@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	workspaceSessionPath          = "/__if_workspace_session"
 	workspaceTicketParameter      = "__if_workspace_ticket"
 	workspaceSessionCookie        = "__Host-if_workspace_session"
 	workspaceInsecureCookiePrefix = "if_workspace_session_"
@@ -282,6 +283,17 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if r.URL.Path == workspaceSessionPath {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST, OPTIONS")
+			http.Error(w, "工作区会话续期仅支持 POST", http.StatusMethodNotAllowed)
+			return
+		}
+		g.exchangeTicket(w, r, host, r.URL.Query().Get(workspaceTicketParameter))
+		return
+	}
 	if ticket := r.URL.Query().Get(workspaceTicketParameter); ticket != "" {
 		g.exchangeTicket(w, r, host, ticket)
 		return
@@ -304,7 +316,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "工作区会话已失效，请重新打开", http.StatusUnauthorized)
 		return
 	}
-	g.proxy(w, r, grant)
+	g.proxy(w, r, grant, cookie.Value)
 }
 
 func (g *Gateway) exchangeTicket(w http.ResponseWriter, r *http.Request, host, ticket string) {
@@ -313,8 +325,12 @@ func (g *Gateway) exchangeTicket(w http.ResponseWriter, r *http.Request, host, t
 	grant, ok := g.tickets[ticket]
 	g.deleteTicketLocked(ticket, grant) // 无论 Host 是否匹配，票据只允许尝试一次。
 	g.mu.Unlock()
-	grant, err := g.authorizeGrant(r.Context(), grant)
+	grant, err := g.authorizeGrantUncached(r.Context(), grant)
 	if !ok || grant.Host != host || !now.Before(grant.ExpiresAt) || err != nil {
+		if r.URL.Path == workspaceSessionPath {
+			http.Error(w, "工作区票据无效或已过期", http.StatusUnauthorized)
+			return
+		}
 		// iframe 刷新会重新访问浏览器保存的原始 ticket URL。票据仍然不可
 		// 重放；只有同一 Host 已有的有效 HttpOnly 会话可跳过交换并清理 URL。
 		cookieName, cookieNameOK := g.sessionCookieName(host)
@@ -336,27 +352,41 @@ func (g *Gateway) exchangeTicket(w http.ResponseWriter, r *http.Request, host, t
 		http.Error(w, "建立工作区会话失败", http.StatusInternalServerError)
 		return
 	}
-	grant.ExpiresAt = now.Add(g.sessionTTL)
-	grant.LastUsedAt = now
-	g.mu.Lock()
-	g.cleanupPeriodicLocked(now)
-	if len(g.sessions) >= maxActiveSessions || g.actorSessionCountLocked(grant.Actor) >= maxSessionsPerActor {
-		g.cleanupLocked(now)
-	}
-	for g.actorSessionCountLocked(grant.Actor) >= maxSessionsPerActor {
-		g.evictOldestSessionLocked(func(item gatewayGrant) bool { return sameActor(item.Actor, grant.Actor) })
-	}
-	for len(g.sessions) >= maxActiveSessions {
-		g.evictOldestSessionLocked(nil)
-	}
-	g.sessions[sessionID] = grant
-	g.mu.Unlock()
+	// 新票据验证成功后才允许续期；同身份、工程、代次和服务复用会话 ID，
+	// 长连接据此读取最新有效期。不同 scope 或已过期 Cookie 一律建立新会话。
 	cookieName, cookieNameOK := g.sessionCookieName(host)
 	if !cookieNameOK {
 		http.Error(w, "工作区服务无效", http.StatusBadRequest)
 		return
 	}
+	cookie, cookieErr := r.Cookie(cookieName)
+	now = g.now().UTC()
+	grant.ExpiresAt = now.Add(g.sessionTTL)
+	grant.LastUsedAt = now
+	g.mu.Lock()
+	g.cleanupPeriodicLocked(now)
+	if cookieErr == nil {
+		if existing, exists := g.sessions[cookie.Value]; exists && existing.Host == host && now.Before(existing.ExpiresAt) && ticketScope(existing.Actor, existing.ProjectID, existing.Epoch, existing.Service) == ticketScope(grant.Actor, grant.ProjectID, grant.Epoch, grant.Service) {
+			sessionID = cookie.Value
+		}
+	}
+	_, renewing := g.sessions[sessionID]
+	if !renewing && (len(g.sessions) >= maxActiveSessions || g.actorSessionCountLocked(grant.Actor) >= maxSessionsPerActor) {
+		g.cleanupLocked(now)
+	}
+	for !renewing && g.actorSessionCountLocked(grant.Actor) >= maxSessionsPerActor {
+		g.evictOldestSessionLocked(func(item gatewayGrant) bool { return sameActor(item.Actor, grant.Actor) })
+	}
+	for !renewing && len(g.sessions) >= maxActiveSessions {
+		g.evictOldestSessionLocked(nil)
+	}
+	g.sessions[sessionID] = grant
+	g.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: sessionID, Path: "/", HttpOnly: true, Secure: !g.allowInsecureHTTPDev, SameSite: http.SameSiteLaxMode, MaxAge: int(g.sessionTTL.Seconds())})
+	if r.URL.Path == workspaceSessionPath {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	g.redirectWithoutTicket(w, r)
 }
 
@@ -370,7 +400,9 @@ func (g *Gateway) redirectWithoutTicket(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, target.RequestURI(), http.StatusSeeOther)
 }
 
-func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGrant) {
+func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGrant, sessionID string) {
+	done := g.service.beginActivity(grant.ProjectID)
+	defer done()
 	port := workspaceServicePorts[grant.Service]
 	upstream := &url.URL{Scheme: "http", Host: containerName(grant.ProjectID) + "." + g.namespace + ".svc.cluster.local:" + fmt.Sprint(port)}
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
@@ -382,6 +414,11 @@ func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGra
 		// 一次票据和会话校验绑定的公开 Origin，供 Pi Web/Vite 精确允许主机校验。
 		req.Host = grant.Host
 		stripWorkspaceCredentials(req.Header)
+		// 身份来自已验证的网关会话，覆盖浏览器同名头，供工作区执行用户隔离。
+		req.Header.Set("X-InduForge-User-Id", grant.Actor.ID)
+		req.Header.Set("X-InduForge-Tenant-Id", grant.Actor.TenantID)
+		req.Header.Set("X-InduForge-Project-Id", grant.ProjectID)
+		req.Header.Set("X-InduForge-Role", grant.Actor.Role)
 	}
 	proxy.ModifyResponse = func(response *http.Response) error {
 		response.Header.Del("Set-Cookie")
@@ -398,13 +435,40 @@ func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGra
 	}
 	// ReverseProxy 会处理 Upgrade。记录被 Hijack 的连接并周期复核 epoch，恢复
 	// bump epoch 后至多一秒关闭旧 WebSocket，不依赖客户端再次发 HTTP。
-	guarded := &epochResponseWriter{ResponseWriter: w, check: func() bool {
-		checkCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_, err := g.authorizeGrant(checkCtx, grant)
-		return err == nil
-	}}
+	check := func() bool { return g.sessionAuthorized(sessionID, grant) }
+	// SSE 不会 Hijack，取消请求上下文使上游流也随失权关闭。
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if !check() {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	r = r.WithContext(ctx)
+	guarded := &epochResponseWriter{ResponseWriter: w, check: check}
 	proxy.ServeHTTP(guarded, r)
+}
+
+// 每次长连接复核读取当前会话，禁止使用连接建立时捕获的旧有效期。
+func (g *Gateway) sessionAuthorized(id string, original gatewayGrant) bool {
+	current, ok := g.session(id, original.Host)
+	if !ok || ticketScope(current.Actor, current.ProjectID, current.Epoch, current.Service) != ticketScope(original.Actor, original.ProjectID, original.Epoch, original.Service) {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := g.authorizeGrant(ctx, current)
+	return err == nil
 }
 
 func (g *Gateway) applyCORS(w http.ResponseWriter, r *http.Request) bool {
@@ -576,7 +640,7 @@ func (g *Gateway) evictOldestSessionLocked(match func(gatewayGrant) bool) {
 func stripWorkspaceCredentials(header http.Header) {
 	for name := range header {
 		lower := strings.ToLower(name)
-		if lower == "authorization" || lower == "cookie" || lower == "proxy-authorization" || strings.HasPrefix(lower, "x-forwarded-") || strings.HasPrefix(lower, "x-induforge-internal-") {
+		if lower == "authorization" || lower == "cookie" || lower == "proxy-authorization" || strings.HasPrefix(lower, "x-forwarded-") || strings.HasPrefix(lower, "x-induforge-internal-") || lower == "x-induforge-user-id" || lower == "x-induforge-tenant-id" || lower == "x-induforge-project-id" || lower == "x-induforge-role" {
 			header.Del(name)
 		}
 	}

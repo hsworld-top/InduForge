@@ -57,6 +57,7 @@ type PresenceStore interface {
 }
 
 type Service struct {
+	activity   activityRegistry
 	projects   ProjectRepository
 	engine     Engine
 	config     Config
@@ -208,6 +209,8 @@ func (s *Service) Status(ctx context.Context, actor auth.User, projectID string)
 	if _, err := s.authorize(ctx, actor, projectID); err != nil {
 		return Status{}, err
 	}
+	done := s.beginActivity(projectID)
+	defer done()
 	status, err := s.inspect(ctx, projectID)
 	if err != nil {
 		return Status{}, err
@@ -238,6 +241,8 @@ func (s *Service) Start(ctx context.Context, actor auth.User, projectID string) 
 	if err != nil {
 		return Status{}, err
 	}
+	done := s.beginActivity(projectID)
+	defer done()
 	if err := s.requireEpoch(ctx, actor, projectID); err != nil {
 		return Status{}, err
 	}
@@ -315,6 +320,8 @@ func (s *Service) Rebuild(ctx context.Context, actor auth.User, projectID string
 	if err != nil {
 		return Status{}, err
 	}
+	done := s.beginActivity(projectID)
+	defer done()
 	if err := s.requireEpoch(ctx, actor, projectID); err != nil {
 		return Status{}, err
 	}
@@ -389,6 +396,7 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		filepath.Join(projectDirectory, "code-server-data"),
 		filepath.Join(projectDirectory, "code-server-config"),
 		filepath.Join(projectDirectory, "cache"),
+		filepath.Join(projectDirectory, "pi-agent"),
 		filepath.Join(projectDirectory, "context-state", "current"),
 	} {
 		if err := os.MkdirAll(directory, 0o755); err != nil {
@@ -420,7 +428,7 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 	}
 	return ContainerSpec{
 		Name: containerName(item.ID), Image: s.config.Image,
-		Command:       []string{"--bind-addr", "0.0.0.0:3000", "--auth", "none", "--disable-telemetry", "--idle-timeout-seconds", "1800", workspacePath},
+		Command:       []string{"--bind-addr", "0.0.0.0:3000", "--auth", "none", "--disable-telemetry", workspacePath},
 		User:          "1000:1000",
 		WorkingDir:    workspacePath,
 		Environment:   environment,
@@ -428,10 +436,12 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.project-id": item.ID, "com.induforge.role": "code-workspace"},
 		Mounts: []Mount{
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "workspace"), Target: workspacePath},
-			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "context-state", "current"), Target: "/workspace/.induforge/context", ReadOnly: true},
+			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "context-state"), Target: "/workspace/.induforge/context", ReadOnly: true},
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "code-server-data"), Target: "/home/coder/.local/share/code-server"},
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "code-server-config"), Target: "/home/coder/.config/code-server"},
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "cache"), Target: "/cache"},
+			// Pi 用户会话与配置随工程容器重建保留，目录内再按用户隔离。
+			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "pi-agent"), Target: "/home/coder/.pi/agent"},
 		},
 	}, nil
 }

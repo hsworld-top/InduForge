@@ -434,8 +434,8 @@ func (w *FileWorkspace) SyncContext(projectID string, files map[string][]byte) e
 		}
 	}
 
-	// K3s 将该目录以只读 subPath 投影到 workspace/.induforge/context。
-	// 控制面只能在真实源目录内原子替换，不能对工作区挂载点执行 rename。
+	// K3s 挂载稳定的 context-state 父目录；AI 从 context/current 读取。
+	// current 可替换，父目录不可替换，否则已有容器会继续读取旧 inode。
 	contextRoot := filepath.Join(projectDirectory, "context-state", "current")
 	if err := os.MkdirAll(filepath.Dir(contextRoot), 0o755); err != nil {
 		return err

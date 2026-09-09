@@ -92,7 +92,7 @@ func TestStartCreatesDeterministicSharedContainerWithControlledMounts(t *testing
 	if spec.Name != "induforge-code-"+testProjectID {
 		t.Fatalf("unexpected container name: %s", spec.Name)
 	}
-	if len(spec.Mounts) != 5 {
+	if len(spec.Mounts) != 6 {
 		t.Fatalf("unexpected mounts: %#v", spec.Mounts)
 	}
 	wanted := map[string]bool{
@@ -101,8 +101,12 @@ func TestStartCreatesDeterministicSharedContainerWithControlledMounts(t *testing
 		"/home/coder/.local/share/code-server": false,
 		"/home/coder/.config/code-server":      false,
 		"/cache":                               false,
+		"/home/coder/.pi/agent":                false,
 	}
 	for _, mount := range spec.Mounts {
+		if mount.Target == "/workspace/.induforge/context" && mount.Subpath != testProjectID+"/context-state" {
+			t.Fatal("必须挂载稳定的上下文父目录，不能挂载会被替换的 current")
+		}
 		readOnly, ok := wanted[mount.Target]
 		if !ok || readOnly != mount.ReadOnly {
 			t.Fatalf("unexpected mount: %#v", mount)
@@ -235,7 +239,7 @@ func TestCodeWorkspaceRequiresProjectWriteAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Status(context.Background(), auth.User{ID: "viewer", TenantID: "tenant", Role: "OPS_ADMIN"}, testProjectID)
+	_, err = service.Status(context.Background(), auth.User{ID: "viewer", TenantID: "tenant", Role: "VIEWER"}, testProjectID)
 	if !errors.Is(err, auth.ErrPermissionDenied) {
 		t.Fatalf("expected permission denied, got %v", err)
 	}

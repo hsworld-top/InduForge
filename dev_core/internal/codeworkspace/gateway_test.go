@@ -205,6 +205,8 @@ func TestGatewayExchangesOneTimeTicketAndStripsCredentials(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer must-not-reach-workspace")
 	request.Header.Set("X-Forwarded-Host", "attacker.example")
 	request.Header.Set("X-InduForge-Internal-Token", "secret")
+	request.Header.Set("X-InduForge-User-Id", "spoofed-user")
+	request.Header.Set("X-InduForge-Tenant-Id", "spoofed-tenant")
 	result := httptest.NewRecorder()
 	gateway.ServeHTTP(result, request)
 	if result.Code != http.StatusOK || result.Body.String() != "workspace" || transport.calls != 1 {
@@ -220,6 +222,9 @@ func TestGatewayExchangesOneTimeTicketAndStripsCredentials(t *testing.T) {
 		if transport.request.Header.Get(header) != "" {
 			t.Fatalf("敏感请求头泄露到工作区: %s", header)
 		}
+	}
+	if transport.request.Header.Get("X-InduForge-User-Id") != actor.ID || transport.request.Header.Get("X-InduForge-Tenant-Id") != actor.TenantID || transport.request.Header.Get("X-InduForge-Project-Id") != testProjectID || transport.request.Header.Get("X-InduForge-Role") != actor.Role {
+		t.Fatal("上游用户上下文必须由网关会话覆盖，不得信任浏览器请求头")
 	}
 	if result.Header().Get("Set-Cookie") != "" || result.Header().Get("Location") != "" {
 		t.Fatalf("上游凭据或绝对重定向泄露: %#v", result.Header())

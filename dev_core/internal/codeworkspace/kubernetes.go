@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"os"
@@ -147,10 +148,10 @@ func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error
 		"image":           spec.Image,
 		"imagePullPolicy": "Never",
 		"command": []string{"/bin/sh", "-ec", `
-mkdir -p /project/workspace /project/code-server-data /project/code-server-config /project/cache
-# 历史编辑器缓存中可能存在 coder 的 0700 子目录；初始化器只需修正四个挂载根
+mkdir -p /project/workspace /project/code-server-data /project/code-server-config /project/cache /project/pi-agent
+# 编辑器缓存中可能存在 coder 的 0700 子目录；初始化器只修正挂载根
 # 目录，递归遍历既无必要，也会要求额外的目录绕过能力。
-chown 1000:1000 /project/workspace /project/code-server-data /project/code-server-config /project/cache
+chown 1000:1000 /project/workspace /project/code-server-data /project/code-server-config /project/cache /project/pi-agent
 # K3s 为只读上下文子路径自动创建 .induforge 父目录时，默认属主为 root。
 # 仅修正这个父目录，context 本身仍保持只读挂载，不放宽主容器权限。
 if test -d /project/workspace/.induforge; then chown 1000:1000 /project/workspace/.induforge; fi
@@ -274,4 +275,57 @@ func (k *KubernetesEngine) request(ctx context.Context, method, endpoint string,
 		}
 	}
 	return nil
+}
+
+// 仅枚举平台管理的开发容器，源码卷不属于回收对象。
+func (k *KubernetesEngine) RunningProjects(ctx context.Context) ([]string, error) {
+	var result struct {
+		Items []struct {
+			Metadata struct {
+				Labels map[string]string `json:"labels"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	endpoint := "/api/v1/namespaces/" + k.namespace + "/pods?labelSelector=com.induforge.role%3Dcode-workspace%2Ccom.induforge.managed%3Dtrue"
+	if err := k.request(ctx, http.MethodGet, endpoint, nil, &result); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(result.Items))
+	for _, item := range result.Items {
+		id := item.Metadata.Labels["com.induforge.project-id"]
+		if _, err := uuid.Parse(id); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+func (k *KubernetesEngine) WorkspaceBusy(ctx context.Context, id string) (bool, error) {
+	endpoint := "http://" + containerName(id) + "." + k.namespace + ".svc.cluster.local:5174/api/v1/workspace/activity"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return true, err
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	response, err := client.Do(req)
+	if err != nil {
+		return true, err
+	}
+	defer response.Body.Close()
+	var payload struct {
+		Code *int `json:"code"`
+		Data struct {
+			Busy *bool `json:"busy"`
+		} `json:"data"`
+	}
+	if response.StatusCode != http.StatusOK {
+		return true, fmt.Errorf("开发环境活动探测失败: HTTP %d", response.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&payload); err != nil {
+		return true, err
+	}
+	if payload.Code == nil || *payload.Code != 0 || payload.Data.Busy == nil {
+		return true, fmt.Errorf("开发环境活动状态未知")
+	}
+	return *payload.Data.Busy, nil
 }

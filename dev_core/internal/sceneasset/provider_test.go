@@ -150,8 +150,8 @@ func TestHTProviderEditorURLContainsControlledEntry(t *testing.T) {
 		entryPath string
 		page      string
 	}{
-		{kind: "2d", entryPath: "displays/main scene.json", page: "/designer/scene-studio/index.html"},
-		{kind: "3d", entryPath: "scenes/main scene.json", page: "/designer/scene-studio/index3d.html"},
+		{kind: "2d", entryPath: "displays/main scene.json", page: "/scene-studio/index.html"},
+		{kind: "3d", entryPath: "scenes/main scene.json", page: "/scene-studio/index3d.html"},
 	}
 	for _, test := range tests {
 		result, err := url.Parse(provider.EditorURL(EditorSession{ID: "session-1", SceneName: "主场景", Kind: test.kind, EntryPath: test.entryPath}))

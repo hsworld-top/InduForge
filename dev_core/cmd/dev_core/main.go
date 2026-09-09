@@ -282,6 +282,7 @@ func main() {
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	opsRepository.SetImageWorkerContext(signalCtx)
+	go codeWorkspaceService.RunIdleReclaimer(signalCtx, logger)
 	if restoreExecutor != nil {
 		restoreExecutor.Start(signalCtx)
 	}

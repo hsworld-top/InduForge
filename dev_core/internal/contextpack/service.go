@@ -119,8 +119,15 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 		roleLines = append(roleLines, "## "+role.Code+"（"+role.Name+"）", "", role.Description, "", "能力：`"+strings.Join(role.Capabilities, "`, `")+"`", "")
 	}
 	overview := "# 工程信息\n\n- 名称：" + item.Name + "\n- 编码：`" + item.Code + "`\n- 工程 ID：`" + item.ID + "`\n"
-	readme := "# InduForge 工程上下文包\n\n这是数据库和场景公开契约的只读开发镜像。先搜索 `points/README.md`，再使用 `@induforge/runtime-sdk` 调用数据点、权限和场景能力。\n"
-	files := map[string][]byte{"README.md": []byte(readme), "project/overview.md": []byte(overview), "project/development-rules.md": []byte("# 开发规则\n\n普通页面使用 Vue 3 + JavaScript；路由源码是唯一事实。\n"), "runtime-api.md": []byte(runtimeAPIMarkdown()), "authorization/roles.md": []byte(strings.Join(roleLines, "\n")), "authorization/permissions.md": []byte("# 权限\n\n请通过运行时 SDK 判断角色和权限。\n"), "authorization/usage.md": []byte(authorizationUsageMarkdown()), "points/README.md": []byte("# 数据点开发契约\n\n数据点按 500 条分片写入 `catalog/`，请先搜索 ID，再按需读取对应文件。\n"), "scenes/README.md": []byte("# 场景公开契约\n\n这里仅描述 2D、3D 场景向 Vue 页面和运行时 SDK 公开的接口，不包含 HT 私有画布结构。\n")}
+	// 静态开发规则随 SDK 发布；此处仅生成当前工程业务数据，避免两处说明漂移。
+	readme := "# 工程上下文\n\n此目录是平台生成的只读业务数据。开发规则、能力说明和示例见 /opt/induforge/project-sdk。先读取实际工程 package.json 和 .induforge/project.json 确定技术栈，再按需查询本目录的数据点和场景。\n"
+	files := map[string][]byte{
+		"README.md":              []byte(readme),
+		"project/overview.md":    []byte(overview),
+		"authorization/roles.md": []byte(strings.Join(roleLines, "\n")),
+		"points/README.md":       []byte("# 数据点开发契约\n\n数据点按 500 条分片写入 catalog/，请按需检索读取。\n"),
+		"scenes/README.md":       []byte("# 场景公开契约\n\n此处描述工程页面可用的场景参数、事件和命令，不包含私有画布结构。\n"),
+	}
 	const pointsPerShard = 500
 	chunkCount := 0
 	for start := 0; start < len(points.DataPoints); start += pointsPerShard {
@@ -279,54 +286,4 @@ func schemaExample(schema map[string]any) any {
 	default:
 		return nil
 	}
-}
-
-func runtimeAPIMarkdown() string {
-	return `# 运行时 SDK
-
-客户页面使用 JavaScript，导入工程模板内置的 @induforge/runtime-sdk：
-
-~~~js
-import { points, access, scenes } from '@induforge/runtime-sdk'
-import '@induforge/runtime-sdk/scene-elements'
-
-const result = await points.production.orders.get({ workshopId: 'A01' })
-await points.production.command.set({ command: 'start' })
-const unsubscribe = points.production.status.sub((event) => console.log(event))
-unsubscribe()
-
-if (access.hasRole('operator')) {
-  scenes.open2D('line-overview')
-}
-~~~
-
-页面内嵌已提交场景：
-
-~~~html
-<induforge-scene-2d scene-id="场景ID"></induforge-scene-2d>
-<induforge-scene-3d scene-id="场景ID"></induforge-scene-3d>
-~~~
-
-通过元素的 params / setParams() 传参，监听 scene-event，使用 invoke() 调用场景命令。具体名称和
-JSON 结构必须以 scenes/manifest.json 和对应场景文档为准。
-
-- 数据点路径以 points/catalog/ 中的稳定 ID 为准。
-- get、set、sub、pub 是否可用和参数结构以对应数据点契约为准。
-- 场景只通过 Web Components、scenes.open2D()、scenes.open3D() 和公开契约使用，不读取 Provider 私有文件。
-- 运行时仍执行真实权限、参数和数据校验；上下文文件只用于开发提示。
-`
-}
-
-func authorizationUsageMarkdown() string {
-	return `# 权限使用
-
-~~~js
-import { access } from '@induforge/runtime-sdk'
-
-const canOperate = access.hasRole('operator')
-const canManage = access.hasAnyRole(['admin', 'engineer'])
-~~~
-
-角色和权限结果取自当前运行用户。不要把上下文中的角色文档当作授权依据，也不要在页面中保存 Token、用户名或角色绑定关系。
-`
 }

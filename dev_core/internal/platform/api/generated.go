@@ -9963,15 +9963,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/scene-viewer-sessions/{sessionId}", wrapper.GetSceneViewerSession)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/scene-viewer-sessions/{sessionId}/files/content", wrapper.GetSceneViewerFileContent)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/scene-viewer-sessions/{sessionId}/heartbeat", wrapper.HeartbeatSceneViewerSession)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tenants", wrapper.ListTenants)
 	})
 	r.Group(func(r chi.Router) {

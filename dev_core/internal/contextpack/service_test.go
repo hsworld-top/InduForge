@@ -45,3 +45,18 @@ func TestBuildFilesIncludesSceneContractsWithoutPrivateCanvas(t *testing.T) {
 		t.Fatalf("scene event or command example missing: %s", content)
 	}
 }
+
+func TestContextDoesNotDuplicateStaticSDKRules(t *testing.T) {
+	files, err := buildFiles(project.Project{ID: "project-1"}, nil, pointSnapshot{}, scenecontract.Snapshot{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"runtime-api.md", "project/development-rules.md", "authorization/usage.md"} {
+		if _, found := files[name]; found {
+			t.Fatalf("static SDK documentation duplicated: %s", name)
+		}
+	}
+	if !strings.Contains(string(files["README.md"]), "/opt/induforge/project-sdk") {
+		t.Fatal("SDK documentation entry missing")
+	}
+}

@@ -144,7 +144,8 @@ func (s *Service) CreateScene(ctx context.Context, actor auth.User, projectID st
 	if err := provider.ValidateEntry(input.Kind, entry); err != nil {
 		return Scene{}, err
 	}
-	initial := []byte("{}")
+	// HT 反序列化要求数据数组；空对象不是有效的空白画布。
+	initial := []byte(`{"d":[]}`)
 	hash := hashBytes(initial)
 	return s.repository.CreateScene(ctx, actor, input, state.Provider, contentObject{Hash: hash, Size: int64(len(initial)), ContentType: "application/json", JSON: initial})
 }

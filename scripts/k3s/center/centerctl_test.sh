@@ -24,6 +24,29 @@ IF_EDGE_TLS_HOST_PORT=18443 \
 IF_CENTER_DOCKER_GID=998 \
   "$SCRIPT_DIR/centerctl" render > "$temp_dir/rendered.yaml"
 
+# 镜像配置必须能跟随独立前端制品更新，环境变量优先于持久化配置。
+printf 'CODE_SERVER_IMAGE=induframe/dev-workspace:configured\n' > "$temp_dir/workspace-image.conf"
+IF_CENTER_CONFIG_FILE="$temp_dir/workspace-image.conf" \
+IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DOCKER_GID=998 \
+  "$SCRIPT_DIR/centerctl" render > "$temp_dir/workspace-configured.yaml"
+if ! grep -Fq 'value: induframe/dev-workspace:configured' "$temp_dir/workspace-configured.yaml"; then
+  echo "configured workspace image was ignored" >&2
+  exit 1
+fi
+IF_CENTER_CONFIG_FILE="$temp_dir/workspace-image.conf" \
+IF_CODE_SERVER_IMAGE=induframe/dev-workspace:migration-check \
+IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DOCKER_GID=998 \
+  "$SCRIPT_DIR/centerctl" render > "$temp_dir/workspace-override.yaml"
+if ! grep -Fq 'value: induframe/dev-workspace:migration-check' "$temp_dir/workspace-override.yaml"; then
+  echo "workspace image environment override was ignored" >&2
+  exit 1
+fi
+if IF_CODE_SERVER_IMAGE='invalid|image' IF_CENTER_NODE_NAME=if-center-01 IF_CENTER_DOCKER_GID=998 \
+  "$SCRIPT_DIR/centerctl" render >/dev/null 2>&1; then
+  echo "unsafe workspace image must be rejected before rendering" >&2
+  exit 1
+fi
+
 ln -s "$SCRIPT_DIR/centerctl" "$temp_dir/centerctl"
 IF_CENTER_NODE_NAME=if-center-01 \
 IF_CENTER_CONTROL_IMAGE=induforge/control:1.0.0 \
@@ -396,6 +419,7 @@ run_fake_apply() {
   FAKE_LEGACY_CONTROL_ENV="$legacy_control_env" \
   FAKE_SET_ENV_FAILURE="$set_env_failure" \
   IF_CENTER_IMAGE_SERVICE_INSTALLER=/usr/bin/true \
+  IF_CODE_SERVER_IMAGE=induframe/dev-workspace:migration-check \
   IF_CENTER_CONFIG_FILE="$temp_dir/center-k3s.conf" \
   IF_CENTER_K3S_BIN="$fake_bin/k3s" \
   IF_CENTER_KUBECONFIG="$temp_dir/custom.kubeconfig" \
@@ -417,6 +441,10 @@ if ! grep -Fxq "IF_CENTER_KUBECONFIG=$temp_dir/custom.kubeconfig" "$temp_dir/cen
 fi
 if ! grep -Fxq "K3S_TOKEN_FILE=$temp_dir/k3s-token" "$temp_dir/center-k3s.conf"; then
   echo "center apply must persist the K3s token file path"
+  exit 1
+fi
+if ! grep -Fxq 'CODE_SERVER_IMAGE=induframe/dev-workspace:migration-check' "$temp_dir/center-k3s.conf"; then
+  echo "center apply must persist the resolved workspace image" >&2
   exit 1
 fi
 stop_line=$(grep -n 'scale deployment/center-control --replicas=0' "$upgrade_log" | cut -d: -f1)
