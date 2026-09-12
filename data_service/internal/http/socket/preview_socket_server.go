@@ -162,7 +162,7 @@ func NewPreviewSocketServer(
 	return server, nil
 }
 
-// ConfigureBuiltinMessageHub 配置 IF消息库预览订阅使用的内置 MQTT Broker。
+// ConfigureBuiltinMessageHub 配置 消息库预览订阅使用的内置 MQTT Broker。
 func (s *PreviewSocketServer) ConfigureBuiltinMessageHub(addr, username, password string) {
 	if s == nil {
 		return
@@ -1678,7 +1678,7 @@ func buildMqttBrokerURL(connection repository.MqttConnectionDetailRecord) (strin
 func buildBuiltinMessageBrokerURL(addr string) (string, error) {
 	raw := strings.TrimSpace(addr)
 	if raw == "" {
-		return "", fmt.Errorf("IF消息库 message-hub 地址为空")
+		return "", fmt.Errorf("消息库服务地址未配置")
 	}
 	if strings.Contains(raw, "://") {
 		return raw, nil

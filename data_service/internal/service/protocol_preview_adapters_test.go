@@ -263,6 +263,25 @@ func TestKafkaPreviewAdapter_UsesTemporaryReaderAndReturnsSamples(t *testing.T) 
 	}
 }
 
+func TestKafkaPreviewAdapter_TimesOutWithoutSamplesAsEmptyResult(t *testing.T) {
+	reader := &fakeKafkaPreviewReader{}
+	adapter := KafkaPreviewAdapter{ReaderFactory: func(kafka.ReaderConfig) kafkaPreviewReader { return reader }}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	result, err := adapter.Preview(ctx, ProtocolPreviewAdapterInput{
+		Connection: repository.ProtocolPreviewConnectionRecord{ID: "conn-kafka", Type: "kafka", Config: map[string]any{
+			"brokers": "127.0.0.1:9092", "topic": "factory.events", "startPosition": "latest",
+		}},
+		Limit: 1, Timeout: 10 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("empty Kafka preview should not fail on timeout: %v", err)
+	}
+	if result.Status != "ok" || len(result.Samples) != 0 {
+		t.Fatalf("unexpected empty preview result: %#v", result)
+	}
+}
+
 func TestKafkaPreviewAdapter_SupportsSinglePartitionOffsetAndHeaders(t *testing.T) {
 	reader := &fakeKafkaPreviewReader{
 		messages: []kafka.Message{

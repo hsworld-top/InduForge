@@ -54,7 +54,7 @@ test('空工作区可以列出模板并完成一次初始化', async () => {
   assert.equal(result.status, 'initialized')
   assert.equal((await initializer.status()).templateId, 'vite-vue-js')
   assert.match(await readFile(path.join(workspaceRoot, 'package.json'), 'utf8'), /fixture/)
-  assert.equal(JSON.parse(await readFile(path.join(workspaceRoot, '.induforge/project.json'))).version, 1)
+  assert.equal(JSON.parse(await readFile(path.join(workspaceRoot, '.workspace/project.json'))).version, 1)
   assert.deepEqual(commands[0], [
     'pnpm',
     'install',
@@ -143,9 +143,9 @@ test('已初始化工作区会按锁文件补齐依赖，供恢复后的预览�
 
 test('依赖恢复要求完整的源码与锁文件', async () => {
   const { initializer, workspaceRoot } = await fixture()
-  await mkdir(path.join(workspaceRoot, '.induforge'), { recursive: true })
+  await mkdir(path.join(workspaceRoot, '.workspace'), { recursive: true })
   await writeFile(
-    path.join(workspaceRoot, '.induforge', 'project.json'),
+    path.join(workspaceRoot, '.workspace', 'project.json'),
     JSON.stringify({ version: 1, templateId: 'vite-vue-js', initializedAt: '2026-09-04T00:00:00.000Z' }),
   )
 
@@ -157,7 +157,7 @@ test('依赖恢复要求完整的源码与锁文件', async () => {
 
 test('仅有平台上下文挂载时仍可初始化，并保留上下文目录', async () => {
   const { initializer, workspaceRoot } = await fixture()
-  const contextRoot = path.join(workspaceRoot, '.induforge', 'context')
+  const contextRoot = path.join(workspaceRoot, '.workspace', 'context')
   await mkdir(contextRoot, { recursive: true })
   await writeFile(path.join(contextRoot, 'runtime.json'), '{"project":"demo"}\n')
 
@@ -169,7 +169,7 @@ test('仅有平台上下文挂载时仍可初始化，并保留上下文目录',
     await readFile(path.join(contextRoot, 'runtime.json'), 'utf8'),
     '{"project":"demo"}\n',
   )
-  assert.equal(JSON.parse(await readFile(path.join(workspaceRoot, '.induforge/project.json'))).version, 1)
+  assert.equal(JSON.parse(await readFile(path.join(workspaceRoot, '.workspace/project.json'))).version, 1)
 })
 
 test('非空且无标记的工作区不会被覆盖', async () => {

@@ -459,13 +459,13 @@ func mapConstraintError(err error) error {
 	return fmt.Errorf("保存工程资源失败: %w", err)
 }
 
-func (r *PostgreSQLRepository) CreateDemoShell(ctx context.Context, item Project, actor auth.User) (Project, error) {
+func (r *PostgreSQLRepository) CreateDemoShell(ctx context.Context, item Project, actor auth.User, runtimeAdminHash string) (Project, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Project{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err := platformdb.CreateDemoShell(ctx, tx, item.TenantID, actor.ID, item.ID, item.WorkspacePath); err != nil {
+	if err := platformdb.CreateDemoShellWithRuntimeAccess(ctx, tx, item.TenantID, actor.ID, item.ID, item.WorkspacePath, runtimeAdminHash); err != nil {
 		return Project{}, mapConstraintError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -253,6 +253,7 @@ func (h *DataPointHandler) AppendTagsByFilter(w http.ResponseWriter, r *http.Req
 
 type dataPointFilterPayload struct {
 	Type           string   `json:"type"`
+	DataType       string   `json:"dataType"`
 	Status         string   `json:"status"`
 	Search         string   `json:"search"`
 	AccessSourceID string   `json:"accessSourceId"`
@@ -264,6 +265,7 @@ type dataPointFilterPayload struct {
 func (p dataPointFilterPayload) toServiceFilter() service.DataPointListFilter {
 	return service.DataPointListFilter{
 		Type:           strings.TrimSpace(p.Type),
+		DataType:       strings.TrimSpace(p.DataType),
 		Status:         strings.TrimSpace(p.Status),
 		Search:         strings.TrimSpace(p.Search),
 		AccessSourceID: strings.TrimSpace(p.AccessSourceID),
@@ -307,6 +309,7 @@ func parseDataPointListFilter(r *http.Request) (service.DataPointListFilter, err
 
 	return service.DataPointListFilter{
 		Type:           strings.TrimSpace(query.Get("type")),
+		DataType:       strings.TrimSpace(query.Get("dataType")),
 		Status:         strings.TrimSpace(query.Get("status")),
 		Search:         strings.TrimSpace(query.Get("search")),
 		AccessSourceID: strings.TrimSpace(query.Get("accessSourceId")),

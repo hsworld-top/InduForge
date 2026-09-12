@@ -66,7 +66,7 @@ func (m *MqttConnectionRuntimeManager) ConnectBuiltin(ctx context.Context, summa
 
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
-		return fmt.Errorf("IF消息库 message-hub 地址为空")
+		return fmt.Errorf("消息库服务地址未配置")
 	}
 	if !strings.Contains(addr, "://") {
 		addr = "tcp://" + addr

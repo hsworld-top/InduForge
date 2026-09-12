@@ -58,6 +58,7 @@ require_center_images() {
     induforge/compute-sandbox:1.0.0 \
     docker.io/timescale/timescaledb:2.26.4-pg16 \
     docker.io/library/redis:7.2-alpine \
+    docker.io/emqx/emqx:5.6.1 \
     docker.io/chrislusf/seaweedfs:3.85 \
     docker.io/rancher/mirrored-library-busybox:1.37.0; do
     canonical=$image
@@ -406,8 +407,10 @@ apply_center() {
   install -d -m 0755 "$DATA_ROOT"
   install -d -m 0750 \
     "$DATA_ROOT/meta-store" "$DATA_ROOT/cache-store" "$DATA_ROOT/object-store" \
+    "$DATA_ROOT/message-hub/data" "$DATA_ROOT/message-hub/log" \
     "$DATA_ROOT/workspaces" "$DATA_ROOT/center-releases" "$DATA_ROOT/tls"
   chown 1000:1000 "$DATA_ROOT/center-releases"
+  chown -R 1000:1000 "$DATA_ROOT/message-hub"
   "${IF_CENTER_IMAGE_SERVICE_INSTALLER:-$SCRIPT_DIR/install-image-service.sh}"
   ensure_release_workspace_volume
   ensure_release_signing_key
@@ -455,7 +458,7 @@ apply_center() {
     *configured*) kubectl_cmd -n "$NAMESPACE" rollout restart deployment/center-edge ;;
   esac
   for workload in \
-    statefulset/center-meta-store statefulset/center-cache-store statefulset/center-object-store \
+    statefulset/center-meta-store statefulset/center-cache-store statefulset/center-message-hub statefulset/center-object-store \
     deployment/compute-sandbox deployment/center-data; do
     kubectl_cmd -n "$NAMESPACE" rollout status "$workload" --timeout=180s
   done
@@ -490,6 +493,7 @@ show_summary() {
     'edge|center-edge|deployment' \
     'database|center-meta-store|statefulset' \
     'cache|center-cache-store|statefulset' \
+    'message-hub|center-message-hub|statefulset' \
     'object-store|center-object-store|statefulset'; do
     public_name=${item%%|*}
     rest=${item#*|}
@@ -541,6 +545,7 @@ show_logs() {
     center-edge) container=nginx ;;
     center-meta-store) container=postgres ;;
     center-cache-store) container=redis ;;
+    center-message-hub) container=emqx ;;
     center-object-store) container=seaweedfs ;;
     *) echo "unsupported center workload: $workload" >&2; exit 2 ;;
   esac
@@ -552,7 +557,7 @@ restart_workload() {
   workload=${1:-}
   case "$workload" in
     center-control|center-data|center-edge|compute-sandbox) kubectl_cmd -n "$NAMESPACE" rollout restart "deployment/$workload" ;;
-    center-meta-store|center-cache-store|center-object-store) kubectl_cmd -n "$NAMESPACE" rollout restart "statefulset/$workload" ;;
+    center-meta-store|center-cache-store|center-message-hub|center-object-store) kubectl_cmd -n "$NAMESPACE" rollout restart "statefulset/$workload" ;;
     *) echo "restart requires a supported center workload" >&2; exit 2 ;;
   esac
 }

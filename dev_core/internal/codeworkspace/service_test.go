@@ -97,14 +97,14 @@ func TestStartCreatesDeterministicSharedContainerWithControlledMounts(t *testing
 	}
 	wanted := map[string]bool{
 		"/workspace":                           false,
-		"/workspace/.induforge/context":        true,
+		"/workspace/.workspace/context":        true,
 		"/home/coder/.local/share/code-server": false,
 		"/home/coder/.config/code-server":      false,
 		"/cache":                               false,
 		"/home/coder/.pi/agent":                false,
 	}
 	for _, mount := range spec.Mounts {
-		if mount.Target == "/workspace/.induforge/context" && mount.Subpath != testProjectID+"/context-state" {
+		if mount.Target == "/workspace/.workspace/context" && mount.Subpath != testProjectID+"/context-state" {
 			t.Fatal("必须挂载稳定的上下文父目录，不能挂载会被替换的 current")
 		}
 		readOnly, ok := wanted[mount.Target]

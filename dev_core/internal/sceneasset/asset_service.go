@@ -98,9 +98,6 @@ func (s *Service) ImportAsset(ctx context.Context, actor auth.User, projectID st
 	if input.Name == "" || len([]rune(input.Name)) > 200 {
 		return SceneAsset{}, ErrInvalidAssetName
 	}
-	if !validAssetType(input.Type) {
-		return SceneAsset{}, ErrInvalidAssetType
-	}
 	state, err := s.repository.GetProvider(ctx)
 	if errors.Is(err, ErrProviderNotSet) {
 		state, err = s.repository.SetProvider(ctx, actor, ProviderHT, HTProviderVersion)
@@ -115,6 +112,14 @@ func (s *Service) ImportAsset(ctx context.Context, actor auth.User, projectID st
 	providerFiles, err := unpackAsset(input)
 	if err != nil {
 		return SceneAsset{}, err
+	}
+	if input.Type == "" {
+		input.Type, err = inferAssetType(providerFiles)
+		if err != nil {
+			return SceneAsset{}, err
+		}
+	} else if !validAssetType(input.Type) {
+		return SceneAsset{}, ErrInvalidAssetType
 	}
 	analysis, err := provider.AnalyzeAsset(ctx, input.Type, providerFiles)
 	if err != nil {
@@ -783,6 +788,77 @@ func validAssetType(value AssetType) bool {
 	default:
 		return false
 	}
+}
+
+// inferAssetType keeps the upload API simple: callers provide a file and the
+// provider classifies it from its contents. JSON assets may carry an explicit
+// type/kind; legacy JSON without a hint is treated as a 2D symbol.
+func inferAssetType(files map[string]ProviderFile) (AssetType, error) {
+	if len(files) == 0 {
+		return "", ErrInvalidArchive
+	}
+	var hasJSON, hasImage, hasModel, hasFont bool
+	var jsonFiles []ProviderFile
+	for filename, file := range files {
+		switch strings.ToLower(path.Ext(filename)) {
+		case ".obj", ".mtl":
+			hasModel = true
+		case ".woff", ".woff2":
+			hasFont = true
+		case ".png", ".jpg", ".jpeg", ".webp", ".gif":
+			hasImage = true
+		case ".json":
+			hasJSON = true
+			jsonFiles = append(jsonFiles, file)
+		}
+	}
+	if hasModel {
+		return AssetModel, nil
+	}
+	if hasFont {
+		return AssetFont, nil
+	}
+	if hasJSON {
+		for _, file := range jsonFiles {
+			var value map[string]any
+			if json.Unmarshal(file.Content, &value) != nil {
+				return "", ErrInvalidJSON
+			}
+			for _, key := range []string{"type", "assetType", "resourceType", "kind"} {
+				if hint, ok := value[key].(string); ok {
+					switch strings.ToLower(strings.TrimSpace(hint)) {
+					case "material", "材质":
+						return AssetMaterial, nil
+					case "component", "组件":
+						return AssetComponent, nil
+					case "symbol", "selection", "符号":
+						return AssetSymbol, nil
+					}
+				}
+				if value[key] == "selection" {
+					return AssetSymbol, nil
+				}
+			}
+			if value["induforgeResourceType"] == "selection" {
+				return AssetSymbol, nil
+			}
+			for _, key := range []string{"shader", "uniforms", "roughness", "metalness", "material"} {
+				if _, ok := value[key]; ok {
+					return AssetMaterial, nil
+				}
+			}
+			for _, key := range []string{"component", "children", "nodes", "props"} {
+				if _, ok := value[key]; ok {
+					return AssetComponent, nil
+				}
+			}
+		}
+		return AssetSymbol, nil
+	}
+	if hasImage {
+		return AssetImage, nil
+	}
+	return "", fmt.Errorf("%w: 无法识别文件格式，请上传图片、字体、模型或受支持的 JSON/ZIP 资源", ErrInvalidAssetType)
 }
 
 var _ = fmt.Sprintf

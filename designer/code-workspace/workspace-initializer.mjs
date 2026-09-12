@@ -6,6 +6,7 @@ import {
   readFile,
   readdir,
   rename,
+  rmdir,
   rm,
   writeFile,
 } from 'node:fs/promises'
@@ -107,8 +108,45 @@ export function createWorkspaceInitializer(options = {}) {
     }
   }
 
-  const markerPath = path.join(workspaceRoot, '.induforge', 'project.json')
+  const metadataRoot = path.join(workspaceRoot, '.workspace')
+  const legacyMetadataRoot = path.join(workspaceRoot, '.induforge')
+  const markerPath = path.join(metadataRoot, 'project.json')
   const catalogPath = path.join(templatesRoot, 'catalog.json')
+
+  async function migrateLegacyMetadata() {
+    let legacyEntries
+    try {
+      legacyEntries = await readdir(legacyMetadataRoot, { withFileTypes: true })
+    } catch (error) {
+      if (error?.code === 'ENOENT') return
+      throw error
+    }
+    let currentEntries
+    try {
+      currentEntries = await readdir(metadataRoot, { withFileTypes: true })
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        await rename(legacyMetadataRoot, metadataRoot)
+        return
+      }
+      throw error
+    }
+    const currentNames = new Set(currentEntries.map((entry) => entry.name))
+    for (const entry of legacyEntries) {
+      if (currentNames.has(entry.name)) {
+        if (entry.name === 'context' && entry.isDirectory()) {
+          await rm(path.join(legacyMetadataRoot, entry.name), { recursive: true, force: true })
+        }
+        continue
+      }
+      await rename(path.join(legacyMetadataRoot, entry.name), path.join(metadataRoot, entry.name))
+    }
+    try {
+      await rmdir(legacyMetadataRoot)
+    } catch (error) {
+      if (error?.code !== 'ENOTEMPTY') throw error
+    }
+  }
 
   async function readCatalog() {
     return validateCatalog(JSON.parse(await readFile(catalogPath, 'utf8')))
@@ -133,6 +171,7 @@ export function createWorkspaceInitializer(options = {}) {
 
   async function status() {
     if (initialization) return workspaceState('initializing')
+    await migrateLegacyMetadata()
     const marker = await readMarker()
     if (marker) {
       return workspaceState('initialized', marker.templateId, marker.initializedAt)
@@ -143,14 +182,14 @@ export function createWorkspaceInitializer(options = {}) {
       lastError = null
       return workspaceState('uninitialized', null, null, error)
     }
-    // Kubernetes 会把平台上下文单独挂载到工作区的 .induforge/context。
+    // Kubernetes 会把平台上下文单独挂载到工作区的 .workspace/context。
     // 它不是用户工程文件；仅这一固定目录存在时仍允许首次模板初始化。
     if (
       entries.length === 1 &&
-      entries[0].name === '.induforge' &&
+      entries[0].name === '.workspace' &&
       entries[0].isDirectory()
     ) {
-      const metadataEntries = await readdir(path.join(workspaceRoot, '.induforge'), {
+      const metadataEntries = await readdir(path.join(workspaceRoot, '.workspace'), {
         withFileTypes: true,
       })
       if (
@@ -184,10 +223,10 @@ export function createWorkspaceInitializer(options = {}) {
     const moved = []
     try {
       for (const entry of await readdir(stagingRoot, { withFileTypes: true })) {
-        // .induforge/context 可能是平台的独立挂载点。初始化标记与其共用父目录，
+        // .workspace/context 可能是平台的独立挂载点。初始化标记与其共用父目录，
         // 因此只移动本次生成的标记，绝不覆盖或移动平台上下文。
-        if (entry.name === '.induforge' && entry.isDirectory()) {
-          const metadataRoot = path.join(workspaceRoot, '.induforge')
+        if (entry.name === '.workspace' && entry.isDirectory()) {
+          const metadataRoot = path.join(workspaceRoot, '.workspace')
           await mkdir(metadataRoot, { recursive: true })
           for (const metadataEntry of await readdir(path.join(stagingRoot, entry.name))) {
             const target = path.join(metadataRoot, metadataEntry)
@@ -226,7 +265,7 @@ export function createWorkspaceInitializer(options = {}) {
       throw new WorkspaceInitializationError('工程模板目录非法', 400)
     }
 
-    const stagingRoot = path.join(workspaceRoot, `.induforge-initialize-${process.pid}-${Date.now()}`)
+    const stagingRoot = path.join(workspaceRoot, `.workspace-initialize-${process.pid}-${Date.now()}`)
     const initializedAt = now()
     try {
       await mkdir(stagingRoot, { recursive: false })
@@ -251,9 +290,9 @@ export function createWorkspaceInitializer(options = {}) {
         { cwd: stagingRoot, env: { ...process.env, CI: 'true' } },
       )
 
-      await mkdir(path.join(stagingRoot, '.induforge'), { recursive: true })
+      await mkdir(path.join(stagingRoot, '.workspace'), { recursive: true })
       await writeFile(
-        path.join(stagingRoot, '.induforge', 'project.json'),
+        path.join(stagingRoot, '.workspace', 'project.json'),
         `${JSON.stringify({ version: 1, templateId, initializedAt }, null, 2)}\n`,
         'utf8',
       )

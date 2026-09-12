@@ -83,6 +83,9 @@ for expected in \
   'supplementalGroups: [998]' \
   'name: wait-center-infrastructure' \
   'name: initialize-dev-timeseries' \
+  'name: center-message-hub' \
+  'value: center-message-hub' \
+  'path: /var/lib/induforge/center/message-hub/data' \
   'CREATE EXTENSION IF NOT EXISTS timescaledb;' \
   'key: IF_META_STORE_DEV_DATA_DB' \
   'name: wait-center-control' \
@@ -158,7 +161,7 @@ if ! grep -Fq 'shared_preload_libraries=timescaledb' "$temp_dir/rendered.yaml"; 
   echo "center meta store must preload TimescaleDB" >&2
   exit 1
 fi
-if [ "$(grep -Fc 'induforge.io/center-node: "true"' "$temp_dir/rendered.yaml")" -ne 7 ]; then
+if [ "$(grep -Fc 'induforge.io/center-node: "true"' "$temp_dir/rendered.yaml")" -ne 8 ]; then
   echo "not every center workload is pinned to the center node" >&2
   exit 1
 fi

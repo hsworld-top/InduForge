@@ -70,7 +70,7 @@ Workspace Trust 提示和 Getting Started 覆盖。
 - 镜像构建时复制到只读 `/opt/induforge/templates`，同时预热 pnpm store。
 - `/workspace` 必须为空且没有初始化标记；非空未知工作区不会被覆盖。
 - 初始化在临时目录完成复制、离线安装、标记写入和 Git 提交，成功后再移动到 `/workspace`。
-- `/workspace/.induforge/project.json` 是初始化状态标记；已初始化工程再次初始化返回 HTTP `409`。
+- `/workspace/.workspace/project.json` 是初始化状态标记；已初始化工程再次初始化返回 HTTP `409`。
 - 初始仓库分支为 `main`，只配置本地提交身份，不配置远端。
 - 平台 Vite Runner 不注入调试脚本，四套官方模板和生产 `dist` 保持官方模板结构。
 
@@ -131,7 +131,7 @@ docker run --rm `
 | 共享卷子目录 | 容器目录 | 权限 | 用途 |
 | --- | --- | --- | --- |
 | `{projectId}/workspace` | `/workspace` | 读写 | Vue 或 React Vite 工程源码。 |
-| `{projectId}/context-state/current` | `/workspace/.induforge/context` | 只读 | 平台上下文。 |
+| `{projectId}/context-state/current` | `/workspace/.workspace/context` | 只读 | 平台上下文。 |
 | `{projectId}/code-server-data` | `/home/coder/.local/share/code-server` | 读写 | 编辑器设置和状态。 |
 | `{projectId}/code-server-config` | `/home/coder/.config/code-server` | 读写 | code-server 配置。 |
 | `{projectId}/pi-agent` | `/home/coder/.pi/agent` | 读写 | Pi 配置、凭据和会话。 |

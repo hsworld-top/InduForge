@@ -184,7 +184,7 @@ func TestDockerFrontendBuildRunnerBootstrapsPlatformContextOnlyWorkspace(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	workspace := filepath.Join(frontendTestRoot, releaseSourceProjectID, "workspace", ".induforge", "context")
+	workspace := filepath.Join(frontendTestRoot, releaseSourceProjectID, "workspace", ".workspace", "context")
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatal(err)
 	}

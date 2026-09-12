@@ -9,7 +9,8 @@ import (
 var sceneIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
 var reservedRoots = map[string]struct{}{
-	".induforge": {},
+	".workspace": {},
+	".induforge": {}, // 兼容旧工程路径，禁止写入新工程。
 	".git":       {},
 	"runtime":    {},
 }

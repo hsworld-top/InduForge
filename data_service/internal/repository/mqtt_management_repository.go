@@ -241,6 +241,25 @@ type UpdateMqttTagDataPointParams struct {
 	SourceConfig map[string]any
 }
 
+type mqttTxContextKey struct{}
+
+func withMqttTx(ctx context.Context, tx pgx.Tx) context.Context {
+	return context.WithValue(ctx, mqttTxContextKey{}, tx)
+}
+
+func mqttTxFromContext(ctx context.Context) (pgx.Tx, bool) {
+	tx, ok := ctx.Value(mqttTxContextKey{}).(pgx.Tx)
+	return tx, ok
+}
+
+func (r *MqttRepository) beginMqttTx(ctx context.Context) (pgx.Tx, bool, error) {
+	if tx, ok := mqttTxFromContext(ctx); ok {
+		return tx, false, nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	return tx, true, err
+}
+
 // ListConnectionDetails 按项目分页查询 MQTT 连接详情。
 func (r *MqttRepository) ListConnectionDetails(ctx context.Context, projectID string, page, pageSize int) ([]MqttConnectionDetailRecord, int, error) {
 	page, pageSize = normalizePageAndSize(page, pageSize, 50, 200)
@@ -896,11 +915,13 @@ func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, para
 		return []MqttTagRecord{}, nil
 	}
 
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, ownsTx, err := r.beginMqttTx(ctx)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量批量创建事务失败", err)
 	}
-	defer rollbackTxQuietly(ctx, tx)
+	if ownsTx {
+		defer rollbackTxQuietly(ctx, tx)
+	}
 
 	subscriptionID := strings.TrimSpace(params[0].Tag.SubscriptionID)
 	if err := lockMqttTagOrderAllocation(ctx, tx, subscriptionID); err != nil {
@@ -990,8 +1011,10 @@ func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, para
 		return nil, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量创建事务失败", err)
+	if ownsTx {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量创建事务失败", err)
+		}
 	}
 	return records, nil
 }
@@ -1122,11 +1145,13 @@ func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagR
 // UpdateTagWithDataPoint 在同一事务中更新 MQTT 变量和稳定生成点。
 // 类型变更前会锁定生成点并检查报警、计算和历史引用，避免子配置成功而点位同步失败。
 func (r *MqttRepository) UpdateTagWithDataPoint(ctx context.Context, params UpdateMqttTagDataPointParams) (*MqttTagRecord, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, ownsTx, err := r.beginMqttTx(ctx)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量更新事务失败", err)
 	}
-	defer rollbackTxQuietly(ctx, tx)
+	if ownsTx {
+		defer rollbackTxQuietly(ctx, tx)
+	}
 
 	validationBytes, err := marshalMqttJSONObject(params.Tag.Validation)
 	if err != nil {
@@ -1192,8 +1217,10 @@ func (r *MqttRepository) UpdateTagWithDataPoint(ctx context.Context, params Upda
 	if err != nil {
 		return nil, translateDataPointWriteError(err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量更新事务失败", err)
+	if ownsTx {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量更新事务失败", err)
+		}
 	}
 	return &record, nil
 }
@@ -1216,11 +1243,13 @@ func (r *MqttRepository) DeleteTagsBatchWithDataPoints(ctx context.Context, proj
 		return 0, nil
 	}
 
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, ownsTx, err := r.beginMqttTx(ctx)
 	if err != nil {
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量批量删除事务失败", err)
 	}
-	defer rollbackTxQuietly(ctx, tx)
+	if ownsTx {
+		defer rollbackTxQuietly(ctx, tx)
+	}
 	if err := lockSourceProject(ctx, tx, projectID); err != nil {
 		return 0, err
 	}
@@ -1277,10 +1306,46 @@ func (r *MqttRepository) DeleteTagsBatchWithDataPoints(ctx context.Context, proj
 		return 0, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "部分 MQTT 变量不存在或不属于当前项目")
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量删除事务失败", err)
+	if ownsTx {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量删除事务失败", err)
+		}
 	}
 	return deletedCount, nil
+}
+
+// SyncTagsWithDataPoints 在同一事务中完成 MQTT 变量的删除、创建和更新。
+// 子操作通过 context 复用事务，任一步失败都会回滚整批变更。
+func (r *MqttRepository) SyncTagsWithDataPoints(ctx context.Context, creates []BatchMqttTagDataPointParams, updates []UpdateMqttTagDataPointParams, projectID string, deletes []string, userID string) error {
+	tx, ownsTx, err := r.beginMqttTx(ctx)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量批量同步事务失败", err)
+	}
+	if ownsTx {
+		defer rollbackTxQuietly(ctx, tx)
+	}
+	txCtx := withMqttTx(ctx, tx)
+	if len(deletes) > 0 {
+		if _, err := r.DeleteTagsBatchWithDataPoints(txCtx, projectID, deletes, userID); err != nil {
+			return err
+		}
+	}
+	if len(creates) > 0 {
+		if _, err := r.CreateTagsBatchWithDataPoints(txCtx, creates); err != nil {
+			return err
+		}
+	}
+	for _, update := range updates {
+		if _, err := r.UpdateTagWithDataPoint(txCtx, update); err != nil {
+			return err
+		}
+	}
+	if ownsTx {
+		if err := tx.Commit(ctx); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量同步事务失败", err)
+		}
+	}
+	return nil
 }
 
 // UpdateTagsOrder 批量更新变量顺序。

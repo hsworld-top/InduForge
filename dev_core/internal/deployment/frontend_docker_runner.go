@@ -180,7 +180,7 @@ func (r *DockerFrontendBuildRunner) bootstrapBuiltinWorkspace(ctx context.Contex
 		return nil
 	}
 	workspace := filepath.Join(r.workspaceRoot, project.ID, "workspace")
-	staging := filepath.Join(workspace, ".induforge-initialize")
+	staging := filepath.Join(workspace, ".workspace-initialize")
 	entries, err := os.ReadDir(workspace)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -220,25 +220,25 @@ func (r *DockerFrontendBuildRunner) bootstrapBuiltinWorkspace(ctx context.Contex
 	return nil
 }
 
-// isPlatformContextOnly 只认可 K3s 平台挂载的 .induforge/context；任何用户文件或
+// isPlatformContextOnly 只认可 K3s 平台挂载的 .workspace/context；任何用户文件或
 // 其他元数据均保持 fail-closed，模板初始化不会覆盖非空工程。
 func isPlatformContextOnly(entries []os.DirEntry, workspace string) bool {
 	for _, entry := range entries {
-		if !entry.IsDir() || (entry.Name() != ".induforge" && entry.Name() != ".induforge-initialize") {
+		if !entry.IsDir() || (entry.Name() != ".workspace" && entry.Name() != ".workspace-initialize") {
 			return false
 		}
 	}
 	if len(entries) == 0 {
 		return false
 	}
-	metadata, err := os.ReadDir(filepath.Join(workspace, ".induforge"))
+	metadata, err := os.ReadDir(filepath.Join(workspace, ".workspace"))
 	return err == nil && len(metadata) == 1 && metadata[0].Name() == "context" && metadata[0].IsDir()
 }
 
 func bootstrapCommand(templateID string) string {
 	// dockerFrontendClient 将工作区子路径固定挂载为 /source；不要使用镜像中不存在的路径，
 	// 以保证初始化与正式构建读取同一受控 volume subpath。
-	return "test -z \"$(find /source -mindepth 1 -maxdepth 1 ! -name .induforge -print -quit)\"; if test -e /source/.induforge; then test -d /source/.induforge/context && test -z \"$(find /source/.induforge -mindepth 1 -maxdepth 1 ! -name context -print -quit)\"; fi; staging=/source/.induforge-initialize; mkdir \"$staging\"; cp -a /opt/induforge/templates/" + templateID + "/. \"$staging\"/; chmod u+rwx \"$staging/.induforge\"; rm -rf \"$staging/node_modules\" \"$staging/dist\" \"$staging/.pnpm-store\"; mkdir -p \"$staging/.induforge\" /source/.induforge; printf '%s\\n' '{\"version\":1,\"templateId\":\"" + templateID + "\"}' > \"$staging/.induforge/project.json\"; find \"$staging\" -mindepth 1 -maxdepth 1 ! -name .induforge -exec mv {} /source/ \\;; find \"$staging/.induforge\" -mindepth 1 -maxdepth 1 -exec mv {} /source/.induforge/ \\;; rmdir \"$staging/.induforge\" \"$staging\""
+	return "test -z \"$(find /source -mindepth 1 -maxdepth 1 ! -name .workspace -print -quit)\"; if test -e /source/.workspace; then test -d /source/.workspace/context && test -z \"$(find /source/.workspace -mindepth 1 -maxdepth 1 ! -name context -print -quit)\"; fi; staging=/source/.workspace-initialize; mkdir \"$staging\"; cp -a /opt/induforge/templates/" + templateID + "/. \"$staging\"/; rm -rf \"$staging/node_modules\" \"$staging/dist\" \"$staging/.pnpm-store\"; mkdir -p \"$staging/.workspace\" /source/.workspace; chmod u+rwx \"$staging/.workspace\"; printf '%s\\n' '{\"version\":1,\"templateId\":\"" + templateID + "\"}' > \"$staging/.workspace/project.json\"; find \"$staging\" -mindepth 1 -maxdepth 1 ! -name .workspace -exec mv {} /source/ \\;; find \"$staging/.workspace\" -mindepth 1 -maxdepth 1 -exec mv {} /source/.workspace/ \\;; rmdir \"$staging/.workspace\" \"$staging\""
 }
 
 type dockerFrontendClient struct {

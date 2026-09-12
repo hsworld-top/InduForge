@@ -263,7 +263,7 @@ func (s *MqttService) StartConnection(ctx context.Context, projectID, connection
 	if s.runtime != nil {
 		if summary.Type == "builtin.message" {
 			if err := s.runtime.ConnectBuiltin(ctx, *summary); err != nil {
-				return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接 IF消息库失败", err)
+				return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接 消息库失败", err)
 			}
 		} else {
 			connection, err := s.repository.GetConnectionDetail(ctx, projectID, connectionID)
@@ -417,11 +417,11 @@ func (s *MqttService) PublishSubscriptionMessage(ctx context.Context, projectID,
 
 func (s *MqttService) applyBuiltinMessagePublishConnection(connection *repository.MqttPublishConnectionRecord) error {
 	if connection == nil {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "IF消息库连接不存在")
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "消息库连接不存在")
 	}
 	addr := strings.TrimSpace(s.builtinMessageHubAddr)
 	if addr == "" {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "IF消息库 message-hub 地址为空")
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "消息库服务地址未配置")
 	}
 	connection.BrokerURL = addr
 	connection.Protocol = "mqtt"

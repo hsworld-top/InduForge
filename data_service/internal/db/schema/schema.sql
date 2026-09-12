@@ -2063,11 +2063,11 @@ ALTER TABLE ONLY data_queries
 
 
 --
--- Name: data_queries data_queries_project_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: data_queries data_queries_connection_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY data_queries
-    ADD CONSTRAINT data_queries_project_name_key UNIQUE (project_id, name);
+    ADD CONSTRAINT data_queries_connection_name_key UNIQUE (project_id, connection_id, name);
 
 
 --

@@ -30,6 +30,20 @@ spec:
     spec:
       nodeSelector:
         induforge.io/center-node: "true"
+      initContainers:
+        # HostPath 由中心安装脚本创建，需在 EMQX 的非 root 进程启动前移交写权限。
+        - name: prepare-storage
+          image: docker.io/rancher/mirrored-library-busybox:1.37.0
+          imagePullPolicy: Never
+          command: ["sh", "-c", "chown -R 1000:1000 /opt/emqx/data /opt/emqx/log"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: data
+              mountPath: /opt/emqx/data
+            - name: log
+              mountPath: /opt/emqx/log
       containers:
         - name: postgres
           image: docker.io/timescale/timescaledb:2.26.4-pg16
@@ -155,6 +169,76 @@ spec:
         - name: data
           hostPath:
             path: __DATA_ROOT__/cache-store
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: center-message-hub
+  namespace: induforge-system
+spec:
+  selector:
+    app.kubernetes.io/name: center-message-hub
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: mqtt
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: center-message-hub
+  namespace: induforge-system
+spec:
+  serviceName: center-message-hub
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: center-message-hub
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: center-message-hub
+        app.kubernetes.io/part-of: induforge-center
+    spec:
+      nodeSelector:
+        induforge.io/center-node: "true"
+      containers:
+        - name: emqx
+          image: docker.io/emqx/emqx:5.6.1
+          imagePullPolicy: Never
+          ports:
+            - name: mqtt
+              containerPort: 1883
+          readinessProbe:
+            tcpSocket:
+              port: mqtt
+            initialDelaySeconds: 5
+            periodSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: mqtt
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/emqx/data
+            - name: log
+              mountPath: /opt/emqx/log
+      volumes:
+        - name: data
+          hostPath:
+            path: __DATA_ROOT__/message-hub/data
+            type: Directory
+        - name: log
+          hostPath:
+            path: __DATA_ROOT__/message-hub/log
             type: Directory
 ---
 apiVersion: v1
@@ -488,6 +572,7 @@ spec:
             - |
               until nc -z center-meta-store 18432; do sleep 2; done
               until nc -z center-cache-store 18379; do sleep 2; done
+              until nc -z center-message-hub 1883; do sleep 2; done
         # 使用安装配置指定的开发时序库，在 data_service 启动前完成空库与扩展准备。
         - name: initialize-dev-timeseries
           image: docker.io/timescale/timescaledb:2.26.4-pg16
@@ -557,6 +642,11 @@ spec:
               value: center-cache-store
             - name: IF_CACHE_STORE_PORT
               value: "18379"
+            # 开发态消息库由中心系统服务提供，不能指向 data Pod 自身或工程运行环境。
+            - name: IF_MESSAGE_HUB_HOST
+              value: center-message-hub
+            - name: IF_MESSAGE_HUB_MQTT_PORT
+              value: "1883"
           ports:
             - name: http
               containerPort: 18102

@@ -117,10 +117,16 @@ type UpdateConnectionInput struct {
 
 // ConnectionService 承载连接领域的基本业务校验与映射。
 type ConnectionService struct {
+	mqttTester      func(context.Context, string, string) error
 	repository      *repository.ConnectionRepository
 	builtinRuntime  *BuiltinRuntimeService
 	workbenchGroups *WorkbenchGroupService
 	secrets         *repository.ConnectionSecretRepository
+}
+
+// SetMqttTester 复用 MQTT 域的完整配置和凭据解析，避免仅用连接摘要测试。
+func (s *ConnectionService) SetMqttTester(test func(context.Context, string, string) error) {
+	s.mqttTester = test
 }
 
 // NewConnectionService 创建连接服务。
@@ -535,11 +541,8 @@ func (s *ConnectionService) TestSavedConnection(ctx context.Context, projectID, 
 		return nil, err
 	}
 	capability := connectionTestCapability(record.Type)
-	if capability.Status != "supported" || record.Type == "mqtt" {
+	if capability.Status != "supported" {
 		reason := capability.Reason
-		if record.Type == "mqtt" {
-			reason = "请在 MQTT 工作台中测试 Broker 连接"
-		}
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, reason)
 	}
 	config := cloneMap(record.Config)
@@ -553,7 +556,17 @@ func (s *ConnectionService) TestSavedConnection(ctx context.Context, projectID, 
 		}
 	}
 	startedAt := time.Now()
-	result, testErr := s.TestConnection(ctx, projectID, CreateConnectionInput{Type: record.Type, Config: config})
+	var result *ConnectionTestResult
+	var testErr error
+	if record.Type == "mqtt" {
+		if s.mqttTester == nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "MQTT 测试服务未配置")
+		}
+		testErr = s.mqttTester(ctx, projectID, connectionID)
+		result = &ConnectionTestResult{Connected: testErr == nil, Type: "mqtt", Message: "MQTT Broker 连接验证通过"}
+	} else {
+		result, testErr = s.TestConnection(ctx, projectID, CreateConnectionInput{Type: record.Type, Config: config})
+	}
 	durationMS := int(time.Since(startedAt).Milliseconds())
 	status, message := "succeeded", "连接测试成功"
 	if testErr != nil {
@@ -1801,10 +1814,8 @@ func connectionConfigurationState(record repository.ConnectionRecord) string {
 
 func connectionTestCapability(connectionType string) ConnectionTestCapability {
 	switch connectionType {
-	case "relational", "kafka", "redis", "tdengine":
+	case "relational", "kafka", "redis", "tdengine", "mqtt":
 		return ConnectionTestCapability{Status: "supported"}
-	case "mqtt":
-		return ConnectionTestCapability{Status: "unsupported", Reason: "请在 MQTT 工作台中测试 Broker 连接"}
 	case "http", "websocket":
 		return ConnectionTestCapability{Status: "unsupported", Reason: "该类型没有来源级地址，请在请求或会话工作台中测试"}
 	default:

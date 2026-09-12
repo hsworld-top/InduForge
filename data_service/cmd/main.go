@@ -7,6 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	// 精简离线镜像也能解析 IANA 时区，不依赖宿主机或容器的 zoneinfo。
+	_ "time/tzdata"
+
 	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/config"
 )

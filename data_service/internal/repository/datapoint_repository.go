@@ -55,6 +55,7 @@ const dataPointSelectColumns = `id, project_id, path, name, description, source_
 // DataPointListFilter 表示数据点列表的过滤条件。
 type DataPointListFilter struct {
 	Type           string
+	DataType       string
 	Status         string
 	Search         string
 	AccessSourceID string
@@ -841,6 +842,9 @@ func buildDataPointWhereClause(projectID string, filter DataPointListFilter) (st
 	}
 
 	if err := addStringClause("source_type", filter.Type); err != nil {
+		return "", nil, err
+	}
+	if err := addStringClause("data_type", filter.DataType); err != nil {
 		return "", nil, err
 	}
 	if err := addStringClause("status", filter.Status); err != nil {

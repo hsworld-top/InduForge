@@ -57,7 +57,7 @@ sudo induforge logs control
 sudo induforge restart control
 ```
 
-`induforge status` 只展示中心开发系统的 IDE 入口、控制服务、中心数据库、缓存和
+`induforge status` 只展示中心开发系统的 IDE 入口、控制服务、中心数据库、缓存、消息库和
 对象存储；物理节点、运行环境、基础服务分布和时间同步统一在 Web 运维管理中查看。
 交互终端会显示 IF Logo 和状态颜色；管道、重定向、`NO_COLOR=1` 或哑终端自动使用纯文本。
 自动化可使用 `sudo induforge status --json` 和 `sudo induforge doctor --json`。

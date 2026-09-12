@@ -188,6 +188,33 @@ func main() {
 	sceneAssetService.SetAuthoringEpochGuard(projectRepository)
 	sceneAssetHandler := sceneasset.NewHandler(sceneAssetService, cfg.DataServiceURL)
 	contextPackService.SetSceneContracts(sceneAssetService)
+	contextPackService.SetObjectLibrary(func(ctx context.Context, actor auth.User, projectID string) ([]map[string]any, error) {
+		items := make([]map[string]any, 0)
+		for page := 1; ; page++ {
+			assets, total, err := sceneAssetService.ListAssets(ctx, actor, projectID, sceneasset.AssetListFilter{Page: page, Limit: 200, Sort: "updatedAt", Order: "desc"})
+			if err != nil {
+				return nil, err
+			}
+			for _, asset := range assets {
+				items = append(items, map[string]any{
+					"assetId":        asset.ID,
+					"projectId":      asset.ProjectID,
+					"name":           asset.Name,
+					"type":           asset.Type,
+					"compatibleKind": asset.CompatibleKind,
+					"entryFile":      asset.EntryPath,
+					"thumbnailUrl":   asset.ThumbnailURL,
+					"archived":       asset.Archived,
+					"bound":          asset.Bound,
+					"updatedAt":      asset.UpdatedAt,
+				})
+			}
+			if int64(len(items)) >= total || len(assets) == 0 {
+				break
+			}
+		}
+		return items, nil
+	})
 	realtimeServer := realtime.New(authService, logger)
 	defer realtimeServer.Close()
 	nodeService := node.NewService(node.NewPostgreSQLRepository(pool), cacheStore)

@@ -961,6 +961,14 @@ func (s *MqttService) CreateTagsBatch(ctx context.Context, projectID, subscripti
 	return result, nil
 }
 
+// SyncTagsBatch 在单一数据库事务中提交 MQTT 变量及其数据点变更。
+func (s *MqttService) SyncTagsBatch(ctx context.Context, projectID, userID string, creates []repository.BatchMqttTagDataPointParams, updates []repository.UpdateMqttTagDataPointParams, deletes []string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	return s.repository.SyncTagsWithDataPoints(ctx, creates, updates, projectID, deletes, userID)
+}
+
 // UpdateTag 更新变量并同步数据点。
 func (s *MqttService) UpdateTag(ctx context.Context, projectID, tagID, userID string, input repository.UpdateMqttTagParams) (*MqttTag, error) {
 	current, err := s.repository.GetTag(ctx, projectID, tagID)
@@ -1468,4 +1476,21 @@ func valueOrDefault(primary *string, fallback *string) string {
 		return strings.TrimSpace(*fallback)
 	}
 	return ""
+}
+
+// TestSavedConnection 只建立临时连接验证认证，不改变工作台订阅和运行状态。
+func (s *MqttService) TestSavedConnection(ctx context.Context, projectID, connectionID string) error {
+	connection, err := s.repository.GetConnectionDetail(ctx, projectID, connectionID)
+	if err != nil {
+		return err
+	}
+	if err := s.hydrateMqttSecrets(ctx, connection); err != nil {
+		return err
+	}
+	return s.TestConnectionConfig(ctx, CreateMqttConnectionInput{
+		Name: connection.Name, BrokerURL: connection.BrokerURL, Protocol: connection.Protocol,
+		Port: &connection.Port, ClientID: connection.ClientID, Username: connection.Username, Password: connection.Password,
+		Keepalive: &connection.Keepalive, CleanSession: &connection.CleanSession, QOS: &connection.QOS,
+		ConnectTimeoutMS: &connection.ConnectTimeoutMS, SSLConfig: connection.SSLConfig,
+	})
 }

@@ -74,12 +74,12 @@ func TestProjectReleaseSourceBuilderBuildsDeterministicAuthorizedSource(t *testi
 		t.Fatal("client 归档不得额外包含 dist 根目录")
 	}
 	runtimeFiles := unpackReleaseSource(t, first.Runtime)
-	for _, file := range []string{"runtime-project-artifact.json", "displays/panel.json", "symbols/pump.svg", ".induforge/scenes/main.json"} {
+	for _, file := range []string{"runtime-project-artifact.json", "displays/panel.json", "symbols/pump.svg", ".workspace/scenes/main.json"} {
 		if _, ok := runtimeFiles[file]; !ok {
 			t.Fatalf("运行工件缺少正式资源 %s: %v", file, mapKeys(runtimeFiles))
 		}
 	}
-	if _, ok := runtimeFiles[".induforge/context/secret.md"]; ok {
+	if _, ok := runtimeFiles[".workspace/context/secret.md"]; ok {
 		t.Fatal("工作空间上下文不得进入运行制品")
 	}
 	if !json.Valid(first.SBOM) || !json.Valid(first.HealthContract) || !json.Valid(first.ResourceRecommendation) || !json.Valid(first.SchemaPlan) {
@@ -229,8 +229,8 @@ func releaseSourceDirectories(t *testing.T) (string, string) {
 		filepath.Join(dist, "index.html"):                              "<main>demo</main>",
 		filepath.Join(workspace, "displays", "panel.json"):             "{}",
 		filepath.Join(workspace, "symbols", "pump.svg"):                "<svg/>",
-		filepath.Join(workspace, ".induforge", "scenes", "main.json"):  "{}",
-		filepath.Join(workspace, ".induforge", "context", "secret.md"): "must-not-package",
+		filepath.Join(workspace, ".workspace", "scenes", "main.json"):  "{}",
+		filepath.Join(workspace, ".workspace", "context", "secret.md"): "must-not-package",
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

@@ -396,7 +396,7 @@ func (b *ProjectReleaseSourceBuilder) packRuntime(workspacePath string, runtimeJ
 	if total > b.archiveLimit {
 		return nil, fmt.Errorf("运行工件超过大小限制")
 	}
-	for _, directory := range []string{"displays", "symbols", ".induforge/scenes"} {
+	for _, directory := range []string{"displays", "symbols", ".workspace/scenes"} {
 		root := filepath.Join(workspacePath, filepath.FromSlash(directory))
 		items, err := readTreeFiles(root, directory, b.archiveLimit-total)
 		if err != nil {

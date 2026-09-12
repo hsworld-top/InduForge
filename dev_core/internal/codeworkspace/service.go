@@ -436,7 +436,7 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		Labels: map[string]string{"com.induforge.managed": "true", "com.induforge.project-id": item.ID, "com.induforge.role": "code-workspace"},
 		Mounts: []Mount{
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "workspace"), Target: workspacePath},
-			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "context-state"), Target: "/workspace/.induforge/context", ReadOnly: true},
+			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "context-state"), Target: "/workspace/.workspace/context", ReadOnly: true},
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "code-server-data"), Target: "/home/coder/.local/share/code-server"},
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "code-server-config"), Target: "/home/coder/.config/code-server"},
 			{Source: s.config.VolumeName, Subpath: path.Join(item.ID, "cache"), Target: "/cache"},

@@ -167,7 +167,7 @@ func (r *QueryRepository) GetByID(ctx context.Context, queryID string) (*QueryRe
 }
 
 // Create 写入一条新的查询记录。
-// 查询路径：project_id + name 唯一约束，主要命中 data_queries_project_name_key，写入时同时依赖 data_queries_connection_project_idx 的关联校验。
+// 查询路径：project_id + connection_id + name 唯一约束，主要命中 data_queries_connection_name_key，写入时同时依赖 data_queries_connection_project_idx 的关联校验。
 // 潜在性能风险：写入阶段会触发 JSONB 编码与唯一约束检查；若配置体积变大，应关注 config 字段体积与冲突重试成本。
 func (r *QueryRepository) Create(ctx context.Context, params CreateQueryParams) (*QueryRecord, error) {
 	return r.create(ctx, params, nil)
@@ -527,7 +527,7 @@ func translateQueryWriteError(err error) error {
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case "23505":
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "查询名称已存在")
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源下查询名称已存在")
 		case "23503":
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "关联的连接不存在")
 		}

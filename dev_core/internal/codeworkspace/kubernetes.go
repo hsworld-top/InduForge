@@ -127,10 +127,10 @@ func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error
 	initMounts := make([]any, 0, 2)
 	for _, m := range spec.Mounts {
 		mounts = append(mounts, map[string]any{"name": "workspaces", "mountPath": m.Target, "subPath": m.Subpath, "readOnly": m.ReadOnly})
-		// context 子路径挂载会由 Kubernetes 创建 .induforge 父目录。让初始化容器
+		// context 子路径挂载会由 Kubernetes 创建 .workspace 父目录。让初始化容器
 		// 同时看到该固定挂载点，才能在主容器启动前安全修正父目录属主。
-		if m.Target == "/workspace/.induforge/context" {
-			initMounts = append(initMounts, map[string]any{"name": "workspaces", "mountPath": "/project/workspace/.induforge/context", "subPath": m.Subpath, "readOnly": true})
+		if m.Target == "/workspace/.workspace/context" {
+			initMounts = append(initMounts, map[string]any{"name": "workspaces", "mountPath": "/project/workspace/.workspace/context", "subPath": m.Subpath, "readOnly": true})
 		}
 	}
 	projectRoot := ""
@@ -152,9 +152,9 @@ mkdir -p /project/workspace /project/code-server-data /project/code-server-confi
 # 编辑器缓存中可能存在 coder 的 0700 子目录；初始化器只修正挂载根
 # 目录，递归遍历既无必要，也会要求额外的目录绕过能力。
 chown 1000:1000 /project/workspace /project/code-server-data /project/code-server-config /project/cache /project/pi-agent
-# K3s 为只读上下文子路径自动创建 .induforge 父目录时，默认属主为 root。
+# K3s 为只读上下文子路径自动创建 .workspace 父目录时，默认属主为 root。
 # 仅修正这个父目录，context 本身仍保持只读挂载，不放宽主容器权限。
-if test -d /project/workspace/.induforge; then chown 1000:1000 /project/workspace/.induforge; fi
+if test -d /project/workspace/.workspace; then chown 1000:1000 /project/workspace/.workspace; fi
 `},
 		"securityContext": map[string]any{
 			"runAsUser":                0,

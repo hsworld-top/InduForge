@@ -236,7 +236,7 @@ func TestSchemaInitializer_CreatesIndexes(t *testing.T) {
 		"data_relational_configs_connection_id_key",
 		"data_relational_configs_db_type_idx",
 		"data_relational_configs_ssl_config_gin_idx",
-		"data_queries_project_name_key",
+		"data_queries_connection_name_key",
 		"data_queries_project_connection_idx",
 		"data_queries_connection_project_idx",
 		"data_queries_type_enabled_idx",

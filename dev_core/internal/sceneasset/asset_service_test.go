@@ -69,3 +69,27 @@ func TestUnpackAssetRejectsUnsafeEntries(t *testing.T) {
 		})
 	}
 }
+
+func TestInferAssetTypeFromFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+		body string
+		want AssetType
+	}{
+		{name: "image", file: "cover.png", want: AssetImage},
+		{name: "font", file: "font.woff2", want: AssetFont},
+		{name: "model", file: "scene.obj", want: AssetModel},
+		{name: "material hint", file: "surface.json", body: `{"type":"material"}`, want: AssetMaterial},
+		{name: "selection hint", file: "selection.json", body: `{"induforgeResourceType":"selection"}`, want: AssetSymbol},
+		{name: "legacy json", file: "shape.json", body: `{"datas":[]}`, want: AssetSymbol},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := inferAssetType(map[string]ProviderFile{test.file: canonicalProviderFile(test.file, []byte(test.body), "")})
+			if err != nil || got != test.want {
+				t.Fatalf("inferAssetType() = %q, %v; want %q", got, err, test.want)
+			}
+		})
+	}
+}

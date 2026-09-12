@@ -2601,7 +2601,8 @@ paths:
         - {
             name: type,
             in: query,
-            required: true,
+            required: false,
+            description: 可选的兼容字段；未提供时由服务端根据文件内容识别类型,
             schema: { type: string, enum: [image, font, model, material, symbol, component] },
           }
         - { name: filename, in: query, required: true, schema: { type: string } }

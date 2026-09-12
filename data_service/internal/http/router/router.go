@@ -1105,6 +1105,10 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/tags/sync",
+		middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(opts.mqttHandler.SyncTagsBatch))),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/tags/delete-filtered",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(

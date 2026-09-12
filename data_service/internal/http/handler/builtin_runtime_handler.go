@@ -24,15 +24,15 @@ func NewBuiltinRuntimeHandler(runtimeService *service.BuiltinRuntimeService, con
 }
 
 func (h *BuiltinRuntimeHandler) ExecuteRelationSQL(w http.ResponseWriter, r *http.Request) error {
-	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请使用连接级 IF关系库 SQL 工作台")
+	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请使用连接级 关系库 SQL 工作台")
 }
 
 func (h *BuiltinRuntimeHandler) QueryTimeseries(w http.ResponseWriter, r *http.Request) error {
-	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请使用连接级 IF时序库 SQL 工作台")
+	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请使用连接级 时序库 SQL 工作台")
 }
 
 func (h *BuiltinRuntimeHandler) SampleTimeseries(w http.ResponseWriter, r *http.Request) error {
-	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请使用连接级 IF时序库 SQL 工作台")
+	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请使用连接级 时序库 SQL 工作台")
 }
 
 func (h *BuiltinRuntimeHandler) SetRealtimeKey(w http.ResponseWriter, r *http.Request) error {

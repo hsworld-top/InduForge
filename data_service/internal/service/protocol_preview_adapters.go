@@ -320,7 +320,10 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 	for len(samples) < input.Limit {
 		message, err := reader.ReadMessage(ctx)
 		if err != nil {
-			if len(samples) > 0 && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+			// 短时预览在 latest 位点没有新消息时会正常超时；这应返回空结果，
+			// 让界面提示“暂无样本”，而不是误报为 Kafka 读取故障。
+			if errors.Is(err, context.DeadlineExceeded) ||
+				(len(samples) > 0 && errors.Is(err, context.Canceled)) {
 				break
 			}
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview 读取消息失败", err)

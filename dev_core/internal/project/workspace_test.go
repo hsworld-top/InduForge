@@ -270,7 +270,7 @@ func TestWorkspaceExportRejectsOversizedTotal(t *testing.T) {
 func TestWorkspaceExportExcludesGeneratedDirectories(t *testing.T) {
 	root := t.TempDir()
 	projectPath := filepath.Join(root, "project")
-	excluded := []string{"node_modules", "dist", ".git", ".vite", "code-server-data", "code-server-config", filepath.Join(".induforge", "context"), filepath.Join(".induforge", "design-imports")}
+	excluded := []string{"node_modules", "dist", ".git", ".vite", "code-server-data", "code-server-config", filepath.Join(".workspace", "context"), filepath.Join(".workspace", "design-imports")}
 	for _, directory := range excluded {
 		path := filepath.Join(projectPath, directory)
 		if err := os.MkdirAll(path, 0o755); err != nil {

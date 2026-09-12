@@ -43,7 +43,8 @@ func (r *ProtocolConnectionRepository) GetPreviewConnection(ctx context.Context,
 		configPayload []byte
 	)
 	err := r.pool.QueryRow(ctx, `
-		SELECT conn.id::text, conn.project_id, conn.name, conn.type, conn.status,
+		SELECT conn.id::text, conn.project_id, conn.name, conn.type,
+		       CASE WHEN conn.is_enabled THEN 'enabled' ELSE 'disabled' END,
 		       CASE conn.type
 		         WHEN 'kafka' THEN jsonb_build_object(
 		           'brokers', COALESCE(NULLIF(conn.metadata->>'brokers', ''), kafka.brokers),

@@ -554,6 +554,36 @@ func (h *MqttHandler) CreateTagsBatch(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
+// SyncTagsBatch 一次事务提交 MQTT 变量的创建、更新和删除。
+func (h *MqttHandler) SyncTagsBatch(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		Creates []repository.BatchMqttTagDataPointParams  `json:"creates"`
+		Updates []repository.UpdateMqttTagDataPointParams `json:"updates"`
+		Deletes []string                                  `json:"deletes"`
+	}
+	if err := decodeJSONBody(r, &req); err != nil {
+		return err
+	}
+	for i := range req.Creates {
+		req.Creates[i].Tag.ProjectID = r.PathValue("projectId")
+		req.Creates[i].Tag.SubscriptionID = r.PathValue("subscriptionId")
+		req.Creates[i].Tag.UserID = claims.UserID
+	}
+	for i := range req.Updates {
+		req.Updates[i].Tag.ProjectID = r.PathValue("projectId")
+		req.Updates[i].Tag.UserID = claims.UserID
+	}
+	if err := h.service.SyncTagsBatch(r.Context(), r.PathValue("projectId"), claims.UserID, req.Creates, req.Updates, req.Deletes); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"ok": true})
+	return nil
+}
+
 // UpdateTag 更新变量。
 func (h *MqttHandler) UpdateTag(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

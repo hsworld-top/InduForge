@@ -481,7 +481,7 @@ func excludedWorkspacePath(relative string) bool {
 	if name == "node_modules" || name == "dist" || name == ".git" || name == ".cache" || name == ".vite" || name == "code-server-data" || name == "code-server-config" {
 		return true
 	}
-	return relative == ".induforge/context" || relative == ".induforge/design-imports"
+	return relative == ".workspace/context" || relative == ".workspace/design-imports"
 }
 func newID() string { return uuid.NewString() }
 

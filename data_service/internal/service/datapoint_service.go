@@ -216,6 +216,7 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 
 	records, total, err := s.repository.ListByProject(ctx, projectID, repository.DataPointListFilter{
 		Type:           normalizedFilter.Type,
+		DataType:       normalizedFilter.DataType,
 		Status:         normalizedFilter.Status,
 		Search:         normalizedFilter.Search,
 		AccessSourceID: normalizedFilter.AccessSourceID,
@@ -568,6 +569,7 @@ func (s *DataPointService) DeleteInvalidDataPointsByFilter(ctx context.Context, 
 
 	deleted, err := s.repository.DeleteInvalidByFilter(ctx, projectID, repository.DataPointListFilter{
 		Type:           normalizedFilter.Type,
+		DataType:       normalizedFilter.DataType,
 		Status:         normalizedFilter.Status,
 		Search:         normalizedFilter.Search,
 		AccessSourceID: normalizedFilter.AccessSourceID,
@@ -601,6 +603,7 @@ func (s *DataPointService) AppendDataPointTagsByFilter(ctx context.Context, proj
 
 	updated, err := s.repository.AppendTagsByFilter(ctx, projectID, repository.DataPointListFilter{
 		Type:           normalizedFilter.Type,
+		DataType:       normalizedFilter.DataType,
 		Status:         normalizedFilter.Status,
 		Search:         normalizedFilter.Search,
 		AccessSourceID: normalizedFilter.AccessSourceID,
@@ -618,6 +621,7 @@ func (s *DataPointService) AppendDataPointTagsByFilter(ctx context.Context, proj
 func normalizeDataPointListFilter(filter DataPointListFilter) (DataPointListFilter, error) {
 	normalized := DataPointListFilter{
 		Type:           strings.TrimSpace(filter.Type),
+		DataType:       strings.TrimSpace(filter.DataType),
 		Status:         strings.TrimSpace(filter.Status),
 		Search:         strings.TrimSpace(filter.Search),
 		AccessSourceID: strings.TrimSpace(filter.AccessSourceID),
@@ -1454,6 +1458,7 @@ func cloneOptionalFloat64(value *float64) *float64 {
 // DataPointListFilter 表示 service 层对数据点列表的入参封装，供 HTTP 层与仓储层之间转换。
 type DataPointListFilter struct {
 	Type           string
+	DataType       string
 	Status         string
 	Search         string
 	AccessSourceID string

@@ -247,13 +247,18 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInpu
 	item.WorkspacePath = workspacePath
 	if input.Template != nil && *input.Template == "demo-shell" {
 		creator, ok := s.repository.(interface {
-			CreateDemoShell(context.Context, Project, auth.User) (Project, error)
+			CreateDemoShell(context.Context, Project, auth.User, string) (Project, error)
 		})
 		if !ok {
 			_ = s.workspace.Remove(workspacePath)
 			return Project{}, fmt.Errorf("示例工程创建未配置")
 		}
-		result, err := creator.CreateDemoShell(ctx, item, actor)
+		hash, err := auth.HashPassword(s.defaultRuntimePassword)
+		if err != nil {
+			_ = s.workspace.Remove(workspacePath)
+			return Project{}, err
+		}
+		result, err := creator.CreateDemoShell(ctx, item, actor, hash)
 		if err != nil {
 			_ = s.workspace.Remove(workspacePath)
 		}
