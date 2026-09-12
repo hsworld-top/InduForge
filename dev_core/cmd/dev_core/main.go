@@ -314,8 +314,10 @@ func main() {
 			router.Post("/api/v1/studio-entry", auditlog.EntryHandler(pool, auditLogRepository))
 			nodeHandler.MountAgentRoutes(router)
 			opsHandler.MountRoutes(router)
-			router.Route("/api/v1", sceneAssetHandler.MountRoutes)
-			router.Route("/api/v1", projectFileHandler.MountRoutes)
+			router.Route("/api/v1", func(api chi.Router) {
+				sceneAssetHandler.MountRoutes(api)
+				projectFileHandler.MountRoutes(api)
+			})
 			platformapi.HandlerFromMuxWithBaseURL(controlPlane, router, "/api/v1")
 		},
 	})
@@ -328,9 +330,9 @@ func main() {
 		Handler:           serverHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		// 工程对象库支持视频和大文件上传；超时由对象库大小限制和代理层进一步约束。
-		ReadTimeout:       10 * time.Minute,
-		WriteTimeout:      10 * time.Minute,
-		IdleTimeout:       60 * time.Second,
+		ReadTimeout:  10 * time.Minute,
+		WriteTimeout: 10 * time.Minute,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
