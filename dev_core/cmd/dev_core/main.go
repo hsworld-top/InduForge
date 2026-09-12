@@ -33,6 +33,7 @@ import (
 	platformcache "github.com/indu-forge/dev_core/internal/platform/cache"
 	platformdb "github.com/indu-forge/dev_core/internal/platform/db"
 	"github.com/indu-forge/dev_core/internal/project"
+	"github.com/indu-forge/dev_core/internal/projectfile"
 	"github.com/indu-forge/dev_core/internal/realtime"
 	"github.com/indu-forge/dev_core/internal/runtimeaccess"
 	"github.com/indu-forge/dev_core/internal/sceneasset"
@@ -95,6 +96,10 @@ func main() {
 		logger.Error("校验控制面数据库失败", "error", err)
 		os.Exit(1)
 	}
+	if err := projectfile.EnsureSchema(ctx, pool); err != nil {
+		logger.Error("初始化工程对象库表失败", "error", err)
+		os.Exit(1)
+	}
 	cacheStore, err := platformcache.NewRedis(ctx, platformcache.RedisConfig{Address: cfg.CacheAddress, Password: cfg.CachePassword, DB: cfg.CacheDB})
 	if err != nil {
 		logger.Error("初始化 Redis 缓存失败", "error", err)
@@ -144,6 +149,8 @@ func main() {
 	projectService := project.NewService(projectRepository, workspace, "")
 	projectService.SetTenantBindingEnsurer(dataServiceClient)
 	controlPlane.SetProjectHandler(project.NewHandler(projectService, authService))
+	projectFileService := projectfile.NewService(projectfile.NewRepository(pool), projectService, designObjects)
+	projectFileHandler := projectfile.NewHandler(projectFileService)
 	workspaceEngine, err := newCodeWorkspaceEngine(cfg)
 	if err != nil {
 		logger.Error("初始化代码工作区引擎失败", "error", err)
@@ -212,6 +219,24 @@ func main() {
 			if int64(len(items)) >= total || len(assets) == 0 {
 				break
 			}
+		}
+		files, err := projectFileService.ListPublicMetadata(ctx, actor, projectID)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			items = append(items, map[string]any{
+				"assetId":     "file:" + file.ID,
+				"projectId":   file.ProjectID,
+				"name":        file.Name,
+				"type":        "file",
+				"contentType": file.ContentType,
+				"size":        file.Size,
+				"path":        file.Path,
+				"updatedAt":   file.UpdatedAt,
+				"usage":       "视频、大文件、共享文件或需要后端处理的工程对象",
+				"entry":       file.Entry,
+			})
 		}
 		return items, nil
 	})
@@ -290,6 +315,7 @@ func main() {
 			nodeHandler.MountAgentRoutes(router)
 			opsHandler.MountRoutes(router)
 			router.Route("/api/v1", sceneAssetHandler.MountRoutes)
+			router.Route("/api/v1", projectFileHandler.MountRoutes)
 			platformapi.HandlerFromMuxWithBaseURL(controlPlane, router, "/api/v1")
 		},
 	})
@@ -301,8 +327,9 @@ func main() {
 		Addr:              cfg.Addr,
 		Handler:           serverHandler,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		// 工程对象库支持视频和大文件上传；超时由对象库大小限制和代理层进一步约束。
+		ReadTimeout:       10 * time.Minute,
+		WriteTimeout:      10 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 	}
 

@@ -28,6 +28,7 @@ CREATE TABLE tenants (
 );
 CREATE INDEX tenants_status_idx ON tenants (status);
 
+
 CREATE TABLE users (
   must_change_password boolean NOT NULL DEFAULT false,
   credential_version bigint NOT NULL DEFAULT 0,
@@ -101,6 +102,27 @@ CREATE TABLE projects (
   UNIQUE (id, tenant_id)
 );
 CREATE INDEX projects_tenant_status_idx ON projects (tenant_id, status, updated_at DESC);
+
+-- 工程对象库文件元数据。对象内容保存在 design-assets 对象库，数据库只维护工程隔离的公开元数据和内部对象键。
+CREATE TABLE project_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  path text NOT NULL DEFAULT '' CHECK (path !~ '(^|/)\.\.(/|$)' AND left(path, 1) <> '/'),
+  name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 255 AND name !~ '(^|/)\.\.(/|$)' AND position('/' IN name) = 0),
+  content_type text NOT NULL DEFAULT 'application/octet-stream',
+  size bigint NOT NULL CHECK (size >= 0),
+  object_key text NOT NULL UNIQUE,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (id, project_id),
+  UNIQUE (project_id, path, name),
+  FOREIGN KEY (project_id, tenant_id) REFERENCES projects (id, tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX project_files_project_path_idx ON project_files (project_id, path, updated_at DESC);
+CREATE INDEX project_files_project_name_idx ON project_files (project_id, lower(name));
 
 CREATE TABLE scene_provider_state (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),

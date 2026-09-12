@@ -319,6 +319,19 @@
 | `GET/PUT`        | `/api/v1/scene-asset-editor-sessions/{sessionId}/files/content`      | 读取或保存资源工作副本                               |
 | `POST`           | `/api/v1/scene-asset-editor-sessions/{sessionId}/commit`             | 发布资源工作副本为新内部代次                         |
 
+工程对象库文件是通用后端对象能力，与 `scene-assets` 的 2D/3D 场景资源分开。它适合视频、大文件、跨页面共享文件和需要后端处理的文件；页面专属的小型图片和图标仍应放在工程源码中。
+
+| 方法             | 路径                                                                 | 功能概要                                             |
+| ---------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| `GET`            | `/api/v1/projects/{projectId}/files`                                | 按目录、文件名关键字分页查询工程对象文件             |
+| `POST`           | `/api/v1/projects/{projectId}/files`                                | 上传工程对象文件；服务端识别 MIME，前端不传场景类型   |
+| `GET`            | `/api/v1/projects/{projectId}/files/{fileId}/content`                | 由平台鉴权后流式读取文件                             |
+| `PUT`            | `/api/v1/projects/{projectId}/files/{fileId}`                       | 重命名或调整目录                                     |
+| `POST`           | `/api/v1/projects/{projectId}/files/{fileId}/replace`                | 替换文件内容并保留文件标识                           |
+| `DELETE`         | `/api/v1/projects/{projectId}/files/{fileId}`                       | 删除文件及其对象内容                                 |
+
+对象文件接口只返回文件 ID、目录、名称、MIME、大小、更新时间和平台入口，不返回 bucket、object key、租户信息或签名参数。读取和删除仍受工程权限控制；单文件上限为 `2 GiB`。
+
 读取资源要求 `project:read`；上传、替换、归档、编辑、挂载、更新和场景提交要求
 `project:write`。上传单文件上限为 `64 MiB`；ZIP 请求上限为 `512 MiB`、最多 `10,000`
 个条目，并拒绝绝对路径、路径逃逸、符号链接、重复逻辑路径和不完整依赖。

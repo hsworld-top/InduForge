@@ -251,7 +251,7 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 		"authorization/roles.json": append(rolesJSON, '\n'),
 		"points/README.md":         []byte("# 数据点开发契约\n\nJSON 分片是机器读取的权威契约，Markdown 分片用于快速阅读。数据点按 500 条分片写入 catalog/，请先读取 manifest.json 再按需检索。\n"),
 		"scenes/README.md":         []byte("# 场景公开契约\n\n此处描述工程页面可用的场景参数、事件和命令，不包含私有画布结构。\n"),
-		"object-library/README.md": []byte("# 工程对象库\n\n这里列出当前工程可复用的图片、字体、模型、材质、Symbol 和 Component 元数据。对象字节由平台对象库托管，不能把内部 object key 写入源码，也不要把同一资源复制到 public。当前上下文提供资源 ID、类型、适用场景、入口文件和缩略图；页面运行时请优先使用场景 Provider 已声明的资源入口。当前 Runtime SDK 没有通用对象库读取方法，若当前环境没有对应能力，应先说明缺口，不要猜测 URL。\n"),
+		"object-library/README.md": []byte("# 工程对象库\n\n工程对象库用于保存视频、大文件、跨页面或多人共享文件，以及需要后端处理的文件。小型、页面私有且随版本发布的图片和图标优先放在工程源码中。\n\nJSON 是机器读取的权威元数据，Markdown 只用于快速浏览。每项包含 assetId、name、contentType、size、updatedAt、usage 和 entry（若平台已公开入口）。对象存储 key、租户信息、内部 Provider 地址和签名参数不会写入上下文。开发工作区提供 `/api/v1/projects/{projectId}/files` 用于上传、查询、替换和删除工程对象文件；开发时只能使用该入口或已声明的 Runtime SDK、场景 Provider 入口，并传入 assetId。不能根据文件名、ID 或 entry 自己拼接 URL，也不能把大文件复制到 public。\n"),
 	}
 	addResourceFiles(files, "alarms", "报警", alarms, nil)
 	addResourceFiles(files, "computes", "计算单元", computes, []string{"scriptCode", "code"})
