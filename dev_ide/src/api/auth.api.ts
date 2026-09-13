@@ -115,6 +115,20 @@ export const authAPI = {
   getCurrentUser(config?: AxiosRequestConfig & { skipAuthRedirect?: boolean }) {
     return request.get<ApiResponse<AuthUserPayload>>('/auth/me', config)
   },
+  updateCurrentUser(payload: Partial<AuthUserPayload>) {
+    return request.put<ApiResponse<AuthUserPayload>>('/auth/me', payload)
+  },
+  getAvatar(config?: AxiosRequestConfig) {
+    return request.get('/auth/me/avatar', { responseType: 'blob', ...(config || {}) })
+  },
+  deleteAvatar() {
+    return request.delete<ApiResponse<AuthUserPayload>>('/auth/me/avatar')
+  },
+  uploadAvatar(file: File) {
+    const body = new FormData()
+    body.append('file', file)
+    return request.post<ApiResponse<AuthUserPayload>>('/auth/me/avatar', body)
+  },
 
   /**
    * 修改密码

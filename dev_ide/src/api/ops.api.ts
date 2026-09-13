@@ -440,6 +440,15 @@ export const opsAPI = {
     )
     return { ...result, items: result.items.map(node) }
   },
+  async listNodeMetrics(ids: OpsId[], signal?: AbortSignal) {
+    return unpack<{ items: OpsNodeMetrics[] }>(
+      await request.get('/ops/nodes/metrics', {
+        params: { ids: ids.join(',') },
+        ...(signal ? { signal } : {}),
+        ...config,
+      }),
+    ).items
+  },
   async getNode(id: OpsId) {
     return node(unpack<OpsNode>(await request.get(`/ops/nodes/${id}`, config)))
   },
