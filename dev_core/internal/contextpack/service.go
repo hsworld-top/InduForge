@@ -351,7 +351,7 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 	if objects.Available {
 		capabilities = append(capabilities, "object-library")
 	}
-	manifest, err := json.MarshalIndent(map[string]any{"schemaVersion": "workspace-context.v2", "contextVersion": "2", "pathVersion": "datapoint-path.v1", "projectId": item.ID, "generatedAt": time.Now().UTC().Format(time.RFC3339), "pointContractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "userCount": len(users.Items), "alarmCount": len(alarms.Items), "computeCount": len(computes.Items), "objectLibraryCount": len(objects.Items), "pointChunkCount": chunkCount, "sceneContractVersion": scenes.ContractVersion, "sceneCount": len(scenes.Contracts), "formats": []string{"json", "md"}, "capabilities": capabilities, "fileHashes": fileHashes, "missing": missing}, "", "  ")
+	manifest, err := json.MarshalIndent(map[string]any{"schemaVersion": "workspace-context.v2", "contextVersion": "2", "pathVersion": "datapoint-path.v2", "projectId": item.ID, "generatedAt": time.Now().UTC().Format(time.RFC3339), "pointContractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "userCount": len(users.Items), "alarmCount": len(alarms.Items), "computeCount": len(computes.Items), "objectLibraryCount": len(objects.Items), "pointChunkCount": chunkCount, "sceneContractVersion": scenes.ContractVersion, "sceneCount": len(scenes.Contracts), "formats": []string{"json", "md"}, "capabilities": capabilities, "fileHashes": fileHashes, "missing": missing}, "", "  ")
 	if err != nil {
 		return nil, err
 	}

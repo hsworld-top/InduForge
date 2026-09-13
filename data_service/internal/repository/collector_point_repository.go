@@ -369,7 +369,7 @@ func (r *CollectorRepository) UpdatePointsBatch(ctx context.Context, params []Up
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点不存在")
 		}
 		interval := collectorRefreshInterval(item.Acquisition)
-		_, err = tx.Exec(ctx, `UPDATE data_points SET path=$2,name=$3,description=$4,source_config=jsonb_build_object('connectionId',$11::text),data_type=$5,refresh_mode='auto',refresh_interval_ms=$6,status=$7,display_order=$8,updated_by=$9,updated_at=now() WHERE project_id=$1 AND source_type='collector.point' AND source_id=$10`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID, item.ID, item.ConnectionID)
+		_, err = tx.Exec(ctx, `UPDATE data_points SET path=$2,name=$3,description=$4,source_config=jsonb_build_object('connectionId',$11::text),data_type=$5,refresh_mode='auto',refresh_interval_ms=$6,status=$7,display_order=$8,updated_by=$9,updated_at=now() WHERE project_id=$1 AND source_type='collector.point' AND source_id=$10`, item.ProjectID, collectorPointPath(item.ConnectionID, item.Code), item.Name, item.Description, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID, item.ID, item.ConnectionID)
 		if err != nil {
 			return nil, translateCollectorWriteError("更新采集点映射数据点失败", err)
 		}
@@ -485,7 +485,7 @@ func buildCollectorPointBatchInsertRows(params []CreateCollectorPointParams) []c
 			ElementCount: item.ElementCount, ReadOptions: collectorPointJSONMap(item.ReadOptions), AcquisitionMode: collectorPointAcquisitionMode(item.AcquisitionMode),
 			AcquisitionOverrides: collectorPointJSONMap(item.AcquisitionOverrides),
 			Enabled:              item.Enabled, SortOrder: item.SortOrder, Metadata: collectorPointJSONMap(item.Metadata),
-			Path: collectorPointPath(item.ConnectionCode, item.Code), RefreshIntervalMS: collectorRefreshInterval(item.Acquisition),
+			Path: collectorPointPath(item.ConnectionID, item.Code), RefreshIntervalMS: collectorRefreshInterval(item.Acquisition),
 			Status: collectorDataPointStatus(item.Enabled), UserID: item.UserID,
 		})
 	}
@@ -532,7 +532,7 @@ func insertCollectorPointAndDataPoint(ctx context.Context, tx pgx.Tx, item Creat
 		return badCollectorPayload("序列化采集点来源失败", err)
 	}
 	interval := collectorRefreshInterval(item.Acquisition)
-	_, err = tx.Exec(ctx, `INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,'collector.point',$5,$6::jsonb,$7,'auto',$8,$9,$10,$11,$11)`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.ID, string(sourceConfig), item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID)
+	_, err = tx.Exec(ctx, `INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,'collector.point',$5,$6::jsonb,$7,'auto',$8,$9,$10,$11,$11)`, item.ProjectID, collectorPointPath(item.ConnectionID, item.Code), item.Name, item.Description, item.ID, string(sourceConfig), item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID)
 	if err != nil {
 		return translateCollectorWriteError("创建采集点映射数据点失败", err)
 	}
@@ -686,8 +686,8 @@ func mergeCollectorAcquisition(defaults map[string]any, mode string, overrides m
 	return result
 }
 
-func collectorPointPath(connectionCode, code string) string {
-	prefix := strings.TrimSpace(connectionCode)
+func collectorPointPath(connectionID, code string) string {
+	prefix := strings.TrimSpace(connectionID)
 	var builder strings.Builder
 	for _, char := range strings.TrimSpace(code) {
 		if unicode.IsLetter(char) || unicode.IsDigit(char) || char == '.' || char == '_' || char == '-' {
