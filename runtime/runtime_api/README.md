@@ -18,7 +18,7 @@ Runtime API 是发布后工程的唯一动态 HTTP/WebSocket 边界。它运行�
 
 当前 Project Gateway 只开放白名单中的只读查询和实时订阅，使用服务端持有的 `viewer` token，移除客户端 Authorization；创建会话、人工写入、报警确认、人工计算及其他未开放的运行接口返回 `403 / code=40301`。API 内部已有动作实现，不代表发布页面已经能执行这些动作。
 
-运行用户可以作为 Argon2id 摘要写入 `runtime-api-tokens.v1` secret 的 `users` 数组，Runtime API 通过 `POST /api/v1/runtime/session` 的用户名密码建立同源会话；密码明文不会进入 Artifact 或上下文。当前发布编排仍需把中心的工程用户、角色和能力快照写入该 secret，未完成之前只能使用 deployment token。详细边界见 [Runtime API 契约](../../docs/04-契约与规范/跨模块契约/runtime-api-contract.md)。
+运行用户可以作为 Argon2id 摘要写入 `runtime-api-tokens.v1` secret 的 `users` 数组，Runtime API 通过 `POST /api/v1/runtime/session` 的用户名密码建立同源会话；发布调和会从工程运行用户、角色和授权表生成该受限快照，密码明文不会进入 Artifact 或上下文。详细边界见 [Runtime API 契约](../../docs/04-契约与规范/跨模块契约/runtime-api-contract.md)。
 
 ```sh
 runtime-api \
