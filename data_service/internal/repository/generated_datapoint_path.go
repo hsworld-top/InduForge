@@ -16,7 +16,7 @@ import (
 // 输入是项目、基础 path、来源类型和来源对象 ID；输出是可插入 data_points 的最终 path。
 // 如果基础 path 已经属于同一个来源对象，直接复用；如果被其他对象占用，则追加对象 ID 前缀避免覆盖。
 func allocateGeneratedDataPointPath(ctx context.Context, tx pgx.Tx, projectID, basePath, sourceType, sourceObjectID string) (string, error) {
-	basePath = strings.TrimSpace(basePath)
+	basePath = normalizeGeneratedDataPointPath(basePath)
 	if basePath == "" {
 		basePath = "generated.unnamed"
 	}
@@ -89,6 +89,12 @@ func generatedDataPointSourceConfigKey(sourceType string) string {
 	default:
 		return ""
 	}
+}
+
+// normalizeGeneratedDataPointPath 统一工作台生成路径的分隔符与空白，避免同一逻辑路径因输入格式不同产生重复点。
+func normalizeGeneratedDataPointPath(path string) string {
+	parts := strings.FieldsFunc(strings.TrimSpace(path), func(r rune) bool { return r == '/' || r == '\\' })
+	return strings.Join(parts, ".")
 }
 
 func toJSONText(value any) string {
