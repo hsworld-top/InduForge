@@ -141,6 +141,15 @@ for (const alarm of activeAlarms.data?.items ?? []) {
 }
 const compute = await computes.byRef('compute-unit-uuid').describe()
 
+// 对象库只按 assetId 访问；内容响应支持 Range/ETag，内部对象存储地址不会返回给工程。
+const assets = await runtime.assets.list({ query: 'intro', page: 1, pageSize: 20 })
+const asset = assets.data?.items?.[0]
+if (asset) {
+  const metadata = await runtime.assets.get(asset.assetId)
+  const content = await runtime.assets.open(asset.assetId)
+  console.log(metadata.data?.contentType, content.data?.url)
+}
+
 const live = await points.factory.line1.temperature.subscribe(
   (sample) => console.log(sample.value),
   {
