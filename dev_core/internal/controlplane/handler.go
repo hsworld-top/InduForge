@@ -71,6 +71,10 @@ func (h *Handler) RebuildCodeWorkspace(w http.ResponseWriter, r *http.Request, p
 	h.codeWorkspace.RebuildCodeWorkspace(w, r, projectID)
 }
 
+func (h *Handler) CreateCodeWorkspaceMCPToken(w http.ResponseWriter, r *http.Request, projectID string) {
+	h.codeWorkspace.CreateCodeWorkspaceMCPToken(w, r, projectID)
+}
+
 func (h *Handler) SetAuditLogHandler(handler *auditlog.Handler) { h.auditLog = handler }
 
 func NewHandler(authHandler *auth.Handler, tenantHandler ...*tenant.Handler) *Handler {
