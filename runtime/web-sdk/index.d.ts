@@ -192,12 +192,15 @@ export interface RuntimeComputeUnit {
 
 export interface RuntimeSession {
   subjectId: string
+  username?: string
+  displayName?: string
   roles: string[]
   capabilities?: string[]
   expiresAt?: string
 }
 
 export interface HttpRuntimeSession {
+  login(username: string, password: string, options?: HttpRequestOptions): Promise<SDKResult<RuntimeSession>>
   establish(accessToken?: string, options?: HttpRequestOptions): Promise<SDKResult<RuntimeSession>>
   query(options?: HttpRequestOptions): Promise<SDKResult<RuntimeSession>>
   exit(options?: HttpRequestOptions): Promise<SDKResult<{ revoked: boolean }>>

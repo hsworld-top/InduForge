@@ -418,6 +418,21 @@ test('HTTP Runtime 适配器使用会话、当前值、历史、报警和计算�
   assert.match(commandBody.idempotencyKey, /^run-/)
 })
 
+test('HTTP Runtime 支持工程运行用户登录并缓存身份', async () => {
+  const runtime = createHttpRuntime({
+    fetch: async (_url, init) => {
+      assert.equal(init.method, 'POST')
+      assert.equal(init.body, JSON.stringify({ username: 'admin', password: 'password' }))
+      return { ok: true, json: async () => ({ code: 0, msg: 'ok', data: { subjectId: 'admin-1', username: 'admin', displayName: '管理员', roles: ['ADMIN'], capabilities: ['project.read'] } }) }
+    },
+  })
+  const client = createRuntimeClient(runtime)
+  const result = await runtime.session.login('admin', 'password')
+  assert.equal(result.data.username, 'admin')
+  assert.equal(client.access.currentUser().displayName, '管理员')
+  assert.equal(client.access.hasCapability('project.read'), true)
+})
+
 test('HTTP Runtime 适配器将取消和非标准响应归一为 SDKResult', async () => {
   const runtime = createHttpRuntime({
     fetch: (_url, init) =>

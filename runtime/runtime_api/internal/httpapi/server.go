@@ -160,9 +160,29 @@ func (s *Server) createSession(writer http.ResponseWriter, request *http.Request
 		writeError(writer, request, http.StatusForbidden, 40301, "工程入口身份不匹配")
 		return
 	}
-	principal, err := s.config.Authorizer.Authenticate(request, s.config.Now())
+	var principal runtimeauth.Principal
+	var err error
+	if strings.TrimSpace(request.Header.Get("Authorization")) != "" {
+		principal, err = s.config.Authorizer.Authenticate(request, s.config.Now())
+	} else {
+		var credentials struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if decodeErr := json.NewDecoder(io.LimitReader(request.Body, 8<<10)).Decode(&credentials); decodeErr != nil {
+			err = decodeErr
+		} else {
+			principal, err = s.config.Authorizer.AuthenticateCredentials(credentials.Username, credentials.Password, s.config.Now())
+		}
+	}
 	if err != nil {
-		writeError(writer, request, http.StatusUnauthorized, 40101, "访问令牌无效或已过期")
+		status, code, message := http.StatusUnauthorized, 40102, "用户名或密码错误"
+		if strings.Contains(err.Error(), "disabled") {
+			status, code, message = http.StatusForbidden, 40302, "运行用户已停用"
+		} else if strings.Contains(err.Error(), "expired") {
+			code, message = 40103, "运行用户已过期"
+		}
+		writeError(writer, request, status, code, message)
 		return
 	}
 	id, expiresAt, err := s.sessions.issue(principal, s.config.Now())
@@ -171,12 +191,12 @@ func (s *Server) createSession(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	http.SetCookie(writer, sessionCookie(id, s.config.Now(), expiresAt, s.config.SecureCookies))
-	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "roles": principal.Roles, "capabilities": principal.Capabilities, "expiresAt": expiresAt})
+	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "username": principal.Username, "displayName": principal.DisplayName, "roles": principal.Roles, "capabilities": principal.Capabilities, "expiresAt": expiresAt})
 }
 
 func (s *Server) getSession(writer http.ResponseWriter, request *http.Request) {
 	principal := principalFrom(request.Context())
-	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "roles": principal.Roles, "capabilities": principal.Capabilities})
+	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "username": principal.Username, "displayName": principal.DisplayName, "roles": principal.Roles, "capabilities": principal.Capabilities})
 }
 
 func (s *Server) deleteSession(writer http.ResponseWriter, request *http.Request) {

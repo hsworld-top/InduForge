@@ -402,6 +402,14 @@ export function createHttpRuntime(options = {}) {
     roles,
     catalog: Object.freeze({ get: getCatalog }),
     session: Object.freeze({
+      login: async (username, password, requestOptions = {}) => {
+        if (typeof username !== 'string' || !username.trim()) throw new TypeError('session.login(username, password) 的 username 必须是非空字符串')
+        if (typeof password !== 'string' || !password) throw new TypeError('session.login(username, password) 的 password 必须是非空字符串')
+        return transformResult(
+          await request('session', { ...requestOptions, method: 'POST', json: { username, password } }),
+          cacheSession,
+        )
+      },
       establish: async (accessToken, requestOptions = {}) =>
         transformResult(
           await request('session', {
