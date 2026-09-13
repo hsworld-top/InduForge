@@ -27,7 +27,7 @@ import (
 )
 
 type options struct {
-	listen, artifactPath, postgresSecret, tokenSecret, natsURL, natsCredentials             string
+	listen, artifactPath, postgresSecret, tokenSecret, natsURL, natsCredentials, assetRoot  string
 	deploymentID, projectID, accountID, siteID, nodeID, version, executionForm, manualOwner string
 	manualEpoch                                                                             int64
 	secureCookies                                                                           bool
@@ -52,6 +52,7 @@ func main() {
 	flag.StringVar(&input.tokenSecret, "token-secret", "", "runtime-api-tokens.v1 secret 文件")
 	flag.StringVar(&input.natsURL, "nats-url", "", "当前 deployment NATS Account URL")
 	flag.StringVar(&input.natsCredentials, "nats-credentials", "", "NATS User Credentials 文件")
+	flag.StringVar(&input.assetRoot, "asset-root", "", "运行态对象库资源目录（可选，目录内需有 manifest.json）")
 	flag.StringVar(&input.deploymentID, "deployment-id", "", "工程部署 ID")
 	flag.StringVar(&input.projectID, "project-id", "", "工程 ID")
 	flag.StringVar(&input.accountID, "account-id", "", "工程 NATS Account ID")
@@ -102,10 +103,17 @@ func main() {
 		fatal("runtime-api NATS 不可用", err)
 	}
 	defer natsSubscriber.Close()
+	var assetStore httpapi.AssetStore
+	if strings.TrimSpace(input.assetRoot) != "" {
+		assetStore, err = httpapi.NewFileAssetStore(input.assetRoot)
+		if err != nil {
+			fatal("运行态对象库索引无效", err)
+		}
+	}
 	app, err := httpapi.New(httpapi.Config{
 		DeploymentID: input.deploymentID, ProjectID: input.projectID, AccountID: input.accountID,
 		SiteID: input.siteID, NodeID: input.nodeID, Version: input.version, ExecutionForm: input.executionForm,
-		SecureCookies: input.secureCookies, Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: input.manualEpoch, ManualWriter: store, Publisher: natsSubscriber, CommandStore: store, CommandPublisher: natsSubscriber,
+		SecureCookies: input.secureCookies, Catalog: catalog, Store: store, Authorizer: authorizer, Realtime: hub, ManualEpoch: input.manualEpoch, ManualWriter: store, Publisher: natsSubscriber, CommandStore: store, CommandPublisher: natsSubscriber, Assets: assetStore,
 	})
 	if err != nil {
 		fatal("runtime-api 初始化失败", err)

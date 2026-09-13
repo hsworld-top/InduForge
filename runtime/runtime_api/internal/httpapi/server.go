@@ -48,6 +48,7 @@ type Config struct {
 	CommandPublisher interface {
 		PublishCommand(context.Context, string, []byte) error
 	}
+	Assets AssetStore
 }
 
 type Server struct {
@@ -102,6 +103,9 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/runtime/session", s.requirePrincipal(http.HandlerFunc(s.getSession)))
 	mux.Handle("DELETE /api/v1/runtime/session", s.requirePrincipal(http.HandlerFunc(s.deleteSession)))
 	mux.Handle("GET /api/v1/runtime/catalog", s.requirePrincipal(http.HandlerFunc(s.catalog)))
+	mux.Handle("GET /api/v1/runtime/assets", s.requirePrincipal(http.HandlerFunc(s.listAssets)))
+	mux.Handle("GET /api/v1/runtime/assets/{assetId}", s.requirePrincipal(http.HandlerFunc(s.getAsset)))
+	mux.Handle("GET /api/v1/runtime/assets/{assetId}/content", s.requirePrincipal(http.HandlerFunc(s.openAsset)))
 	mux.Handle("GET /api/v1/runtime/points/{path}", s.requirePrincipal(http.HandlerFunc(s.currentPoint)))
 	mux.Handle("GET /api/v1/runtime/points/{path}/history", s.requirePrincipal(http.HandlerFunc(s.pointHistory)))
 	mux.Handle("POST /api/v1/runtime/points/{path}/write", s.requirePrincipal(http.HandlerFunc(s.writePoint)))
