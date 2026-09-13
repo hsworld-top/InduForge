@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
 	"golang.org/x/net/publicsuffix"
 )
@@ -86,6 +87,9 @@ type Gateway struct {
 	allowInsecureHTTPDev bool
 	namespace            string
 	allowedOrigin        map[string]struct{}
+	centerOrigin         string
+	centerHost           string
+	centerHostname       string
 	ticketTTL            time.Duration
 	sessionTTL           time.Duration
 	now                  func() time.Time
@@ -196,7 +200,7 @@ func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
 	if config.ResolveUser == nil {
 		return nil, fmt.Errorf("工作区网关用户状态解析器不能为空")
 	}
-	return &Gateway{service: service, template: template, scheme: expectedScheme, allowInsecureHTTPDev: config.AllowInsecureHTTPDev, namespace: namespace, allowedOrigin: allowed, ticketTTL: config.TicketTTL, sessionTTL: config.SessionTTL, now: config.Now, transport: config.Transport, resolveUser: config.ResolveUser, resolveMCPToken: config.ResolveMCPToken, tickets: map[string]gatewayGrant{}, ticketByScope: map[string]string{}, sessions: map[string]gatewayGrant{}, hostPattern: hostPattern, fullHostPattern: fullHostPattern, serviceHostPatterns: serviceHostPatterns, validations: map[string]grantValidation{}, flights: map[string]*grantValidationFlight{}}, nil
+	return &Gateway{service: service, template: template, scheme: expectedScheme, allowInsecureHTTPDev: config.AllowInsecureHTTPDev, namespace: namespace, allowedOrigin: allowed, centerOrigin: centerURL.Scheme + "://" + centerURL.Host, centerHost: strings.ToLower(centerURL.Host), centerHostname: strings.ToLower(centerURL.Hostname()), ticketTTL: config.TicketTTL, sessionTTL: config.SessionTTL, now: config.Now, transport: config.Transport, resolveUser: config.ResolveUser, resolveMCPToken: config.ResolveMCPToken, tickets: map[string]gatewayGrant{}, ticketByScope: map[string]string{}, sessions: map[string]gatewayGrant{}, hostPattern: hostPattern, fullHostPattern: fullHostPattern, serviceHostPatterns: serviceHostPatterns, validations: map[string]grantValidation{}, flights: map[string]*grantValidationFlight{}}, nil
 }
 
 func (g *Gateway) PublicURL(actor auth.User, projectID, epoch, serviceName string) (string, error) {
@@ -272,20 +276,22 @@ func (g *Gateway) publicOrigin(projectID, serviceName string) (string, error) {
 	return strings.ToLower(parsed.Host), nil
 }
 
-// PublicURLWithoutTicket 返回供无浏览器客户端使用的固定服务地址。
+// PublicURLWithoutTicket 返回供无浏览器客户端使用的中心 MCP 地址。
 func (g *Gateway) PublicURLWithoutTicket(projectID, serviceName string) (string, error) {
-	origin, err := g.publicOrigin(projectID, serviceName)
-	if err != nil {
-		return "", err
+	if serviceName != "mcp" {
+		return "", fmt.Errorf("无票据公开地址仅支持 MCP 服务")
 	}
-	return g.scheme + "://" + origin + "/mcp", nil
+	if _, err := uuid.Parse(projectID); err != nil {
+		return "", fmt.Errorf("工程 ID 无效: %w", err)
+	}
+	return g.centerOrigin + "/workspaces/" + url.PathEscape(strings.ToLower(projectID)) + "/mcp", nil
 }
 
 // Wrap 根据 Host 分流工作区流量，中心 Host 继续进入原控制面 Handler。
 func (g *Gateway) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := workspaceRequestHostname(r.Host)
-		if !g.hostPattern.MatchString(host) {
+		if !g.hostPattern.MatchString(host) && !(strings.EqualFold(host, g.centerHostname) && g.isCentralMCPPath(r.URL.Path)) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -295,7 +301,8 @@ func (g *Gateway) Wrap(next http.Handler) http.Handler {
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := strings.ToLower(r.Host)
-	if !g.fullHostPattern.MatchString(host) || !g.requestSchemeMatches(r) {
+	centralMCPProjectID, centralMCP := g.centralMCPProjectID(host, r.URL.Path)
+	if (!g.fullHostPattern.MatchString(host) && !centralMCP) || !g.requestSchemeMatches(r) {
 		http.Error(w, "工作区访问协议或 Host 无效", http.StatusBadRequest)
 		return
 	}
@@ -306,7 +313,10 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if g.isMCPHost(host) && g.serveMCPBearer(w, r, host) {
+	if g.isMCPHost(host) && g.serveMCPBearer(w, r, host, "") {
+		return
+	}
+	if centralMCP && g.serveMCPBearer(w, r, host, centralMCPProjectID) {
 		return
 	}
 	if r.URL.Path == workspaceSessionPath {
@@ -350,8 +360,32 @@ func (g *Gateway) isMCPHost(host string) bool {
 	return ok && pattern.MatchString(host)
 }
 
+func (g *Gateway) isCentralMCPPath(path string) bool {
+	_, ok := parseCentralMCPPath(path)
+	return ok
+}
+
+func (g *Gateway) centralMCPProjectID(host, path string) (string, bool) {
+	if !strings.EqualFold(host, g.centerHost) {
+		return "", false
+	}
+	return parseCentralMCPPath(path)
+}
+
+func parseCentralMCPPath(path string) (string, bool) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "workspaces" || parts[2] != "mcp" {
+		return "", false
+	}
+	projectID, err := uuid.Parse(parts[1])
+	if err != nil {
+		return "", false
+	}
+	return strings.ToLower(projectID.String()), true
+}
+
 // serveMCPBearer authenticates external MCP clients without browser cookies.
-func (g *Gateway) serveMCPBearer(w http.ResponseWriter, r *http.Request, host string) bool {
+func (g *Gateway) serveMCPBearer(w http.ResponseWriter, r *http.Request, host, pathProjectID string) bool {
 	if g.resolveMCPToken == nil {
 		return false
 	}
@@ -364,10 +398,21 @@ func (g *Gateway) serveMCPBearer(w http.ResponseWriter, r *http.Request, host st
 		http.Error(w, "MCP 连接令牌已失效", http.StatusUnauthorized)
 		return true
 	}
-	expected, err := g.publicOrigin(projectID, "mcp")
-	if err != nil || expected != host {
+	if pathProjectID != "" && !strings.EqualFold(pathProjectID, projectID) {
 		http.Error(w, "MCP 连接令牌与工程不匹配", http.StatusForbidden)
 		return true
+	}
+	if pathProjectID == "" {
+		expected, err := g.publicOrigin(projectID, "mcp")
+		if err != nil || expected != host {
+			http.Error(w, "MCP 连接令牌与工程不匹配", http.StatusForbidden)
+			return true
+		}
+	}
+	if pathProjectID != "" {
+		r = r.Clone(r.Context())
+		r.URL.Path = "/mcp"
+		r.URL.RawPath = ""
 	}
 	sessionID, err := secureValue()
 	if err != nil {

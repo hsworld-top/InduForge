@@ -141,6 +141,36 @@ func TestGatewayInsecureHTTPDevelopmentMode(t *testing.T) {
 	}
 }
 
+func TestGatewayCentralMCPPathUsesProjectIDAndBearerToken(t *testing.T) {
+	transport := &recordingTransport{}
+	gateway, _, actor := newGatewayForTest(t, transport)
+	gateway.resolveMCPToken = func(context.Context, string) (auth.User, string, string, time.Time, bool) {
+		return actor, testProjectID, "epoch-7", time.Now().Add(time.Minute), true
+	}
+	endpoint, err := gateway.PublicURLWithoutTicket(testProjectID, "mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if endpoint != "https://center.induforge.test/workspaces/"+testProjectID+"/mcp" {
+		t.Fatalf("中心 MCP 地址错误: %s", endpoint)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(`{"jsonrpc":"2.0"}`))
+	request.Host = "center.induforge.test"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("Authorization", "Bearer test-token")
+	result := httptest.NewRecorder()
+	gateway.Wrap(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("中心 MCP 请求意外回退到控制面")
+	})).ServeHTTP(result, request)
+	if result.Code != http.StatusOK {
+		t.Fatalf("中心 MCP 请求失败: %d %s", result.Code, result.Body.String())
+	}
+	if transport.request == nil || transport.request.URL.Path != "/mcp" {
+		t.Fatalf("中心 MCP 路径未转换为上游 /mcp: %#v", transport.request)
+	}
+}
+
 func TestGatewayProductionRejectsHTTPWithoutConsumingTicket(t *testing.T) {
 	gateway, _, actor := newGatewayForTest(t, &recordingTransport{})
 	publicURL, err := gateway.PublicURL(actor, testProjectID, "epoch-7", "code")
