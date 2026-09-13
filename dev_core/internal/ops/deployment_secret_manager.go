@@ -30,7 +30,7 @@ func NewDeploymentSecretManager(c KubeSecretClient) *DeploymentSecretManager {
 
 // Ensure 将环境级 source Secret 的最小凭据在内存中封装为 resolver 的严格 JSON，
 // 写入 deployment 专属 Secret。不会返回、记录或持久化任何源 Secret 值。
-func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, projectID, environmentID, role string, support RuntimeSupportResources) (string, error) {
+func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, projectID, environmentID, role string, support RuntimeSupportResources, identities ...RuntimeIdentitySnapshot) (string, error) {
 	if role != ServiceBase && role != ServiceCompute && role != ServiceAlarm {
 		return "", fmt.Errorf("运行角色非法")
 	}
@@ -103,7 +103,11 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 			changed = true
 		}
 		digest := sha256.Sum256([]byte(data["runtime-api-token"]))
-		tokens, e := json.Marshal(map[string]any{"schemaVersion": "runtime-api-tokens.v1", "tokens": []map[string]any{{"tokenSha256": hex.EncodeToString(digest[:]), "subjectId": "deployment-user", "roles": []string{"viewer"}}}})
+		identity := RuntimeIdentitySnapshot{}
+		if len(identities) > 0 {
+			identity = identities[0]
+		}
+		tokens, e := buildRuntimeAPITokensFile(hex.EncodeToString(digest[:]), identity)
 		if e != nil {
 			return "", fmt.Errorf("构造 Runtime API token 凭据失败")
 		}
@@ -139,6 +143,49 @@ func (m *DeploymentSecretManager) Ensure(ctx context.Context, ns, deploymentID, 
 		}
 	}
 	return name, nil
+}
+
+func buildRuntimeAPITokensFile(tokenDigest string, identity RuntimeIdentitySnapshot) (string, error) {
+	if !validRuntimeTokenDigest(tokenDigest) {
+		return "", fmt.Errorf("Runtime API token 摘要非法")
+	}
+	records := make([]map[string]any, 0, len(identity.Users))
+	for _, user := range identity.Users {
+		if strings.TrimSpace(user.SubjectID) == "" || strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.PasswordHash) == "" || !strings.HasPrefix(user.PasswordHash, "$argon2id$") {
+			return "", fmt.Errorf("运行用户 %q 的 Argon2id 摘要无效", user.Username)
+		}
+		if len(user.Roles) == 0 {
+			return "", fmt.Errorf("运行用户 %q 未绑定角色", user.Username)
+		}
+		records = append(records, map[string]any{
+			"username": user.Username, "passwordHash": user.PasswordHash, "subjectId": user.SubjectID,
+			"displayName": user.DisplayName, "status": user.Status, "roles": user.Roles, "capabilities": user.Capabilities,
+		})
+	}
+	payload := map[string]any{
+		"schemaVersion": "runtime-api-tokens.v1",
+		"tokens":        []map[string]any{{"tokenSha256": tokenDigest, "subjectId": "deployment-user", "roles": []string{"viewer"}}},
+	}
+	if len(records) > 0 {
+		payload["users"] = records
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("构造 Runtime API token 凭据失败: %w", err)
+	}
+	return string(raw), nil
+}
+
+func validRuntimeTokenDigest(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, c := range value {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func safeCollectorSecretFileName(name string) bool {

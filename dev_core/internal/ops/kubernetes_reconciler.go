@@ -714,7 +714,7 @@ func (r *KubernetesProjectReconciler) Reconcile(ctx context.Context, workload Pr
 		if err != nil {
 			return err
 		}
-		if _, err = r.secretManager.Ensure(ctx, namespace, workload.DeploymentID, runtimeContext.ProjectID, runtimeContext.EnvironmentID, workload.Engine, runtimeContext.Support); err != nil {
+		if _, err = r.secretManager.Ensure(ctx, namespace, workload.DeploymentID, runtimeContext.ProjectID, runtimeContext.EnvironmentID, workload.Engine, runtimeContext.Support, runtimeContext.Identity); err != nil {
 			return fmt.Errorf("准备部署运行 Secret 失败: %w", err)
 		}
 		if err := r.applyRuntimeBindingConfigMap(ctx, workload, input); err != nil {

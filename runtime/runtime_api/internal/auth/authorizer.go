@@ -84,7 +84,7 @@ func Load(path string) (*Authorizer, error) {
 		seen[token.TokenSHA256] = struct{}{}
 	}
 	for _, user := range secret.Users {
-		if strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.SubjectID) == "" || user.Status == "disabled" || len(user.Roles) == 0 || !strings.HasPrefix(user.PasswordHash, "$argon2id$") {
+		if strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.SubjectID) == "" || (user.Status != "active" && user.Status != "disabled") || len(user.Roles) == 0 || !strings.HasPrefix(user.PasswordHash, "$argon2id$") {
 			return nil, errors.New("Runtime API 运行用户记录非法")
 		}
 	}

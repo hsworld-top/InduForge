@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -98,6 +99,24 @@ func TestDeploymentSecretManagerBuildsBaseRuntimeAPIFilesWithoutBootstrapLeak(t 
 	}
 	if strings.Contains(data[runtimeAPIPostgresFile], "admin-password") || strings.Contains(data[runtimeAPITokensFile], data["runtime-api-token"]) || strings.Contains(data[runtimeAPITokensFile], "runtime-db-password") || data["sandbox-token"] != "" {
 		t.Fatalf("base API Secret leaked admin/sandbox value: %#v", data)
+	}
+}
+
+func TestRuntimeAPITokensIncludeIdentitySnapshotWithoutPlaintextPassword(t *testing.T) {
+	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	hash := "$argon2id$v=19$m=65536,t=3,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcA"
+	raw, err := buildRuntimeAPITokensFile(digest, RuntimeIdentitySnapshot{Users: []RuntimeIdentityUser{{SubjectID: "user-1", Username: "admin", PasswordHash: hash, DisplayName: "管理员", Status: "active", Roles: []string{"ADMIN"}, Capabilities: []string{"project.read"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Users []map[string]any `json:"users"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil || len(payload.Users) != 1 {
+		t.Fatalf("身份快照未写入: %v %s", err, raw)
+	}
+	if strings.Contains(raw, "明文密码") || !strings.Contains(raw, hash) || strings.Contains(raw, "password") == false {
+		t.Fatalf("身份快照未保留摘要字段或疑似泄露明文: %s", raw)
 	}
 }
 

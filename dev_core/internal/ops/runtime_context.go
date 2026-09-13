@@ -6,12 +6,29 @@ import (
 	"fmt"
 )
 
+// RuntimeIdentitySnapshot 是发布时传给 Runtime API 的受限身份快照。
+// PasswordHash 只允许进入运行态 Secret，不能进入上下文、日志或普通制品。
+type RuntimeIdentitySnapshot struct {
+	Users []RuntimeIdentityUser
+}
+
+type RuntimeIdentityUser struct {
+	SubjectID    string
+	Username     string
+	PasswordHash string
+	DisplayName  string
+	Status       string
+	Roles        []string
+	Capabilities []string
+}
+
 // ProjectRuntimeContext 是调和器按 deployment 加载的受信运行快照；不含任何 Secret 值。
 type ProjectRuntimeContext struct {
 	TenantID, ProjectID, EnvironmentID, DeploymentID, Mode string
 	Release                                                releaseMetadata
 	BindingRevision                                        int
 	Support                                                RuntimeSupportResources
+	Identity                                               RuntimeIdentitySnapshot
 	// RuntimeEngines 是本 deployment 当前期望运行的共享 JetStream 消费角色。
 	// 它来自 deployment_services，而不是发布制品能力，避免未被部署的角色
 	// 进入拓扑声明。
@@ -94,6 +111,9 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 	if e != nil {
 		return ProjectRuntimeContext{}, e
 	}
+	if out.Identity, e = r.loadRuntimeIdentitySnapshot(ctx, out.TenantID, out.ProjectID); e != nil {
+		return ProjectRuntimeContext{}, fmt.Errorf("加载运行用户快照失败: %w", e)
+	}
 	engineRows, e := r.pool.Query(ctx, `SELECT service_type FROM deployment_services WHERE project_deployment_id=$1 AND desired_status='running' AND service_type IN ('base','compute','alarm') ORDER BY service_type`, deploymentID)
 	if e != nil {
 		return ProjectRuntimeContext{}, e
@@ -110,6 +130,36 @@ func (r *PostgreSQLRepository) LoadProjectRuntimeContext(ctx context.Context, de
 		return ProjectRuntimeContext{}, e
 	}
 	return out, nil
+}
+
+func (r *PostgreSQLRepository) loadRuntimeIdentitySnapshot(ctx context.Context, tenantID, projectID string) (RuntimeIdentitySnapshot, error) {
+	rows, err := r.pool.Query(ctx, `SELECT u.id::text,u.username,u.password_hash,COALESCE(u.display_name,''),u.status,
+       COALESCE(array_agg(DISTINCT r.code) FILTER (WHERE r.id IS NOT NULL), ARRAY[]::text[]),
+       COALESCE(array_agg(DISTINCT g.capability) FILTER (WHERE g.id IS NOT NULL AND g.effect='allow'), ARRAY[]::text[])
+FROM project_runtime_users u
+JOIN projects p ON p.id=u.project_id AND p.tenant_id=$1 AND p.status <> 'deleted'
+LEFT JOIN project_user_role_bindings b ON b.runtime_user_id=u.id
+LEFT JOIN project_roles r ON r.id=b.role_id AND r.status='active'
+LEFT JOIN project_role_grants g ON g.role_id=r.id
+WHERE u.project_id=$2
+GROUP BY u.id
+ORDER BY u.is_builtin_admin DESC,u.created_at,u.id`, tenantID, projectID)
+	if err != nil {
+		return RuntimeIdentitySnapshot{}, err
+	}
+	defer rows.Close()
+	snapshot := RuntimeIdentitySnapshot{Users: make([]RuntimeIdentityUser, 0)}
+	for rows.Next() {
+		var item RuntimeIdentityUser
+		if err := rows.Scan(&item.SubjectID, &item.Username, &item.PasswordHash, &item.DisplayName, &item.Status, &item.Roles, &item.Capabilities); err != nil {
+			return RuntimeIdentitySnapshot{}, err
+		}
+		snapshot.Users = append(snapshot.Users, item)
+	}
+	if err := rows.Err(); err != nil {
+		return RuntimeIdentitySnapshot{}, err
+	}
+	return snapshot, nil
 }
 
 func collectorSourceSnapshotFromManifest(raw []byte, projectID string) (json.RawMessage, bool, error) {
