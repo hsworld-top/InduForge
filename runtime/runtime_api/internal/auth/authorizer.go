@@ -18,16 +18,18 @@ import (
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Principal struct {
-	SubjectID string     `json:"subjectId"`
-	Roles     []string   `json:"roles"`
-	ExpiresAt *time.Time `json:"-"`
+	SubjectID    string     `json:"subjectId"`
+	Roles        []string   `json:"roles"`
+	Capabilities []string   `json:"capabilities,omitempty"`
+	ExpiresAt    *time.Time `json:"-"`
 }
 
 type tokenRecord struct {
-	TokenSHA256 string     `json:"tokenSha256"`
-	SubjectID   string     `json:"subjectId"`
-	Roles       []string   `json:"roles"`
-	ExpiresAt   *time.Time `json:"expiresAt"`
+	TokenSHA256  string     `json:"tokenSha256"`
+	SubjectID    string     `json:"subjectId"`
+	Roles        []string   `json:"roles"`
+	Capabilities []string   `json:"capabilities,omitempty"`
+	ExpiresAt    *time.Time `json:"expiresAt"`
 }
 
 type tokenSecret struct {
@@ -82,7 +84,7 @@ func (a *Authorizer) Authenticate(request *http.Request, now time.Time) (Princip
 		if record.ExpiresAt != nil && !now.Before(record.ExpiresAt.UTC()) {
 			return Principal{}, errors.New("expired bearer token")
 		}
-		return Principal{SubjectID: record.SubjectID, Roles: append([]string(nil), record.Roles...), ExpiresAt: record.ExpiresAt}, nil
+		return Principal{SubjectID: record.SubjectID, Roles: append([]string(nil), record.Roles...), Capabilities: append([]string(nil), record.Capabilities...), ExpiresAt: record.ExpiresAt}, nil
 	}
 	return Principal{}, errors.New("invalid bearer token")
 }

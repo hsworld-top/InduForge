@@ -233,6 +233,17 @@ function getRoles(runtimeProvider) {
   return new Set(Array.isArray(roles) ? roles : [])
 }
 
+function getSession(runtimeProvider) {
+  const runtime = resolveRuntime(runtimeProvider())
+  return runtime.sessionIdentity ?? runtime.session?.current ?? runtime.session?.identity ?? null
+}
+
+function getCapabilities(runtimeProvider) {
+  const runtime = resolveRuntime(runtimeProvider())
+  const capabilities = runtime.capabilities ?? runtime.access?.capabilities ?? getSession(runtimeProvider)?.capabilities ?? []
+  return new Set(Array.isArray(capabilities) ? capabilities : [])
+}
+
 function createAccess(runtimeProvider) {
   return Object.freeze({
     hasRole(role) {
@@ -242,6 +253,14 @@ function createAccess(runtimeProvider) {
       if (!Array.isArray(roles)) throw new TypeError('access.hasAnyRole(roles) 的 roles 必须是数组')
       const currentRoles = getRoles(runtimeProvider)
       return roles.some((role) => currentRoles.has(role))
+    },
+    currentUser() {
+      const session = getSession(runtimeProvider)
+      return session ? Object.freeze({ ...session }) : null
+    },
+    hasCapability(capability) {
+      if (typeof capability !== 'string' || !capability.trim()) throw new TypeError('access.hasCapability(capability) 的 capability 必须是非空字符串')
+      return getCapabilities(runtimeProvider).has(capability)
     },
   })
 }
@@ -272,6 +291,7 @@ function buildRuntimeClient(runtimeProvider) {
     computes: createComputes(runtimeProvider),
     access: createAccess(runtimeProvider),
     scenes: createScenes(runtimeProvider),
+    session: resolveRuntime(runtimeProvider()).session,
   })
 }
 

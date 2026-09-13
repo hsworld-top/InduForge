@@ -145,7 +145,9 @@ export interface RuntimeConfiguration {
   pointContracts?: Record<string, DataPointContract>
   navigation?: NavigationAdapter
   roles?: string[]
-  access?: { roles?: string[] }
+  capabilities?: string[]
+  access?: { roles?: string[]; capabilities?: string[] }
+  session?: HttpRuntimeSession
   sceneResolver?: {
     resolve(input: { sceneId: string; kind: '2d' | '3d' }): Promise<SceneResolution>
   }
@@ -191,6 +193,7 @@ export interface RuntimeComputeUnit {
 export interface RuntimeSession {
   subjectId: string
   roles: string[]
+  capabilities?: string[]
   expiresAt?: string
 }
 
@@ -313,6 +316,8 @@ export type ComputePath = {
 export interface RuntimeAccess {
   hasRole(role: string): boolean
   hasAnyRole(roles: string[]): boolean
+  currentUser(): RuntimeSession | null
+  hasCapability(capability: string): boolean
 }
 
 export interface RuntimeScenes {
@@ -326,6 +331,7 @@ export interface RuntimeClient {
   computes: ComputePath
   access: RuntimeAccess
   scenes: RuntimeScenes
+  session?: HttpRuntimeSession
 }
 
 declare global {

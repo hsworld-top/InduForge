@@ -371,6 +371,7 @@ export function createHttpRuntime(options = {}) {
   const request = createRequest(options, baseUrl)
   const pointContracts = Object.create(null)
   const roles = []
+  let currentSession = null
   const cacheCatalog = (catalog) => {
     for (const key of Object.keys(pointContracts)) delete pointContracts[key]
     for (const point of catalog?.points ?? []) {
@@ -381,6 +382,7 @@ export function createHttpRuntime(options = {}) {
   const getCatalog = async (requestOptions) =>
     transformResult(await request('catalog', requestOptions), cacheCatalog)
   const cacheSession = (session) => {
+    currentSession = session ?? null
     roles.splice(0, roles.length, ...(Array.isArray(session?.roles) ? session.roles : []))
     return session
   }
@@ -413,10 +415,13 @@ export function createHttpRuntime(options = {}) {
         transformResult(await request('session', requestOptions), cacheSession),
       exit: async (requestOptions) => {
         const result = await request('session', { ...requestOptions, method: 'DELETE' })
-        if (result.code === 0) roles.splice(0)
+        if (result.code === 0) cacheSession(null)
         return result
       },
     }),
+    get sessionIdentity() {
+      return currentSession
+    },
     adapter: Object.freeze({
       get: async (path, requestOptions) =>
         transformResult(await currentPoint(path, requestOptions), (item) => item.value),

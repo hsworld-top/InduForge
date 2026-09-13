@@ -540,3 +540,18 @@ test('HTTP Runtime 报警订阅在异常关闭后重连', async () => {
   assert.equal(sockets.length, 2)
   subscription.data()
 })
+
+test('会话身份和能力只来自服务端授权，注销后清除', async () => {
+  const runtime = createHttpRuntime({
+    fetch: async (_url, init) => ({ ok: true, json: async () => ({ code: 0, msg: 'ok', data: init.method === 'DELETE' ? { revoked: true } : { subjectId: 'user-1', roles: ['operator'], capabilities: ['points.read'] } }) }),
+  })
+  const client = createRuntimeClient(runtime)
+  assert.equal(client.access.currentUser(), null)
+  await runtime.session.establish('token')
+  assert.equal(client.access.currentUser().subjectId, 'user-1')
+  assert.equal(client.access.hasCapability('points.read'), true)
+  assert.equal(client.access.hasCapability('points.write'), false)
+  await runtime.session.exit()
+  assert.equal(client.access.currentUser(), null)
+  assert.equal(client.access.hasRole('operator'), false)
+})

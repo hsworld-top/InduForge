@@ -167,12 +167,12 @@ func (s *Server) createSession(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	http.SetCookie(writer, sessionCookie(id, s.config.Now(), expiresAt, s.config.SecureCookies))
-	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "roles": principal.Roles, "expiresAt": expiresAt})
+	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "roles": principal.Roles, "capabilities": principal.Capabilities, "expiresAt": expiresAt})
 }
 
 func (s *Server) getSession(writer http.ResponseWriter, request *http.Request) {
 	principal := principalFrom(request.Context())
-	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "roles": principal.Roles})
+	writeOK(writer, request, map[string]any{"subjectId": principal.SubjectID, "roles": principal.Roles, "capabilities": principal.Capabilities})
 }
 
 func (s *Server) deleteSession(writer http.ResponseWriter, request *http.Request) {
