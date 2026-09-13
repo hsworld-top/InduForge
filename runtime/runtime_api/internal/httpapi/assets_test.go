@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ func TestRuntimeAssetsSupportMetadataRangeAndETag(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "video.mp4"), []byte("0123456789"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "manifest.json"), []byte(`{"assets":[{"assetId":"asset-1","name":"video.mp4","contentType":"video/mp4","path":"video.mp4"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "manifest.json"), []byte(`{"schemaVersion":"runtime-assets.v1","assets":[{"assetId":"asset-1","name":"video.mp4","contentType":"video/mp4","path":"video.mp4"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	store, err := NewFileAssetStore(root)
@@ -39,5 +40,25 @@ func TestRuntimeAssetsSupportMetadataRangeAndETag(t *testing.T) {
 	}
 	if got := response.Header.Get("ETag"); got == "" {
 		t.Fatal("缺少 ETag")
+	}
+}
+
+func TestNewFileAssetStoreRejectsMissingOrMismatchedResources(t *testing.T) {
+	root := t.TempDir()
+	writeManifest := func(raw string) error { return os.WriteFile(filepath.Join(root, "manifest.json"), []byte(raw), 0o600) }
+	if err := writeManifest(`{"schemaVersion":"runtime-assets.v1","assets":[{"assetId":"missing","name":"missing.bin","contentType":"application/octet-stream","path":"missing.bin"}]}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFileAssetStore(root); err == nil || !strings.Contains(err.Error(), "资源文件不存在") {
+		t.Fatalf("missing resource was accepted: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "file.bin"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeManifest(`{"schemaVersion":"runtime-assets.v1","assets":[{"assetId":"file","name":"file.bin","contentType":"application/octet-stream","path":"file.bin","size":99}]}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFileAssetStore(root); err == nil || !strings.Contains(err.Error(), "大小不匹配") {
+		t.Fatalf("mismatched resource was accepted: %v", err)
 	}
 }

@@ -193,7 +193,7 @@ func RenderProjectWorkloadManifest(workload ProjectWorkload) (string, error) {
         - name: runtime-api
           image: %s
           imagePullPolicy: Never
-          args: ["--listen", "127.0.0.1:18081", "--artifact", "/work/runtime-api-artifact/runtime-project-artifact.json", "--postgres-secret", "/var/run/induforge/runtime-api/postgres.json", "--token-secret", "/var/run/induforge/runtime-api/tokens.json", "--nats-credentials", "/var/run/induforge/runtime-api/nats.json", "--deployment-id", %q, "--project-id", %q, "--account-id", %q, "--site-id", %q, "--node-id", %q, "--version", %q, "--manual-owner", "runtime-api", "--manual-epoch", %q, "--execution-form", "k3s-workload"]
+          args: ["--listen", "127.0.0.1:18081", "--artifact", "/work/runtime-api-artifact/runtime-project-artifact.json", "--asset-root", "/work/runtime-api-artifact/object-library", "--postgres-secret", "/var/run/induforge/runtime-api/postgres.json", "--token-secret", "/var/run/induforge/runtime-api/tokens.json", "--nats-credentials", "/var/run/induforge/runtime-api/nats.json", "--deployment-id", %q, "--project-id", %q, "--account-id", %q, "--site-id", %q, "--node-id", %q, "--version", %q, "--manual-owner", "runtime-api", "--manual-epoch", %q, "--execution-form", "k3s-workload"]
           env: [{name: IF_RUNTIME_NATS_URL, value: %q}]
           resources: {requests: {cpu: "100m", memory: "128Mi"}, limits: {cpu: "500m", memory: "512Mi"}}
           readinessProbe: {exec: {command: ["/usr/local/bin/runtime-api", "healthcheck", "--url", "http://127.0.0.1:18081/health"]}, initialDelaySeconds: 3, periodSeconds: 3}

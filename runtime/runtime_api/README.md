@@ -2,7 +2,7 @@
 
 Runtime API 是发布后工程的唯一动态 HTTP/WebSocket 边界。它运行在物理节点回环地址上，只能由同节点 Project Gateway 代理，浏览器不会直接访问 PostgreSQL、NATS、中心对象存储或现场 Secret。
 
-运行态对象库通过 `GET /api/v1/runtime/assets`、`GET /api/v1/runtime/assets/{assetId}` 和 `GET /api/v1/runtime/assets/{assetId}/content` 提供。内容接口支持 Range 与 ETag，响应只包含工程 `assetId` 和公开元数据，不返回对象存储 key。部署时可用 `-asset-root` 挂载包含 `manifest.json` 的受控资源目录；未配置目录时接口会返回明确的“运行态对象库未配置”，不会降级为任意文件读取。
+运行态对象库通过 `GET /api/v1/runtime/assets`、`GET /api/v1/runtime/assets/{assetId}` 和 `GET /api/v1/runtime/assets/{assetId}/content` 提供。内容接口支持 Range 与 ETag，响应只包含工程 `assetId` 和公开元数据，不返回对象存储 key。运行制品固定把 `object-library/` 作为对象库根目录，并由 `runtime-assets.v1` 的 `manifest.json` 描述资源；部署工作负载通过 `--asset-root /work/runtime-api-artifact/object-library` 显式挂载。Runtime API 启动时会校验版本、重复 ID、文件路径和文件大小，发现缺失资源直接失败，避免发布后才暴露问题。未配置目录时接口会返回明确的“运行态对象库未配置”，不会降级为任意文件读取。
 
 当前 API 已实现以下能力；经 Project Gateway 可访问的范围见下文：
 

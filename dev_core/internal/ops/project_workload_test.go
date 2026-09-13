@@ -20,6 +20,9 @@ func TestRenderProjectWorkloadManifestSeparatesRolesAndHostPort(t *testing.T) {
 			t.Fatalf("base manifest missing %q: %s", expected, base)
 		}
 	}
+	if !strings.Contains(base, `"--asset-root", "/work/runtime-api-artifact/object-library"`) {
+		t.Fatalf("runtime-api 必须挂载对象库运行资源目录:\n%s", base)
+	}
 	if strings.Contains(base, "hostPort:") {
 		t.Fatalf("base 入口必须由稳定 ServiceLB 承载，不得绑定 Pod hostPort:\n%s", base)
 	}

@@ -67,10 +67,14 @@ func NewFileAssetStore(root string) (*FileAssetStore, error) {
 		return nil, fmt.Errorf("读取对象库运行态索引失败: %w", err)
 	}
 	var raw struct {
-		Assets []fileAssetRecord `json:"assets"`
+		SchemaVersion string            `json:"schemaVersion"`
+		Assets        []fileAssetRecord `json:"assets"`
 	}
 	if err := json.Unmarshal(payload, &raw); err != nil {
 		return nil, fmt.Errorf("解析对象库运行态索引失败: %w", err)
+	}
+	if raw.SchemaVersion != "runtime-assets.v1" {
+		return nil, errors.New("对象库运行态索引版本无效")
 	}
 	entries := make(map[string]fileAssetRecord, len(raw.Assets))
 	for _, item := range raw.Assets {
@@ -83,8 +87,24 @@ func NewFileAssetStore(root string) (*FileAssetStore, error) {
 		if relative, err := filepath.Rel(root, resolved); err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return nil, errors.New("对象库运行态索引越过资源根目录")
 		}
+		info, err := os.Stat(resolved)
+		if err != nil || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("对象库运行态资源文件不存在: %s", item.ID)
+		}
+		if item.Size < 0 || (item.Size > 0 && item.Size != info.Size()) {
+			return nil, fmt.Errorf("对象库运行态资源大小不匹配: %s", item.ID)
+		}
+		if item.Size == 0 {
+			item.Size = info.Size()
+		}
+		if item.UpdatedAt.IsZero() {
+			item.UpdatedAt = info.ModTime().UTC()
+		}
 		if item.ETag == "" {
 			item.ETag = `"` + item.ID + `"`
+		}
+		if _, exists := entries[item.ID]; exists {
+			return nil, fmt.Errorf("对象库运行态索引包含重复资源 ID: %s", item.ID)
 		}
 		entries[item.ID] = item
 	}

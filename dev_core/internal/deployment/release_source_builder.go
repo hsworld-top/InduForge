@@ -410,6 +410,27 @@ func (b *ProjectReleaseSourceBuilder) packRuntime(workspacePath string, runtimeJ
 			total += int64(len(content))
 		}
 	}
+	assetRoot := filepath.Join(workspacePath, "object-library")
+	assetFiles, err := readTreeFiles(assetRoot, "object-library", b.archiveLimit-total)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("读取工程对象库运行资源失败: %w", err)
+		}
+		assetFiles = map[string][]byte{}
+	}
+	if _, ok := assetFiles["object-library/manifest.json"]; !ok {
+		if len(assetFiles) > 0 {
+			return nil, fmt.Errorf("工程对象库运行资源缺少 manifest.json")
+		}
+		assetFiles["object-library/manifest.json"] = []byte(`{"schemaVersion":"runtime-assets.v1","assets":[]}`)
+	}
+	for name, content := range assetFiles {
+		files[name] = content
+		total += int64(len(content))
+		if total > b.archiveLimit {
+			return nil, fmt.Errorf("运行工件超过大小限制")
+		}
+	}
 	return packReleaseSourceArchive(files)
 }
 
