@@ -3050,6 +3050,7 @@ paths:
     post:
       operationId: validateNodeEnrollment
       tags: [ops]
+      x-client: agent
       description: 只读校验接入码状态、平台和所需能力，不消耗接入码或创建节点。
       requestBody:
         required: true

@@ -114,6 +114,13 @@ func TestAvatarUploadAndPrivateRead(t *testing.T) {
 			if len(store.files) != 1 {
 				t.Fatalf("old objects not cleaned: %d", len(store.files))
 			}
+			baseRequest := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me/avatar", nil)
+			baseRequest.AddCookie(cookie)
+			baseResponse := httptest.NewRecorder()
+			server.ServeHTTP(baseResponse, baseRequest)
+			if baseResponse.Code != http.StatusOK {
+				t.Fatalf("无版本头像地址读取失败: %d", baseResponse.Code)
+			}
 			req := httptest.NewRequest(http.MethodGet, url, nil)
 			rec := httptest.NewRecorder()
 			server.ServeHTTP(rec, req)

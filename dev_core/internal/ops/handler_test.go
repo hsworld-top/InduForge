@@ -63,6 +63,7 @@ func TestNewOpsReadRoutesHaveConcreteHTTPEvidence(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/api/v1/ops/deployment-runs/11111111-1111-4111-8111-111111111111/events/page", nil),
 		httptest.NewRequest(http.MethodGet, "/api/v1/ops/records", nil),
 		httptest.NewRequest(http.MethodGet, "/api/v1/ops/runtime-environments/11111111-1111-4111-8111-111111111111/overview", nil),
+		httptest.NewRequest(http.MethodPost, "/api/v1/ops/agent/enrollments/validate", nil),
 	}
 	for _, request := range requests {
 		out := httptest.NewRecorder()
@@ -70,6 +71,24 @@ func TestNewOpsReadRoutesHaveConcreteHTTPEvidence(t *testing.T) {
 		if out.Code == http.StatusNotFound {
 			t.Fatalf("route not mounted: %s %s", request.Method, request.URL.Path)
 		}
+	}
+}
+
+type nodeMetricsHTTPRepository struct{ Repository }
+
+func (r *nodeMetricsHTTPRepository) ListNodeMetrics(_ context.Context, _ string, ids []string) ([]Node, error) {
+	return []Node{{ID: ids[0], DesiredStatus: "active", ObservedStatus: "online", ResourceSummary: map[string]any{}}}, nil
+}
+
+func TestNodeMetricsRouteForwardsIDs(t *testing.T) {
+	router := chi.NewRouter()
+	NewHandler(NewService(&nodeMetricsHTTPRepository{}, nil), nil).MountRoutes(router)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ops/nodes/metrics?ids="+testNodeID, nil)
+	request = request.WithContext(auth.WithUser(request.Context(), auth.User{TenantID: "tenant", Role: "OPS_ADMIN"}))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("节点指标接口请求失败: %d %s", response.Code, response.Body.String())
 	}
 }
 

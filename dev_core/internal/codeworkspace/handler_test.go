@@ -47,6 +47,10 @@ func (h testAPIHandler) RebuildCodeWorkspace(w http.ResponseWriter, r *http.Requ
 	h.workspace.RebuildCodeWorkspace(w, r, projectID)
 }
 
+func (h testAPIHandler) CreateCodeWorkspaceMCPToken(w http.ResponseWriter, r *http.Request, projectID string) {
+	h.workspace.CreateCodeWorkspaceMCPToken(w, r, projectID)
+}
+
 func TestCodeWorkspaceHTTPRoutes(t *testing.T) {
 	application, token := newCodeWorkspaceHTTPTestApp(t)
 
@@ -54,6 +58,7 @@ func TestCodeWorkspaceHTTPRoutes(t *testing.T) {
 	assertCodeWorkspaceResponse(t, application, token, http.MethodPost, "/api/v1/projects/"+testProjectID+"/code-workspace/start")
 	assertCodeWorkspaceResponse(t, application, token, http.MethodPost, "/api/v1/projects/"+testProjectID+"/code-workspace/stop")
 	assertCodeWorkspaceResponse(t, application, token, http.MethodPost, "/api/v1/projects/"+testProjectID+"/code-workspace/rebuild")
+	assertMCPTokenResponse(t, application, token)
 }
 
 func newCodeWorkspaceHTTPTestApp(t *testing.T) (*app.App, string) {
@@ -119,6 +124,27 @@ func assertCodeWorkspaceResponse(t *testing.T, application *app.App, token, meth
 		if _, ok := payload.Data.Services[name]; !ok {
 			t.Fatalf("缺少 %s 服务", name)
 		}
+	}
+}
+
+func assertMCPTokenResponse(t *testing.T, application *app.App, token string) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+testProjectID+"/code-workspace/mcp-token", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	application.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("MCP 令牌接口状态错误: %d %s", response.Code, response.Body.String())
+	}
+	var envelope struct {
+		Code int `json:"code"`
+		Data struct {
+			ProjectID string `json:"projectId"`
+			Token     string `json:"token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || envelope.Code != 0 || envelope.Data.ProjectID != testProjectID || envelope.Data.Token == "" {
+		t.Fatalf("MCP 令牌接口响应错误: %s err=%v", response.Body.String(), err)
 	}
 }
 

@@ -409,6 +409,11 @@ export const opsAPI = {
   async getEnrollment(id: OpsId) {
     return unpack<NodeEnrollment>(await request.get(`/ops/node-enrollments/${id}`, config))
   },
+  async revokeEnrollment(id: OpsId) {
+    return unpack<NodeEnrollment>(
+      await request.post(`/ops/node-enrollments/${id}/revoke`, undefined, config),
+    )
+  },
   async createEnrollment(payload: {
     platform: OpsPlatform
     capabilities: OpsCapability[]
@@ -419,16 +424,6 @@ export const opsAPI = {
       await request.post('/ops/node-enrollments', payload, config),
     )
     return { ...result.enrollment, enrollmentCode: result.code }
-  },
-  async approveEnrollment(id: OpsId) {
-    return unpack<NodeEnrollment>(
-      await request.post(`/ops/node-enrollments/${id}/approve`, undefined, config),
-    )
-  },
-  async rejectEnrollment(id: OpsId) {
-    return unpack<NodeEnrollment>(
-      await request.post(`/ops/node-enrollments/${id}/reject`, undefined, config),
-    )
   },
   async listNodes(params: ListParams = {}, signal?: AbortSignal) {
     const result = list<OpsNode>(
