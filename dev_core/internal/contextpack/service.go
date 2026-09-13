@@ -121,6 +121,13 @@ func (s *Service) Sync(ctx context.Context, actor auth.User, projectID, authoriz
 	if err != nil {
 		return nil, err
 	}
+	users := resourceContext{Items: []map[string]any{}}
+	if runtimeUsers, userErr := s.runtimeAccess.ListUsers(ctx, actor, projectID); userErr != nil {
+		users.Error = fmt.Sprintf("读取运行用户上下文失败: %v", userErr)
+	} else {
+		users.Available = true
+		users.Items = runtimeUserContextItems(runtimeUsers)
+	}
 	points, err := s.fetchPoints(ctx, projectID, authorization)
 	if err != nil {
 		return nil, err
@@ -143,14 +150,14 @@ func (s *Service) Sync(ctx context.Context, actor auth.User, projectID, authoriz
 		objects.Items = items
 		objects.Available = true
 	}
-	files, err := buildFiles(item, roles, points, scenes, alarms, computes, objects)
+	files, err := buildFiles(item, roles, points, scenes, alarms, computes, objects, users)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.workspace.SyncContext(projectID, files); err != nil {
 		return nil, err
 	}
-	return map[string]any{"schemaVersion": "workspace-context.v2", "contractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "alarmCount": len(alarms.Items), "computeCount": len(computes.Items), "objectLibraryCount": len(objects.Items), "sceneCount": len(scenes.Contracts), "sceneContractVersion": scenes.ContractVersion, "updatedAt": time.Now().UTC().Format("2006-01-02 15:04:05")}, nil
+	return map[string]any{"schemaVersion": "workspace-context.v2", "contractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "userCount": len(users.Items), "alarmCount": len(alarms.Items), "computeCount": len(computes.Items), "objectLibraryCount": len(objects.Items), "sceneCount": len(scenes.Contracts), "sceneContractVersion": scenes.ContractVersion, "updatedAt": time.Now().UTC().Format("2006-01-02 15:04:05")}, nil
 }
 
 func (s *Service) fetchPoints(ctx context.Context, projectID, authorization string) (pointSnapshot, error) {
@@ -217,6 +224,7 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 	alarms := resourceContext{Items: []map[string]any{}, Available: true}
 	computes := resourceContext{Items: []map[string]any{}, Available: true}
 	objects := resourceContext{Items: []map[string]any{}, Available: true}
+	users := resourceContext{Items: []map[string]any{}, Available: true}
 	if len(resources) > 0 {
 		alarms = resources[0]
 	}
@@ -225,6 +233,9 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 	}
 	if len(resources) > 2 {
 		objects = resources[2]
+	}
+	if len(resources) > 3 {
+		users = resources[3]
 	}
 	roleLines := []string{"# 运行角色", "", "角色和能力仅用于开发参考，运行时仍由服务端校验。", ""}
 	roleItems := make([]roleContext, 0, len(roles))
@@ -249,10 +260,12 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 		"project/overview.json":    append(overviewJSON, '\n'),
 		"authorization/roles.md":   []byte(strings.Join(roleLines, "\n")),
 		"authorization/roles.json": append(rolesJSON, '\n'),
+		"authorization/users.md":   []byte("# 工程运行用户\n\n此文件只包含运行用户的公开元数据，不包含密码摘要。登录和最终权限判断由 Runtime API 完成。\n"),
 		"points/README.md":         []byte("# 数据点开发契约\n\nJSON 分片是机器读取的权威契约，Markdown 分片用于快速阅读。数据点按 500 条分片写入 catalog/，请先读取 manifest.json 再按需检索。\n"),
 		"scenes/README.md":         []byte("# 场景公开契约\n\n此处描述工程页面可用的场景参数、事件和命令，不包含私有画布结构。\n"),
 		"object-library/README.md": []byte("# 工程对象库\n\n工程对象库用于保存视频、大文件、跨页面或多人共享文件，以及需要后端处理的文件。小型、页面私有且随版本发布的图片和图标优先放在工程源码中。\n\nJSON 是机器读取的权威元数据，Markdown 只用于快速浏览。每项包含 assetId、name、contentType、size、updatedAt、usage 和 entry（若平台已公开入口）。对象存储 key、租户信息、内部 Provider 地址和签名参数不会写入上下文。开发工作区提供 `/api/v1/projects/{projectId}/files` 用于上传、查询、替换和删除工程对象文件；开发时只能使用该入口或已声明的 Runtime SDK、场景 Provider 入口，并传入 assetId。不能根据文件名、ID 或 entry 自己拼接 URL，也不能把大文件复制到 public。\n"),
 	}
+	addResourceFiles(files, "authorization/users", "运行用户", users, []string{"password", "passwordHash", "password_hash", "secret"})
 	addResourceFiles(files, "alarms", "报警", alarms, nil)
 	addResourceFiles(files, "computes", "计算单元", computes, []string{"scriptCode", "code"})
 	addResourceFiles(files, "object-library", "对象库", objects, []string{"objectKey", "provider", "tenantId"})
@@ -305,7 +318,10 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 		return nil, err
 	}
 	files["scenes/manifest.json"] = sceneManifestJSON
-	missing := []string{"runtime-users"}
+	missing := []string{}
+	if !users.Available {
+		missing = append(missing, "runtime-users")
+	}
 	if !alarms.Available {
 		missing = append(missing, "alarm-context")
 	}
@@ -315,7 +331,7 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 	if !objects.Available {
 		missing = append(missing, "object-library")
 	}
-	manifest, err := json.MarshalIndent(map[string]any{"schemaVersion": "workspace-context.v2", "projectId": item.ID, "generatedAt": time.Now().UTC().Format(time.RFC3339), "pointContractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "alarmCount": len(alarms.Items), "computeCount": len(computes.Items), "objectLibraryCount": len(objects.Items), "pointChunkCount": chunkCount, "sceneContractVersion": scenes.ContractVersion, "sceneCount": len(scenes.Contracts), "formats": []string{"json", "md"}, "missing": missing}, "", "  ")
+	manifest, err := json.MarshalIndent(map[string]any{"schemaVersion": "workspace-context.v2", "contextVersion": "2", "pathVersion": "datapoint-path.v1", "projectId": item.ID, "generatedAt": time.Now().UTC().Format(time.RFC3339), "pointContractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "userCount": len(users.Items), "alarmCount": len(alarms.Items), "computeCount": len(computes.Items), "objectLibraryCount": len(objects.Items), "pointChunkCount": chunkCount, "sceneContractVersion": scenes.ContractVersion, "sceneCount": len(scenes.Contracts), "formats": []string{"json", "md"}, "missing": missing}, "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +377,34 @@ func addResourceFiles(files map[string][]byte, directory, label string, resource
 	}
 	files[directory+"/catalog.md"] = []byte(strings.Join(lines, "\n"))
 	files[directory+"/catalog.json"] = append(jsonData, '\n')
+}
+
+// runtimeUserContextItems 将运行用户投影成开发上下文公开元数据。
+// RuntimeUser 不携带密码摘要；这里再次白名单化，避免未来模型字段变化时把凭据写入工作区。
+func runtimeUserContextItems(users []runtimeaccess.RuntimeUser) []map[string]any {
+	items := make([]map[string]any, 0, len(users))
+	for _, user := range users {
+		roles := make([]map[string]any, 0, len(user.Roles))
+		capabilities := make([]string, 0)
+		seen := map[string]bool{}
+		for _, role := range user.Roles {
+			roleItem := map[string]any{"id": role.ID, "code": role.Code, "name": role.Name, "status": role.Status, "isBuiltin": role.IsBuiltin}
+			roles = append(roles, roleItem)
+			for _, capability := range role.Capabilities {
+				if !seen[capability] {
+					seen[capability] = true
+					capabilities = append(capabilities, capability)
+				}
+			}
+		}
+		items = append(items, map[string]any{
+			"id": user.ID, "projectId": user.ProjectID, "username": user.Username,
+			"displayName": user.DisplayName, "email": user.Email, "status": user.Status,
+			"isBuiltinAdmin": user.IsBuiltinAdmin, "roles": roles, "capabilities": capabilities,
+			"lastLoginAt": user.LastLoginAt, "createdAt": user.CreatedAt, "updatedAt": user.UpdatedAt,
+		})
+	}
+	return items
 }
 
 func containsString(values []string, target string) bool {
