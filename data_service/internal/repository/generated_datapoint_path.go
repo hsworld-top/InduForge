@@ -17,7 +17,11 @@ import (
 // 如果基础 path 已经属于同一个来源对象，直接复用；如果被其他对象占用，则追加对象 ID 前缀避免覆盖。
 func allocateGeneratedDataPointPath(ctx context.Context, tx pgx.Tx, projectID, basePath, sourceType, sourceObjectID string) (string, error) {
 	basePath = normalizeGeneratedDataPointPath(basePath)
-	if generated, err := buildV2GeneratedDataPointPath(sourceType, sourceObjectID, basePath); err == nil {
+	if sourceType != "" {
+		generated, err := buildV2GeneratedDataPointPath(sourceType, sourceObjectID, lastGeneratedPathSegment(basePath))
+		if err != nil {
+			return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, err.Error())
+		}
 		basePath = generated
 	}
 	if basePath == "" {
@@ -53,7 +57,11 @@ func allocateGeneratedDataPointPath(ctx context.Context, tx pgx.Tx, projectID, b
 }
 
 func buildV2GeneratedDataPointPath(sourceType, sourceID, outputKey string) (string, error) {
-	prefixes := map[string]string{"manual": "manual", "db.query": "db", "mqtt.subscription": "mqtt", "realtime.key": "realtime", "collector.point": "collector", "calc.output": "calc"}
+	prefixes := map[string]string{
+		"manual": "manual", "db.query": "db", "mqtt.subscription": "mqtt", "mqtt.tag": "mqtt",
+		"realtime.key": "realtime", "collector.point": "collector", "calc.output": "calc",
+		"http.request": "http", "websocket.session": "websocket", "kafka.field": "kafka", "kafka.raw": "kafka",
+	}
 	prefix, ok := prefixes[sourceType]
 	if !ok {
 		return "", fmt.Errorf("不支持的数据点来源类型: %s", sourceType)
@@ -69,6 +77,14 @@ func buildV2GeneratedDataPointPath(sourceType, sourceID, outputKey string) (stri
 		return "", fmt.Errorf("数据点路径长度超过 512 个字符")
 	}
 	return path, nil
+}
+
+func lastGeneratedPathSegment(path string) string {
+	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '.' || r == '/' || r == '\\' })
+	if len(parts) == 0 {
+		return "output"
+	}
+	return parts[len(parts)-1]
 }
 
 func readDataPointPathOwner(ctx context.Context, tx pgx.Tx, projectID, path string) (string, map[string]any, error) {
