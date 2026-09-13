@@ -27,9 +27,12 @@ type pointSnapshot struct {
 // 属性、方法说明和更新时间。这里不包含实时值、连接参数等运行期私有数据。
 type dataPointContext struct {
 	ID          string            `json:"id"`
+	Path        string            `json:"path"`
 	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
 	DataType    string            `json:"dataType"`
+	SourceType  string            `json:"sourceType,omitempty"`
+	SourceID    string            `json:"sourceId,omitempty"`
 	Status      string            `json:"status"`
 	Attributes  map[string]string `json:"attributes"`
 	Methods     []dataPointMethod `json:"methods"`
@@ -285,7 +288,7 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 			return nil, err
 		}
 		for _, point := range points.DataPoints[start:end] {
-			lines = append(lines, "## `"+point.ID+"`", "", point.Name+" · "+point.DataType+" · "+point.Status, "", point.Description, "")
+			lines = append(lines, "## `"+point.ID+"` "+point.Name, "", "路径：`"+point.Path+"` · 类型："+point.DataType+" · 来源：`"+point.SourceType+"` · 状态："+point.Status, "", point.Description, "")
 			for _, method := range point.Methods {
 				parameters, _ := json.Marshal(method.Parameters)
 				result, _ := json.Marshal(method.Result)
