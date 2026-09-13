@@ -173,4 +173,4 @@ Runtime API V1 目前只读。因此 `points.*.set()` 和 `computes.*.run()` 会
 
 ## 会话与权限
 
-当前运行态会话入口使用发布网关注入的 Runtime Bearer Token：调用 `runtime.session.establish(token)` 建立 HttpOnly 会话，之后可用 `query()`、`exit()` 管理会话。`access.currentUser()` 返回当前会话身份，`access.hasRole()` 与 `access.hasCapability()` 只读取服务端会话快照。用户名密码登录需要工程用户快照和密码验证链路完成后再开放，SDK 不伪造本地登录结果。
+运行态会话支持两种入口：发布网关注入的 Runtime Bearer Token 使用 `runtime.session.establish(token)`；工程用户快照已随部署下发时，可使用 `runtime.session.login(username, password)`。两者都会建立 HttpOnly 会话，之后可用 `query()`、`exit()` 管理会话。`access.currentUser()` 返回当前会话身份，`access.hasRole()` 与 `access.hasCapability()` 只读取服务端会话快照；SDK 不在浏览器保存密码或自行判断权限。
