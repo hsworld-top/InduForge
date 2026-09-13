@@ -17,6 +17,9 @@ import (
 // 如果基础 path 已经属于同一个来源对象，直接复用；如果被其他对象占用，则追加对象 ID 前缀避免覆盖。
 func allocateGeneratedDataPointPath(ctx context.Context, tx pgx.Tx, projectID, basePath, sourceType, sourceObjectID string) (string, error) {
 	basePath = normalizeGeneratedDataPointPath(basePath)
+	if generated, err := buildV2GeneratedDataPointPath(sourceType, sourceObjectID, basePath); err == nil {
+		basePath = generated
+	}
 	if basePath == "" {
 		basePath = "generated.unnamed"
 	}
@@ -47,6 +50,25 @@ func allocateGeneratedDataPointPath(ctx context.Context, tx pgx.Tx, projectID, b
 		}
 	}
 	return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "自动生成数据点路径冲突过多")
+}
+
+func buildV2GeneratedDataPointPath(sourceType, sourceID, outputKey string) (string, error) {
+	prefixes := map[string]string{"manual": "manual", "db.query": "db", "mqtt.subscription": "mqtt", "realtime.key": "realtime", "collector.point": "collector", "calc.output": "calc"}
+	prefix, ok := prefixes[sourceType]
+	if !ok {
+		return "", fmt.Errorf("不支持的数据点来源类型: %s", sourceType)
+	}
+	parts := []string{prefix, sourceID, outputKey}
+	for _, p := range parts {
+		if strings.TrimSpace(p) == "" || strings.ContainsAny(p, ".\\/\n\r\t") {
+			return "", fmt.Errorf("数据点路径片段无效")
+		}
+	}
+	path := strings.Join(parts, ".")
+	if len([]rune(path)) > 512 {
+		return "", fmt.Errorf("数据点路径长度超过 512 个字符")
+	}
+	return path, nil
 }
 
 func readDataPointPathOwner(ctx context.Context, tx pgx.Tx, projectID, path string) (string, map[string]any, error) {
