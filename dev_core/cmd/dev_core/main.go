@@ -158,7 +158,7 @@ func main() {
 	}
 	codeWorkspaceService, err := codeworkspace.NewService(projectRepository, workspaceEngine, codeworkspace.Config{
 		Image: cfg.CodeServerImage, BindHost: cfg.CodeServerBindHost, AllowedOrigins: cfg.CodeWorkspaceAllowedOrigins, WorkspacePublicOriginTemplate: cfg.WorkspacePublicOriginTemplate, AllowInsecureHTTPDev: cfg.WorkspaceAllowInsecureHTTPDev, VolumeName: cfg.CodeWorkspaceVolume,
-		DefaultTemplateProjectID: platformdb.BuiltinDemoProjectID, DefaultTemplateID: "vite-vue-js",
+		DefaultTemplateProjectID: platformdb.BuiltinDemoProjectID, DefaultTemplateID: "vite-vue-js", DataServiceURL: cfg.DataServiceURL, CenterPublicOrigin: cfg.CenterPublicOrigin,
 	})
 	if err != nil {
 		logger.Error("初始化代码工作区服务失败", "error", err)
@@ -167,6 +167,9 @@ func main() {
 	codeWorkspaceService.SetPresence(cacheStore)
 	codeWorkspaceService.SetAuthoringEpochGuard(projectRepository)
 	codeWorkspaceHandler := codeworkspace.NewHandler(codeWorkspaceService, authService)
+	codeWorkspaceHandler.SetMCPDataProxy(func(proxyCtx context.Context, method, requestPath, bearer string, body []byte) ([]byte, int, error) {
+		return dataServiceClient.ProxyUserRequest(proxyCtx, method, requestPath, bearer, body)
+	})
 	var codeWorkspaceGateway *codeworkspace.Gateway
 	if cfg.WorkspacePublicOriginTemplate != "" {
 		codeWorkspaceGateway, err = codeworkspace.NewGateway(codeWorkspaceService, codeworkspace.GatewayConfig{
@@ -316,6 +319,7 @@ func main() {
 			nodeHandler.MountAgentRoutes(router)
 			opsHandler.MountRoutes(router)
 			router.Route("/api/v1", func(api chi.Router) {
+				api.Post("/projects/{projectId}/code-workspace/mcp-data", codeWorkspaceHandler.ProxyMCPData)
 				sceneAssetHandler.MountRoutes(api)
 				projectFileHandler.MountRoutes(api)
 			})

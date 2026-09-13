@@ -295,6 +295,16 @@ func (s *QueryService) ExecuteQuery(ctx context.Context, claims *auth.Claims, qu
 	return s.executeRecord(ctx, *record, input.Parameters)
 }
 
+// GetQuery 按主键读取查询定义，并校验查询所属工程在当前令牌范围内。
+func (s *QueryService) GetQuery(ctx context.Context, claims *auth.Claims, queryID string) (*Query, error) {
+	record, err := s.loadQueryForClaims(ctx, claims, queryID)
+	if err != nil {
+		return nil, err
+	}
+	query := toQuery(*record)
+	return &query, nil
+}
+
 // ExecuteQueryForProject 按项目与查询主键执行查询，适用于 datapoint value 的内部调用。
 func (s *QueryService) ExecuteQueryForProject(ctx context.Context, projectID, queryID string, input ExecuteQueryInput) (*QueryExecutionResult, error) {
 	if err := validateProjectID(projectID); err != nil {

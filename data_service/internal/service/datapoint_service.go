@@ -118,8 +118,26 @@ type DataPointValue struct {
 	Status          string     `json:"status"`
 }
 
-// CreateDataPointInput 预留给后续扩展的创建入参。
-type CreateDataPointInput struct{}
+// CreateDataPointInput 表示 MCP/工程工具创建业务数据点的入参。
+// 接入源、查询和计算的存在性由服务端按 sourceType 校验，不能由客户端伪造。
+type CreateDataPointInput struct {
+	Path              string
+	Name              string
+	Description       *string
+	SourceType        string
+	SourceID          *string
+	SourceConfig      map[string]any
+	DataType          string
+	Unit              *string
+	PrecisionNum      *int
+	DefaultValue      *string
+	MinValue          *float64
+	MaxValue          *float64
+	Tags              []any
+	RefreshMode       string
+	RefreshIntervalMS *int
+	Status            string
+}
 
 // UpdateDataPointInput 表示更新数据点时的业务输入。
 type UpdateDataPointInput struct {
@@ -162,6 +180,74 @@ type DataPointService struct {
 	collectors     *repository.CollectorRepository
 	builtinRuntime *BuiltinRuntimeService
 	mqttPublisher  mqttDataPointPublisher
+}
+
+// CreateDataPoint 创建手工或基于已有来源的数据点。
+func (s *DataPointService) CreateDataPoint(ctx context.Context, projectID, userID string, input CreateDataPointInput) (*DataPoint, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	pathValue, err := normalizeDataPointPath(input.Path)
+	if err != nil {
+		return nil, err
+	}
+	name, err := normalizeDataPointName(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	sourceType, err := normalizeDataPointSourceType(input.SourceType)
+	if err != nil {
+		return nil, err
+	}
+	dataType, err := normalizeDataPointDataType(input.DataType)
+	if err != nil {
+		return nil, err
+	}
+	refreshMode := strings.TrimSpace(input.RefreshMode)
+	if refreshMode == "" {
+		refreshMode = "manual"
+	}
+	refreshMode, err = normalizeRefreshMode(refreshMode)
+	if err != nil {
+		return nil, err
+	}
+	status := strings.TrimSpace(input.Status)
+	if status == "" {
+		status = "active"
+	}
+	status, err = normalizeDataPointStatus(status)
+	if err != nil {
+		return nil, err
+	}
+	var sourceID *string
+	if input.SourceID != nil && strings.TrimSpace(*input.SourceID) != "" {
+		sourceID, err = normalizeOptionalUUIDPtr(*input.SourceID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if sourceType != "manual.input" && sourceID == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "非手工数据点必须引用已有 sourceId")
+	}
+	if sourceType == "db.query" && s.queries != nil && sourceID != nil {
+		if _, err = s.queries.repository.GetByProjectAndID(ctx, projectID, *sourceID); err != nil {
+			return nil, err
+		}
+	}
+	if sourceType == "calc.output" && s.computes != nil && sourceID != nil {
+		if _, err = s.computes.GetUnitByProjectAndID(ctx, projectID, *sourceID); err != nil {
+			return nil, err
+		}
+	}
+	record, err := s.repository.Create(ctx, repository.CreateDataPointParams{ProjectID: projectID, UserID: &userID, Path: pathValue, Name: name, Description: cloneOptionalString(input.Description), SourceType: sourceType, SourceID: sourceID, SourceConfig: cloneMap(input.SourceConfig), DataType: dataType, Unit: cloneOptionalString(input.Unit), PrecisionNum: cloneOptionalInt(input.PrecisionNum), DefaultValue: cloneOptionalString(input.DefaultValue), MinValue: cloneOptionalFloat64(input.MinValue), MaxValue: cloneOptionalFloat64(input.MaxValue), Tags: cloneJSONArray(input.Tags), RefreshMode: refreshMode, RefreshIntervalMS: cloneOptionalInt(input.RefreshIntervalMS), Status: status})
+	if err != nil {
+		return nil, err
+	}
+	result := toDataPoint(*record)
+	return &result, nil
 }
 
 type mqttDataPointPublisher interface {

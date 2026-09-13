@@ -691,6 +691,14 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 		mux.Handle(
+			"GET /api/v1/data/queries/{id}",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.queryHandler.Get),
+				),
+			),
+		)
+		mux.Handle(
 			"POST /api/v1/data/queries/{id}/execute",
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:read")(
@@ -752,6 +760,14 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:read")(
 					middleware.ErrorHandler(opts.dataPointHandler.GetValue),
+				),
+			),
+		)
+		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/datapoints",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.Create),
 				),
 			),
 		)

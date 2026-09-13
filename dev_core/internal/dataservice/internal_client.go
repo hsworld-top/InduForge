@@ -207,6 +207,37 @@ type InternalClient struct {
 	client  *http.Client
 }
 
+// ProxyUserRequest 将经过中心鉴权的工程范围请求转发到数据服务公开 API。
+// bearer 由 dev_core 为当前 MCP 用户签发，绝不接受工作区自行伪造的身份字段。
+func (c *InternalClient) ProxyUserRequest(ctx context.Context, method, requestPath, bearer string, body []byte) ([]byte, int, error) {
+	if c == nil || c.client == nil || strings.TrimSpace(bearer) == "" {
+		return nil, http.StatusUnauthorized, fmt.Errorf("数据服务代理凭证无效")
+	}
+	requestPath = strings.TrimSpace(requestPath)
+	if !strings.HasPrefix(requestPath, "/api/v1/data/") || strings.Contains(requestPath, "..") {
+		return nil, http.StatusBadRequest, fmt.Errorf("数据服务代理路径不允许")
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+requestPath, bytes.NewReader(body))
+	if err != nil {
+		return nil, http.StatusBadRequest, fmt.Errorf("创建数据服务代理请求失败")
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
+	req.Header.Set("Accept", "application/json")
+	if len(body) > 0 {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, http.StatusBadGateway, fmt.Errorf("调用数据服务代理失败")
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxAuthoringSnapshotBytes+1))
+	if err != nil || int64(len(raw)) > maxAuthoringSnapshotBytes {
+		return nil, http.StatusBadGateway, fmt.Errorf("数据服务代理响应过大")
+	}
+	return raw, resp.StatusCode, nil
+}
+
 func NewInternalClient(rawURL, token string) (*InternalClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(rawURL), "/")
 	parsed, err := url.ParseRequestURI(baseURL)

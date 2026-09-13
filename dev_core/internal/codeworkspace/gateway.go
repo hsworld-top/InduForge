@@ -65,6 +65,8 @@ type gatewayGrant struct {
 	Host       string
 	ExpiresAt  time.Time
 	LastUsedAt time.Time
+	// MCPToken 仅在 MCP 会话转发到工作区时短暂携带，供工作区数据工具回到中心做同一身份校验。
+	MCPToken string
 }
 
 type grantValidation struct {
@@ -419,7 +421,7 @@ func (g *Gateway) serveMCPBearer(w http.ResponseWriter, r *http.Request, host, p
 		http.Error(w, "建立 MCP 会话失败", http.StatusInternalServerError)
 		return true
 	}
-	grant := gatewayGrant{Actor: actor, ProjectID: projectID, Epoch: epoch, Service: "mcp", Host: host, ExpiresAt: expiresAt, LastUsedAt: g.now()}
+	grant := gatewayGrant{Actor: actor, ProjectID: projectID, Epoch: epoch, Service: "mcp", Host: host, ExpiresAt: expiresAt, LastUsedAt: g.now(), MCPToken: parts[1]}
 	g.mu.Lock()
 	g.sessions[sessionID] = grant
 	g.mu.Unlock()
@@ -532,6 +534,9 @@ func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, grant gatewayGra
 		req.Header.Set("X-InduForge-Tenant-Id", grant.Actor.TenantID)
 		req.Header.Set("X-InduForge-Project-Id", grant.ProjectID)
 		req.Header.Set("X-InduForge-Role", grant.Actor.Role)
+		if grant.Service == "mcp" && grant.MCPToken != "" {
+			req.Header.Set("X-InduForge-MCP-Token", grant.MCPToken)
+		}
 	}
 	proxy.ModifyResponse = func(response *http.Response) error {
 		response.Header.Del("Set-Cookie")

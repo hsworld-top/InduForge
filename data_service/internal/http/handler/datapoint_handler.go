@@ -58,6 +58,24 @@ func (h *DataPointHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// Create 创建手工或引用已有来源的数据点。
+func (h *DataPointHandler) Create(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.CreateDataPointInput
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.service.CreateDataPoint(r.Context(), r.PathValue("projectId"), claims.UserID, input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // GetValue 按路径读取数据点值。
 func (h *DataPointHandler) GetValue(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {

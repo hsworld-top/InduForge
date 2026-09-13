@@ -42,6 +42,20 @@ func (h *QueryHandler) List(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// Get 返回当前令牌可访问的单条查询定义。
+func (h *QueryHandler) Get(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.GetQuery(r.Context(), claims, r.PathValue("id"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // Create 在项目内创建查询定义。
 func (h *QueryHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

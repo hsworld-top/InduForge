@@ -50,6 +50,14 @@ type LoginInput struct {
 
 func (s *Service) SetAssetSigner(signer AssetSigner) { s.assets = signer }
 
+// IssueScopedAccessToken 为受控的开发工具代理生成工程范围令牌。
+func (s *Service) IssueScopedAccessToken(user User, projectID string, capabilities []string) (string, time.Time, error) {
+	if s == nil || s.tokens == nil || strings.TrimSpace(projectID) == "" {
+		return "", time.Time{}, ErrUnauthorized
+	}
+	return s.tokens.IssueScopedAccessToken(user, projectID, capabilities)
+}
+
 type TokenPair struct {
 	RememberMe       bool   `json:"-"`
 	RefreshExpiresIn int64  `json:"-"`

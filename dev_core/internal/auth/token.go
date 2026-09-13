@@ -16,11 +16,13 @@ import (
 var ErrAccessTokenExpired = errors.New("访问令牌已到期")
 
 type Claims struct {
-	CredentialVersion int64  `json:"credentialVersion"`
-	UserID            string `json:"userId"`
-	TenantID          string `json:"tenantId"`
-	Username          string `json:"username"`
-	Role              string `json:"role"`
+	CredentialVersion int64    `json:"credentialVersion"`
+	UserID            string   `json:"userId"`
+	TenantID          string   `json:"tenantId"`
+	Username          string   `json:"username"`
+	Role              string   `json:"role"`
+	ProjectIDs        []string `json:"projectIds,omitempty"`
+	Capabilities      []string `json:"capabilities,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -51,6 +53,16 @@ func NewTokenManager(secret, issuer, audience string, accessTTL, refreshTTL time
 }
 
 func (m *TokenManager) IssueAccessToken(user User) (string, time.Time, error) {
+	return m.issueAccessToken(user, nil, nil)
+}
+
+// IssueScopedAccessToken 为受控的服务间代理签发短期、工程限定访问令牌。
+// 令牌仍使用与 data_service 共享的 JWT 密钥，但只包含一个工程和明确的读写能力。
+func (m *TokenManager) IssueScopedAccessToken(user User, projectID string, capabilities []string) (string, time.Time, error) {
+	return m.issueAccessToken(user, []string{projectID}, capabilities)
+}
+
+func (m *TokenManager) issueAccessToken(user User, projectIDs, capabilities []string) (string, time.Time, error) {
 	now := m.now().UTC()
 	expiresAt := now.Add(m.accessTTL)
 	tokenID, err := randomTokenValue(16)
@@ -63,6 +75,8 @@ func (m *TokenManager) IssueAccessToken(user User) (string, time.Time, error) {
 		TenantID:          user.TenantID,
 		Username:          user.Username,
 		Role:              user.Role,
+		ProjectIDs:        append([]string(nil), projectIDs...),
+		Capabilities:      append([]string(nil), capabilities...),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        tokenID,
 			Issuer:    m.issuer,

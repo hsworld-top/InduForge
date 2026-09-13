@@ -35,6 +35,8 @@ type Config struct {
 	VolumeName                    string
 	DefaultTemplateProjectID      string
 	DefaultTemplateID             string
+	DataServiceURL                string
+	CenterPublicOrigin            string
 }
 
 type Status struct {
@@ -79,6 +81,8 @@ func NewService(projects ProjectRepository, engine Engine, config Config) (*Serv
 	config.VolumeName = strings.TrimSpace(config.VolumeName)
 	config.DefaultTemplateProjectID = strings.TrimSpace(config.DefaultTemplateProjectID)
 	config.DefaultTemplateID = strings.TrimSpace(config.DefaultTemplateID)
+	config.DataServiceURL = strings.TrimRight(strings.TrimSpace(config.DataServiceURL), "/")
+	config.CenterPublicOrigin = strings.TrimRight(strings.TrimSpace(config.CenterPublicOrigin), "/")
 	if config.Image == "" {
 		return nil, fmt.Errorf("code-server 镜像不能为空")
 	}
@@ -404,6 +408,13 @@ func (s *Service) containerSpec(item project.Project) (ContainerSpec, error) {
 		}
 	}
 	environment := []string{"PNPM_HOME=/cache/pnpm", "npm_config_store_dir=/cache/pnpm-store", "XDG_CACHE_HOME=/cache"}
+	environment = append(environment, "INDUFORGE_PROJECT_ID="+item.ID)
+	if s.config.DataServiceURL != "" {
+		environment = append(environment, "INDUFORGE_DATA_API_URL="+s.config.DataServiceURL)
+	}
+	if s.config.CenterPublicOrigin != "" {
+		environment = append(environment, "INDUFORGE_MCP_DATA_ENDPOINT="+s.config.CenterPublicOrigin+"/api/v1/projects/"+item.ID+"/code-workspace/mcp-data")
+	}
 	publicHosts, err := workspacePublicHosts(s.config.WorkspacePublicOriginTemplate, item.ID, s.config.AllowInsecureHTTPDev)
 	if err != nil {
 		return ContainerSpec{}, err

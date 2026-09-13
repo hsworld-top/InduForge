@@ -115,8 +115,8 @@ func TestStartCreatesDeterministicSharedContainerWithControlledMounts(t *testing
 			t.Fatal("code-server 子容器不得挂载 Docker Socket")
 		}
 	}
-	if len(spec.Environment) != 3 {
-		t.Fatalf("子容器不应继承控制面环境: %#v", spec.Environment)
+	if len(spec.Environment) != 4 {
+		t.Fatalf("子容器只允许继承固定工作区环境和工程 ID: %#v", spec.Environment)
 	}
 	if !slices.Contains(spec.Environment, "npm_config_store_dir=/cache/pnpm-store") {
 		t.Fatalf("pnpm store 未指向共享缓存: %#v", spec.Environment)
