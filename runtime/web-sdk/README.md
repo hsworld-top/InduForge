@@ -161,3 +161,7 @@ await runtime.session.exit()
 
 Runtime API V1 目前只读。因此 `points.*.set()` 和 `computes.*.run()` 会将服务端的
 `501 / code: 50031` 原样返回；其他尚未定义的写入、发布和报警动作同样返回失败，绝不会伪成功。
+
+## 会话与权限
+
+当前运行态会话入口使用发布网关注入的 Runtime Bearer Token：调用 `runtime.session.establish(token)` 建立 HttpOnly 会话，之后可用 `query()`、`exit()` 管理会话。`access.currentUser()` 返回当前会话身份，`access.hasRole()` 与 `access.hasCapability()` 只读取服务端会话快照。用户名密码登录需要工程用户快照和密码验证链路完成后再开放，SDK 不伪造本地登录结果。
