@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/indu-forge/dev_core/internal/app"
@@ -118,5 +119,20 @@ func assertCodeWorkspaceResponse(t *testing.T, application *app.App, token, meth
 		if _, ok := payload.Data.Services[name]; !ok {
 			t.Fatalf("缺少 %s 服务", name)
 		}
+	}
+}
+
+func TestMCPTokenBindsUserProjectAndEpoch(t *testing.T) {
+	h := &Handler{mcpTokens: map[string]mcpToken{}}
+	actor := auth.User{ID: "u1"}
+	token, _, err := h.IssueMCPToken(actor, "p1", "e1", time.Hour)
+	if err != nil || token == "" {
+		t.Fatalf("issue token: %v", err)
+	}
+	if !h.ValidateMCPToken(token, "u1", "p1", "e1") {
+		t.Fatal("token should validate")
+	}
+	if h.ValidateMCPToken(token, "u2", "p1", "e1") || h.ValidateMCPToken(token, "u1", "p2", "e1") || h.ValidateMCPToken(token, "u1", "p1", "e2") {
+		t.Fatal("token crossed binding")
 	}
 }

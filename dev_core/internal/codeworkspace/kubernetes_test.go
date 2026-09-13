@@ -78,6 +78,9 @@ func TestKubernetesCreateUsesRestrictedPermissionInitializer(t *testing.T) {
 	if !strings.Contains(string(servicePayload), `"type":"ClusterIP"`) || strings.Contains(string(servicePayload), `"type":"NodePort"`) || strings.Contains(string(servicePayload), `"nodePort"`) {
 		t.Fatalf("Kubernetes 工作区必须只发布 ClusterIP: %s", servicePayload)
 	}
+	if !strings.Contains(string(servicePayload), `"name":"mcp","port":30142`) || !strings.Contains(string(servicePayload), `"targetPort":30142`) {
+		t.Fatalf("Kubernetes 工作区必须发布 MCP 服务端口: %s", servicePayload)
+	}
 	if strings.Contains(payload, "chown -R") {
 		t.Fatalf("初始化器不得递归遍历用户缓存目录: %s", payload)
 	}

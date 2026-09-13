@@ -89,7 +89,8 @@ func (h *Handler) content(w http.ResponseWriter, r *http.Request) {
 	defer reader.Reader.Close()
 	w.Header().Set("Content-Type", item.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(item.Size, 10))
-	w.Header().Set("Cache-Control", "private, max-age=3600")
+	// 资源地址保持稳定，替换内容后必须重新向服务端校验，避免浏览器继续使用旧缓存。
+	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Set("Content-Disposition", `inline; filename="`+strings.ReplaceAll(item.Name, `"`, "")+`"`)
 	_, _ = io.Copy(w, reader.Reader)
 }

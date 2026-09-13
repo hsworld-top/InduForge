@@ -176,6 +176,7 @@ func main() {
 			AllowedOrigins:       cfg.CodeWorkspaceAllowedOrigins,
 			AllowInsecureHTTPDev: cfg.WorkspaceAllowInsecureHTTPDev,
 			ResolveUser:          authService.GetActiveUser,
+			ResolveMCPToken:      codeWorkspaceHandler.ResolveMCPToken,
 		})
 		if err != nil {
 			logger.Error("初始化代码工作区隔离网关失败", "error", err)

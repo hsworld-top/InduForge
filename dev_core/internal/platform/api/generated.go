@@ -2265,6 +2265,7 @@ type ServerInterface interface {
 	// 查询工程代码工作区状态
 	// (GET /projects/{projectId}/code-workspace)
 	GetCodeWorkspace(w http.ResponseWriter, r *http.Request, projectId string)
+	CreateCodeWorkspaceMCPToken(w http.ResponseWriter, r *http.Request, projectId string)
 	// 重建工程代码工作区容器
 	// (POST /projects/{projectId}/code-workspace/rebuild)
 	RebuildCodeWorkspace(w http.ResponseWriter, r *http.Request, projectId string)
@@ -3000,6 +3001,11 @@ func (_ Unimplemented) GetProjectAuthoringContext(w http.ResponseWriter, r *http
 // 查询工程代码工作区状态
 // (GET /projects/{projectId}/code-workspace)
 func (_ Unimplemented) GetCodeWorkspace(w http.ResponseWriter, r *http.Request, projectId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建开发工作区 MCP 令牌
+func (_ Unimplemented) CreateCodeWorkspaceMCPToken(w http.ResponseWriter, r *http.Request, projectId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6278,6 +6284,22 @@ func (siw *ServerInterfaceWrapper) GetCodeWorkspace(w http.ResponseWriter, r *ht
 		handler = middleware(handler)
 	}
 
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCodeWorkspaceMCPToken operation middleware
+func (siw *ServerInterfaceWrapper) CreateCodeWorkspaceMCPToken(w http.ResponseWriter, r *http.Request) {
+	var projectId string
+	if err := runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+	ctx := context.WithValue(r.Context(), BearerAuthScopes, []string{})
+	r = r.WithContext(ctx)
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { siw.Handler.CreateCodeWorkspaceMCPToken(w, r, projectId) }))
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
 	handler.ServeHTTP(w, r)
 }
 
@@ -9887,6 +9909,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/code-workspace", wrapper.GetCodeWorkspace)
+		r.Post(options.BaseURL+"/projects/{projectId}/code-workspace/mcp-token", wrapper.CreateCodeWorkspaceMCPToken)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/code-workspace/rebuild", wrapper.RebuildCodeWorkspace)

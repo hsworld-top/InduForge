@@ -2141,6 +2141,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/code-workspace/mcp-token:
+    post:
+      operationId: createCodeWorkspaceMCPToken
+      tags: [codeWorkspace]
+      x-client: designer
+      summary: 创建开发工作区 MCP 连接令牌
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
   /projects/{projectId}/code-workspace/start:
     post:
       operationId: startCodeWorkspace

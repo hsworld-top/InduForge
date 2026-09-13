@@ -117,6 +117,7 @@ func (k *KubernetesEngine) Create(ctx context.Context, spec ContainerSpec) error
 	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": spec.Name, "labels": labels}, "spec": map[string]any{"type": "ClusterIP", "selector": map[string]string{"app.kubernetes.io/name": spec.Name}, "ports": []any{
 		map[string]any{"name": "code", "port": 3000, "targetPort": 3000, "protocol": "TCP"},
 		map[string]any{"name": "ai", "port": 30141, "targetPort": 30141, "protocol": "TCP"},
+		map[string]any{"name": "mcp", "port": 30142, "targetPort": 30142, "protocol": "TCP"},
 		map[string]any{"name": "preview", "port": 5173, "targetPort": 5173, "protocol": "TCP"},
 		map[string]any{"name": "preview-control", "port": 5174, "targetPort": 5174, "protocol": "TCP"},
 	}}}
@@ -173,7 +174,7 @@ if test -d /project/workspace/.workspace; then chown 1000:1000 /project/workspac
 			"initContainers":  []any{initContainer},
 			"containers": []any{map[string]any{
 				"name": "code-workspace", "image": spec.Image, "imagePullPolicy": "Never", "args": spec.Command, "workingDir": spec.WorkingDir,
-				"env": envValues(mainEnvironment), "ports": []any{map[string]any{"containerPort": 3000}, map[string]any{"containerPort": 30141}, map[string]any{"containerPort": 5173}, map[string]any{"containerPort": 5174}},
+				"env": envValues(mainEnvironment), "ports": []any{map[string]any{"containerPort": 3000}, map[string]any{"containerPort": 30141}, map[string]any{"containerPort": 30142}, map[string]any{"containerPort": 5173}, map[string]any{"containerPort": 5174}},
 				"securityContext": map[string]any{"runAsUser": 1000, "runAsGroup": 1000, "allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}},
 				"volumeMounts":    mounts,
 			}},

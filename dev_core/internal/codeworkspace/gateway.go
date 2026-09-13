@@ -39,7 +39,7 @@ var (
 )
 
 var workspaceServicePorts = map[string]int{
-	"code": 3000, "ai": 30141, "preview": 5173, "preview-control": 5174,
+	"code": 3000, "ai": 30141, "preview": 5173, "preview-control": 5174, "mcp": 30142,
 }
 
 type GatewayConfig struct {
@@ -53,6 +53,7 @@ type GatewayConfig struct {
 	Now                  func() time.Time
 	Transport            http.RoundTripper
 	ResolveUser          func(context.Context, string) (auth.User, error)
+	ResolveMCPToken      func(context.Context, string) (auth.User, string, string, time.Time, bool)
 }
 
 type gatewayGrant struct {
@@ -90,6 +91,7 @@ type Gateway struct {
 	now                  func() time.Time
 	transport            http.RoundTripper
 	resolveUser          func(context.Context, string) (auth.User, error)
+	resolveMCPToken      func(context.Context, string) (auth.User, string, string, time.Time, bool)
 	mu                   sync.Mutex
 	tickets              map[string]gatewayGrant
 	ticketByScope        map[string]string
@@ -138,14 +140,14 @@ func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
 	patternURL, _ := url.Parse(strings.NewReplacer("{projectId}", "ifprojectplaceholder", "{service}", "ifserviceplaceholder").Replace(template))
 	fullHostExpression := regexp.QuoteMeta(strings.ToLower(patternURL.Host))
 	fullHostExpression = strings.Replace(fullHostExpression, "ifprojectplaceholder", `[0-9a-f-]{36}`, 1)
-	fullHostExpression = strings.Replace(fullHostExpression, "ifserviceplaceholder", `(?:ai|code|preview|preview-control)`, 1)
+	fullHostExpression = strings.Replace(fullHostExpression, "ifserviceplaceholder", `(?:ai|code|preview|preview-control|mcp)`, 1)
 	fullHostPattern, err := regexp.Compile("^" + fullHostExpression + "$")
 	if err != nil {
 		return nil, fmt.Errorf("%w: Host 模式无法编译", ErrInvalidOriginTemplate)
 	}
 	hostExpression := regexp.QuoteMeta(strings.ToLower(patternURL.Hostname()))
 	hostExpression = strings.Replace(hostExpression, "ifprojectplaceholder", `[0-9a-f-]{36}`, 1)
-	hostExpression = strings.Replace(hostExpression, "ifserviceplaceholder", `(?:ai|code|preview|preview-control)`, 1)
+	hostExpression = strings.Replace(hostExpression, "ifserviceplaceholder", `(?:ai|code|preview|preview-control|mcp)`, 1)
 	hostPattern, err := regexp.Compile("^" + hostExpression + "$")
 	if err != nil {
 		return nil, fmt.Errorf("%w: Hostname 模式无法编译", ErrInvalidOriginTemplate)
@@ -194,7 +196,7 @@ func NewGateway(service *Service, config GatewayConfig) (*Gateway, error) {
 	if config.ResolveUser == nil {
 		return nil, fmt.Errorf("工作区网关用户状态解析器不能为空")
 	}
-	return &Gateway{service: service, template: template, scheme: expectedScheme, allowInsecureHTTPDev: config.AllowInsecureHTTPDev, namespace: namespace, allowedOrigin: allowed, ticketTTL: config.TicketTTL, sessionTTL: config.SessionTTL, now: config.Now, transport: config.Transport, resolveUser: config.ResolveUser, tickets: map[string]gatewayGrant{}, ticketByScope: map[string]string{}, sessions: map[string]gatewayGrant{}, hostPattern: hostPattern, fullHostPattern: fullHostPattern, serviceHostPatterns: serviceHostPatterns, validations: map[string]grantValidation{}, flights: map[string]*grantValidationFlight{}}, nil
+	return &Gateway{service: service, template: template, scheme: expectedScheme, allowInsecureHTTPDev: config.AllowInsecureHTTPDev, namespace: namespace, allowedOrigin: allowed, ticketTTL: config.TicketTTL, sessionTTL: config.SessionTTL, now: config.Now, transport: config.Transport, resolveUser: config.ResolveUser, resolveMCPToken: config.ResolveMCPToken, tickets: map[string]gatewayGrant{}, ticketByScope: map[string]string{}, sessions: map[string]gatewayGrant{}, hostPattern: hostPattern, fullHostPattern: fullHostPattern, serviceHostPatterns: serviceHostPatterns, validations: map[string]grantValidation{}, flights: map[string]*grantValidationFlight{}}, nil
 }
 
 func (g *Gateway) PublicURL(actor auth.User, projectID, epoch, serviceName string) (string, error) {
@@ -258,6 +260,27 @@ func (g *Gateway) PublicURL(actor auth.User, projectID, epoch, serviceName strin
 	return parsed.String(), nil
 }
 
+func (g *Gateway) publicOrigin(projectID, serviceName string) (string, error) {
+	if _, ok := workspaceServicePorts[serviceName]; !ok {
+		return "", fmt.Errorf("未知工作区服务: %s", serviceName)
+	}
+	origin := strings.NewReplacer("{projectId}", strings.ToLower(projectID), "{service}", serviceName).Replace(g.template)
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Hostname() == "" {
+		return "", ErrInvalidOriginTemplate
+	}
+	return strings.ToLower(parsed.Host), nil
+}
+
+// PublicURLWithoutTicket 返回供无浏览器客户端使用的固定服务地址。
+func (g *Gateway) PublicURLWithoutTicket(projectID, serviceName string) (string, error) {
+	origin, err := g.publicOrigin(projectID, serviceName)
+	if err != nil {
+		return "", err
+	}
+	return g.scheme + "://" + origin + "/mcp", nil
+}
+
 // Wrap 根据 Host 分流工作区流量，中心 Host 继续进入原控制面 Handler。
 func (g *Gateway) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +304,9 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if g.isMCPHost(host) && g.serveMCPBearer(w, r, host) {
 		return
 	}
 	if r.URL.Path == workspaceSessionPath {
@@ -317,6 +343,48 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.proxy(w, r, grant, cookie.Value)
+}
+
+func (g *Gateway) isMCPHost(host string) bool {
+	pattern, ok := g.serviceHostPatterns["mcp"]
+	return ok && pattern.MatchString(host)
+}
+
+// serveMCPBearer authenticates external MCP clients without browser cookies.
+func (g *Gateway) serveMCPBearer(w http.ResponseWriter, r *http.Request, host string) bool {
+	if g.resolveMCPToken == nil {
+		return false
+	}
+	parts := strings.Fields(r.Header.Get("Authorization"))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return false
+	}
+	actor, projectID, epoch, expiresAt, ok := g.resolveMCPToken(r.Context(), parts[1])
+	if !ok || !g.now().Before(expiresAt) {
+		http.Error(w, "MCP 连接令牌已失效", http.StatusUnauthorized)
+		return true
+	}
+	expected, err := g.publicOrigin(projectID, "mcp")
+	if err != nil || expected != host {
+		http.Error(w, "MCP 连接令牌与工程不匹配", http.StatusForbidden)
+		return true
+	}
+	sessionID, err := secureValue()
+	if err != nil {
+		http.Error(w, "建立 MCP 会话失败", http.StatusInternalServerError)
+		return true
+	}
+	grant := gatewayGrant{Actor: actor, ProjectID: projectID, Epoch: epoch, Service: "mcp", Host: host, ExpiresAt: expiresAt, LastUsedAt: g.now()}
+	g.mu.Lock()
+	g.sessions[sessionID] = grant
+	g.mu.Unlock()
+	defer func() {
+		g.mu.Lock()
+		delete(g.sessions, sessionID)
+		g.mu.Unlock()
+	}()
+	g.proxy(w, r, grant, sessionID)
+	return true
 }
 
 func (g *Gateway) exchangeTicket(w http.ResponseWriter, r *http.Request, host, ticket string) {
@@ -487,7 +555,7 @@ func (g *Gateway) applyCORS(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Vary", "Origin")
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-InduForge-Authoring-Epoch")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-InduForge-Authoring-Epoch")
 		w.Header().Set("Access-Control-Max-Age", "300")
 	}
 	return true
