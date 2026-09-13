@@ -292,6 +292,7 @@ function buildRuntimeClient(runtimeProvider) {
     access: createAccess(runtimeProvider),
     scenes: createScenes(runtimeProvider),
     session: resolveRuntime(runtimeProvider()).session,
+    assets: resolveRuntime(runtimeProvider()).assets,
   })
 }
 
@@ -302,6 +303,7 @@ export const alarms = defaultClient.alarms
 export const computes = defaultClient.computes
 export const access = defaultClient.access
 export const scenes = defaultClient.scenes
+export const assets = defaultClient.assets
 
 export function configureRuntime(runtime) {
   if (runtime == null || typeof runtime !== 'object' || Array.isArray(runtime)) {

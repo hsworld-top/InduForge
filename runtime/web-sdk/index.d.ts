@@ -332,6 +332,22 @@ export interface RuntimeClient {
   access: RuntimeAccess
   scenes: RuntimeScenes
   session?: HttpRuntimeSession
+  assets?: RuntimeAssets
+}
+
+export interface RuntimeAsset {
+  assetId: string
+  name?: string
+  contentType?: string
+  size?: number
+  updatedAt?: string
+  [key: string]: unknown
+}
+
+export interface RuntimeAssets {
+  list(query?: unknown): Promise<SDKResult<RuntimeAsset[] | unknown>>
+  get(assetId: string): Promise<SDKResult<RuntimeAsset | unknown>>
+  open(assetId: string, options?: HttpRequestOptions): Promise<SDKResult<{ assetId: string; url: string; requestOptions: HttpRequestOptions }>>
 }
 
 declare global {
@@ -345,6 +361,7 @@ export const alarms: AlarmSDK
 export const computes: ComputePath
 export const access: RuntimeAccess
 export const scenes: RuntimeScenes
+export const assets: RuntimeAssets
 
 export function configureRuntime(runtime: RuntimeConfiguration): RuntimeClient
 export function createRuntimeClient(runtime?: RuntimeConfiguration): RuntimeClient

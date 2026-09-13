@@ -419,6 +419,20 @@ export function createHttpRuntime(options = {}) {
         return result
       },
     }),
+    assets: Object.freeze({
+      list: (query) => {
+        const parts = splitQueryAndRequestOptions(query)
+        return request(`assets${queryString(parts.query)}`, parts.requestOptions)
+      },
+      get: (assetId, requestOptions) => {
+        if (typeof assetId !== 'string' || !assetId.trim()) throw new TypeError('assets.get(assetId) 的 assetId 必须是非空字符串')
+        return request(`assets/${encodeURIComponent(assetId)}`, requestOptions)
+      },
+      open: async (assetId, requestOptions = {}) => {
+        if (typeof assetId !== 'string' || !assetId.trim()) throw new TypeError('assets.open(assetId) 的 assetId 必须是非空字符串')
+        return { code: 0, msg: '对象库资源地址已生成', data: { assetId, url: runtimeUrl(baseUrl, `assets/${encodeURIComponent(assetId)}/content`), requestOptions } }
+      },
+    }),
     get sessionIdentity() {
       return currentSession
     },
